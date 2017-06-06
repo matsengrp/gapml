@@ -25,7 +25,6 @@ class Barcode():
     def simulate(self, time):
 
         lambda_total = self.lambdas.sum()
-        new_lambdas = self.lambdas
         relative_rates = scipy.array([lambda_/lambda_total for lambda_ in self.lambdas])
 
         t = 0
@@ -37,7 +36,7 @@ class Barcode():
             # preference to edit ~ 75% position
             profile = scipy.array([1] * self.target_lengths[target_index])
             if profile.shape[0] > 1:
-                profile[round(.75*profile.shape[0])-1] = 50
+                profile[round(.75*profile.shape[0])-1] = 20
                 # profile = gaussian_kde([x for x in range(len(profile)) for _ in range(profile[x])], .1).pdf(list(range(profile.shape[0])))
             profile = profile/profile.sum()
 
@@ -55,12 +54,15 @@ class Barcode():
                         self.barcode[i] = []
             for i, target in enumerate(self.barcode):
                 self.target_lengths[i] = len(target)
-                new_lambdas[i] = self.lambdas[i]*(self.target_lengths[i]/self.target_length)
-            lambda_total = new_lambdas.sum()
+                # if shorter, send to zero
+                if self.target_lengths[i] < self.target_length:
+                    self.lambdas[i] = 0 #self.lambdas[i]*(self.target_lengths[i]//self.target_length)
+            lambda_total = self.lambdas.sum()
             if lambda_total <= 0:
                 return
-            relative_rates = scipy.array([lambda_/lambda_total for lambda_ in new_lambdas])
+            relative_rates = scipy.array([lambda_/lambda_total for lambda_ in self.lambdas])
             last_edit = (t, target_index, position_index)
+
 
     def __repr__(self):
         return str(self.barcode)
