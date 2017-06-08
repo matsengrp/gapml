@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import scipy, argparse
-from scipy.stats import expon
+from scipy.stats import expon, poisson
 import numpy as np
 from numpy.random import choice, randint
 import matplotlib
@@ -12,22 +12,23 @@ from matplotlib import gridspec
 from scipy.stats import gaussian_kde
 
 class Barcode():
-    def __init__(self, lambdas, repair_lambda, target_length=100, repair_deletion=1):
+    def __init__(self, lambdas, repair_lambda, target_length=23, repair_deletion_lambda=.1):
         self.lambdas = scipy.array(lambdas)
         self.n_targets = len(lambdas)
         self.repair_lambda = repair_lambda
         self.target_length = target_length
         self.target_lengths = [target_length] * self.n_targets
-        self.repair_deletion = repair_deletion
-        if repair_deletion != 1:
-            raise NotImplementedError('must use repair_deletion=1')
+        self.repair_deletion_lambda = repair_deletion_lambda
         self.barcode = [list(range(target_length)) for _ in range(self.n_targets)]
 
     def simulate(self, max_cuts):
         target_lambdas = np.array([l for l in self.lambdas])
         needs_repair = False
-        last_edit = None
+        last_target = None
+        last_deletion_length = None
         tot_cuts = 0
+        # cut position
+        position_index = self.target_length - 6
         while tot_cuts < max_cuts:
             if not needs_repair:
                 target_index = choice(self.n_targets, p=target_lambdas/target_lambdas.sum())
@@ -36,18 +37,14 @@ class Barcode():
                 target_index = choice(self.n_targets + 1, p=repair_and_target_lambdas/repair_and_target_lambdas.sum())
             if target_index < self.n_targets:
                 tot_cuts += 1
-                # preference to edit ~ 75% position
-                profile = scipy.array([1.0] * self.target_lengths[target_index])
-                if profile.shape[0] > 1:
-                    profile[int(.75*profile.shape[0])-1] = 20.0
-                    # profile = gaussian_kde([x for x in range(len(profile)) for _ in range(profile[x])], .1).pdf(list(range(profile.shape[0])))
-                position_index = self.barcode[target_index].pop(choice(self.target_lengths[target_index], p=profile/profile.sum()))
-                self.target_lengths[target_index] -= 1
+                deletion_length = min((5, poisson.rvs(self.repair_deletion_lambda)))
+                self.barcode[target_index] = [x for x in range(self.target_lengths[target_index]) if x <= position_index - deletion_length or x > position_index + deletion_length]
+                self.target_lengths[target_index] -= 2*deletion_length
 
                 if needs_repair:
                     # we encountered a double cut
-                    left = min((last_edit, (target_index, position_index)))
-                    right = max((last_edit, (target_index, position_index)))
+                    left = min(((last_target, position_index - last_deletion_length), (target_index, position_index - deletion_length)))
+                    right = max(((last_target, position_index + last_deletion_length), (target_index, position_index + deletion_length)))
                     if left[0] == right[0]:
                         self.barcode[left[0]] = [x for x in self.barcode[left[0]] if x < left[1] or x > right[1]]
                     else:
@@ -63,7 +60,8 @@ class Barcode():
                     target_lambdas[i] = 0 #self.lambdas[i]*(self.target_lengths[i]//self.target_length)
             if target_lambdas.sum() <= 0:
                 return
-            last_edit = (target_index, position_index)
+            last_target = target_index
+            last_deletion_length = deletion_length
             needs_repair = target_index < self.n_targets
 
     def __repr__(self):
@@ -116,8 +114,9 @@ def main():
     barcodes = [
         Barcode(
             lambdas=lambdas,
-            repair_lambda=1.0,
-            target_length=target_length)
+            repair_lambda=.5,
+            target_length=target_length,
+            repair_deletion_lambda=1)
         for _ in range(n_barcodes)
     ]
 
@@ -151,6 +150,8 @@ def main():
             for k in range(target_length):
                 if k not in target:
                     plt.barh(i, 1, left=j*target_length+k, color='red')
+        plt.axhline(y=i-.5, color='black', lw=.1)
+    plt.axhline(y=i+1-.5, color='black', lw=.1)
     ax.axis('off')
     plt.xlim(0, n_targets*target_length)
     fig.set_tight_layout(True)
