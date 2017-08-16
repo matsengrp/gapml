@@ -3,26 +3,39 @@
 
 import scipy, argparse
 from scipy.stats import expon, poisson
-import numpy as np
 from numpy.random import choice, randint
 import matplotlib
-matplotlib.use('PDF')
+matplotlib.use('agg')
 from matplotlib import pyplot as plt
 from matplotlib import gridspec
 from scipy.stats import gaussian_kde
 
+
 class Barcode():
-    def __init__(self, lambdas, repair_lambda, target_length=23, repair_deletion_lambda=.1):
+    '''GESTALT target array with PAM sequences'''
+    def __init__(self, lambdas, repair_lambda, repair_deletion_lambda=.1):
+        # v7 barcode from GESTALT paper Table S4
+        self.barcode = [  'cg', 'GATACGATACGCGCACGCTATGG',
+                        'agtc', 'GACACGACTCGCGCATACGATGG',
+                        'agtc', 'GATAGTATGCGTATACGCTATGG',
+                        'agtc', 'GATATGCATAGCGCATGCTATGG',
+                        'agtc', 'GAGTCGAGACGCTGACGATATGG',
+                        'agtc', 'GCTACGATACACTCTGACTATGG',
+                        'agtc', 'GCGACTGTACGCACACGCGATGG',
+                        'agtc', 'GATACGTAGCACGCAGACTATGG',
+                        'agtc', 'GACACAGTACTCTCACTCTATGG',
+                        'agtc', 'GATATGAGACTCGCATGTGATGG',
+                        'ga']
+        self.n_targets = len(self.v7)/2 - 1
+        if len(lambdas) != self.n_targets:
+            raise ValueError('must give {} lambdas'.format(self.n_targets))
         self.lambdas = scipy.array(lambdas)
-        self.n_targets = len(lambdas)
         self.repair_lambda = repair_lambda
-        self.target_length = target_length
+        self.target_length = len(self.v7[1])
         self.target_lengths = [target_length] * self.n_targets
         self.repair_deletion_lambda = repair_deletion_lambda
-        self.barcode = [list(range(target_length)) for _ in range(self.n_targets)]
 
     def simulate(self, max_cuts):
-        target_lambdas = np.array([l for l in self.lambdas])
         needs_repair = False
         last_target = None
         last_deletion_length = None
@@ -31,13 +44,14 @@ class Barcode():
         position_index = self.target_length - 6
         while tot_cuts < max_cuts:
             if not needs_repair:
-                target_index = choice(self.n_targets, p=target_lambdas/target_lambdas.sum())
+                target_index = choice(self.n_targets, p=self.lambdas/self.lambdas.sum())
             else:
-                repair_and_target_lambdas = np.concatenate([target_lambdas, [self.repair_lambda]])
+                repair_and_target_lambdas = scipy.concatenate([self.lambdas, [self.repair_lambda]])
                 target_index = choice(self.n_targets + 1, p=repair_and_target_lambdas/repair_and_target_lambdas.sum())
             if target_index < self.n_targets:
                 tot_cuts += 1
-                deletion_length = min((5, poisson.rvs(self.repair_deletion_lambda)))
+                deletion_length = poisson.rvs(self.repair_deletion_lambda)
+                ###
                 self.barcode[target_index] = [x for x in range(self.target_lengths[target_index]) if x <= position_index - deletion_length or x > position_index + deletion_length]
                 self.target_lengths[target_index] -= 2*deletion_length
 
@@ -57,8 +71,8 @@ class Barcode():
                 self.target_lengths[i] = len(target)
                 # if shorter, send to zero
                 if self.target_lengths[i] < self.target_length:
-                    target_lambdas[i] = 0 #self.lambdas[i]*(self.target_lengths[i]//self.target_length)
-            if target_lambdas.sum() <= 0:
+                    self.lambdas[i] = 0 #self.lambdas[i]*(self.target_lengths[i]//self.target_length)
+            if self.lambdas.sum() == 0:
                 return
             last_target = target_index
             last_deletion_length = deletion_length
@@ -67,46 +81,13 @@ class Barcode():
     def __repr__(self):
         return str(self.barcode)
 
-
-# class Barcodes(Barcode):
-#     '''container of Barcode'''
-#     def __init__(self, lambdas, repair_time=1, target_length=100, repair_deletion=1, n_barcodes=100):
-#         Barcode.__init__(self,
-#                          lambdas,
-#                          repair_time=repair_time,
-#                          target_length=target_length,
-#                          repair_deletion=repair_deletion)
-#         self.n_barcodes = n_barcodes
-#         self.target_length = target_length
-#         self.barcode = [Barcode(lambdas,
-#                                  repair_time=self.repair_time,
-#                                  target_length=self.target_length,
-#                                  repair_deletion=self.repair_deletion) for _ in range(self.n_barcodes)]
-#     def simulate(self, time):
-#         for barcode in self.barcode:
-#             barcode.simulate(time)
-#     def plot(self, plot_file):
-#         dat = []
-#         fig = plt.figure(figsize=(10,3))
-#         for target in range(self.n_targets):
-#             if target > 0:
-#                 plt.axvline(x=target*self.target_length, color='black', alpha=.2, lw=3)
-#             for position in range(self.target_length):
-#                 dat.append(sum(position not in barcode.barcode[target] for barcode in self.barcode))
-#         plt.plot(dat, color='red', lw=2, clip_on=False)
-#         plt.xlim(0, self.n_targets*self.target_length)
-#         plt.ylim(0, self.n_barcodes)
-#         fig.set_tight_layout(True)
-#         plt.savefig(plot_file)
-#         print(dat)
-
 def main():
 
     parser = argparse.ArgumentParser(description='simulate GESTALT')
     parser.add_argument('outfile', type=str, help='plot file name')
     args = parser.parse_args()
 
-    target_length=23
+
     n_barcodes=50
     lambdas = [2**-n for n in range(3)] + [2**-n for n in range(5,12)]
     n_targets = len(lambdas)
@@ -115,13 +96,12 @@ def main():
         Barcode(
             lambdas=lambdas,
             repair_lambda=.5,
-            target_length=target_length,
             repair_deletion_lambda=1)
         for _ in range(n_barcodes)
     ]
 
     for barcode in barcodes:
-        barcode.simulate(np.random.choice(2) + 1)
+        barcode.simulate(scipy.random.choice(2) + 1)
 
     dat = []
     fig = plt.figure(figsize=(6,4))
@@ -129,7 +109,7 @@ def main():
     plt.subplot(gs[0])
     for target in range(n_targets):
         if target > 0:
-            plt.axvline(x=target*target_length, color='black', alpha=.2, lw=3)
+            plt.axvline(x=target*barcode.target_length, color='black', alpha=.2, lw=3)
         for position in range(target_length):
             dat.append(sum(position not in barcode.barcode[target] for barcode in barcodes))
     dat = scipy.array(dat)
