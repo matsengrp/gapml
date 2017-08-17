@@ -15,7 +15,7 @@ class Barcode():
     '''GESTALT target array with PAM sequences'''
     def __init__(self, lambdas, repair_lambda, repair_deletion_lambda=.1):
         # v7 barcode from GESTALT paper Table S4
-        self.barcode = [  'cg', 'GATACGATACGCGCACGCTATGG',
+        self.barcode0 = [  'cg', 'GATACGATACGCGCACGCTATGG',
                         'agtc', 'GACACGACTCGCGCATACGATGG',
                         'agtc', 'GATAGTATGCGTATACGCTATGG',
                         'agtc', 'GATATGCATAGCGCATGCTATGG',
@@ -26,14 +26,25 @@ class Barcode():
                         'agtc', 'GACACAGTACTCTCACTCTATGG',
                         'agtc', 'GATATGAGACTCGCATGTGATGG',
                         'ga']
+        # an editable copy of the barcode (as a list for mutability)
+        self._barcode = list(self.barcode0)
         self.n_targets = len(self.v7)/2 - 1
         if len(lambdas) != self.n_targets:
             raise ValueError('must give {} lambdas'.format(self.n_targets))
+        # poisson rates for each target
         self.lambdas = scipy.array(lambdas)
+        # poisson rate for repair process
         self.repair_lambda = repair_lambda
-        self.target_length = len(self.v7[1])
-        self.target_lengths = [target_length] * self.n_targets
+        # how much (~symmetric) deletion happens when repair happens
         self.repair_deletion_lambda = repair_deletion_lambda
+
+    def delete(self, target, deletion_length):
+        '''
+        create a deletion in target (index), with specified length in both directions
+         - can span target boundaries
+         - any targets that are modified get their lambda sent to zero
+        '''
+
 
     def simulate(self, max_cuts):
         needs_repair = False
