@@ -100,7 +100,7 @@ class Barcode():
         - any targets that are modified get their lambda sent to zero
         '''
         if len(self.needs_repair) == 0:
-            return
+            raise RuntimeError('cannot repair if not targets need repair')
         # random draw for whether or not there will be a deletion
         if random() < self.repair_deletion_probability:
             # a random draw for symmetric deletion about cut site(s)
