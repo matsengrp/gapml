@@ -3,16 +3,21 @@
 
 import scipy, argparse
 from scipy.stats import expon, poisson
-from numpy.random import choice, randint
+from numpy.random import choice, random
 import matplotlib
 matplotlib.use('agg')
 from matplotlib import pyplot as plt
 from matplotlib import gridspec
 from scipy.stats import gaussian_kde
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from Bio.Alphabet import generic_dna
+from Bio import AlignIO
+from Bio.Phylo.TreeConstruction import MultipleSeqAlignment
 
 class Barcode():
     '''GESTALT target array with spacer sequences'''
-    def __init__(self, lambdas, repair_lambda, repair_deletion_lambda=.1):
+    def __init__(self, lambdas, repair_lambda, repair_deletion_probability=.1, repair_deletion_lambda=2):
         # v7 barcode from GESTALT paper Table S4
         self.barcode0 = (  'cg', 'GATACGATACGCGCACGCTATGG',
                          'agtc', 'GACACGACTCGCGCATACGATGG',
@@ -35,7 +40,11 @@ class Barcode():
         self.lambdas = scipy.array(lambdas)
         # poisson rate for repair process
         self.repair_lambda = repair_lambda
-        # poisson parameter for how much (~symmetric) deletion about cut sites happens when repair happens
+        # probability that repair will cause deletion
+        # NOTE: this is effectively a zero-inflation parameter
+        self.repair_deletion_probability = repair_deletion_probability
+        # poisson parameter for how much (~symmetric) deletion about cut sites
+        # happens if deletion happens with repair
         self.repair_deletion_lambda = repair_deletion_lambda
         # a list of target indices that have a DSB and need repair
         self.needs_repair = set()
@@ -92,9 +101,14 @@ class Barcode():
         '''
         if len(self.needs_repair) == 0:
             return
-        # a random draw for symmetric deletion about cut site(s)
-        deletion_length = poisson.rvs(self.repair_deletion_lambda)
+        # random draw for whether or not there will be a deletion
+        if random() < self.repair_deletion_probability:
+            # a random draw for symmetric deletion about cut site(s)
+            deletion_length = poisson.rvs(self.repair_deletion_lambda)
+        else:
+            deletion_length = 0
         # choose a random pair of targets among those that need repair (with replacement)
+        # if two different targets are chose, that will result in an inter-target deletion
         target1, target2 = choice(list(self.needs_repair), 2)
         # create deletion
         self.delete(target1, target2, deletion_length)
@@ -110,17 +124,28 @@ class Barcode():
     def simulate(self, n_repairs):
         '''
         simulate a specified number of repair events
-        NOTE: possible that repair event leaves no deletion
+        - possible that repair event leaves no deletion
+        - barcode may be rendered uneditable at all targets (exhausted) before
+          getting to n_repairs
         '''
         # counts how many repair events have occured
+        # NOTE: this probably isn't a good clock since effective repair rate is
+        #       proportional to the number sites that need repair
         repairs = 0
         while repairs < n_repairs:
-            # line up the target cut rates and the repair process rate, so they can race!
-            event_lambdas = scipy.concatenate([self.lambdas, [self.repair_lambda]])
-            event = choice(self.n_targets + 1, p=event_lambdas/event_lambdas.sum())
-            # the last event represents the repair process
+            # Line up the target cut rates and the repair process rate, so they can race!
+            # There's really a repair process at each cut site that needs repair (self.needs_repair),
+            # but since repair rates are equal we can aggregate rates, and then choose one if the
+            # aggregated repair event wins
+            event_lambdas = scipy.concatenate([self.lambdas, [len(self.needs_repair)*self.repair_lambda]])
+            event_lambdas_total = event_lambdas.sum()
+            if event_lambdas_total == 0:
+                # barcode exhausted
+                break
+            event = choice(self.n_targets + 1, p=event_lambdas/event_lambdas_total)
+            # the last event represents the aggregated repair event
             if event == self.n_targets:
-                self.repair()
+                self.repair() # NOTE: random selection of which targets to repair happens in here
                 repairs += 1 # NOTE: this gets incremented even if repair did nothing because of an empty self.needs_repair (to be consistent with a fixed time)
             else:
                 self.needs_repair.add(event) # NOTE: if this target already needed repair, this doesn't change anything
@@ -129,26 +154,32 @@ class Barcode():
         return str(''.join(self.barcode))
 
 def main():
-    '''do things'''
+    '''do things, the main things'''
     parser = argparse.ArgumentParser(description='simulate GESTALT')
-    parser.add_argument('outfile', type=str, help='plot file name')
-    parser.add_argument('--n', type=int, default=100, help='how many barcodes to simulate')
+    parser.add_argument('outbase', type=str, help='base name for plot and fasta output')
+    parser.add_argument('--n', type=int, default=50, help='how many barcodes to simulate')
     parser.add_argument('--lambdas', type=float, nargs='+', default=[2**-n for n in range(10)], help='target cut poisson rates')
-    parser.add_argument('--repair_lambda', type=float, default=1., help='repair poisson rate')
-    parser.add_argument('--repair_deletion_lambda', type=float, default=1., help='poisson parameter for distribution of symmetric deltion about cut site(s) during repair')
+    parser.add_argument('--repair_lambda', type=float, default=10, help='repair poisson rate')
+    parser.add_argument('--repair_deletion_probability', type=float, default=.1, help='probability of deletion during repair')
+    parser.add_argument('--repair_deletion_lambda', type=float, default=5., help='poisson parameter for distribution of symmetric deltion about cut site(s) if deletion happens during repair')
     parser.add_argument('--n_repair', type=int, default=10, help='how many repair events to simulate')
     args = parser.parse_args()
 
+    scipy.seterr(all='raise')
+
     barcodes = [Barcode(lambdas=args.lambdas,
                         repair_lambda=args.repair_lambda,
+                        repair_deletion_probability=args.repair_deletion_probability,
                         repair_deletion_lambda=args.repair_deletion_lambda)
                 for _ in range(args.n)]
 
-    for barcode in barcodes:
+    aln = MultipleSeqAlignment([])
+    for i, barcode in enumerate(barcodes, 1):
         # NOTE: with multiple barcodes, is it weird to be fixing the number of events,
         #       rather than the time? We don't get any variation in the number of events this way
         barcode.simulate(args.n_repair)
-        print(barcode)
+        aln.append(SeqRecord(Seq(str(barcode), generic_dna), id='barcode{}'.format(i), description=''))
+    AlignIO.write(aln, open(args.outbase + '.fasta', 'w'), 'fasta')
 
     bc_unedited = str(''.join(barcodes[0].barcode0))
 
@@ -171,17 +202,23 @@ def main():
     top='off',         # ticks along the top edge are off
     labelbottom='off')
 
+    deletion_array = scipy.zeros((len(barcodes), len(str(barcodes[0])), 3))
     ax = plt.subplot(gs[1])
-    for i, barcode in enumerate(barcodes):
+    ax.axhline(-.5, c='k', lw=.5, clip_on=False)
+    for i, barcode in enumerate(sorted(barcodes, key=lambda barcode:str(barcode))):
+        ax.axhline(i + .5, c='k', lw=.5, clip_on=False)
         for j, letter in enumerate(str(barcode)):
             if letter == '-':
-                plt.barh(i, 1, left=j, color='red')
-        plt.axhline(y=i-.5, color='black', lw=.1)
-    plt.axhline(y=i+1-.5, color='black', lw=.1)
-    ax.axis('off')
-    plt.xlim(0, len(bc_unedited))
+                deletion_array[i, j, :] = [1, 0, 0] # RGB red
+            else:
+                deletion_array[i, j, :] = [1, 1, 1] # RGB white
+    ax.axvline(-.5, c='k', lw=.5, clip_on=False)
+    ax.axvline(j + .5, c='k', lw=.5, clip_on=False)
+    ax.imshow(deletion_array, aspect='auto', interpolation='nearest')
+    plt.axis('off')
     fig.set_tight_layout(True)
-    plt.savefig(args.outfile)
+    plt.savefig(args.outbase + '.pdf')
+
 
 
 if __name__ == "__main__":
