@@ -1,6 +1,9 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from __future__ import division, print_function
+from string import maketrans
+
 import scipy, argparse
 from scipy.stats import expon, poisson
 from numpy.random import choice, random
@@ -8,36 +11,53 @@ import matplotlib
 matplotlib.use('agg')
 from matplotlib import pyplot as plt
 from matplotlib import gridspec
-from scipy.stats import gaussian_kde
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio.Alphabet import generic_dna
 from Bio import AlignIO
 from Bio.Phylo.TreeConstruction import MultipleSeqAlignment
+from ete3 import TreeNode
 
-class Barcode():
-    '''GESTALT target array with spacer sequences'''
-    def __init__(self, lambdas, repair_lambda, repair_deletion_probability=.1, repair_deletion_lambda=2):
-        # v7 barcode from GESTALT paper Table S4
-        self.barcode0 = (  'cg', 'GATACGATACGCGCACGCTATGG',
-                         'agtc', 'GACACGACTCGCGCATACGATGG',
-                         'agtc', 'GATAGTATGCGTATACGCTATGG',
-                         'agtc', 'GATATGCATAGCGCATGCTATGG',
-                         'agtc', 'GAGTCGAGACGCTGACGATATGG',
-                         'agtc', 'GCTACGATACACTCTGACTATGG',
-                         'agtc', 'GCGACTGTACGCACACGCGATGG',
-                         'agtc', 'GATACGTAGCACGCAGACTATGG',
-                         'agtc', 'GACACAGTACTCTCACTCTATGG',
-                         'agtc', 'GATATGAGACTCGCATGTGATGG',
-                         'ga')
+class Barcode:
+    '''
+    GESTALT target array with spacer sequences
+    v7 barcode from GESTALT paper Table S4 by default
+    '''
+    def __init__(self,
+                 target_lambdas=scipy.ones(10),
+                 repair_lambda=10,
+                 repair_deletion_probability=.1,
+                 repair_deletion_lambda=2,
+                 barcode0=(  'cg', 'GATACGATACGCGCACGCTATGG',
+                           'agtc', 'GACACGACTCGCGCATACGATGG',
+                           'agtc', 'GATAGTATGCGTATACGCTATGG',
+                           'agtc', 'GATATGCATAGCGCATGCTATGG',
+                           'agtc', 'GAGTCGAGACGCTGACGATATGG',
+                           'agtc', 'GCTACGATACACTCTGACTATGG',
+                           'agtc', 'GCGACTGTACGCACACGCGATGG',
+                           'agtc', 'GATACGTAGCACGCAGACTATGG',
+                           'agtc', 'GACACAGTACTCTCACTCTATGG',
+                           'agtc', 'GATATGAGACTCGCATGTGATGG',
+                           'ga')):
+        # validate arguments
+        for i, target_lambda in enumerate(target_lambdas, 1):
+            if target_lambda < 0:
+                raise ValueError('{}th target rate {} is negative'.format(i, target_lambda))
+        if repair_lambda < 0:
+            raise ValueError('repair rate {} is negative'.format(repair_lambda))
+        if not (0 <= repair_deletion_probability <= 1):
+            raise ValueError('repair deletion probability {} is outside the unit interval'.format(repair_deletion_probability))
+        if repair_deletion_lambda < 0:
+            raise ValueError('repair deletion parameter {} is negative'.format(repair_deletion_lambda))
+        self.barcode0 = barcode0
         # number of targets
         self.n_targets = (len(self.barcode0) - 1)//2
         # an editable copy of the barcode (as a list for mutability)
         self.barcode = list(self.barcode0)
-        if len(lambdas) != self.n_targets:
-            raise ValueError('must give {} lambdas'.format(self.n_targets))
+        if len(target_lambdas) != self.n_targets:
+            raise ValueError('must give {} target_lambdas'.format(self.n_targets))
         # poisson rates for each target
-        self.lambdas = scipy.array(lambdas)
+        self.target_lambdas = scipy.array(target_lambdas)
         # poisson rate for repair process
         self.repair_lambda = repair_lambda
         # probability that repair will cause deletion
@@ -66,7 +86,7 @@ class Barcode():
         if target2 == target1:
             center = ''
         else:
-            center = '-' * cut_site + ',' + ','.join(self.barcode[(index1 + 1):index2]).translate(str.maketrans('ACGTacgt', '-'*8)) + ',' + '-' * (len(self.barcode[index2]) - cut_site)
+            center = '-' * cut_site + ',' + ','.join(self.barcode[(index1 + 1):index2]).translate(maketrans('ACGTacgt', '-'*8)) + ',' + '-' * (len(self.barcode[index2]) - cut_site)
         # sequence right of cut
         right = ','.join(self.barcode[index2:])[len(self.barcode[index2]) - cut_site:]
         # left delete
@@ -94,8 +114,7 @@ class Barcode():
         '''
         repair DSB cuts
         - if self.needs_repair is empty, do nothing
-        - if self.needs_repair contains one element, create a repair scar in that target (index), with specified length in both directions
-        - it self.needs_repair contains two or more elements, create an inter-target deletion, randomly choosing two indices (with replacement)
+        - otherwise, create a repair/deletion, randomly choosing two indices with replacement (inter-target if two different indices)
         - deletions can span target boundaries
         - any targets that are modified get their lambda sent to zero
         '''
@@ -112,72 +131,121 @@ class Barcode():
         target1, target2 = choice(list(self.needs_repair), 2)
         # create deletion
         self.delete(target1, target2, deletion_length)
-        # update lambdas
+        # update target_lambdas
         for target in range(self.n_targets):
             index = 1 + 2*target
             # NOTE: this is more robust than checking for gap characters, since we might later model insertions
             if self.barcode[index] != self.barcode0[index]:
-                self.lambdas[target] = 0
+                self.target_lambdas[target] = 0
         # update which targets still need repair
         self.needs_repair = {target for target in self.needs_repair if target < min(target1, target2) or target > max(target1, target2)}
 
-    def simulate(self, n_repairs):
+    def simulate(self, time):
         '''
-        simulate a specified number of repair events
+        simulate a specified time of editing
         - possible that repair event leaves no deletion
-        - barcode may be rendered uneditable at all targets (exhausted) before
-          getting to n_repairs
+        - barcode may be rendered uneditable at all targets (exhausted)
         '''
-        # counts how many repair events have occured
-        # NOTE: this probably isn't a good clock since effective repair rate is
-        #       proportional to the number sites that need repair
-        repairs = 0
-        while repairs < n_repairs:
+        if time <= 0:
+            raise ValueError('simulation time {} is not positive'.format(time))
+        t = 0
+        while True:
             # Line up the target cut rates and the repair process rate, so they can race!
             # There's really a repair process at each cut site that needs repair (self.needs_repair),
             # but since repair rates are equal we can aggregate rates, and then choose one if the
             # aggregated repair event wins
-            event_lambdas = scipy.concatenate([self.lambdas, [len(self.needs_repair)*self.repair_lambda]])
+            event_lambdas = scipy.concatenate([self.target_lambdas, [len(self.needs_repair)*self.repair_lambda]])
             event_lambdas_total = event_lambdas.sum()
+            # if barcode exhausted, we are done
             if event_lambdas_total == 0:
-                # barcode exhausted
                 break
+            # add time to the next event
+            t += expon.rvs(scale=1/event_lambdas_total)
+            # if we run out of time, we are done
+            if t > time:
+                break
+            # pick an event
             event = choice(self.n_targets + 1, p=event_lambdas/event_lambdas_total)
             # the last event represents the aggregated repair event
             if event == self.n_targets:
                 self.repair() # NOTE: random selection of which targets to repair happens in here
-                repairs += 1 # NOTE: this gets incremented even if repair did nothing because of an empty self.needs_repair (to be consistent with a fixed time)
             else:
                 self.needs_repair.add(event) # NOTE: if this target already needed repair, this doesn't change anything
 
     def __repr__(self):
         return str(''.join(self.barcode))
 
+
+class BarcodeTree():
+    '''
+    simulate tree of barcodes
+    barcode must have simulation method
+    '''
+    def __init__(self, barcode, birth_lambda=1):
+        if birth_lambda < 0:
+            raise ValueError('birth rate {} is negative'.format(birth_lambda))
+        self.birth_lambda = birth_lambda
+        self.tree = TreeNode(dist=0)
+        self.tree.add_feature('barcode', barcode)
+
+    def simulate(self, simulation_time):
+        if simulation_time <= 0:
+            raise ValueError('simulation time {} is not positive'.format(simulation_time))
+        # time to the next division or end of simulation
+        t = min(expon.rvs(scale=1/self.birth_lambda), simulation_time)
+
+        # add child and edit the barcode for that long
+        child = self.tree.copy()
+        child.barcode.simulate(t)
+        child.dist = t
+        self.tree.add_child(child)
+
+        if t < simulation_time:
+            # not a leaf, so add two daughters
+            daughter1 = BarcodeTree(child.barcode)
+            daughter1.simulate(simulation_time - t)
+            daughter1.tree.dist = simulation_time - t
+            child.add_child(daughter1.tree)
+            daughter2 = BarcodeTree(child.barcode)
+            daughter2.simulate(simulation_time - t)
+            daughter2.tree.dist = simulation_time - t
+            child.add_child(daughter2.tree)
+        return self.tree
+
+    def render(self, file):
+        self.tree.render(file)
+
+    def get_leaf_barcodes(self):
+        return [leaf.barcode for leaf in self.tree]
+
+
 def main():
     '''do things, the main things'''
     parser = argparse.ArgumentParser(description='simulate GESTALT')
     parser.add_argument('outbase', type=str, help='base name for plot and fasta output')
-    parser.add_argument('--n', type=int, default=50, help='how many barcodes to simulate')
-    parser.add_argument('--lambdas', type=float, nargs='+', default=[2**-n for n in range(10)], help='target cut poisson rates')
+    parser.add_argument('--target_lambdas', type=float, nargs='+', default=[2**-n for n in range(10)], help='target cut poisson rates')
     parser.add_argument('--repair_lambda', type=float, default=10, help='repair poisson rate')
     parser.add_argument('--repair_deletion_probability', type=float, default=.1, help='probability of deletion during repair')
     parser.add_argument('--repair_deletion_lambda', type=float, default=5., help='poisson parameter for distribution of symmetric deltion about cut site(s) if deletion happens during repair')
-    parser.add_argument('--n_repair', type=int, default=10, help='how many repair events to simulate')
+    parser.add_argument('--birth_lambda', type=float, default=1, help='birth rate')
+    parser.add_argument('--time', type=int, default=5, help='how much time to simulate')
     args = parser.parse_args()
 
     scipy.seterr(all='raise')
 
-    barcodes = [Barcode(lambdas=args.lambdas,
-                        repair_lambda=args.repair_lambda,
-                        repair_deletion_probability=args.repair_deletion_probability,
-                        repair_deletion_lambda=args.repair_deletion_lambda)
-                for _ in range(args.n)]
+    tree = BarcodeTree(Barcode(target_lambdas=args.target_lambdas,
+                               repair_lambda=args.repair_lambda,
+                               repair_deletion_probability=args.repair_deletion_probability,
+                               repair_deletion_lambda=args.repair_deletion_lambda))
+    tree.simulate(args.time)
+    barcodes = tree.get_leaf_barcodes()
+    tree.render(args.outbase + '.svg')
 
     aln = MultipleSeqAlignment([])
     for i, barcode in enumerate(barcodes, 1):
         # NOTE: with multiple barcodes, is it weird to be fixing the number of events,
         #       rather than the time? We don't get any variation in the number of events this way
-        barcode.simulate(args.n_repair)
+        barcode.simulate(args.time)
         aln.append(SeqRecord(Seq(str(barcode), generic_dna), id='barcode{}'.format(i), description=''))
     AlignIO.write(aln, open(args.outbase + '.fasta', 'w'), 'fasta')
 
@@ -191,7 +259,7 @@ def main():
         if letter.islower():
             plt.bar(position, 100, 1, facecolor='black', alpha=.2)
         dat.append(sum(str(barcode)[position] == '-' for barcode in barcodes))
-    plt.plot(100*scipy.array(dat)/args.n, color='red', lw=2, clip_on=False)
+    plt.plot(100*scipy.array(dat)/len(barcodes), color='red', lw=2, clip_on=False)
     plt.xlim(0, len(bc_unedited))
     plt.ylim(0, 100)
     plt.ylabel('Editing (%)')
