@@ -16,29 +16,31 @@ from Bio.SeqRecord import SeqRecord
 from Bio.Alphabet import generic_dna
 from Bio import AlignIO
 from Bio.Phylo.TreeConstruction import MultipleSeqAlignment
-from ete3 import TreeNode
+from ete3 import TreeNode, NodeStyle, TreeStyle, faces, SeqMotifFace, add_face_to_node
 
 class Barcode:
     '''
     GESTALT target array with spacer sequences
-    v7 barcode from GESTALT paper Table S4 by default
+    v7 barcode from GESTALT paper Table S4 is unedited barcode
+    initial barcode state equal to v7 by default
     '''
+    v7 = (  'cg', 'GATACGATACGCGCACGCTATGG',
+          'agtc', 'GACACGACTCGCGCATACGATGG',
+          'agtc', 'GATAGTATGCGTATACGCTATGG',
+          'agtc', 'GATATGCATAGCGCATGCTATGG',
+          'agtc', 'GAGTCGAGACGCTGACGATATGG',
+          'agtc', 'GCTACGATACACTCTGACTATGG',
+          'agtc', 'GCGACTGTACGCACACGCGATGG',
+          'agtc', 'GATACGTAGCACGCAGACTATGG',
+          'agtc', 'GACACAGTACTCTCACTCTATGG',
+          'agtc', 'GATATGAGACTCGCATGTGATGG',
+          'ga')
     def __init__(self,
                  target_lambdas=scipy.ones(10),
                  repair_lambda=10,
                  repair_deletion_probability=.1,
                  repair_deletion_lambda=2,
-                 barcode0=(  'cg', 'GATACGATACGCGCACGCTATGG',
-                           'agtc', 'GACACGACTCGCGCATACGATGG',
-                           'agtc', 'GATAGTATGCGTATACGCTATGG',
-                           'agtc', 'GATATGCATAGCGCATGCTATGG',
-                           'agtc', 'GAGTCGAGACGCTGACGATATGG',
-                           'agtc', 'GCTACGATACACTCTGACTATGG',
-                           'agtc', 'GCGACTGTACGCACACGCGATGG',
-                           'agtc', 'GATACGTAGCACGCAGACTATGG',
-                           'agtc', 'GACACAGTACTCTCACTCTATGG',
-                           'agtc', 'GATATGAGACTCGCATGTGATGG',
-                           'ga')):
+                 barcode=v7):
         # validate arguments
         for i, target_lambda in enumerate(target_lambdas, 1):
             if target_lambda < 0:
@@ -49,11 +51,10 @@ class Barcode:
             raise ValueError('repair deletion probability {} is outside the unit interval'.format(repair_deletion_probability))
         if repair_deletion_lambda < 0:
             raise ValueError('repair deletion parameter {} is negative'.format(repair_deletion_lambda))
-        self.barcode0 = barcode0
-        # number of targets
-        self.n_targets = (len(self.barcode0) - 1)//2
         # an editable copy of the barcode (as a list for mutability)
-        self.barcode = list(self.barcode0)
+        self.barcode = list(barcode)
+        # number of targets
+        self.n_targets = (len(self.barcode) - 1)//2
         if len(target_lambdas) != self.n_targets:
             raise ValueError('must give {} target_lambdas'.format(self.n_targets))
         # poisson rates for each target
@@ -108,7 +109,7 @@ class Barcode:
         # put it back together
         self.barcode = (left + center + right).split(',')
         # sanity check
-        assert len(''.join(self.barcode)) == len(''.join(self.barcode0))
+        assert len(''.join(self.barcode)) == len(''.join(self.v7))
 
     def repair(self):
         '''
@@ -135,7 +136,7 @@ class Barcode:
         for target in range(self.n_targets):
             index = 1 + 2*target
             # NOTE: this is more robust than checking for gap characters, since we might later model insertions
-            if self.barcode[index] != self.barcode0[index]:
+            if self.barcode[index] != self.v7[index]:
                 self.target_lambdas[target] = 0
         # update which targets still need repair
         self.needs_repair = {target for target in self.needs_repair if target < min(target1, target2) or target > max(target1, target2)}
@@ -179,7 +180,7 @@ class Barcode:
 class BarcodeTree():
     '''
     simulate tree of barcodes
-    barcode must have simulation method
+    initialized with an instance of type Barcode (or any type with a simulation method)
     '''
     def __init__(self, barcode, birth_lambda=1):
         if birth_lambda < 0:
@@ -188,7 +189,7 @@ class BarcodeTree():
         self.tree = TreeNode(dist=0)
         self.tree.add_feature('barcode', barcode)
 
-    def simulate(self, simulation_time):
+    def simulate(self, simulation_time, root=True):
         if simulation_time <= 0:
             raise ValueError('simulation time {} is not positive'.format(simulation_time))
         # time to the next division or end of simulation
@@ -198,25 +199,78 @@ class BarcodeTree():
         child = self.tree.copy()
         child.barcode.simulate(t)
         child.dist = t
-        self.tree.add_child(child)
 
         if t < simulation_time:
             # not a leaf, so add two daughters
             daughter1 = BarcodeTree(child.barcode)
-            daughter1.simulate(simulation_time - t)
-            daughter1.tree.dist = simulation_time - t
+            daughter1.simulate(simulation_time - t, root=False)
             child.add_child(daughter1.tree)
             daughter2 = BarcodeTree(child.barcode)
-            daughter2.simulate(simulation_time - t)
-            daughter2.tree.dist = simulation_time - t
+            daughter2.simulate(simulation_time - t, root=False)
             child.add_child(daughter2.tree)
+
+        if root:
+            self.tree.add_child(child)
+            # sequence alignment for leaf barcodes
+            self.aln = MultipleSeqAlignment([])
+            for i, leaf in enumerate(self.tree, 1):
+                name = 'barcode{}'.format(i)
+                leaf.name = name
+                self.aln.append(SeqRecord(Seq(str(leaf.barcode).upper(), generic_dna), id=name, description=''))
+        else:
+            self.tree = child
+
         return self.tree
 
-    def render(self, file):
-        self.tree.render(file)
+    def get_unedited_barcode(self):
+        return str(self.tree.barcode)
 
-    def get_leaf_barcodes(self):
-        return [leaf.barcode for leaf in self.tree]
+    def write_alignment(self, file):
+        AlignIO.write(self.aln, open(file, 'w'), 'fasta')
+
+    def render(self, file):
+        '''render tree to image file'''
+        style = NodeStyle()
+        style['size'] = 0
+        for n in self.tree.traverse():
+           n.set_style(style)
+        for leaf in self.tree:
+           seqFace = SeqMotifFace(seq=str(leaf.barcode).upper(),
+                                  seqtype='nt',
+                                  seq_format='[]',
+                                  height=3,
+                                  gapcolor='red',
+                                  fgcolor='black',
+                                  bgcolor='lightgray',
+                                  width=5)
+           leaf.add_face(seqFace, 1)
+        tree_style = TreeStyle()
+        tree_style.show_scale = False
+        tree_style.show_leaf_name = False
+        self.tree.render(file, tree_style=tree_style)
+
+    def editing_profile(self, file):
+        '''plot profile of deletion frequency at each position over leaves'''
+        # plot editing percentage on top of alignment
+        dat = []
+        n_leaves = len(self.tree)
+        plt.figure(figsize=(5,1))
+        for position, letter in enumerate(str(''.join(Barcode.v7))):
+            if letter.islower():
+                plt.bar(position, 100, 1, facecolor='black', alpha=.2)
+            dat.append(100*sum(str(leaf.barcode)[position] == '-' for leaf in self.tree)/n_leaves)
+        plt.plot(dat, color='red', lw=2, clip_on=False)
+        plt.xlim(0, len(dat))
+        plt.ylim(0, 100)
+        plt.ylabel('Editing (%)')
+        plt.tick_params(
+        axis='x',          # changes apply to the x-axis
+        which='both',      # both major and minor ticks are affected
+        bottom='off',      # ticks along the bottom edge are off
+        top='off',         # ticks along the top edge are off
+        labelbottom='off')
+        plt.tight_layout()
+        plt.savefig(file)
 
 
 def main():
@@ -238,56 +292,9 @@ def main():
                                repair_deletion_probability=args.repair_deletion_probability,
                                repair_deletion_lambda=args.repair_deletion_lambda))
     tree.simulate(args.time)
-    barcodes = tree.get_leaf_barcodes()
-    tree.render(args.outbase + '.svg')
-
-    aln = MultipleSeqAlignment([])
-    for i, barcode in enumerate(barcodes, 1):
-        # NOTE: with multiple barcodes, is it weird to be fixing the number of events,
-        #       rather than the time? We don't get any variation in the number of events this way
-        barcode.simulate(args.time)
-        aln.append(SeqRecord(Seq(str(barcode), generic_dna), id='barcode{}'.format(i), description=''))
-    AlignIO.write(aln, open(args.outbase + '.fasta', 'w'), 'fasta')
-
-    bc_unedited = str(''.join(barcodes[0].barcode0))
-
-    dat = []
-    fig = plt.figure(figsize=(4,6))
-    gs = gridspec.GridSpec(2, 1, height_ratios=[1, 5])
-    plt.subplot(gs[0])
-    for position, letter in enumerate(bc_unedited):
-        if letter.islower():
-            plt.bar(position, 100, 1, facecolor='black', alpha=.2)
-        dat.append(sum(str(barcode)[position] == '-' for barcode in barcodes))
-    plt.plot(100*scipy.array(dat)/len(barcodes), color='red', lw=2, clip_on=False)
-    plt.xlim(0, len(bc_unedited))
-    plt.ylim(0, 100)
-    plt.ylabel('Editing (%)')
-    plt.tick_params(
-    axis='x',          # changes apply to the x-axis
-    which='both',      # both major and minor ticks are affected
-    bottom='off',      # ticks along the bottom edge are off
-    top='off',         # ticks along the top edge are off
-    labelbottom='off')
-
-    deletion_array = scipy.zeros((len(barcodes), len(str(barcodes[0])), 3))
-    ax = plt.subplot(gs[1])
-    ax.axhline(-.5, c='k', lw=.5, clip_on=False)
-    for i, barcode in enumerate(sorted(barcodes, key=lambda barcode:str(barcode))):
-        ax.axhline(i + .5, c='k', lw=.5, clip_on=False)
-        for j, letter in enumerate(str(barcode)):
-            if letter == '-':
-                deletion_array[i, j, :] = [1, 0, 0] # RGB red
-            else:
-                deletion_array[i, j, :] = [1, 1, 1] # RGB white
-    ax.axvline(-.5, c='k', lw=.5, clip_on=False)
-    ax.axvline(j + .5, c='k', lw=.5, clip_on=False)
-    ax.imshow(deletion_array, aspect='auto', interpolation='nearest')
-    plt.axis('off')
-    fig.set_tight_layout(True)
-    plt.savefig(args.outbase + '.pdf')
-
-
+    tree.write_alignment(args.outbase + '.fasta')
+    tree.render(args.outbase + '.tree.pdf')
+    tree.editing_profile(args.outbase + '.editing_profile.pdf')
 
 if __name__ == "__main__":
     main()
