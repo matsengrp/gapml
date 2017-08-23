@@ -202,10 +202,13 @@ class BarcodeTree():
 
         if t < simulation_time:
             # not a leaf, so add two daughters
+            # daughters do not inherit DSBs (do not need repair)
             daughter1 = BarcodeTree(child.barcode)
+            daughter1.tree.barcode.needs_repair = set()
             daughter1.simulate(simulation_time - t, root=False)
             child.add_child(daughter1.tree)
             daughter2 = BarcodeTree(child.barcode)
+            daughter2.tree.barcode.needs_repair = set()
             daughter2.simulate(simulation_time - t, root=False)
             child.add_child(daughter2.tree)
 
@@ -251,7 +254,6 @@ class BarcodeTree():
 
     def editing_profile(self, file):
         '''plot profile of deletion frequency at each position over leaves'''
-        # plot editing percentage on top of alignment
         dat = []
         n_leaves = len(self.tree)
         plt.figure(figsize=(5,1))
