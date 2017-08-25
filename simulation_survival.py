@@ -10,7 +10,9 @@ from numpy.random import choice, random
 import matplotlib
 matplotlib.use('agg')
 from matplotlib import pyplot as plt
-from matplotlib import gridspec
+import seaborn as sns
+sns.set(style="white", color_codes=True)
+sns.set_style('ticks')
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio.Alphabet import generic_dna
@@ -205,6 +207,7 @@ class BarcodeTree():
             # daughters do not inherit DSBs (do not need repair)
             daughter1 = BarcodeTree(child.barcode)
             daughter1.tree.barcode.needs_repair = set()
+            # oooh, recursion
             daughter1.simulate(simulation_time - t, root=False)
             child.add_child(daughter1.tree)
             daughter2 = BarcodeTree(child.barcode)
@@ -222,11 +225,6 @@ class BarcodeTree():
                 self.aln.append(SeqRecord(Seq(str(leaf.barcode).upper(), generic_dna), id=name, description=''))
         else:
             self.tree = child
-
-        return self.tree
-
-    def get_unedited_barcode(self):
-        return str(self.tree.barcode)
 
     def write_alignment(self, file):
         AlignIO.write(self.aln, open(file, 'w'), 'fasta')
@@ -274,6 +272,27 @@ class BarcodeTree():
         plt.tight_layout()
         plt.savefig(file)
 
+    def birth_time_distribution(self, file):
+        '''
+        validation plot of the distribution of division times for internal
+        nodes, and compare to theory
+        '''
+        plt.figure(figsize=(3,3))
+        observed_times = [node.dist for node in self.tree.iter_descendants() if not node.is_leaf()]
+        sns.distplot(observed_times, kde=False, norm_hist=True, color='gray', axlabel='lifetime')
+        time = scipy.linspace(0, max(observed_times), 100)
+        density = expon.pdf(time, scale=1/self.birth_lambda)
+        plt.plot(time, density, ls='-', c='k')
+        sns.despine()
+        plt.tick_params(
+        axis='y',
+        which='both',
+        left='off',
+        right='off',
+        labelleft='off')
+        plt.tight_layout()
+        plt.savefig(file)
+
 
 def main():
     '''do things, the main things'''
@@ -292,11 +311,13 @@ def main():
     tree = BarcodeTree(Barcode(target_lambdas=args.target_lambdas,
                                repair_lambda=args.repair_lambda,
                                repair_deletion_probability=args.repair_deletion_probability,
-                               repair_deletion_lambda=args.repair_deletion_lambda))
+                               repair_deletion_lambda=args.repair_deletion_lambda),
+                       birth_lambda=args.birth_lambda)
     tree.simulate(args.time)
     tree.write_alignment(args.outbase + '.fasta')
     tree.render(args.outbase + '.tree.pdf')
     tree.editing_profile(args.outbase + '.editing_profile.pdf')
+    tree.birth_time_distribution(args.outbase + '.division_times.pdf')
 
 if __name__ == "__main__":
     main()
