@@ -196,35 +196,36 @@ class BarcodeTree():
             raise ValueError('simulation time {} is not positive'.format(simulation_time))
         # time to the next division or end of simulation
         t = min(expon.rvs(scale=1/self.birth_lambda), simulation_time)
-
-        # add child and edit the barcode for that long
-        child = self.tree.copy()
-        child.barcode.simulate(t)
-        child.dist = t
+        # define node for editing, and edit its barcode for the specified time
+        if root:
+            # keep the unedited state above
+            node = self.tree.copy()
+            self.tree.add_child(node)
+        else:
+            node = self.tree
+        node.barcode.simulate(t)
+        node.dist = t
 
         if t < simulation_time:
             # not a leaf, so add two daughters
             # daughters do not inherit DSBs (do not need repair)
-            daughter1 = BarcodeTree(child.barcode)
+            daughter1 = BarcodeTree(node.barcode)
             daughter1.tree.barcode.needs_repair = set()
             # oooh, recursion
             daughter1.simulate(simulation_time - t, root=False)
-            child.add_child(daughter1.tree)
-            daughter2 = BarcodeTree(child.barcode)
+            node.add_child(daughter1.tree)
+            daughter2 = BarcodeTree(node.barcode)
             daughter2.tree.barcode.needs_repair = set()
             daughter2.simulate(simulation_time - t, root=False)
-            child.add_child(daughter2.tree)
+            node.add_child(daughter2.tree)
 
         if root:
-            self.tree.add_child(child)
             # sequence alignment for leaf barcodes
             self.aln = MultipleSeqAlignment([])
             for i, leaf in enumerate(self.tree, 1):
                 name = 'barcode{}'.format(i)
                 leaf.name = name
                 self.aln.append(SeqRecord(Seq(str(leaf.barcode).upper(), generic_dna), id=name, description=''))
-        else:
-            self.tree = child
 
     def write_alignment(self, file):
         AlignIO.write(self.aln, open(file, 'w'), 'fasta')
@@ -272,27 +273,6 @@ class BarcodeTree():
         plt.tight_layout()
         plt.savefig(file)
 
-    def birth_time_distribution(self, file):
-        '''
-        validation plot of the distribution of division times for internal
-        nodes, and compare to theory
-        '''
-        plt.figure(figsize=(3,3))
-        observed_times = [node.dist for node in self.tree.iter_descendants() if not node.is_leaf()]
-        sns.distplot(observed_times, kde=False, norm_hist=True, color='gray', axlabel='lifetime')
-        time = scipy.linspace(0, max(observed_times), 100)
-        density = expon.pdf(time, scale=1/self.birth_lambda)
-        plt.plot(time, density, ls='-', c='k')
-        sns.despine()
-        plt.tick_params(
-        axis='y',
-        which='both',
-        left='off',
-        right='off',
-        labelleft='off')
-        plt.tight_layout()
-        plt.savefig(file)
-
 
 def main():
     '''do things, the main things'''
@@ -317,7 +297,6 @@ def main():
     tree.write_alignment(args.outbase + '.fasta')
     tree.render(args.outbase + '.tree.pdf')
     tree.editing_profile(args.outbase + '.editing_profile.pdf')
-    tree.birth_time_distribution(args.outbase + '.division_times.pdf')
 
 if __name__ == "__main__":
     main()
