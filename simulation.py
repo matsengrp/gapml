@@ -4,7 +4,7 @@
 from __future__ import division, print_function
 from string import maketrans
 from collections import Counter
-import scipy, argparse, copy
+import scipy, argparse, copy, re
 from scipy.stats import expon, poisson
 from numpy.random import choice, random
 import matplotlib
@@ -276,7 +276,9 @@ class BarcodeTree():
     def summary_stats(self):
         genotypes = Counter([''.join(leaf.barcode.barcode) for leaf in self.tree])
         n_seqs = len(self.tree)
-        return {'genotypes':len(genotypes), 'cells':n_seqs}
+        # weighted average deletion length
+        mean_deletion_length = sum(len(run.group(0))*genotypes[genotype] for genotype in genotypes for run in re.finditer('-+', genotype))/sum(genotypes.values())
+        return {'genotypes':len(genotypes), 'cells':n_seqs, 'mean deletion length':mean_deletion_length}
 
 
 
