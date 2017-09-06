@@ -3,8 +3,8 @@
 
 from __future__ import division, print_function
 from string import maketrans
-
-import scipy, argparse
+from collections import Counter
+import scipy, argparse, copy
 from scipy.stats import expon, poisson
 from numpy.random import choice, random
 import matplotlib
@@ -184,12 +184,12 @@ class BarcodeTree():
     simulate tree of barcodes
     initialized with an instance of type Barcode (or any type with a simulation method)
     '''
-    def __init__(self, barcode, birth_lambda=1):
+    def __init__(self, barcode, birth_lambda):
         if birth_lambda < 0:
             raise ValueError('birth rate {} is negative'.format(birth_lambda))
         self.birth_lambda = birth_lambda
         self.tree = TreeNode(dist=0)
-        self.tree.add_feature('barcode', barcode)
+        self.tree.add_feature('barcode', copy.deepcopy(barcode))
 
     def simulate(self, simulation_time, root=True):
         if simulation_time <= 0:
@@ -209,12 +209,12 @@ class BarcodeTree():
         if t < simulation_time:
             # not a leaf, so add two daughters
             # daughters do not inherit DSBs (do not need repair)
-            daughter1 = BarcodeTree(node.barcode)
+            daughter1 = BarcodeTree(node.barcode, birth_lambda=self.birth_lambda)
             daughter1.tree.barcode.needs_repair = set()
             # oooh, recursion
             daughter1.simulate(simulation_time - t, root=False)
             node.add_child(daughter1.tree)
-            daughter2 = BarcodeTree(node.barcode)
+            daughter2 = BarcodeTree(node.barcode, birth_lambda=self.birth_lambda)
             daughter2.tree.barcode.needs_repair = set()
             daughter2.simulate(simulation_time - t, root=False)
             node.add_child(daughter2.tree)
@@ -273,6 +273,12 @@ class BarcodeTree():
         plt.tight_layout()
         plt.savefig(file)
 
+    def summary_stats(self):
+        genotypes = Counter([''.join(leaf.barcode.barcode) for leaf in self.tree])
+        n_seqs = len(self.tree)
+        return {'genotypes':len(genotypes), 'cells':n_seqs}
+
+
 
 def main():
     '''do things, the main things'''
@@ -286,8 +292,6 @@ def main():
     parser.add_argument('--time', type=int, default=5, help='how much time to simulate')
     args = parser.parse_args()
 
-    scipy.seterr(all='raise')
-
     tree = BarcodeTree(Barcode(target_lambdas=args.target_lambdas,
                                repair_lambda=args.repair_lambda,
                                repair_deletion_probability=args.repair_deletion_probability,
@@ -297,6 +301,10 @@ def main():
     tree.write_alignment(args.outbase + '.fasta')
     tree.render(args.outbase + '.tree.pdf')
     tree.editing_profile(args.outbase + '.editing_profile.pdf')
+
+    print('summary statistic\tvalue')
+    for key, value in tree.summary_stats().items():
+        print('{}\t{}'.format(key, value))
 
 if __name__ == "__main__":
     main()
