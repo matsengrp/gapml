@@ -38,13 +38,17 @@ def main():
 
     # Output file for PHYLIP
     lines = []
-    for seq_events in processed_seqs:
+    for i, seq_events in enumerate(processed_seqs):
         event_idxs = [all_event_dict[seq_ev] for seq_ev in seq_events]
         event_arr = np.zeros((num_events,), dtype=int)
         event_arr[event_idxs] = 1
-        lines.append("".join([str(c) for c in event_arr.tolist()]) + "\n")
+        event_encoding = "".join([str(c) for c in event_arr.tolist()])
+        seq_name = "SEQ%d" % i
+        seq_name += " " * (10 - len(seq_name))
+        lines.append("%s%s\n" % (seq_name, event_encoding))
 
     with open(args.out, "w") as f:
+        f.write("%d %d\n" % (len(lines), num_events))
         f.writelines(lines)
 
 if __name__ == "__main__":
