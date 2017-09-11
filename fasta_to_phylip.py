@@ -37,6 +37,7 @@ def main():
     num_events = len(all_event_dict)
 
     # Output file for PHYLIP
+    # Format is very dumb: species name must be 10 characters long, followed by sequence of 0 and 1s
     lines = []
     for i, seq_events in enumerate(processed_seqs):
         event_idxs = [all_event_dict[seq_ev] for seq_ev in seq_events]
