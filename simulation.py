@@ -90,7 +90,7 @@ class Barcode:
         if target2 == target1:
             center = ''
         else:
-            center = '-' * cut_site + ',' + ','.join(self.barcode[(index1 + 1):index2]).translate(str.maketrans('ACGTacgt', '-'*8)) + ',' + '-' * (len(self.barcode[index2]) - cut_site)
+            center = '-' * cut_site + ',' + ','.join(self.barcode[(index1 + 1):index2]).translate(maketrans('ACGTacgt', '-'*8)) + ',' + '-' * (len(self.barcode[index2]) - cut_site)
         # sequence right of cut
         right = ','.join(self.barcode[index2:])[len(self.barcode[index2]) - cut_site:]
         # left delete
@@ -295,7 +295,7 @@ class BarcodeForest():
             if min_leaves is None or tree.n_leaves() >= min_leaves:
                 self.trees.append(tree)
                 ct += 1
-                print('trees simulated: {} of {}  \r'.format(ct, n), end='', flush=True)
+                print('trees simulated: {} of {}  \r'.format(ct, n), end='')
         print()
 
     def editing_profile(self, file):
@@ -394,7 +394,7 @@ def main():
     forest.summary_plots(args.outbase + '.summary_plots.pdf')
 
     with open(args.outbase + ".pkl", "w") as f_pkl:
-        pickle.dump(tree, f_pkl)
+        pickle.dump(forest, f_pkl)
 
 if __name__ == "__main__":
     main()
