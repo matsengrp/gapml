@@ -31,7 +31,7 @@ def main():
     processed_seqs = []
     for record in SeqIO.parse(args.fasta, "fasta"):
         seq_events = create_event_ids(record.seq)
-        processed_seqs.append(seq_events)
+        processed_seqs.append((record.id, seq_events))
         all_events.update(seq_events)
     all_event_dict = {event_id: i for i, event_id in enumerate(all_events)}
     num_events = len(all_event_dict)
@@ -39,12 +39,11 @@ def main():
     # Output file for PHYLIP
     # Format is very dumb: species name must be 10 characters long, followed by sequence of 0 and 1s
     lines = []
-    for i, seq_events in enumerate(processed_seqs):
+    for seq_name, seq_events in processed_seqs:
         event_idxs = [all_event_dict[seq_ev] for seq_ev in seq_events]
         event_arr = np.zeros((num_events,), dtype=int)
         event_arr[event_idxs] = 1
         event_encoding = "".join([str(c) for c in event_arr.tolist()])
-        seq_name = "SEQ%d" % i
         seq_name += " " * (10 - len(seq_name))
         lines.append("%s%s\n" % (seq_name, event_encoding))
 

@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import division, print_function
+import pickle
 from string import maketrans
 from collections import Counter
 import scipy, argparse, copy, re
@@ -223,7 +224,7 @@ class BarcodeTree():
             # sequence alignment for leaf barcodes
             self.aln = MultipleSeqAlignment([])
             for i, leaf in enumerate(self.tree, 1):
-                name = 'barcode{}'.format(i)
+                name = 'b{}'.format(i)
                 leaf.name = name
                 self.aln.append(SeqRecord(Seq(str(leaf.barcode).upper(), generic_dna), id=name, description=''))
 
@@ -301,8 +302,11 @@ def main():
                        birth_lambda=args.birth_lambda)
     tree.simulate(args.time)
     tree.write_alignment(args.outbase + '.fasta')
-    tree.render(args.outbase + '.tree.pdf')
+    #tree.render(args.outbase + '.tree.pdf')
     tree.editing_profile(args.outbase + '.editing_profile.pdf')
+
+    with open(args.outbase + ".pkl", "w") as f_pkl:
+        pickle.dump(tree, f_pkl)
 
     print('summary statistic\tvalue')
     for key, value in tree.summary_stats().items():

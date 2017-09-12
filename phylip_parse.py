@@ -61,7 +61,7 @@ def parse_seqdict(fh, mode='mix'):
 # parse the dnaml output file and return data structures containing a
 # list biopython.SeqRecords and a dict containing adjacency
 # relationships and distances between nodes.
-def parse_outfile(outfile, naive='NAIVE'):
+def parse_outfile(outfile):
     '''parse phylip outfile'''
     trees = []
     # Ugg... for compilation need to let python know that these will definely both be defined :-/
@@ -69,13 +69,13 @@ def parse_outfile(outfile, naive='NAIVE'):
         for sect in sections(fh):
             if sect[0] == 'sequences':
                 sequences, edges = parse_seqdict(fh, sect[1])
-                trees.append(build_tree(sequences, edges, naive))
+                trees.append(build_tree(sequences, edges))
     return trees
 
 
 
 # build a tree from a set of sequences and an adjacency dict.
-def build_tree(sequences, parents, naive='NAIVE'):
+def build_tree(sequences, edges):
     # build an ete tree
     # first a dictionary of disconnected nodes
     nodes = {}
@@ -84,22 +84,14 @@ def build_tree(sequences, parents, naive='NAIVE'):
         node.name = name
         node.add_feature('sequence', sequences[node.name])
         nodes[name] = node
-    for name in sequences:
-        if name in parents:
-            nodes[parents[name]].add_child(nodes[name])
+    for node_from, node_to in edges:
+        if node_from in nodes:
+            nodes[node_from].add_child(nodes[node_to])
         else:
-            tree = nodes[name]
-    # reroot on naive
-    if naive is not None:
-        naive_id = [node for node in nodes if naive in node][0]
-        assert len(nodes[naive_id].children) == 0
-        tree = nodes[naive_id]
-
-
-    # compute branch lengths
-    tree.dist = 0 # no branch above root
-    for node in tree.iter_descendants():
-        node.dist = hamming_distance(node.sequence, node.up.sequence)
+            assert(node_from == "root")
+            nodes[node_from] = Tree()
+            tree = nodes[node_from]
+            tree.add_child(nodes[node_to])
 
     return tree
 
