@@ -298,7 +298,7 @@ class BarcodeForest():
 
     def editing_profile(self, file):
         '''plot profile of deletion frequency at each position over leaves'''
-        plt.figure(figsize=(5,1))
+        plt.figure(figsize=(7, 1.5))
         for i, tree in enumerate(self.trees):
             dat = []
             n_leaves = tree.n_leaves()
@@ -319,13 +319,43 @@ class BarcodeForest():
         plt.tight_layout()
         plt.savefig(file)
 
-    def summary_stats(self):
-        # counter for the unique leaf genotypes
-        genotypes = Counter([''.join(leaf.barcode.barcode) for leaf in self.tree])
-        n_seqs = self.n_leaves()
-        # weighted average deletion length
-        mean_deletion_length = sum(len(run.group(0))*genotypes[genotype] for genotype in genotypes for run in re.finditer('-+', genotype))/sum(genotypes.values())
-        return {'genotypes':len(genotypes), 'cells':n_seqs, 'mean deletion length':mean_deletion_length}
+    def summary_plots(self, file):
+        n_cells = []
+        n_genotypes = []
+        n_deletions = []
+        deletion_lens = []
+        for tree in self.trees:
+            # counter for the unique leaf genotypes
+            genotypes = Counter([''.join(leaf.barcode.barcode) for leaf in tree.tree])
+            n_genotypes.append(len(genotypes))
+            n_cells.append(sum(genotypes.values()))
+            n_deletions.append([len(re.findall('-+', genotype)) for genotype in genotypes.elements()])
+            deletion_lens.append([len(run.group(0)) for genotype in genotypes.elements() for run in re.finditer('-+', genotype)])
+
+        plt.figure(figsize=(12, 3))
+        plt.subplot(1, 4, 1)
+        plt.hist(n_cells, stacked=True)
+        plt.xlabel('number of cells')
+        plt.xlim([0, None])
+        plt.subplot(1, 4, 2)
+        plt.hist(n_genotypes, stacked=True)
+        plt.xlabel('number of genotypes')
+        plt.xlim([0, None])
+        plt.subplot(1, 4, 3)
+        plt.hist(n_deletions, stacked=True)
+        # for x in n_deletions:
+        #     sns.distplot(x, hist=False)
+        plt.xlabel('number of deletions')
+        plt.xlim([0, None])
+        plt.subplot(1, 4, 4)
+        plt.hist(deletion_lens, stacked=True)
+        # for x in deletion_lens:
+        #     sns.distplot(x, hist=False)
+        plt.xlabel('deletion lengths')
+        plt.xlim([0, None])
+        sns.despine()
+        plt.tight_layout()
+        plt.savefig(file)
 
     def write_alignments(self, outbase):
         for i, tree in enumerate(self.trees, 1):
@@ -340,11 +370,12 @@ def main():
     parser.add_argument('outbase', type=str, help='base name for plot and fasta output')
     parser.add_argument('--target_lambdas', type=float, nargs='+', default=[2**-n for n in range(10)], help='target cut poisson rates')
     parser.add_argument('--repair_lambda', type=float, default=10, help='repair poisson rate')
-    parser.add_argument('--repair_deletion_probability', type=float, default=.1, help='probability of deletion during repair')
+    parser.add_argument('--repair_deletion_probability', type=float, default=.5, help='probability of deletion during repair')
     parser.add_argument('--repair_deletion_lambda', type=float, default=1, help='poisson parameter for distribution of symmetric deltion about cut site(s) if deletion happens during repair')
     parser.add_argument('--birth_lambda', type=float, default=1, help='birth rate')
     parser.add_argument('--time', type=float, default=5, help='how much time to simulate')
-    parser.add_argument('--min_leaves', type=int, default=200, help='condition on at least this many leaves')
+    parser.add_argument('--min_leaves', type=int, default=0, help='condition on at least this many leaves')
+    parser.add_argument('--n_trees', type=int, default=10, help='number of trees in forest')
     args = parser.parse_args()
 
     forest = BarcodeForest(Barcode(target_lambdas=args.target_lambdas,
@@ -353,15 +384,13 @@ def main():
                                    repair_deletion_lambda=args.repair_deletion_lambda),
                            birth_lambda=args.birth_lambda,
                            simulation_time=args.time,
-                           min_leaves=args.min_leaves)
+                           min_leaves=args.min_leaves,
+                           n=args.n_trees)
 
     forest.editing_profile(args.outbase + '.editing_profile.pdf')
     forest.write_alignments(args.outbase)
     forest.render(args.outbase)
-
-    # print('summary statistic\tvalue')
-    # for key, value in tree.summary_stats().items():
-    #     print('{}\t{}'.format(key, value))
+    forest.summary_plots(args.outbase + '.summary_plots.pdf')
 
 if __name__ == "__main__":
     main()
