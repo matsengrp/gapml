@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Given an outputfile from one of the PHYLIP tools - `dnaml` or `dnapars` - produce an alignment (including
-ancestral sequences), a newick tree (with matching internal node lables), and an svg rendering of said tree.
+Given an outputfile from PHYLIP MIX, produces an ETE tree
 """
 from __future__ import print_function
 from ete3 import Tree

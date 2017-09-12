@@ -1,3 +1,7 @@
+"""
+Compares the true tree to the fitted trees from PHYLIP
+"""
+
 import phylip_parse
 import pickle
 

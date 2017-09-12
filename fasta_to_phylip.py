@@ -1,3 +1,8 @@
+"""
+Converts the fasta files from simulation.py to input to PHYLIP MIX
+Makes the binary file format
+"""
+
 from __future__ import print_function
 import argparse
 
