@@ -77,11 +77,13 @@ def parse_outfile(outfile):
 def build_tree(sequences, edges):
     # build an ete tree
     # first a dictionary of disconnected nodes
+    seq_len = 0
     nodes = {}
     for name in sequences:
         node = Tree()
         node.name = name
-        node.add_feature('sequence', sequences[node.name])
+        node.add_feature('barcode', sequences[node.name])
+        seq_len = len(node.barcode)
         nodes[name] = node
     for node_from, node_to in edges:
         if node_from in nodes:
@@ -92,6 +94,7 @@ def build_tree(sequences, edges):
             tree = nodes[node_from]
             tree.add_child(nodes[node_to])
 
+    tree.add_feature('barcode', "0" * seq_len)
     return tree
 
 
