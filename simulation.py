@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import division, print_function
+import pickle
+from string import maketrans
 from collections import Counter
 import scipy, argparse, copy, re
 from scipy.stats import expon, poisson
@@ -88,7 +90,7 @@ class Barcode:
         if target2 == target1:
             center = ''
         else:
-            center = '-' * cut_site + ',' + ','.join(self.barcode[(index1 + 1):index2]).translate(str.maketrans('ACGTacgt', '-'*8)) + ',' + '-' * (len(self.barcode[index2]) - cut_site)
+            center = '-' * cut_site + ',' + ','.join(self.barcode[(index1 + 1):index2]).translate(maketrans('ACGTacgt', '-'*8)) + ',' + '-' * (len(self.barcode[index2]) - cut_site)
         # sequence right of cut
         right = ','.join(self.barcode[index2:])[len(self.barcode[index2]) - cut_site:]
         # left delete
@@ -224,7 +226,7 @@ class BarcodeTree():
             # sequence alignment for leaf barcodes
             self.aln = MultipleSeqAlignment([])
             for i, leaf in enumerate(self.tree, 1):
-                name = 'barcode{}'.format(i)
+                name = 'b{}'.format(i)
                 leaf.name = name
                 self.aln.append(SeqRecord(Seq(str(leaf.barcode).upper(), generic_dna), id=name, description=''))
 
@@ -293,7 +295,7 @@ class BarcodeForest():
             if min_leaves is None or tree.n_leaves() >= min_leaves:
                 self.trees.append(tree)
                 ct += 1
-                print('trees simulated: {} of {}  \r'.format(ct, n), end='', flush=True)
+                print('trees simulated: {} of {}  \r'.format(ct, n), end='')
         print()
 
     def editing_profile(self, file):
@@ -386,11 +388,13 @@ def main():
                            simulation_time=args.time,
                            min_leaves=args.min_leaves,
                            n=args.n_trees)
-
     forest.editing_profile(args.outbase + '.editing_profile.pdf')
     forest.write_alignments(args.outbase)
     forest.render(args.outbase)
     forest.summary_plots(args.outbase + '.summary_plots.pdf')
+
+    with open(args.outbase + ".pkl", "w") as f_pkl:
+        pickle.dump(forest, f_pkl)
 
 if __name__ == "__main__":
     main()
