@@ -3,7 +3,11 @@
 
 from __future__ import division, print_function
 import pickle
-from string import maketrans
+import sys
+if sys.version_info < (3, 0):
+    from string import maketrans
+else:
+    maketrans = str.maketrans
 from collections import Counter
 import scipy, argparse, copy, re
 from scipy.stats import expon, poisson
@@ -393,7 +397,7 @@ def main():
     forest.render(args.outbase)
     forest.summary_plots(args.outbase + '.summary_plots.pdf')
 
-    with open(args.outbase + ".pkl", "w") as f_pkl:
+    with open(args.outbase + ".pkl", "wb") as f_pkl:
         pickle.dump(forest, f_pkl)
 
 if __name__ == "__main__":
