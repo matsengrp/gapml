@@ -9,6 +9,7 @@ if sys.version_info < (3, 0):
 else:
     maketrans = str.maketrans
 from collections import Counter
+import numpy as np
 import scipy, argparse, copy, re
 from scipy.stats import expon, poisson
 from numpy.random import choice, random
@@ -24,6 +25,7 @@ from Bio.Alphabet import generic_dna
 from Bio import AlignIO
 from Bio.Phylo.TreeConstruction import MultipleSeqAlignment
 from ete3 import TreeNode, NodeStyle, TreeStyle, faces, SeqMotifFace, add_face_to_node
+from collapsed_tree import CollapsedTree
 
 class Barcode:
     '''
@@ -227,15 +229,27 @@ class BarcodeTree():
             node.add_child(daughter2.tree)
 
         if root:
-            # sequence alignment for leaf barcodes
-            self.aln = MultipleSeqAlignment([])
-            for i, leaf in enumerate(self.tree, 1):
-                name = 'b{}'.format(i)
-                leaf.name = name
-                self.aln.append(SeqRecord(Seq(str(leaf.barcode).upper(), generic_dna), id=name, description=''))
+            self.aln = self.create_alignments(self.tree)
+            self.collapsed_tree = CollapsedTree(self.tree)
+            self.collapsed_aln = self.create_alignments(self.collapsed_tree.tree)
+
+    def create_alignments(self, tree):
+        """
+        sequence alignment for leaf barcodes
+        warning: this will rename the leaf nodes!
+        """
+        aln = MultipleSeqAlignment([])
+        for i, leaf in enumerate(tree, 1):
+            name = 'b{}'.format(i)
+            leaf.name = name
+            aln.append(SeqRecord(Seq(str(leaf.barcode).upper(), generic_dna), id=name, description=''))
+        return aln
 
     def write_alignment(self, file):
         AlignIO.write(self.aln, open(file, 'w'), 'fasta')
+
+    def write_collapsed_alignment(self, file):
+        AlignIO.write(self.collapsed_aln, open(file, 'w'), 'fasta')
 
     def render(self, file):
         '''render tree to image file'''
@@ -366,6 +380,11 @@ class BarcodeForest():
     def write_alignments(self, outbase):
         for i, tree in enumerate(self.trees, 1):
             tree.write_alignment('{}.{}.fasta'.format(outbase, i))
+
+    def write_collapsed_alignments(self, outbase):
+        for i, tree in enumerate(self.trees, 1):
+            tree.write_collapsed_alignment('{}.{}.collapsed.fasta'.format(outbase, i))
+
     def render(self, outbase):
         for i, tree in enumerate(self.trees, 1):
             tree.render('{}.{}.pdf'.format(outbase, i))
@@ -381,8 +400,11 @@ def main():
     parser.add_argument('--birth_lambda', type=float, default=1, help='birth rate')
     parser.add_argument('--time', type=float, default=5, help='how much time to simulate')
     parser.add_argument('--min_leaves', type=int, default=0, help='condition on at least this many leaves')
-    parser.add_argument('--n_trees', type=int, default=10, help='number of trees in forest')
+    parser.add_argument('--n-trees', type=int, default=1, help='number of trees in forest')
+    parser.add_argument('--seed', type=int, default=0)
     args = parser.parse_args()
+
+    np.random.seed(seed=args.seed)
 
     forest = BarcodeForest(Barcode(target_lambdas=args.target_lambdas,
                                    repair_lambda=args.repair_lambda,
@@ -394,6 +416,7 @@ def main():
                            n=args.n_trees)
     forest.editing_profile(args.outbase + '.editing_profile.pdf')
     forest.write_alignments(args.outbase)
+    forest.write_collapsed_alignments(args.outbase)
     forest.render(args.outbase)
     forest.summary_plots(args.outbase + '.summary_plots.pdf')
 

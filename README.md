@@ -5,5 +5,11 @@
 # Using PHYLIP MIX
 Use options: O subgroup 1; 4; 5; P
 
+# Pipeline
+python simulation.py
 
+python fasta_to_phylip.py
 
+mix
+
+python compare_trees.py
