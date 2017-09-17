@@ -27,29 +27,20 @@ from Bio.Phylo.TreeConstruction import MultipleSeqAlignment
 from ete3 import TreeNode, NodeStyle, TreeStyle, faces, SeqMotifFace, add_face_to_node
 from collapsed_tree import CollapsedTree
 
+from constants import BARCODE_V7
+
 class Barcode:
     '''
     GESTALT target array with spacer sequences
     v7 barcode from GESTALT paper Table S4 is unedited barcode
     initial barcode state equal to v7 by default
     '''
-    v7 = (  'cg', 'GATACGATACGCGCACGCTATGG',
-          'agtc', 'GACACGACTCGCGCATACGATGG',
-          'agtc', 'GATAGTATGCGTATACGCTATGG',
-          'agtc', 'GATATGCATAGCGCATGCTATGG',
-          'agtc', 'GAGTCGAGACGCTGACGATATGG',
-          'agtc', 'GCTACGATACACTCTGACTATGG',
-          'agtc', 'GCGACTGTACGCACACGCGATGG',
-          'agtc', 'GATACGTAGCACGCAGACTATGG',
-          'agtc', 'GACACAGTACTCTCACTCTATGG',
-          'agtc', 'GATATGAGACTCGCATGTGATGG',
-          'ga')
     def __init__(self,
                  target_lambdas=scipy.ones(10),
                  repair_lambda=10,
                  repair_deletion_probability=.1,
                  repair_deletion_lambda=2,
-                 barcode=v7):
+                 barcode=BARCODE_V7):
         # validate arguments
         for i, target_lambda in enumerate(target_lambdas, 1):
             if target_lambda < 0:
