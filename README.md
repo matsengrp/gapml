@@ -13,3 +13,6 @@ python fasta_to_phylip.py
 mix
 
 python compare_trees.py
+
+# Parsing pipeline
+python3 read_seq_data.py

@@ -2,10 +2,10 @@ from enum import Enum
 from typing import List
 from typing import Dict
 
+
 class EventType(Enum):
     DELETE = 1
     INSERT = 2
-    UNKNOWN = 3
 
 
 class Event:
@@ -42,7 +42,14 @@ class InsertionEvent(Event):
 
 
 class BarcodeEvents:
+    """
+    Represents a single barcode and its cell
+    """
     def __init__(self, events: List[Event], organ: str):
+        """
+        @param events: list of events in the barcode
+        @param organ: organ the barcode was sequenced from
+        """
         self.events = events
         self.organ = organ
 

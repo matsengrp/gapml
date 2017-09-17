@@ -1,4 +1,5 @@
 import csv
+import argparse
 from typing import List
 
 from models import Event
@@ -13,6 +14,12 @@ from constants import NO_EVENT_STRS
 from constants import NUM_BARCODE_V7_TARGETS
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description='read cell file')
+    parser.add_argument('reads_file', type=str, help='Collapsed reads file: format 7B')
+    return parser.parse_args()
+
+
 def process_event_format7B(event_str: str):
     """
     Takes a single event string and creates an event object
@@ -22,11 +29,9 @@ def process_event_format7B(event_str: str):
     event_len = int(event_split[0][:-1])
     event_pos = int(event_split[1])
     if event_type_str == "D":
-        d = DeletionEvent(event_len, event_pos)
-        return d
+        return DeletionEvent(event_len, event_pos)
     elif event_type_str == "I":
-        d = InsertionEvent(event_len, event_pos, event_split[2])
-        return d
+        return InsertionEvent(event_len, event_pos, event_split[2])
     else:
         raise ValueError("Unrecognized event: %s" % event_str)
 
@@ -48,7 +53,6 @@ def parse_reads_file_format7B(file_name, target_hdr_fmt="target%d"):
         reader = csv.reader(f, delimiter='\t')
         header = next(reader)
         target_start_idx = header.index(target_hdr_fmt % 1)
-        num_row = 1
         for row in reader:
             organ = row[0]
             if organ not in CONTROL_ORGANS:
@@ -57,17 +61,13 @@ def parse_reads_file_format7B(file_name, target_hdr_fmt="target%d"):
                     organ,
                 )
                 all_barcodes.append(barcode_events)
-                num_row += 1
-                # if num_row > 10:
-                #     break
 
     return CellReads(all_barcodes)
 
 
 def main():
-    cell_reads = parse_reads_file_format7B("../data/fish_7B_UMI_collapsed_reads.txt")
-    print(len(cell_reads.all_barcodes))
-    # print(cell_reads.get_event_abundance())
+    args = parse_args()
+    cell_reads = parse_reads_file_format7B(args.reads_file)
 
 
 if __name__ == "__main__":
