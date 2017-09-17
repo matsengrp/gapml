@@ -47,7 +47,10 @@ def process_barcode_format7B(target_str_list: List[str], organ: str):
     return BarcodeEvents(events, organ)
 
 
-def parse_reads_file_format7B(file_name, target_hdr_fmt="target%d"):
+def parse_reads_file_format7B(file_name, target_hdr_fmt="target%d", max_read=None):
+    """
+    @param max_read: maximum number of barcodes to read (for debugging purposes)
+    """
     all_barcodes = []
     with open(file_name, "r") as f:
         reader = csv.reader(f, delimiter='\t')
@@ -61,6 +64,8 @@ def parse_reads_file_format7B(file_name, target_hdr_fmt="target%d"):
                     organ,
                 )
                 all_barcodes.append(barcode_events)
+                if max_read is not None and len(all_barcodes) == max_read:
+                    break
 
     return CellReads(all_barcodes)
 
