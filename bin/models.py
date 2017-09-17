@@ -15,9 +15,9 @@ class Event:
         self.start_pos = start_pos
 
     def __str__(self):
-        return self.get_evt_id()
+        return self.get_str_id()
 
-    def get_evt_id(self):
+    def get_str_id(self):
         """
         Identifying string for this event
         """
@@ -28,7 +28,7 @@ class DeletionEvent(Event):
     def __init__(self, event_len: int, start_pos: int):
         super(DeletionEvent, self).__init__(EventType.DELETE, event_len, start_pos)
 
-    def get_evt_id(self):
+    def get_str_id(self):
         return "%s: %d+%d" % (self.event_type, self.start_pos, self.event_len)
 
 
@@ -37,7 +37,7 @@ class InsertionEvent(Event):
         super(InsertionEvent, self).__init__(EventType.INSERT, event_len, start_pos)
         self.insert_str = insert_str
 
-    def get_evt_id(self):
+    def get_str_id(self):
         return "%s: %d+%d, %s" % (self.event_type, self.start_pos, self.event_len, self.insert_str)
 
 
@@ -60,15 +60,17 @@ class CellReads:
         @param all_barcodes: all the barcodes in the cell reads data
         """
         self.all_barcodes = all_barcodes
+        self.event_abundance = self._get_event_abundance()
+        self.event_str_ids = self.event_abundance.keys()
 
-    def get_event_abundance(self):
+    def _get_event_abundance(self):
         """
         @return dictionary mapping event id to number of times the event was seen
         """
         evt_weight_dict = dict()
         for barcode_evts in self.all_barcodes:
             for evt in barcode_evts.events:
-                evt_id = evt.get_evt_id()
+                evt_id = evt.get_str_id()
                 if evt_id not in evt_weight_dict:
                     evt_weight_dict[evt_id] = 1
                 else:
