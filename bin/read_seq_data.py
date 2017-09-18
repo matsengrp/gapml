@@ -41,9 +41,8 @@ def process_barcode_format7B(target_str_list: List[str], organ: str):
     Takes a barcode encoded in 7B format and returns the list of events
     """
     target_evt_strs = [target_str.split("&") for i, target_str in enumerate(target_str_list)]
-    barcode_evt_strs = [evt for target_evts in target_evt_strs for evt in target_evts if evt not in NO_EVENT_STRS]
-    barcode_evt_strs = set(barcode_evt_strs)
-    events = [process_event_format7B(event_str) for event_str in barcode_evt_strs]
+    barcode_evt_str_lists = [[evt for evt in target_evts if evt not in NO_EVENT_STRS] for target_evts in target_evt_strs]
+    events = [[process_event_format7B(event_str) for event_str in event_strs] for event_strs in barcode_evt_str_lists]
     return BarcodeEvents(events, organ)
 
 

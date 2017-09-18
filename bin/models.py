@@ -2,6 +2,8 @@ from enum import Enum
 from typing import List
 from typing import Dict
 
+from constants import NUM_BARCODE_V7_TARGETS
+
 
 class EventType(Enum):
     DELETE = 1
@@ -16,6 +18,9 @@ class Event:
 
     def __str__(self):
         return self.get_str_id()
+
+    def __hash__(self):
+        return hash(self.get_str_id())
 
     def get_str_id(self):
         """
@@ -45,13 +50,18 @@ class BarcodeEvents:
     """
     Represents a single barcode and its cell
     """
-    def __init__(self, events: List[Event], organ: str):
+    def __init__(self, events: List[List[Event]], organ: str):
         """
-        @param events: list of events in the barcode
+        @param events: list of events in the barcode, each list element is the events associated with that target
         @param organ: organ the barcode was sequenced from
         """
         self.events = events
+        assert(len(events) == NUM_BARCODE_V7_TARGETS)
         self.organ = organ
+        self.uniq_events = set([evt for evts in events for evt in evts])
+
+    def get_str_id(self):
+        return ".".join([evt.get_str_id() for evt in self.uniq_events])
 
 
 class CellReads:
@@ -62,6 +72,19 @@ class CellReads:
         self.all_barcodes = all_barcodes
         self.event_abundance = self._get_event_abundance()
         self.event_str_ids = self.event_abundance.keys()
+        self.uniq_barcodes = self._get_uniq_barcodes()
+
+    def _get_uniq_barcodes(self):
+        uniq_barcodes = []
+        uniq_strs = set()
+        for bcode in self.all_barcodes:
+            barcode_id = bcode.get_str_id()
+            if barcode_id in uniq_strs:
+                continue
+            else:
+                uniq_strs.add(barcode_id)
+                uniq_barcodes.append(bcode)
+        return uniq_barcodes
 
     def _get_event_abundance(self):
         """
@@ -69,7 +92,7 @@ class CellReads:
         """
         evt_weight_dict = dict()
         for barcode_evts in self.all_barcodes:
-            for evt in barcode_evts.events:
+            for evt in barcode_evts.uniq_events:
                 evt_id = evt.get_str_id()
                 if evt_id not in evt_weight_dict:
                     evt_weight_dict[evt_id] = 1
