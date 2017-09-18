@@ -19,9 +19,6 @@ class Event:
     def __str__(self):
         return self.get_str_id()
 
-    def __hash__(self):
-        return hash(self.get_str_id())
-
     def get_str_id(self):
         """
         Identifying string for this event
@@ -58,7 +55,19 @@ class BarcodeEvents:
         self.events = events
         assert(len(events) == NUM_BARCODE_V7_TARGETS)
         self.organ = organ
-        self.uniq_events = set([evt for evts in events for evt in evts])
+        self.uniq_events = self._get_uniq_events()
+
+    def _get_uniq_events(self):
+        uniq_evt_strs = set()
+        uniq_events = []
+        for evts in self.events:
+            for evt in evts:
+                if evt.get_str_id() in uniq_evt_strs:
+                    continue
+                else:
+                    uniq_evt_strs.add(evt.get_str_id())
+                    uniq_events.append(evt)
+        return uniq_events
 
     def get_str_id(self):
         return ".".join([evt.get_str_id() for evt in self.uniq_events])
