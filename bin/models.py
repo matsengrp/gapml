@@ -1,3 +1,4 @@
+import re
 from enum import Enum
 from typing import List
 from typing import Dict
@@ -25,13 +26,24 @@ class Event:
         """
         raise NotImplementedError()
 
+    @staticmethod
+    def parse_str_id(event_str_id: str):
+        event_type, event_str_remain = event_str_id.split(":")
+        if event_type == str(EventType.DELETE):
+            start_pos, event_len = event_str_remain.split("+")
+            return DeletionEvent(int(start_pos), int(event_len))
+        elif  event_type == str(EventType.INSERT):
+            start_pos, event_len, insertion_str = filter(None, re.split("[+,]", event_str_remain))
+            return InsertionEvent(int(start_pos), int(event_len), insertion_str)
+        else:
+            raise ValueError("EventType not recognized: %s" % event_str_id)
 
 class DeletionEvent(Event):
     def __init__(self, event_len: int, start_pos: int):
         super(DeletionEvent, self).__init__(EventType.DELETE, event_len, start_pos)
 
     def get_str_id(self):
-        return "%s: %d+%d" % (self.event_type, self.start_pos, self.event_len)
+        return "%s:%d+%d" % (self.event_type, self.start_pos, self.event_len)
 
 
 class InsertionEvent(Event):
@@ -40,7 +52,7 @@ class InsertionEvent(Event):
         self.insert_str = insert_str
 
     def get_str_id(self):
-        return "%s: %d+%d, %s" % (self.event_type, self.start_pos, self.event_len, self.insert_str)
+        return "%s:%d+%d,%s" % (self.event_type, self.start_pos, self.event_len, self.insert_str)
 
 
 class BarcodeEvents:

@@ -7,11 +7,14 @@ from __future__ import print_function
 from ete3 import Tree
 import re, random
 from collections import defaultdict
+import csv
 
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio.Data.IUPACData import ambiguous_dna_values
+
+from models import Event
 
 
 # iterate over recognized sections in the phylip output file.
@@ -60,21 +63,30 @@ def parse_seqdict(fh, mode='mix'):
 # parse the dnaml output file and return data structures containing a
 # list biopython.SeqRecords and a dict containing adjacency
 # relationships and distances between nodes.
-def parse_outfile(outfile):
+def parse_outfile(outfile, event_dict_file):
     '''parse phylip outfile'''
+
+    event_dict = {}
+    with open(event_dict_file, 'r') as f:
+        csv_reader = csv.reader(f, delimiter=" ")
+        for row in csv_reader:
+            event_id = int(row[0])
+            event = Event.parse_str_id(row[1])
+            event_dict[event_id] = event
+
     trees = []
     # Ugg... for compilation need to let python know that these will definely both be defined :-/
     with open(outfile, 'rU') as fh:
         for sect in sections(fh):
             if sect[0] == 'sequences':
                 sequences, edges = parse_seqdict(fh, sect[1])
-                trees.append(build_tree(sequences, edges))
+                trees.append(build_tree(sequences, edges, event_dict))
     return trees
 
 
 
 # build a tree from a set of sequences and an adjacency dict.
-def build_tree(sequences, edges):
+def build_tree(sequences, edges, event_dict):
     # build an ete tree
     # first a dictionary of disconnected nodes
     seq_len = 0
@@ -101,4 +113,3 @@ def build_tree(sequences, edges):
 def hamming_distance(seq1, seq2):
     '''Hamming distance between two sequences of equal length'''
     return sum(x != y for x, y in zip(seq1, seq2))
-

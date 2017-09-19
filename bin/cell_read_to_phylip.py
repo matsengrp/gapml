@@ -60,13 +60,20 @@ def convert_cell_reads_to_phylip(
     file_name: str,
     phylip_infile: str = "infile",
     phylip_weights_file: str = "weights",
+    event_dict_file: str = "event_dict.txt",
 ):
     """
     Convert cell read file to phylip mix input
     """
     cell_reads = parse_reads_file_format7B(file_name)
     evt_to_id_dict = {evt_str: i for i, evt_str in enumerate(cell_reads.event_str_ids)}
+    evt_list = [(evt_id, evt_str) for evt_str, evt_id in evt_to_id_dict]
     num_events = len(cell_reads.event_str_ids)
+
+    sorted_evt_list = sorted(evt_list, key=lambda c: c[0])
+    with open(event_dict_file, "w") as f:
+        for evt_id, evt_str in sorted_evt_list:
+            f.write("%d %s\n" % (evt_id, evt_str))
 
     phylip_lines = make_phylip_lines(cell_reads, evt_to_id_dict)
     with open(phylip_infile, "w") as f:
