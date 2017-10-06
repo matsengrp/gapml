@@ -35,12 +35,13 @@ class Barcode:
     v7 barcode from GESTALT paper Table S4 is unedited barcode
     initial barcode state equal to v7 by default
     '''
+    UNEDITED_BARCODE = BARCODE_V7
     def __init__(self,
                  target_lambdas=scipy.ones(10),
                  repair_lambda=10,
                  repair_deletion_probability=.1,
                  repair_deletion_lambda=2,
-                 barcode=BARCODE_V7):
+                 barcode=UNEDITED_BARCODE):
         # validate arguments
         for i, target_lambda in enumerate(target_lambdas, 1):
             if target_lambda < 0:
@@ -109,7 +110,7 @@ class Barcode:
         # put it back together
         self.barcode = (left + center + right).split(',')
         # sanity check
-        assert len(''.join(self.barcode)) == len(''.join(self.v7))
+        assert len(''.join(self.barcode)) == len(''.join(self.UNEDITED_BARCODE))
 
     def repair(self):
         '''
@@ -136,7 +137,7 @@ class Barcode:
         for target in range(self.n_targets):
             index = 1 + 2*target
             # NOTE: this is more robust than checking for gap characters, since we might later model insertions
-            if self.barcode[index] != self.v7[index]:
+            if self.barcode[index] != self.UNEDITED_BARCODE[index]:
                 self.target_lambdas[target] = 0
         # update which targets still need repair
         self.needs_repair = {target for target in self.needs_repair if target < min(target1, target2) or target > max(target1, target2)}
@@ -268,7 +269,7 @@ class BarcodeTree():
         dat = []
         n_leaves = len(self.tree)
         plt.figure(figsize=(5,1))
-        for position, letter in enumerate(str(''.join(Barcode.v7))):
+        for position, letter in enumerate(str(''.join(Barcode.UNEDITED_BARCODE))):
             if letter.islower():
                 plt.bar(position, 100, 1, facecolor='black', alpha=.2)
             dat.append(100*sum(str(leaf.barcode)[position] == '-' for leaf in self.tree)/n_leaves)
@@ -313,7 +314,7 @@ class BarcodeForest():
         for i, tree in enumerate(self.trees):
             dat = []
             n_leaves = tree.n_leaves()
-            for position, letter in enumerate(str(''.join(Barcode.v7))):
+            for position, letter in enumerate(str(''.join(Barcode.UNEDITED_BARCODE))):
                 if i == 0 and letter.islower():
                     plt.bar(position, 100, 1, facecolor='black', alpha=.2)
                 dat.append(100*sum(str(leaf.barcode)[position] == '-' for leaf in tree.tree)/n_leaves)
