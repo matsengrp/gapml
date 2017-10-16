@@ -35,13 +35,15 @@ class Barcode:
     v7 barcode from GESTALT paper Table S4 is unedited barcode
     initial barcode state equal to v7 by default
     '''
-    UNEDITED_BARCODE = BARCODE_V7
     def __init__(self,
                  target_lambdas=scipy.ones(10),
                  repair_lambda=10,
                  repair_deletion_probability=.1,
-                 repair_deletion_lambda=2,
-                 barcode=UNEDITED_BARCODE):
+                 repair_deletion_lambda=3,
+                 repair_insertion_probability=.05,
+                 repair_insertion_lambda=2,
+                 barcode=BARCODE_V7,
+                 unedited_barcode=BARCODE_V7):
         # validate arguments
         for i, target_lambda in enumerate(target_lambdas, 1):
             if target_lambda < 0:
@@ -52,6 +54,14 @@ class Barcode:
             raise ValueError('repair deletion probability {} is outside the unit interval'.format(repair_deletion_probability))
         if repair_deletion_lambda < 0:
             raise ValueError('repair deletion parameter {} is negative'.format(repair_deletion_lambda))
+        if not (0 <= repair_insertion_probability <= 1):
+            raise ValueError('repair insertion probability {} is outside the unit interval'.format(repair_insertion_probability))
+        if repair_insertion_lambda < 0:
+            raise ValueError('repair insertion parameter {} is negative'.format(repair_insertion_lambda))
+        if set(''.join(unedited_barcode)) != set('ACGT'):
+            raise ValueError('barcode sequence {} must contain only capital letters (inserstions will be denoted in lower case)'.format(unedited_barcode))
+        # The original barcode
+        self.unedited_barcode = unedited_barcode
         # an editable copy of the barcode (as a list for mutability)
         self.barcode = list(barcode)
         # number of targets
@@ -68,14 +78,19 @@ class Barcode:
         # poisson parameter for how much (~symmetric) deletion about cut sites
         # happens if deletion happens with repair
         self.repair_deletion_lambda = repair_deletion_lambda
+        # insertion probability
+        self.repair_insertion_probability = repair_insertion_probability
+        # poisson parameter for how much insertion at cut sites
+        self.repair_insertion_lambda = repair_insertion_lambda
         # a list of target indices that have a DSB and need repair
         self.needs_repair = set()
 
-    def delete(self, target1, target2, deletion_length):
+    def indel(self, target1, target2, deletion_length=0, insertion=''):
         '''
         a utility function for deletion
         if target1 != target2, create an inter-target deletion, otherwise focal deletion
         deletion_length is symmetrically deleted about cut site(s)
+        insertion sequence is placed between target deletions
         '''
         # indices into the self.barcode list (accounting for the spacers)
         index1 = 1 + 2*min(target1, target2)
@@ -108,9 +123,7 @@ class Barcode:
                 right = right[:position] + '-' + right[(position + 1):]
                 deleted += 1
         # put it back together
-        self.barcode = (left + center + right).split(',')
-        # sanity check
-        assert len(''.join(self.barcode)) == len(''.join(self.UNEDITED_BARCODE))
+        self.barcode = (left + insertion + center + right).split(',')
 
     def repair(self):
         '''
@@ -125,19 +138,26 @@ class Barcode:
         # random draw for whether or not there will be a deletion
         if random() < self.repair_deletion_probability:
             # a random draw for symmetric deletion about cut site(s)
-            deletion_length = poisson.rvs(self.repair_deletion_lambda)
+            deletion_length = poisson.rvs(self.repair_deletion_lambda, loc=1)
         else:
             deletion_length = 0
+        # generate random insertion
+        if random() < self.repair_insertion_probability:
+            # a random draw for symmetric deletion about cut site(s)
+            insertion_length = poisson.rvs(self.repair_insertion_lambda, loc=1)
+        else:
+            insertion_length = 0
+        insertion = ''.join(choice(list('acgt'), insertion_length))
         # choose a random pair of targets among those that need repair (with replacement)
         # if two different targets are chose, that will result in an inter-target deletion
         target1, target2 = choice(list(self.needs_repair), 2)
         # create deletion
-        self.delete(target1, target2, deletion_length)
+        self.indel(target1, target2, deletion_length, insertion)
         # update target_lambdas
         for target in range(self.n_targets):
             index = 1 + 2*target
             # NOTE: this is more robust than checking for gap characters, since we might later model insertions
-            if self.barcode[index] != self.UNEDITED_BARCODE[index]:
+            if self.barcode[index] != self.unedited_barcode[index]:
                 self.target_lambdas[target] = 0
         # update which targets still need repair
         self.needs_repair = {target for target in self.needs_repair if target < min(target1, target2) or target > max(target1, target2)}
@@ -186,6 +206,7 @@ class BarcodeTree():
     def __init__(self, barcode, birth_lambda, simulation_time=None):
         if birth_lambda < 0:
             raise ValueError('birth rate {} is negative'.format(birth_lambda))
+        self.initial_barcode = barcode.barcode
         self.birth_lambda = birth_lambda
         self.tree = TreeNode(dist=0)
         self.tree.add_feature('barcode', copy.deepcopy(barcode))
@@ -221,9 +242,9 @@ class BarcodeTree():
             node.add_child(daughter2.tree)
 
         if root:
-            self.aln = self.create_alignments(self.tree)
+            #self.aln = self.create_alignments(self.tree)
             self.collapsed_tree = CollapsedTree(self.tree)
-            self.collapsed_aln = self.create_alignments(self.collapsed_tree.tree)
+            #self.collapsed_aln = self.create_alignments(self.collapsed_tree.tree)
 
     def create_alignments(self, tree):
         """
@@ -250,7 +271,12 @@ class BarcodeTree():
         for n in self.tree.traverse():
            n.set_style(style)
         for leaf in self.tree:
+           # get the motif list for indels in the format that SeqMotifFace expects
+           motifs = []
+           for match in re.compile('[acgt]+').finditer(str(leaf.barcode)):
+               motifs.append([match.start(), match.end(), '[]', match.end() - match.start(), 1, 'blue', 'blue', None])
            seqFace = SeqMotifFace(seq=str(leaf.barcode).upper(),
+                                  motifs=motifs,
                                   seqtype='nt',
                                   seq_format='[]',
                                   height=3,
@@ -269,10 +295,11 @@ class BarcodeTree():
         dat = []
         n_leaves = len(self.tree)
         plt.figure(figsize=(5,1))
-        for position, letter in enumerate(str(''.join(Barcode.UNEDITED_BARCODE))):
+        for position, letter in enumerate(str(''.join(self.tree.barcode.unedited_barcode))):
             if letter.islower():
                 plt.bar(position, 100, 1, facecolor='black', alpha=.2)
-            dat.append(100*sum(str(leaf.barcode)[position] == '-' for leaf in self.tree)/n_leaves)
+            barcode_string_noindel = str(leaf.barcode).translate(None, 'acgt')
+            dat.append(100*sum(barcode_string_noindel[position] == '-' for leaf in self.tree)/n_leaves)
         plt.plot(dat, color='red', lw=2, clip_on=False)
         plt.xlim(0, len(dat))
         plt.ylim(0, 100)
@@ -314,7 +341,7 @@ class BarcodeForest():
         for i, tree in enumerate(self.trees):
             dat = []
             n_leaves = tree.n_leaves()
-            for position, letter in enumerate(str(''.join(Barcode.UNEDITED_BARCODE))):
+            for position, letter in enumerate(str(''.join(tree.initial_barcode))):
                 if i == 0 and letter.islower():
                     plt.bar(position, 100, 1, facecolor='black', alpha=.2)
                 dat.append(100*sum(str(leaf.barcode)[position] == '-' for leaf in tree.tree)/n_leaves)
@@ -387,8 +414,10 @@ def main():
     parser.add_argument('outbase', type=str, help='base name for plot and fasta output')
     parser.add_argument('--target_lambdas', type=float, nargs='+', default=[2**-n for n in range(10)], help='target cut poisson rates')
     parser.add_argument('--repair_lambda', type=float, default=10, help='repair poisson rate')
-    parser.add_argument('--repair_deletion_probability', type=float, default=.5, help='probability of deletion during repair')
-    parser.add_argument('--repair_deletion_lambda', type=float, default=1, help='poisson parameter for distribution of symmetric deltion about cut site(s) if deletion happens during repair')
+    parser.add_argument('--repair_deletion_probability', type=float, default=.1, help='probability of deletion during repair')
+    parser.add_argument('--repair_deletion_lambda', type=float, default=2, help='poisson parameter for distribution of symmetric deltion about cut site(s) if deletion happens during repair')
+    parser.add_argument('--repair_insertion_probability', type=float, default=.05, help='probability of insertion during repair')
+    parser.add_argument('--repair_insertion_lambda', type=float, default=2, help='poisson parameter for distribution of insertion in cut site(s) if deletion happens during repair')
     parser.add_argument('--birth_lambda', type=float, default=1, help='birth rate')
     parser.add_argument('--time', type=float, default=5, help='how much time to simulate')
     parser.add_argument('--min_leaves', type=int, default=0, help='condition on at least this many leaves')
@@ -401,14 +430,16 @@ def main():
     forest = BarcodeForest(Barcode(target_lambdas=args.target_lambdas,
                                    repair_lambda=args.repair_lambda,
                                    repair_deletion_probability=args.repair_deletion_probability,
-                                   repair_deletion_lambda=args.repair_deletion_lambda),
+                                   repair_deletion_lambda=args.repair_deletion_lambda,
+                                   repair_insertion_probability=args.repair_insertion_probability,
+                                   repair_insertion_lambda=args.repair_insertion_lambda),
                            birth_lambda=args.birth_lambda,
                            simulation_time=args.time,
                            min_leaves=args.min_leaves,
                            n=args.n_trees)
     forest.editing_profile(args.outbase + '.editing_profile.pdf')
-    forest.write_alignments(args.outbase)
-    forest.write_collapsed_alignments(args.outbase)
+    #forest.write_alignments(args.outbase)
+    #forest.write_collapsed_alignments(args.outbase)
     forest.render(args.outbase)
     forest.summary_plots(args.outbase + '.summary_plots.pdf')
 
