@@ -1,5 +1,5 @@
 """
-Converts the fasta files from simulation.py to input to PHYLIP MIX
+Converts the fastq files from simulation.py to input to PHYLIP MIX
 Makes the binary file format
 """
 
@@ -11,14 +11,14 @@ import numpy as np
 
 def main():
     parser = argparse.ArgumentParser(description='convert to MIX')
-    parser.add_argument('fasta', type=str, help='fasta input')
+    parser.add_argument('fastq', type=str, help='fastq input')
     parser.add_argument('--out', type=str, help='output to feed to phylip mix')
     args = parser.parse_args()
 
     # Naive processing of events
     all_events = set()
     processed_seqs = []
-    for record in SeqIO.parse(args.fasta, 'fastq'):
+    for record in SeqIO.parse(args.fastq, 'fastq'):
         seq_events = record.description
         processed_seqs.append((record.id, seq_events))
         all_events.update(seq_events)

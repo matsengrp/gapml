@@ -436,11 +436,11 @@ class BarcodeForest():
 
     def write_sequences(self, outbase):
         for i, tree in enumerate(self.trees, 1):
-            tree.write_sequences('{}.{}.fasta'.format(outbase, i))
+            tree.write_sequences('{}.{}.fastq'.format(outbase, i))
 
     def write_collapsed_sequences(self, outbase):
         for i, tree in enumerate(self.trees, 1):
-            tree.write_collapsed_sequences('{}.{}.collapsed.fasta'.format(outbase, i))
+            tree.write_collapsed_sequences('{}.{}.collapsed.fastq'.format(outbase, i))
 
     def render(self, outbase):
         for i, tree in enumerate(self.trees, 1):
@@ -449,7 +449,7 @@ class BarcodeForest():
 def main():
     '''do things, the main things'''
     parser = argparse.ArgumentParser(description='simulate GESTALT')
-    parser.add_argument('outbase', type=str, help='base name for plot and fasta output')
+    parser.add_argument('outbase', type=str, help='base name for plot and fastq output')
     parser.add_argument('--target_lambdas', type=float, nargs='+', default=[1 for _ in range(10)], help='target cut poisson rates')
     parser.add_argument('--repair_lambda', type=float, default=10, help='repair poisson rate')
     parser.add_argument('--repair_indel_probability', type=float, default=.1, help='probability of deletion during repair')
