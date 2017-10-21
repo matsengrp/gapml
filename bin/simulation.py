@@ -17,6 +17,7 @@ import pandas as pd
 import matplotlib
 matplotlib.use('agg')
 from matplotlib import pyplot as plt
+from matplotlib.colors import LogNorm
 import seaborn as sns
 sns.set(style="white", color_codes=True)
 sns.set_style('ticks')
@@ -139,11 +140,12 @@ class Barcode:
         else:
             deletion_length = 0
             insertion_length = 0
+        # The inserted nucleotide content is just uniform random
         insertion = ''.join(choice(list('acgt'), insertion_length))
         # choose a random pair of targets among those that need repair (with replacement)
-        # if two different targets are chose, that will result in an inter-target deletion
+        # if two different targets are chose, that will result in an inter-target indel
         target1, target2 = choice(list(self.needs_repair), 2)
-        # create deletion
+        # create indel
         self.indel(target1, target2, deletion_length, insertion)
         # update target_lambdas
         for target in range(self.n_targets):
@@ -157,7 +159,7 @@ class Barcode:
     def simulate(self, time):
         '''
         simulate a specified time of editing
-        - possible that repair event leaves no deletion
+        - possible that repair event leaves no indel
         - barcode may be rendered uneditable at all targets (exhausted)
         '''
         if time <= 0:
@@ -312,18 +314,29 @@ class BarcodeTree():
 
     def editing_profile(self, file):
         '''plot profile of deletion frequency at each position over leaves'''
-        dat = []
         n_leaves = len(self.tree)
-        plt.figure(figsize=(5,1))
+        deletion_frequency = []
+        plt.figure(figsize=(5,1.5))
         position = 0
+        # loop through and get the deletion frequency of each site
         for bit_index, bit in enumerate(self.tree.barcode.unedited_barcode):
             if len(bit) == 4: # the spacer seqs are length 4, we plot vertical bars to demarcate target boundaries
                 plt.bar(position, 100, 4, facecolor='black', alpha=.2)
             for bit_position, letter in enumerate(bit):
-                dat.append(100*sum(re.sub('[acgt]', '', leaf.barcode.barcode[bit_index])[bit_position] == '-' for leaf in self.tree)/n_leaves)
+                deletion_frequency.append(100*sum(re.sub('[acgt]', '', leaf.barcode.barcode[bit_index])[bit_position] == '-' for leaf in self.tree)/n_leaves)
             position += len(bit)
-        plt.plot(dat, color='red', lw=2, clip_on=False)
-        plt.xlim(0, len(dat))
+        plt.plot(deletion_frequency, color='red', lw=2, clip_on=False)
+        # another loop through to find the frequency that each site is the start of an insertion
+        insertion_start_frequency = scipy.zeros(len(str(self.tree.barcode)))
+        for leaf in self.tree:
+            insertion_total = 0
+            for insertion in re.compile('[acgt]+').finditer(str(leaf.barcode)):
+                start = insertion.start() - insertion_total
+                # find the insertions(s) in this indel
+                insertion_total =+ len(insertion.group(0))
+                insertion_start_frequency[start] += 100/n_leaves
+        plt.plot(insertion_start_frequency, color='blue', lw=2, clip_on=False)
+        plt.xlim(0, len(deletion_frequency))
         plt.ylim(0, 100)
         plt.ylabel('Editing (%)')
         plt.tick_params(
@@ -335,33 +348,50 @@ class BarcodeTree():
         plt.tight_layout()
         plt.savefig(file)
 
-    def indel_boundary_plot(self, file):
+    def indel_boundary(self, file):
         '''plot a scatter of indel start/end positions'''
         indels = pd.DataFrame(columns=('indel start', 'indel end'))
         i = 0
         for leaf in self.tree:
             for match in re.compile('[-]+').finditer(re.sub('[acgt]', '', ''.join(leaf.barcode.barcode))):
-                indels.loc[i] = match.start(), match.end() #, match)
+                indels.loc[i] = match.start(), match.end()
                 i += 1
         bc_len = len(''.join(self.tree.barcode.unedited_barcode))
         plt.figure(figsize=(3, 3))
         bins = scipy.linspace(0, bc_len, 10 + 1)
-        g = sns.jointplot('indel start', 'indel end', data=indels,
-                          stat_func=None, xlim=(0, bc_len - 1), ylim=(0, bc_len - 1),
-                          space=0, marginal_kws=dict(bins=bins), joint_kws=dict(alpha=.2))
+        g = (sns.jointplot('indel start', 'indel end', data=indels,
+                           stat_func=None, xlim=(0, bc_len - 1), ylim=(0, bc_len - 1),
+                           space=0, marginal_kws=dict(bins=bins, color='gray'), joint_kws=dict(alpha=.2, marker='+', color='black', zorder=2))
+             .plot_joint(plt.hist2d, bins=bins, norm=LogNorm(), cmap='Reds', zorder=0))
         position = 0
         for bit in self.tree.barcode.unedited_barcode:
-            if len(bit) == 4: # the spacer seqs are length 4, we plot vertical bars to demarcate target boundaries
+            if len(bit) == 4: # the spacer seqs are length 4, we plot bars to demarcate target boundaries
                 for ax in g.ax_marg_x, g.ax_joint:
-                    ax.bar(position, bc_len if ax == g.ax_joint else 1, 4, facecolor='black', alpha=.2)
+                    ax.bar(position, bc_len if ax == g.ax_joint else 1, 4, facecolor='gray', lw=0, zorder=1)
                 for ax in g.ax_marg_y, g.ax_joint:
-                    ax.barh(position, bc_len if ax == g.ax_joint else 1, 4, facecolor='black', alpha=.2)
+                    ax.barh(position, bc_len if ax == g.ax_joint else 1, 4, facecolor='gray', lw=0, zorder=1)
             position += len(bit)
         g.ax_joint.plot([0, bc_len - 1], [0, bc_len - 1], ls='--', color='black', lw=1, alpha=.2)
         g.ax_joint.set_xticks([])
         g.ax_joint.set_yticks([])
         # plt.tight_layout()
         plt.savefig(file)
+
+    def event_joint(self, file):
+        '''make a seaborn pairgrid plot showing deletion length, 3' deltion length, and insertion length'''
+        raise NotImplementedError("not correctly implemented, can't identify 5' from 3' when there is no insertion")
+        indels = pd.DataFrame(columns=("5' deletion length", "3' deletion length", 'insertion length'))
+        i = 0
+        for leaf in self.tree:
+            for indel in re.compile(r'(-*)([acgt]*)(-*)+').finditer(str(leaf.barcode)):
+                if len(indel.group(0)) > 0:
+                    indels.loc[i] = (len(indel.group(1)) + len(indel.group(3)), len(indel.group(2)))
+                    i += 1
+        plt.figure(figsize=(3, 3))
+        sns.pairplot(indels)
+        plt.tight_layout()
+        plt.savefig(file)
+
 
     def n_leaves(self):
         return len(self.tree)
@@ -390,24 +420,29 @@ class BarcodeForest():
         for i, tree in enumerate(self.trees, 1):
             tree.editing_profile('{}.{}.editing_profile.pdf'.format(outbase, i))
 
-    def indel_boundary_plot(self, outbase):
+    def indel_boundary(self, outbase):
         '''indel start/end plot for each tree'''
         for i, tree in enumerate(self.trees, 1):
-            tree.indel_boundary_plot('{}.{}.indel_boundary_plot.pdf'.format(outbase, i))
+            tree.indel_boundary('{}.{}.indel_boundary.pdf'.format(outbase, i))
+
+    def event_joint(self, outbase):
+        '''joint event stats'''
+        for i, tree in enumerate(self.trees, 1):
+            tree.event_joint('{}.{}.event_joint.pdf'.format(outbase, i))
 
 
     def summary_plots(self, file):
         n_cells = []
         n_genotypes = []
-        n_deletions = []
-        deletion_lens = []
+        n_indels = []
+        indel_lens = []
         for tree in self.trees:
             # counter for the unique leaf genotypes
             genotypes = Counter([''.join(leaf.barcode.barcode) for leaf in tree.tree])
             n_genotypes.append(len(genotypes))
             n_cells.append(sum(genotypes.values()))
-            n_deletions.append([len(re.findall('-+', genotype)) for genotype in genotypes.elements()])
-            deletion_lens.append([len(run.group(0)) for genotype in genotypes.elements() for run in re.finditer('-+', genotype)])
+            n_indels.append([len(re.findall('[-acgt]+', genotype)) for genotype in genotypes.elements()])
+            indel_lens.append([len(run.group(0)) for genotype in genotypes.elements() for run in re.finditer('-+', genotype)])
 
         plt.figure(figsize=(12, 3))
         plt.subplot(1, 4, 1)
@@ -419,16 +454,16 @@ class BarcodeForest():
         plt.xlabel('number of genotypes')
         plt.xlim([0, None])
         plt.subplot(1, 4, 3)
-        plt.hist(n_deletions, stacked=True)
+        plt.hist(n_indels, stacked=True)
         # for x in n_deletions:
         #     sns.distplot(x, hist=False)
-        plt.xlabel('number of deletions')
+        plt.xlabel('number of indels')
         plt.xlim([0, None])
         plt.subplot(1, 4, 4)
-        plt.hist(deletion_lens, stacked=True)
+        plt.hist(indel_lens, stacked=True)
         # for x in deletion_lens:
         #     sns.distplot(x, hist=False)
-        plt.xlabel('deletion lengths')
+        plt.xlabel('indel lengths')
         plt.xlim([0, None])
         sns.despine()
         plt.tight_layout()
@@ -453,8 +488,8 @@ def main():
     parser.add_argument('--target_lambdas', type=float, nargs='+', default=[1 for _ in range(10)], help='target cut poisson rates')
     parser.add_argument('--repair_lambda', type=float, default=10, help='repair poisson rate')
     parser.add_argument('--repair_indel_probability', type=float, default=.1, help='probability of deletion during repair')
-    parser.add_argument('--repair_deletion_lambda', type=float, default=2, help='poisson parameter for distribution of symmetric deltion about cut site(s) if deletion happens during repair')
-    parser.add_argument('--repair_insertion_lambda', type=float, default=.5, help='poisson parameter for distribution of insertion in cut site(s) if deletion happens during repair')
+    parser.add_argument('--repair_deletion_lambda', type=float, default=2, help='poisson parameter for distribution of symmetric deltion about cut site(s)')
+    parser.add_argument('--repair_insertion_lambda', type=float, default=.5, help='poisson parameter for distribution of insertion in cut site(s)')
     parser.add_argument('--birth_lambda', type=float, default=1, help='birth rate')
     parser.add_argument('--time', type=float, default=5, help='how much time to simulate')
     parser.add_argument('--min_leaves', type=int, default=0, help='condition on at least this many leaves')
@@ -474,7 +509,9 @@ def main():
                            min_leaves=args.min_leaves,
                            n=args.n_trees)
     forest.editing_profile(args.outbase)
-    forest.indel_boundary_plot(args.outbase)
+    forest.indel_boundary(args.outbase)
+    # NOTE: function below not yet implemented
+    # forest.event_joint(args.outbase)
     forest.write_sequences(args.outbase)
     forest.write_collapsed_sequences(args.outbase)
     forest.render(args.outbase)
