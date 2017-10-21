@@ -1,5 +1,5 @@
 """
-Converts the fasta files from simulation.py to input to PHYLIP MIX
+Converts the fastq files from simulation.py to input to PHYLIP MIX
 Makes the binary file format
 """
 
@@ -9,33 +9,17 @@ import argparse
 from Bio import SeqIO
 import numpy as np
 
-def create_event_ids(observed_barcode):
-    barcode_len = len(observed_barcode)
-    events = []
-    end_idx = 0
-    while end_idx < barcode_len:
-        find_start_idx = observed_barcode[end_idx:].find("-")
-        if find_start_idx > 0:
-            start_idx = find_start_idx + end_idx
-            end_idx = start_idx
-            while observed_barcode[end_idx] == "-":
-                end_idx += 1
-            events.append((start_idx, end_idx))
-        else:
-            break
-    return events
-
 def main():
     parser = argparse.ArgumentParser(description='convert to MIX')
-    parser.add_argument('fasta', type=str, help='fasta input')
+    parser.add_argument('fastq', type=str, help='fastq input')
     parser.add_argument('--out', type=str, help='output to feed to phylip mix')
     args = parser.parse_args()
 
     # Naive processing of events
     all_events = set()
     processed_seqs = []
-    for record in SeqIO.parse(args.fasta, "fasta"):
-        seq_events = create_event_ids(record.seq)
+    for record in SeqIO.parse(args.fastq, 'fastq'):
+        seq_events = record.description
         processed_seqs.append((record.id, seq_events))
         all_events.update(seq_events)
     all_event_dict = {event_id: i for i, event_id in enumerate(all_events)}
