@@ -259,7 +259,8 @@ class BarcodeTree():
         if root:
             self.sequences = self.create_sequences(self.tree)
             self.collapsed_tree = CollapsedTree(self.tree)
-            self.collapsed_sequences = self.create_sequences(self.collapsed_tree.tree)
+            # NOTE: sequences do not necessary correspond to collapsed_tree
+            #       due to possible homoplasy
 
     @staticmethod
     def create_sequences(tree):
@@ -272,19 +273,17 @@ class BarcodeTree():
             name = 'b{}'.format(i)
             leaf.name = name
             barcode_sequence = re.sub('[-]', '', ''.join(leaf.barcode.barcode)).upper()
+            indel_events = ','.join(':'.join([str(start), str(end), str(insertion)]) for start, end, insertion in leaf.barcode.events())
             sequences.append(SeqRecord(Seq(barcode_sequence,
                                        generic_dna),
                              id=name,
-                             description=','.join(':'.join([str(start), str(end), str(insertion)]) for start, end, insertion in leaf.barcode.events()),
+                             description=indel_events,
                              letter_annotations=dict(phred_quality=[60]*len(barcode_sequence))
                              ))
         return sequences
 
     def write_sequences(self, file):
         SeqIO.write(self.sequences, open(file, 'w'), 'fastq')
-
-    def write_collapsed_sequences(self, file):
-        SeqIO.write(self.collapsed_sequences, open(file, 'w'), 'fastq')
 
     def render(self, file):
         '''render tree to image file'''
@@ -473,10 +472,6 @@ class BarcodeForest():
         for i, tree in enumerate(self.trees, 1):
             tree.write_sequences('{}.{}.fastq'.format(outbase, i))
 
-    def write_collapsed_sequences(self, outbase):
-        for i, tree in enumerate(self.trees, 1):
-            tree.write_collapsed_sequences('{}.{}.collapsed.fastq'.format(outbase, i))
-
     def render(self, outbase):
         for i, tree in enumerate(self.trees, 1):
             tree.render('{}.{}.pdf'.format(outbase, i))
@@ -513,7 +508,6 @@ def main():
     # NOTE: function below not yet implemented
     # forest.event_joint(args.outbase)
     forest.write_sequences(args.outbase)
-    forest.write_collapsed_sequences(args.outbase)
     forest.render(args.outbase)
     forest.summary_plots(args.outbase + '.summary_plots.pdf')
 
