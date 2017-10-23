@@ -11,7 +11,7 @@ CLT = cell lineage tree
 `class ObservedSeq`
 * Stores information from an observed sequence
 * `self.barcode`
-* `self.cell_type` (or maybe `gene_expr` in the future)
+* `self.cell_type` (or maybe `gene_expr` in the future) <!-- Not sure what type this will be, but could you generalize both of these possibilities to be a CellState superclass? Perhaps I'm getting a little too OOPy. -->
 * `self.abundance`
 * any other things?
 
