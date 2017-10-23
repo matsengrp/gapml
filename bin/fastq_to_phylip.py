@@ -19,13 +19,11 @@ def main():
     all_events = set()
     processed_seqs = []
     for record in SeqIO.parse(args.fastq, 'fastq'):
-        seq_events = record.description.split(',')
+        seq_events = record.description.split()[-1].split(',')
         processed_seqs.append((record.id, seq_events))
         all_events.update(seq_events)
     all_event_dict = {event_id: i for i, event_id in enumerate(all_events)}
     num_events = len(all_event_dict)
-
-    print(all_events)
 
     # Output file for PHYLIP
     # Format is very dumb: species name must be 10 characters long, followed by sequence of 0 and 1s
