@@ -1,4 +1,4 @@
-GESTALT Code structure
+# GESTALT Code structure
 
 CLT = cell lineage tree
 
