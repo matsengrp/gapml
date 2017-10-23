@@ -28,16 +28,16 @@ CLT = cell lineage tree
 * Parent class for simulating cell lineage trees. We can subclass this to play around with different generative models.
 * `def simulate(time)`
 * `class CLTSimulatorCellType(CLTSimulator)`
-> * Subclass where we generate CLT based on cell division/death/cell-type-differentiation. Barcode is independently modified along branches.
-> * `self.cell_type_tree = CellTypeTree()`
-> * `self.birth_rate`
-> * `self.death_rate`
+  * Subclass where we generate CLT based on cell division/death/cell-type-differentiation. Barcode is independently modified along branches.
+  * `self.cell_type_tree = CellTypeTree()`
+  * `self.birth_rate`
+  * `self.death_rate`
 * ... and more subclasses in the future
 
 `class CLTObserver`
 * Class that will simulate the observed data from the CLT. Samples leaf nodes from CLT. Subclass if you want to sample leaf nodes in some fancy way (e.g. you can have biased sampling)
 * `def observe_leaves(cell_lineage_tree)` -- samples leaves and returns observations as well as the cell lineage tree post-sampling (so internal nodes are now most recent ancestors)
-> * `@return list[ObservedSeq], CellLineageTree`
+  * `@return list[ObservedSeq], CellLineageTree`
 
 `class FastQWriter`
 * Writes observations to files for other methods to play with data
@@ -46,4 +46,4 @@ CLT = cell lineage tree
 `class CLTEstimator`
 * Class that estimates(predicts?) the CLT given a list of the observed sequences
 * `def estimate(list[ObservedSeq])`
-> * `@return CellLineageTree`
+  * `@return CellLineageTree`
