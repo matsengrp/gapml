@@ -99,7 +99,7 @@ class Barcode:
         if target2 == target1:
             center = ''
         else:
-            center = '-' * cut_site + ',' + ','.join(self.barcode[(index1 + 1):index2]).translate(maketrans('ACGTacgt', '-'*8)) + ',' + '-' * (len(self.barcode[index2]) - cut_site)
+            center = '-' * cut_site + ',' + re.sub('[acgt]', '', ','.join(self.barcode[(index1 + 1):index2])).translate(maketrans('ACGT', '----')) + ',' + '-' * (len(self.barcode[index2]) - cut_site)
         # sequence right of cut
         right = ','.join(self.barcode[index2:])[len(self.barcode[index2]) - cut_site:]
         # left delete
