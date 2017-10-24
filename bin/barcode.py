@@ -10,6 +10,8 @@ class Barcode:
     GESTALT target array with spacer sequences
     v7 barcode from GESTALT paper Table S4 is unedited barcode
     initial barcode state equal to v7 by default
+
+    TODO: check that we are using the right barcode
     '''
 
     def __init__(self,
