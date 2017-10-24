@@ -28,7 +28,7 @@ class CellLineageTree(TreeNode):
                  barcode: Barcode,
                  cell_state: CellState,
                  dist: float = 0,
-                 dead=False):
+                 dead: bool=False):
         """
         @param barcode: the barcode at the CLT node -- this is allowed to be None
         @param cell_state: the cell state at the node
@@ -42,15 +42,13 @@ class CellLineageTree(TreeNode):
         self.add_feature("cell_state", cell_state)
         self.add_feature("dead", dead)
 
-    @staticmethod
-    def create_sequences(tree):
+    def _create_sequences(self):
         """
-        sequences for leaf barcodes
+        @return sequences for leaf barcodes
         """
         sequences = []
-        for i, leaf in enumerate(tree, 1):
+        for i, leaf in enumerate(self, 1):
             name = 'b{}'.format(i)
-            #leaf.name = name
             barcode_sequence = re.sub('[-]', '',
                                       ''.join(leaf.barcode.barcode)).upper()
             indel_events = ','.join(':'.join([
@@ -65,11 +63,11 @@ class CellLineageTree(TreeNode):
                         phred_quality=[60] * len(barcode_sequence))))
         return sequences
 
-    def write_sequences(self, file_name):
-        sequences = CellLineageTree.create_sequences(self)
+    def write_sequences(self, file_name: str):
+        sequences = self._create_sequences()
         SeqIO.write(sequences, open(file_name, 'w'), 'fastq')
 
-    def savefig(self, file_name):
+    def savefig(self, file_name: str):
         '''render tree to image file_name'''
         style = NodeStyle()
         style['size'] = 0
@@ -100,7 +98,7 @@ class CellLineageTree(TreeNode):
         tree_style.show_leaf_name = False
         self.render(file_name, tree_style=tree_style)
 
-    def editing_profile(self, file_name):
+    def editing_profile(self, file_name: str):
         '''plot profile_name of deletion frequency at each position over leaves'''
         n_leaves = len(self)
         deletion_frequency = []
@@ -108,9 +106,8 @@ class CellLineageTree(TreeNode):
         position = 0
         # loop through and get the deletion frequency of each site
         for bit_index, bit in enumerate(self.barcode.unedited_barcode):
-            if len(
-                    bit
-            ) == 4:  # the spacer seqs are length 4, we plot vertical bars to demarcate target boundaries
+            if len(bit) == 4:
+                # the spacer seqs are length 4, we plot vertical bars to demarcate target boundaries
                 plt.bar(position, 100, 4, facecolor='black', alpha=.2)
             for bit_position, letter in enumerate(bit):
                 deletion_frequency.append(100 * sum(
@@ -140,7 +137,7 @@ class CellLineageTree(TreeNode):
         plt.tight_layout()
         plt.savefig(file_name)
 
-    def indel_boundary(self, file_name):
+    def indel_boundary(self, file_name: str):
         '''plot a scatter of indel start/end positions'''
         indels = pd.DataFrame(columns=('indel start', 'indel end'))
         i = 0
@@ -166,9 +163,8 @@ class CellLineageTree(TreeNode):
                  plt.hist2d, bins=bins, norm=LogNorm(), cmap='Reds', zorder=0))
         position = 0
         for bit in self.barcode.unedited_barcode:
-            if len(
-                    bit
-            ) == 4:  # the spacer seqs are length 4, we plot bars to demarcate target boundaries
+            if len(bit) == 4:
+                # the spacer seqs are length 4, we plot bars to demarcate target boundaries
                 for ax in g.ax_marg_x, g.ax_joint:
                     ax.bar(
                         position,
@@ -197,7 +193,7 @@ class CellLineageTree(TreeNode):
         # plt.tight_layout()
         plt.savefig(file_name)
 
-    def event_joint(self, file_name):
+    def event_joint(self, file_name: str):
         '''make a seaborn pairgrid plot showing deletion length, 3' deltion length, and insertion length'''
         raise NotImplementedError(
             "not correctly implemented, can't identify 5' from 3' when there is no insertion"
