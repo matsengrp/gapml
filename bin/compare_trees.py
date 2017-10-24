@@ -16,6 +16,7 @@ print true_barcode_tree.collapsed_tree.tree
 
 trees = phylip_parse.parse_outfile("outfile")
 for t in trees:
-    collapsed_est_tree =  (CollapsedTree(t, preserve_leaves=True)).tree
-    rf_res = collapsed_est_tree.robinson_foulds(true_barcode_tree.collapsed_tree.tree, unrooted_trees=True)
+    collapsed_est_tree = (CollapsedTree(t, preserve_leaves=True)).tree
+    rf_res = collapsed_est_tree.robinson_foulds(
+        true_barcode_tree.collapsed_tree.tree, unrooted_trees=True)
     print("RF dist: %f out of %f" % (rf_res[0], rf_res[1]))

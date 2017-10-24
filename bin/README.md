@@ -1,3 +1,9 @@
+# Code formatting
+
+Install `pip install yapf`.
+Run `python3 format_code.py` -- uses https://github.com/google/yapf to format code.
+
+
 # GESTALT Code structure
 
 CLT = cell lineage tree
@@ -13,42 +19,26 @@ CLT = cell lineage tree
 * `self.categorical_state` -- cell state variable that is categorical, e.g. ["Brain", "Eye", ..]
 * `self.cts_state` -- cell state variable that is continuous, e.g. [0.1, 0.3, ...]
 
-`class CLTNode`
-* Node for cell lineage tree
-* `self.node = TreeNode()` -- using ETE
-* `self.barcode = Barcode()`
-* `self.cell_state = CellState()`
-
-`class CellTypeNode`
-* Node for cell-type tree
-* `self.node = TreeNode()` -- using ETE
-* `self.cell_state = CellState()` -- only contains categorical state, no continuous state
-
 `class ObservedAlignedSeq`
 * Stores information from an observed sequence, after the sequence has been aligned with the unmodified barcode
 * `self.barcode = Barcode()`
 * `self.cell_state = CellState()`
 * `self.abundance` -- the proportion of times this barcode was observed
 
-`class CellLineageTree`
+`class CellLineageTree(TreeNode)`
 * History from embryo cell to observed cells. Each node represents a cell divison/death. Class can be used for storing information about the true cell lineage tree and can be used for storing the estimate of the cell lineage tree.
-* `self.tree = CLTNode()`
+* `self.barcode = Barcode()`
+* `self.cell_state = CellState()`
 * `def add_child(node)` -- for constructing the tree
 * `def render()` -- renders the tree. We can also add other functions for visualizing the cell lineage tree.
 
-`class CellTypeTree`
+`class CellTypeTree(TreeNode)`
 * Stores a cell-type tree with parameters for generating cell lineage trees.
-* `self.tree = CLTNode()` -- root node.
+* `self.cell_state = CellState()` -- only contains categorical state, no continuous state
 
 `class CLTSimulator`
 * Parent class for simulating cell lineage trees. We can subclass this to play around with different generative models.
 * `def simulate(time)`
-* `class CLTSimulatorCellType(CLTSimulator)`
-  * Subclass where we generate CLT based on cell division/death/cell-type-differentiation. Barcode is independently modified along branches.
-  * `self.cell_type_tree = CellTypeTree()`
-  * `self.birth_rate`
-  * `self.death_rate`
-* ... and more subclasses in the future
 
 `class BarcodeSimulator`
 * Simulates modifications to the barcode. Can be used by CLTSimulator to modify the barcode, though not necessarily. Using this class would assume that the barcode modifications are independent of cell lineage tree generation.

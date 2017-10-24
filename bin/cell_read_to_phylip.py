@@ -8,7 +8,8 @@ from models import CellReads
 
 def parse_args():
     parser = argparse.ArgumentParser(description='read cell file')
-    parser.add_argument('reads_file', type=str, help='Collapsed reads file: format 7B')
+    parser.add_argument(
+        'reads_file', type=str, help='Collapsed reads file: format 7B')
     return parser.parse_args()
 
 
@@ -19,8 +20,10 @@ def make_phylip_lines(cell_reads: CellReads, evt_to_id_dict: Dict[str, int]):
     num_events = len(cell_reads.event_str_ids)
     lines = []
     for barcode_i, barcode in enumerate(cell_reads.uniq_barcodes):
-        event_idxs = [evt_to_id_dict[evt.get_str_id()] for evt in barcode.uniq_events]
-        event_arr = np.zeros((num_events,), dtype=int)
+        event_idxs = [
+            evt_to_id_dict[evt.get_str_id()] for evt in barcode.uniq_events
+        ]
+        event_arr = np.zeros((num_events, ), dtype=int)
         event_arr[event_idxs] = 1
         event_encoding = "".join([str(c) for c in event_arr.tolist()])
         seq_name = str(barcode_i)
@@ -39,7 +42,8 @@ def scale_to_phylip_weights(value: int, min_val: int, max_val: int):
     max_log = np.log(max_val - min_val)
     value_log = np.log(value)
     # TODO: check this calculation
-    ret = int(np.round(((value_log - min_val) / max_log) * (WEIGHT_ARRAY_LEN - 1)))
+    ret = int(
+        np.round(((value_log - min_val) / max_log) * (WEIGHT_ARRAY_LEN - 1)))
     return WEIGHT_ARRAY[ret]
 
 
@@ -52,20 +56,24 @@ def make_phylip_weights(cell_reads: CellReads, evt_to_id_dict: Dict[str, int]):
     event_weights = [0] * num_events
     for evt_str_id, evt_abundance in cell_reads.event_abundance.items():
         evt_id = evt_to_id_dict[evt_str_id]
-        event_weights[evt_id] = scale_to_phylip_weights(evt_abundance, 0, max_count)
+        event_weights[evt_id] = scale_to_phylip_weights(
+            evt_abundance, 0, max_count)
     return event_weights
 
 
 def convert_cell_reads_to_phylip(
-    file_name: str,
-    phylip_infile: str = "infile",
-    phylip_weights_file: str = "weights",
+        file_name: str,
+        phylip_infile: str = "infile",
+        phylip_weights_file: str = "weights",
 ):
     """
     Convert cell read file to phylip mix input
     """
     cell_reads = parse_reads_file_format7B(file_name)
-    evt_to_id_dict = {evt_str: i for i, evt_str in enumerate(cell_reads.event_str_ids)}
+    evt_to_id_dict = {
+        evt_str: i
+        for i, evt_str in enumerate(cell_reads.event_str_ids)
+    }
     num_events = len(cell_reads.event_str_ids)
 
     phylip_lines = make_phylip_lines(cell_reads, evt_to_id_dict)

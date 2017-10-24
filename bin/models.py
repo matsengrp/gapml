@@ -28,7 +28,8 @@ class Event:
 
 class DeletionEvent(Event):
     def __init__(self, event_len: int, start_pos: int):
-        super(DeletionEvent, self).__init__(EventType.DELETE, event_len, start_pos)
+        super(DeletionEvent, self).__init__(EventType.DELETE, event_len,
+                                            start_pos)
 
     def get_str_id(self):
         return "%s: %d+%d" % (self.event_type, self.start_pos, self.event_len)
@@ -36,24 +37,27 @@ class DeletionEvent(Event):
 
 class InsertionEvent(Event):
     def __init__(self, event_len: int, start_pos: int, insert_str: str):
-        super(InsertionEvent, self).__init__(EventType.INSERT, event_len, start_pos)
+        super(InsertionEvent, self).__init__(EventType.INSERT, event_len,
+                                             start_pos)
         self.insert_str = insert_str
 
     def get_str_id(self):
-        return "%s: %d+%d, %s" % (self.event_type, self.start_pos, self.event_len, self.insert_str)
+        return "%s: %d+%d, %s" % (self.event_type, self.start_pos,
+                                  self.event_len, self.insert_str)
 
 
 class BarcodeEvents:
     """
     Represents a single barcode and its cell
     """
+
     def __init__(self, events: List[List[Event]], organ: str):
         """
         @param events: list of events in the barcode, each list element is the events associated with that target
         @param organ: organ the barcode was sequenced from
         """
         self.events = events
-        assert(len(events) == NUM_BARCODE_V7_TARGETS)
+        assert (len(events) == NUM_BARCODE_V7_TARGETS)
         self.organ = organ
         self.uniq_events = self._get_uniq_events()
 
