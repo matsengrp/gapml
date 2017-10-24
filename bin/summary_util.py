@@ -85,6 +85,6 @@ def write_sequences(trees: List[CellLineageTree], outbase: str):
         tree.write_sequences('{}.{}.fastq'.format(outbase, i))
 
 
-def render(trees: List[CellLineageTree], outbase: str):
+def savefig(trees: List[CellLineageTree], outbase: str):
     for i, tree in enumerate(trees, 1):
-        tree.render('{}.{}.pdf'.format(outbase, i))
+        tree.savefig('{}.{}.pdf'.format(outbase, i))

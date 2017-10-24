@@ -1,7 +1,7 @@
 import re
 import scipy
 import pandas as pd
-from ete3 import TreeNode
+from ete3 import TreeNode, NodeStyle, SeqMotifFace, TreeStyle
 from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
 import seaborn as sns
@@ -69,7 +69,7 @@ class CellLineageTree(TreeNode):
         sequences = CellLineageTree.create_sequences(self)
         SeqIO.write(sequences, open(file_name, 'w'), 'fastq')
 
-    def render(self, file_name):
+    def savefig(self, file_name):
         '''render tree to image file_name'''
         style = NodeStyle()
         style['size'] = 0
@@ -102,7 +102,7 @@ class CellLineageTree(TreeNode):
 
     def editing_profile(self, file_name):
         '''plot profile_name of deletion frequency at each position over leaves'''
-        n_leaves = self.n_leaves()
+        n_leaves = len(self)
         deletion_frequency = []
         plt.figure(figsize=(5, 1.5))
         position = 0
@@ -217,5 +217,3 @@ class CellLineageTree(TreeNode):
         plt.tight_layout()
         plt.savefig(file_name)
 
-    def n_leaves(self):
-        return len(self)

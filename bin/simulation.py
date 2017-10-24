@@ -1,6 +1,3 @@
-#! /usr/bin/env python
-# -*- coding: utf-8 -*-
-
 from __future__ import division, print_function
 import pickle
 import numpy as np
@@ -84,11 +81,11 @@ def main():
 
     # Dump summary statistics
     editing_profile(forest, args.outbase)
-    #indel_boundary(forest, args.outbase)
+    # indel_boundary(forest, args.outbase)
     # NOTE: function below not yet implemented
     # event_joint(forest, args.outbase)
     write_sequences(forest, args.outbase)
-    #render(forest, args.outbase)
+    savefig(forest, args.outbase)
     summary_plots(forest, args.outbase + '.summary_plots.pdf')
 
     with open(args.outbase + ".pkl", "wb") as f_pkl:
