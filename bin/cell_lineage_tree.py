@@ -11,7 +11,10 @@ class CellLineageTree(TreeNode):
     """
     def __init__(self, barcode: Barcode, cell_state: CellState, dist: float=0, dead=False):
         """
+        @param barcode: the barcode at the CLT node -- this is allowed to be None
+        @param cell_state: the cell state at the node
         @param dist: branch length from parent node
+        @param dead: if the cell at that node is dead
         """
         super().__init__()
         self.dist = dist

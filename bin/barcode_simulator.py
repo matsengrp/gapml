@@ -8,11 +8,19 @@ from barcode import Barcode
 
 class BarcodeSimulator:
     """
-    
+    Simulate how a barcode gets cut/repaired.
+    Subclass this if you want to experiment with other models of the barcode cut/repair process.
 
-    Assumes each barcode can have at most two cuts.
+    This simulator assumes each barcode can have at most two cuts.
     """
     def __init__(self, target_lambdas: ndarray, repair_rates: ndarray, left_del_lambda: float, right_del_lambda: float, insertion_lambda: float):
+        """
+        @param target_lambdas: rate parameter of each target in the barcode
+        @param repair_rates: rate parameter of repair for N cuts in the barcode (repair_rates[N - 1] = rate with N cut in the barcode)
+        @param left_del_lambda: poisson parameter for number of nucleotides deleted to the left of the DSB
+        @param right_del_lambda: poisson parameter for number of nucleotides deleted to the right of the DSB
+        @param insertion_lambda: poisson parameter for number of nucleotides insertd after DSB
+        """
         self.target_lambdas = target_lambdas
         self.repair_rates = repair_rates
         self.left_del_lambda = left_del_lambda
@@ -20,6 +28,10 @@ class BarcodeSimulator:
         self.insertion_lambda = insertion_lambda
 
     def simulate(self, init_barcode: Barcode, time: float):
+        """
+        @param init_barcode: the initial state of the barcode
+        @param time: the amount of time to simulate the barcode modification process
+        """
         barcode = Barcode(init_barcode.barcode, init_barcode.unedited_barcode, init_barcode.cut_sites)
         time_remain = time
         while time_remain > 0:
@@ -45,8 +57,10 @@ class BarcodeSimulator:
                 # One of the targets got cut
                 barcode.cut(race_winner)
             else:
+                # A repair has happened
                 target1 = min(barcode.needs_repair)
                 target2 = max(barcode.needs_repair)
+                # TODO: this may not be a realistic model. will need to update.
                 left_del_len = poisson.rvs(self.left_del_lambda)
                 right_del_len = poisson.rvs(self.right_del_lambda)
                 insertion_length = poisson.rvs(self.insertion_lambda)

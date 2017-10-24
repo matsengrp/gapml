@@ -17,5 +17,5 @@ print(cell_type_tree)
 
 bcode_simulator = BarcodeSimulator(np.array([0.1] * NUM_BARCODE_V7_TARGETS), np.array([0.1, 0.1]), 1, 3, 1)
 simulator = CLTSimulator(0.5, 0.01, cell_type_tree, bcode_simulator)
-simulator.simulate(4)
-print(simulator.tree)
+clt = simulator.simulate(4)
+print(clt)

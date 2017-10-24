@@ -32,15 +32,22 @@ class Barcode:
         assert(self.n_targets == len(self.cut_sites))
 
     def get_active_targets(self):
+        """
+        @return the index of the targets that can be cut, e.g. the targets that have no DSBs and are unmodified
+        """
+        # TODO: right now this code is pretty inefficient. we might want to cache which targets are active
         matches = [self.unedited_barcode[2 * i + 1] == self.barcode[2 * i + 1] for i in range(self.n_targets) if i not in self.needs_repair]
         return np.where(matches)[0]
 
     def cut(self, target_idx):
+        """
+        Marks this target as having a DSB
+        """
         self.needs_repair.add(target_idx)
 
     def indel(self, target1: int, target2: int, left_del_len: int=0, right_del_len: int=0, insertion: str=''):
         '''
-        a utility function for deletion
+        a utility function for deletion/insertion
 
         @param target1: index of target with cut
         @param target2: index of target with cut
@@ -84,6 +91,8 @@ class Barcode:
                 deleted += 1
         # put it back together
         self.barcode = (left + insertion + center + right).split(',')
+        # Update needs_repair
+        self.needs_repair.difference(range(target1, target2 + 1))
 
     def events(self):
         '''return the list of observable indel events in the barcdoe'''

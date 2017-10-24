@@ -7,20 +7,44 @@ from barcode import Barcode
 from barcode_simulator import BarcodeSimulator
 
 class CLTSimulator:
+    """
+    Class for simulating cell lineage trees.
+    Subclass this to play around with different generative models.
+
+    This class is generates CLT based on cell division/death/cell-type-differentiation. Barcode is independently modified along branches.
+    """
     def __init__(self, birth_rate: float, death_rate: float, cell_type_tree: CellTypeTree, bcode_simulator: BarcodeSimulator):
+        """
+        @param birth_rate: the CTMC rate param for cell division
+        @param death_rate: the CTMC rate param for cell death
+        @param cell_type_tree: the tree that specifies how cells differentiate
+        @param bcode_simulator: a simulator for how barcodes get modified
+        """
         self.birth_scale = 1.0/birth_rate
         self.death_scale = 1.0/death_rate
         self.cell_type_tree = cell_type_tree
         self.bcode_simulator = bcode_simulator
 
     def simulate(self, time: float):
+        """
+        Generates a CLT based on the model
+
+        @param time: amount of time to simulate the CLT
+        """
         root_barcode = Barcode()
         cell_state = CellState(categorical=self.cell_type_tree)
-        self.tree = CellLineageTree(root_barcode, cell_state, dist=0) 
+        tree = CellLineageTree(root_barcode, cell_state, dist=0) 
 
-        self._simulate_tree(self.tree, time)
+        self._simulate_tree(tree, time)
+        return tree
 
     def _simulate_tree(self, tree: CellLineageTree, time: float):
+        """
+        The recursive function that actually makes the tree
+
+        @param tree: the root node to create a tree from
+        @param time: the max amount of time to simulate from this node
+        """
         # Determine branch length and event at end of branch
         t_birth = expon.rvs(scale=self.birth_scale)
         t_death = expon.rvs(scale=self.death_scale)
