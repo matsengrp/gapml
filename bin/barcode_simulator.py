@@ -15,17 +15,19 @@ class BarcodeSimulator:
     """
 
     def __init__(self, target_lambdas: ndarray, repair_rates: ndarray,
-                 left_del_lambda: float, right_del_lambda: float,
-                 insertion_lambda: float):
+                 indel_probability: float, left_del_lambda: float,
+                 right_del_lambda: float, insertion_lambda: float):
         """
         @param target_lambdas: rate parameter of each target in the barcode
         @param repair_rates: rate parameter of repair for N cuts in the barcode (repair_rates[N - 1] = rate with N cut in the barcode)
+        @param indel_probability: the probability of making an insertion/deletion (currently this zero-inflation parameter is shared)
         @param left_del_lambda: poisson parameter for number of nucleotides deleted to the left of the DSB
         @param right_del_lambda: poisson parameter for number of nucleotides deleted to the right of the DSB
         @param insertion_lambda: poisson parameter for number of nucleotides insertd after DSB
         """
         self.target_lambdas = target_lambdas
         self.repair_rates = repair_rates
+        self.indel_probability = indel_probability
         self.left_del_lambda = left_del_lambda
         self.right_del_lambda = right_del_lambda
         self.insertion_lambda = insertion_lambda
@@ -69,12 +71,42 @@ class BarcodeSimulator:
                 # A repair has happened
                 target1 = min(barcode.needs_repair)
                 target2 = max(barcode.needs_repair)
+
+                # Serves for a zero-inflated poisson for deletion/insertion process
+                indel_action = binomial.rvs(
+                    n=1, p=self.indel_probability, size=3)
+
                 # TODO: this may not be a realistic model. will need to update.
-                left_del_len = poisson.rvs(self.left_del_lambda)
-                right_del_len = poisson.rvs(self.right_del_lambda)
-                insertion_length = poisson.rvs(self.insertion_lambda)
+                left_del_len = poisson.rvs(
+                    self.left_del_lambda) if indel_action[0] else 0
+                right_del_len = poisson.rvs(
+                    self.right_del_lambda) if indel_action[1] else 0
+
+                insertion_length = poisson.rvs(
+                    self.insertion_lambda) if indel_action[2] else 0
+
                 # TODO: make this more realistic. right now just random DNA inserted
                 insertion = ''.join(choice(list('acgt'), insertion_length))
                 barcode.indel(target1, target2, left_del_len, right_del_len,
                               insertion)
         return barcode
+
+    def events(self):
+        '''return the list of observable indel events in the barcdoe'''
+        events = []
+        insertion_total = 0
+        # find the indels
+        for indel in re.compile('[-acgt]+').finditer(str(self)):
+            start = indel.start() - insertion_total
+            # find the insertions(s) in this indel
+            insertion = ''.join(
+                insertion.group(0)
+                for insertion in re.compile('[acgt]+').finditer(
+                    indel.group(0)))
+            insertion_total = +len(insertion)
+            end = indel.end() - insertion_total
+            events.append((start, end, insertion))
+        return events
+
+    def __repr__(self):
+        return str(''.join(self.barcode))
