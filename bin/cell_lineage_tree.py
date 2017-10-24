@@ -1,4 +1,17 @@
+import re
+import scipy
+import pandas as pd
 from ete3 import TreeNode
+from matplotlib import pyplot as plt
+from matplotlib.colors import LogNorm
+import seaborn as sns
+sns.set(style="white", color_codes=True)
+sns.set_style('ticks')
+
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from Bio.Alphabet import generic_dna
+from Bio import AlignIO, SeqIO
 
 from barcode import Barcode
 from cell_state import CellState
@@ -36,7 +49,7 @@ class CellLineageTree(TreeNode):
         """
         sequences = []
         for i, leaf in enumerate(tree, 1):
-            #name = 'b{}'.format(i)
+            name = 'b{}'.format(i)
             #leaf.name = name
             barcode_sequence = re.sub('[-]', '',
                                       ''.join(leaf.barcode.barcode)).upper()
@@ -53,15 +66,16 @@ class CellLineageTree(TreeNode):
         return sequences
 
     def write_sequences(self, file_name):
-        SeqIO.write(self.sequences, open(file_name, 'w'), 'fastq')
+        sequences = CellLineageTree.create_sequences(self)
+        SeqIO.write(sequences, open(file_name, 'w'), 'fastq')
 
     def render(self, file_name):
         '''render tree to image file_name'''
         style = NodeStyle()
         style['size'] = 0
-        for n in self.tree.traverse():
+        for n in self.traverse():
             n.set_style(style)
-        for leaf in self.tree:
+        for leaf in self:
             # get the motif list for indels in the format that SeqMotifFace expects
             motifs = []
             for match in re.compile('[acgt]+').finditer(str(leaf.barcode)):
@@ -84,16 +98,16 @@ class CellLineageTree(TreeNode):
         tree_style = TreeStyle()
         tree_style.show_scale = False
         tree_style.show_leaf_name = False
-        self.tree.render(file_name, tree_style=tree_style)
+        self.render(file_name, tree_style=tree_style)
 
-    def editing_profile_name(self, file_name):
+    def editing_profile(self, file_name):
         '''plot profile_name of deletion frequency at each position over leaves'''
-        n_leaves = len(self.tree)
+        n_leaves = self.n_leaves()
         deletion_frequency = []
         plt.figure(figsize=(5, 1.5))
         position = 0
         # loop through and get the deletion frequency of each site
-        for bit_index, bit in enumerate(self.tree.barcode.unedited_barcode):
+        for bit_index, bit in enumerate(self.barcode.unedited_barcode):
             if len(
                     bit
             ) == 4:  # the spacer seqs are length 4, we plot vertical bars to demarcate target boundaries
@@ -101,12 +115,12 @@ class CellLineageTree(TreeNode):
             for bit_position, letter in enumerate(bit):
                 deletion_frequency.append(100 * sum(
                     re.sub('[acgt]', '', leaf.barcode.barcode[bit_index])[
-                        bit_position] == '-' for leaf in self.tree) / n_leaves)
+                        bit_position] == '-' for leaf in self) / n_leaves)
             position += len(bit)
         plt.plot(deletion_frequency, color='red', lw=2, clip_on=False)
         # another loop through to find the frequency that each site is the start of an insertion
-        insertion_start_frequency = scipy.zeros(len(str(self.tree.barcode)))
-        for leaf in self.tree:
+        insertion_start_frequency = scipy.zeros(len(str(self.barcode)))
+        for leaf in self:
             insertion_total = 0
             for insertion in re.compile('[acgt]+').finditer(str(leaf.barcode)):
                 start = insertion.start() - insertion_total
@@ -130,12 +144,12 @@ class CellLineageTree(TreeNode):
         '''plot a scatter of indel start/end positions'''
         indels = pd.DataFrame(columns=('indel start', 'indel end'))
         i = 0
-        for leaf in self.tree:
+        for leaf in self:
             for match in re.compile('[-]+').finditer(
                     re.sub('[acgt]', '', ''.join(leaf.barcode.barcode))):
                 indels.loc[i] = match.start(), match.end()
                 i += 1
-        bc_len = len(''.join(self.tree.barcode.unedited_barcode))
+        bc_len = len(''.join(self.barcode.unedited_barcode))
         plt.figure(figsize=(3, 3))
         bins = scipy.linspace(0, bc_len, 10 + 1)
         g = (sns.jointplot(
@@ -151,7 +165,7 @@ class CellLineageTree(TreeNode):
              .plot_joint(
                  plt.hist2d, bins=bins, norm=LogNorm(), cmap='Reds', zorder=0))
         position = 0
-        for bit in self.tree.barcode.unedited_barcode:
+        for bit in self.barcode.unedited_barcode:
             if len(
                     bit
             ) == 4:  # the spacer seqs are length 4, we plot bars to demarcate target boundaries
@@ -191,7 +205,7 @@ class CellLineageTree(TreeNode):
         indels = pd.DataFrame(columns=(
             "5' deletion length", "3' deletion length", 'insertion length'))
         i = 0
-        for leaf in self.tree:
+        for leaf in self:
             for indel in re.compile(r'(-*)([acgt]*)(-*)+').finditer(
                     str(leaf.barcode)):
                 if len(indel.group(0)) > 0:
@@ -204,4 +218,4 @@ class CellLineageTree(TreeNode):
         plt.savefig(file_name)
 
     def n_leaves(self):
-        return len(self.tree)
+        return len(self)

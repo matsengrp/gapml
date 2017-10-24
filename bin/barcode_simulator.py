@@ -1,6 +1,6 @@
 from numpy import ndarray
 import numpy as np
-from scipy.stats import expon, poisson
+from scipy.stats import expon, poisson, binom
 from numpy.random import choice
 
 from barcode import Barcode
@@ -73,7 +73,7 @@ class BarcodeSimulator:
                 target2 = max(barcode.needs_repair)
 
                 # Serves for a zero-inflated poisson for deletion/insertion process
-                indel_action = binomial.rvs(
+                indel_action = binom.rvs(
                     n=1, p=self.indel_probability, size=3)
 
                 # TODO: this may not be a realistic model. will need to update.

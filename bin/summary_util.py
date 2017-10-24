@@ -1,4 +1,13 @@
 from typing import List
+import re
+from collections import Counter
+
+import matplotlib
+matplotlib.use('agg')
+from matplotlib import pyplot as plt
+import seaborn as sns
+sns.set(style="white", color_codes=True)
+sns.set_style('ticks')
 
 from cell_lineage_tree import CellLineageTree
 """
@@ -32,7 +41,7 @@ def summary_plots(trees: List[CellLineageTree], file_name: str):
     for tree in trees:
         # counter for the unique leaf genotypes
         genotypes = Counter(
-            [''.join(leaf.barcode.barcode) for leaf in tree.tree])
+            [''.join(leaf.barcode.barcode) for leaf in tree])
         n_genotypes.append(len(genotypes))
         n_cells.append(sum(genotypes.values()))
         n_indels.append([

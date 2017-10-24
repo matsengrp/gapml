@@ -3,32 +3,18 @@
 
 from __future__ import division, print_function
 import pickle
-import sys
-if sys.version_info < (3, 0):
-    from string import maketrans
-else:
-    maketrans = str.maketrans
-from collections import Counter
 import numpy as np
-import scipy, argparse, copy, re
-from scipy.stats import expon, poisson
-from numpy.random import choice, random
-import pandas as pd
+import argparse
 import matplotlib
 matplotlib.use('agg')
-from matplotlib import pyplot as plt
-from matplotlib.colors import LogNorm
-import seaborn as sns
-sns.set(style="white", color_codes=True)
-sns.set_style('ticks')
-from Bio.Seq import Seq
-from Bio.SeqRecord import SeqRecord
-from Bio.Alphabet import generic_dna
-from Bio import AlignIO, SeqIO
-from ete3 import TreeNode, NodeStyle, TreeStyle, faces, SeqMotifFace, add_face_to_node
-from collapsed_tree import CollapsedTree
 
-from constants import BARCODE_V7
+from cell_state import CellTypeTree
+from clt_simulator import CLTSimulator
+from barcode_simulator import BarcodeSimulator
+from cell_state import CellTypeTree, CellType
+
+from constants import *
+from summary_util import *
 
 
 def main():
@@ -43,7 +29,7 @@ def main():
         default=[1 for _ in range(10)],
         help='target cut poisson rates')
     parser.add_argument(
-        '--repair-lambda', type=float, default=10, help='repair poisson rate')
+        '--repair-lambdas', type=float, default=[0.1,0.1], help='repair poisson rate')
     parser.add_argument(
         '--repair-indel-probability',
         type=float,
@@ -98,11 +84,11 @@ def main():
 
     # Dump summary statistics
     editing_profile(forest, args.outbase)
-    indel_boundary(forest, args.outbase)
+    #indel_boundary(forest, args.outbase)
     # NOTE: function below not yet implemented
     # event_joint(forest, args.outbase)
     write_sequences(forest, args.outbase)
-    render(forest, args.outbase)
+    #render(forest, args.outbase)
     summary_plots(forest, args.outbase + '.summary_plots.pdf')
 
     with open(args.outbase + ".pkl", "wb") as f_pkl:
