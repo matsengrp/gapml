@@ -16,7 +16,8 @@ from constants import NUM_BARCODE_V7_TARGETS
 
 def parse_args():
     parser = argparse.ArgumentParser(description='read cell file')
-    parser.add_argument('reads_file', type=str, help='Collapsed reads file: format 7B')
+    parser.add_argument(
+        'reads_file', type=str, help='Collapsed reads file: format 7B')
     return parser.parse_args()
 
 
@@ -40,13 +41,20 @@ def process_barcode_format7B(target_str_list: List[str], organ: str):
     """
     Takes a barcode encoded in 7B format and returns the list of events
     """
-    target_evt_strs = [target_str.split("&") for i, target_str in enumerate(target_str_list)]
-    barcode_evt_str_lists = [[evt for evt in target_evts if evt not in NO_EVENT_STRS] for target_evts in target_evt_strs]
-    events = [[process_event_format7B(event_str) for event_str in event_strs] for event_strs in barcode_evt_str_lists]
+    target_evt_strs = [
+        target_str.split("&") for i, target_str in enumerate(target_str_list)
+    ]
+    barcode_evt_str_lists = [[
+        evt for evt in target_evts if evt not in NO_EVENT_STRS
+    ] for target_evts in target_evt_strs]
+    events = [[process_event_format7B(event_str) for event_str in event_strs]
+              for event_strs in barcode_evt_str_lists]
     return BarcodeEvents(events, organ)
 
 
-def parse_reads_file_format7B(file_name, target_hdr_fmt="target%d", max_read=None):
+def parse_reads_file_format7B(file_name,
+                              target_hdr_fmt="target%d",
+                              max_read=None):
     """
     @param max_read: maximum number of barcodes to read (for debugging purposes)
     """
@@ -59,7 +67,10 @@ def parse_reads_file_format7B(file_name, target_hdr_fmt="target%d", max_read=Non
             organ = row[0]
             if organ not in CONTROL_ORGANS:
                 barcode_events = process_barcode_format7B(
-                    [row[target_start_idx + i] for i in range(NUM_BARCODE_V7_TARGETS)],
+                    [
+                        row[target_start_idx + i]
+                        for i in range(NUM_BARCODE_V7_TARGETS)
+                    ],
                     organ,
                 )
                 all_barcodes.append(barcode_events)

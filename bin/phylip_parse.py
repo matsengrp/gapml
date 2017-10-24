@@ -18,20 +18,24 @@ from Bio.Data.IUPACData import ambiguous_dna_values
 def sections(fh):
     patterns = {
         ('sequences', 'mix'): "\s*\(\s*.\s*means\s+same",
-        "seqboot_dataset": "Data\s*set"}
-    patterns = {k: re.compile(v, re.IGNORECASE) for (k,v) in patterns.items()}
+        "seqboot_dataset": "Data\s*set"
+    }
+    patterns = {k: re.compile(v, re.IGNORECASE) for (k, v) in patterns.items()}
     for line in fh:
         for k, pat in patterns.items():
             if pat.match(line):
                 yield k
                 break
 
+
 # iterate over entries in the sequences section
 def parse_seqdict(fh, mode='mix'):
     #  152        sssssssssG AGGTGCAGCT GTTGGAGTCT GGGGGAGGCT TGGTACAGCC TGGGGGGTCC
     seqs = defaultdict(str)
     edges = []
-    pattern0 = re.compile("^\s*(?P<from>[a-zA-Z0-9>_.-]+)\s+(?P<id>[a-zA-Z0-9>_.-]+)\s+(yes\s+|no\s+|maybe\s+)?(?P<seq>[01?. \-]+)")
+    pattern0 = re.compile(
+        "^\s*(?P<from>[a-zA-Z0-9>_.-]+)\s+(?P<id>[a-zA-Z0-9>_.-]+)\s+(yes\s+|no\s+|maybe\s+)?(?P<seq>[01?. \-]+)"
+    )
     pattern_cont = re.compile("^\s*(?P<seq>[01?. \-]+)")
     fh.next()
     last_group_id = None
@@ -72,7 +76,6 @@ def parse_outfile(outfile):
     return trees
 
 
-
 # build a tree from a set of sequences and an adjacency dict.
 def build_tree(sequences, edges):
     # build an ete tree
@@ -89,7 +92,7 @@ def build_tree(sequences, edges):
         if node_from in nodes:
             nodes[node_from].add_child(nodes[node_to])
         else:
-            assert(node_from == "root")
+            assert (node_from == "root")
             nodes[node_from] = Tree()
             tree = nodes[node_from]
             tree.add_child(nodes[node_to])
@@ -101,4 +104,3 @@ def build_tree(sequences, edges):
 def hamming_distance(seq1, seq2):
     '''Hamming distance between two sequences of equal length'''
     return sum(x != y for x, y in zip(seq1, seq2))
-

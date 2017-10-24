@@ -19,7 +19,6 @@ except ImportError:
     MethodWrapperType = type(object().__str__)
     MethodDescriptorType = type(str.join)
 
-
 # Please keep __all__ alphabetized within each category.
 __all__ = [
     # Super-special typing primitives.
@@ -36,7 +35,7 @@ __all__ = [
     # ABCs (from collections.abc).
     'AbstractSet',  # collections.abc.Set.
     'GenericMeta',  # subclass of abc.ABCMeta and a metaclass
-                    # for 'Generic' and ABCs below.
+    # for 'Generic' and ABCs below.
     'ByteString',
     'Container',
     'ContextManager',
@@ -109,7 +108,8 @@ def _qualname(x):
 
 
 def _trim_name(nm):
-    whitelist = ('_TypeAlias', '_ForwardRef', '_TypingBase', '_FinalTypingBase')
+    whitelist = ('_TypeAlias', '_ForwardRef', '_TypingBase',
+                 '_FinalTypingBase')
     if nm.startswith('_') and nm not in whitelist:
         nm = nm[1:]
     return nm
@@ -160,7 +160,7 @@ class TypingMeta(type):
 class _TypingBase(metaclass=TypingMeta, _root=True):
     """Internal indicator of special typing constructs."""
 
-    __slots__ = ('__weakref__',)
+    __slots__ = ('__weakref__', )
 
     def __init__(self, *args, **kwds):
         pass
@@ -171,9 +171,8 @@ class _TypingBase(metaclass=TypingMeta, _root=True):
         This only exists to give a better error message in case
         someone tries to subclass a special typing object (not a good idea).
         """
-        if (len(args) == 3 and
-                isinstance(args[0], str) and
-                isinstance(args[1], tuple)):
+        if (len(args) == 3 and isinstance(args[0], str)
+                and isinstance(args[1], tuple)):
             # Close enough.
             raise TypeError("Cannot subclass %r" % cls)
         return super().__new__(cls)
@@ -222,12 +221,13 @@ class _ForwardRef(_TypingBase, _root=True):
     def __init__(self, arg):
         super().__init__(arg)
         if not isinstance(arg, str):
-            raise TypeError('Forward reference must be a string -- got %r' % (arg,))
+            raise TypeError('Forward reference must be a string -- got %r' %
+                            (arg, ))
         try:
             code = compile(arg, '<string>', 'eval')
         except SyntaxError:
-            raise SyntaxError('Forward reference must be an expression -- got %r' %
-                              (arg,))
+            raise SyntaxError(
+                'Forward reference must be an expression -- got %r' % (arg, ))
         self.__forward_arg__ = arg
         self.__forward_code__ = code
         self.__forward_evaluated__ = False
@@ -250,8 +250,8 @@ class _ForwardRef(_TypingBase, _root=True):
     def __eq__(self, other):
         if not isinstance(other, _ForwardRef):
             return NotImplemented
-        return (self.__forward_arg__ == other.__forward_arg__ and
-                self.__forward_value__ == other.__forward_value__)
+        return (self.__forward_arg__ == other.__forward_arg__
+                and self.__forward_value__ == other.__forward_value__)
 
     def __hash__(self):
         return hash((self.__forward_arg__, self.__forward_value__))
@@ -263,7 +263,7 @@ class _ForwardRef(_TypingBase, _root=True):
         raise TypeError("Forward references cannot be used with issubclass().")
 
     def __repr__(self):
-        return '_ForwardRef(%r)' % (self.__forward_arg__,)
+        return '_ForwardRef(%r)' % (self.__forward_arg__, )
 
 
 class _TypeAlias(_TypingBase, _root=True):
@@ -309,8 +309,8 @@ class _TypeAlias(_TypingBase, _root=True):
                                 (parameter, self.type_var))
         if isinstance(parameter, TypeVar) and parameter is not self.type_var:
             raise TypeError("%s cannot be re-parameterized." % self)
-        return self.__class__(self.name, parameter,
-                              self.impl_type, self.type_checker)
+        return self.__class__(self.name, parameter, self.impl_type,
+                              self.type_checker)
 
     def __eq__(self, other):
         if not isinstance(other, _TypeAlias):
@@ -367,17 +367,13 @@ def _type_check(arg, msg):
         return type(None)
     if isinstance(arg, str):
         arg = _ForwardRef(arg)
-    if (
-        isinstance(arg, _TypingBase) and type(arg).__name__ == '_ClassVar' or
-        not isinstance(arg, (type, _TypingBase)) and not callable(arg)
-    ):
-        raise TypeError(msg + " Got %.100r." % (arg,))
+    if (isinstance(arg, _TypingBase) and type(arg).__name__ == '_ClassVar'
+            or not isinstance(arg, (type, _TypingBase)) and not callable(arg)):
+        raise TypeError(msg + " Got %.100r." % (arg, ))
     # Bare Union etc. are not valid as type arguments
-    if (
-        type(arg).__name__ in ('_Union', '_Optional') and
-        not getattr(arg, '__origin__', None) or
-        isinstance(arg, TypingMeta) and arg._gorg in (Generic, _Protocol)
-    ):
+    if (type(arg).__name__ in ('_Union', '_Optional')
+            and not getattr(arg, '__origin__', None) or
+            isinstance(arg, TypingMeta) and arg._gorg in (Generic, _Protocol)):
         raise TypeError("Plain %s is not valid as type argument" % arg)
     return arg
 
@@ -395,7 +391,7 @@ def _type_repr(obj):
             return _qualname(obj)
         return '%s.%s' % (obj.__module__, _qualname(obj))
     if obj is ...:
-        return('...')
+        return ('...')
     if isinstance(obj, types.FunctionType):
         return obj.__name__
     return repr(obj)
@@ -492,13 +488,21 @@ class TypeVar(_TypingBase, _root=True):
       A.__constraints__ == (str, bytes)
     """
 
-    __slots__ = ('__name__', '__bound__', '__constraints__',
-                 '__covariant__', '__contravariant__')
+    __slots__ = ('__name__', '__bound__', '__constraints__', '__covariant__',
+                 '__contravariant__')
 
-    def __init__(self, name, *constraints, bound=None,
-                 covariant=False, contravariant=False):
-        super().__init__(name, *constraints, bound=bound,
-                         covariant=covariant, contravariant=contravariant)
+    def __init__(self,
+                 name,
+                 *constraints,
+                 bound=None,
+                 covariant=False,
+                 contravariant=False):
+        super().__init__(
+            name,
+            *constraints,
+            bound=bound,
+            covariant=covariant,
+            contravariant=contravariant)
         self.__name__ = name
         if covariant and contravariant:
             raise ValueError("Bivariant types are not supported.")
@@ -558,7 +562,8 @@ def _replace_arg(arg, tvars, args):
 
     if tvars is None:
         tvars = []
-    if hasattr(arg, '_subs_tree') and isinstance(arg, (GenericMeta, _TypingBase)):
+    if hasattr(arg, '_subs_tree') and isinstance(arg,
+                                                 (GenericMeta, _TypingBase)):
         return arg._subs_tree(tvars, args)
     if isinstance(arg, TypeVar):
         for i, tvar in enumerate(tvars):
@@ -605,7 +610,8 @@ def _subs_tree(cls, tvars=None, args=None):
     for ocls in orig_chain:
         new_tree_args = []
         for arg in ocls.__args__:
-            new_tree_args.append(_replace_arg(arg, ocls.__parameters__, tree_args))
+            new_tree_args.append(
+                _replace_arg(arg, ocls.__parameters__, tree_args))
         tree_args = new_tree_args
     return tree_args
 
@@ -643,10 +649,11 @@ def _remove_dups_flatten(parameters):
     for t1 in params:
         if not isinstance(t1, type):
             continue
-        if any(isinstance(t2, type) and issubclass(t1, t2)
-               for t2 in all_params - {t1}
-               if not (isinstance(t2, GenericMeta) and
-                       t2.__origin__ is not None)):
+        if any(
+                isinstance(t2, type) and issubclass(t1, t2)
+                for t2 in all_params - {t1}
+                if not (isinstance(t2, GenericMeta)
+                        and t2.__origin__ is not None)):
             all_params.remove(t1)
     return tuple(t for t in params if t in all_params)
 
@@ -659,7 +666,8 @@ def _check_generic(cls, parameters):
     elen = len(cls.__parameters__)
     if alen != elen:
         raise TypeError("Too %s parameters for %s; actual %s, expected %s" %
-                        ("many" if alen > elen else "few", repr(cls), alen, elen))
+                        ("many"
+                         if alen > elen else "few", repr(cls), alen, elen))
 
 
 _cleanups = []
@@ -680,6 +688,7 @@ def _tp_cache(func):
         except TypeError:
             pass  # All real errors (not unhashable args) are raised below.
         return func(*args, **kwds)
+
     return inner
 
 
@@ -735,7 +744,7 @@ class _Union(_FinalTypingBase, _root=True):
             self.__parameters__ = None
             self.__args__ = None
             self.__origin__ = None
-            self.__tree_hash__ = hash(frozenset(('Union',)))
+            self.__tree_hash__ = hash(frozenset(('Union', )))
             return self
         if not isinstance(parameters, tuple):
             raise TypeError("Expected parameters=<tuple>")
@@ -759,7 +768,8 @@ class _Union(_FinalTypingBase, _root=True):
     def _eval_type(self, globalns, localns):
         if self.__args__ is None:
             return self
-        ev_args = tuple(_eval_type(t, globalns, localns) for t in self.__args__)
+        ev_args = tuple(
+            _eval_type(t, globalns, localns) for t in self.__args__)
         ev_origin = _eval_type(self.__origin__, globalns, localns)
         if ev_args == self.__args__ and ev_origin == self.__origin__:
             # Everything is already evaluated.
@@ -792,7 +802,7 @@ class _Union(_FinalTypingBase, _root=True):
         if parameters == ():
             raise TypeError("Cannot take a Union of no types.")
         if not isinstance(parameters, tuple):
-            parameters = (parameters,)
+            parameters = (parameters, )
         if self.__origin__ is None:
             msg = "Union[arg, ...]: each arg must be a type."
         else:
@@ -809,7 +819,7 @@ class _Union(_FinalTypingBase, _root=True):
         tree_args = _remove_dups_flatten(tree_args)
         if len(tree_args) == 1:
             return tree_args[0]  # Union of a single type is that type
-        return (Union,) + tree_args
+        return (Union, ) + tree_args
 
     def __eq__(self, other):
         if isinstance(other, _Union):
@@ -890,6 +900,7 @@ def _make_subclasshook(cls):
             if cls.__extra__ and issubclass(subclass, cls.__extra__):
                 return True
             return NotImplemented
+
     return __extrahook__
 
 
@@ -919,8 +930,15 @@ class GenericMeta(TypingMeta, abc.ABCMeta):
     stripped to plain C.
     """
 
-    def __new__(cls, name, bases, namespace,
-                tvars=None, args=None, origin=None, extra=None, orig_bases=None):
+    def __new__(cls,
+                name,
+                bases,
+                namespace,
+                tvars=None,
+                args=None,
+                origin=None,
+                extra=None,
+                orig_bases=None):
         """Create a new generic class. GenericMeta.__new__ accepts
         keyword arguments that are used for internal bookkeeping, therefore
         an override should pass unused keyword arguments to super().
@@ -946,8 +964,8 @@ class GenericMeta(TypingMeta, abc.ABCMeta):
             for base in bases:
                 if base is Generic:
                     raise TypeError("Cannot inherit from plain Generic")
-                if (isinstance(base, GenericMeta) and
-                        base.__origin__ is Generic):
+                if (isinstance(base, GenericMeta)
+                        and base.__origin__ is Generic):
                     if gvars is not None:
                         raise TypeError(
                             "Cannot inherit from Generic[...] multiple types.")
@@ -966,23 +984,24 @@ class GenericMeta(TypingMeta, abc.ABCMeta):
                 tvars = gvars
 
         initial_bases = bases
-        if extra is not None and type(extra) is abc.ABCMeta and extra not in bases:
-            bases = (extra,) + bases
-        bases = tuple(b._gorg if isinstance(b, GenericMeta) else b for b in bases)
+        if extra is not None and type(
+                extra) is abc.ABCMeta and extra not in bases:
+            bases = (extra, ) + bases
+        bases = tuple(
+            b._gorg if isinstance(b, GenericMeta) else b for b in bases)
 
         # remove bare Generic from bases if there are other generic bases
         if any(isinstance(b, GenericMeta) and b is not Generic for b in bases):
             bases = tuple(b for b in bases if b is not Generic)
         namespace.update({'__origin__': origin, '__extra__': extra})
         self = super().__new__(cls, name, bases, namespace, _root=True)
-        super(GenericMeta, self).__setattr__('_gorg',
-                                             self if not origin else origin._gorg)
+        super(GenericMeta, self).__setattr__('_gorg', self
+                                             if not origin else origin._gorg)
         self.__parameters__ = tvars
         # Be prepared that GenericMeta will be subclassed by TupleMeta
         # and CallableMeta, those two allow ..., (), or [] in __args___.
-        self.__args__ = tuple(... if a is _TypingEllipsis else
-                              () if a is _TypingEmpty else
-                              a for a in args) if args else None
+        self.__args__ = tuple(...if a is _TypingEllipsis else (
+        ) if a is _TypingEmpty else a for a in args) if args else None
         # Speed hack (https://github.com/python/typing/issues/196).
         self.__next_in_mro__ = _next_in_mro(self)
         # Preserve base classes on subclassing (__bases__ are type erased now).
@@ -992,11 +1011,10 @@ class GenericMeta(TypingMeta, abc.ABCMeta):
         # This allows unparameterized generic collections to be used
         # with issubclass() and isinstance() in the same way as their
         # collections.abc counterparts (e.g., isinstance([], Iterable)).
-        if (
-            '__subclasshook__' not in namespace and extra or
-            # allow overriding
-            getattr(self.__subclasshook__, '__name__', '') == '__extrahook__'
-        ):
+        if ('__subclasshook__' not in namespace and extra or
+                # allow overriding
+                getattr(self.__subclasshook__, '__name__', ''
+                        ) == '__extrahook__'):
             self.__subclasshook__ = _make_subclasshook(self)
         if isinstance(extra, abc.ABCMeta):
             self._abc_registry = extra._abc_registry
@@ -1007,8 +1025,8 @@ class GenericMeta(TypingMeta, abc.ABCMeta):
 
         if origin and hasattr(origin, '__qualname__'):  # Fix for Python 3.2.
             self.__qualname__ = origin.__qualname__
-        self.__tree_hash__ = (hash(self._subs_tree()) if origin else
-                              super(GenericMeta, self).__hash__())
+        self.__tree_hash__ = (hash(self._subs_tree()) if origin else super(
+            GenericMeta, self).__hash__())
         return self
 
     # _abc_negative_cache and _abc_negative_cache_version
@@ -1050,18 +1068,20 @@ class GenericMeta(TypingMeta, abc.ABCMeta):
     def _eval_type(self, globalns, localns):
         ev_origin = (self.__origin__._eval_type(globalns, localns)
                      if self.__origin__ else None)
-        ev_args = tuple(_eval_type(a, globalns, localns) for a
-                        in self.__args__) if self.__args__ else None
+        ev_args = tuple(
+            _eval_type(a, globalns, localns)
+            for a in self.__args__) if self.__args__ else None
         if ev_origin == self.__origin__ and ev_args == self.__args__:
             return self
-        return self.__class__(self.__name__,
-                              self.__bases__,
-                              _no_slots_copy(self.__dict__),
-                              tvars=_type_vars(ev_args) if ev_args else None,
-                              args=ev_args,
-                              origin=ev_origin,
-                              extra=self.__extra__,
-                              orig_bases=self.__orig_bases__)
+        return self.__class__(
+            self.__name__,
+            self.__bases__,
+            _no_slots_copy(self.__dict__),
+            tvars=_type_vars(ev_args) if ev_args else None,
+            args=ev_args,
+            origin=ev_origin,
+            extra=self.__extra__,
+            orig_bases=self.__orig_bases__)
 
     def __repr__(self):
         if self.__origin__ is None:
@@ -1083,7 +1103,7 @@ class GenericMeta(TypingMeta, abc.ABCMeta):
         if self.__origin__ is None:
             return self
         tree_args = _subs_tree(self, tvars, args)
-        return (self._gorg,) + tuple(tree_args)
+        return (self._gorg, ) + tuple(tree_args)
 
     def __eq__(self, other):
         if not isinstance(other, GenericMeta):
@@ -1098,7 +1118,7 @@ class GenericMeta(TypingMeta, abc.ABCMeta):
     @_tp_cache
     def __getitem__(self, params):
         if not isinstance(params, tuple):
-            params = (params,)
+            params = (params, )
         if not params and self._gorg is not Tuple:
             raise TypeError(
                 "Parameter list to %s[...] cannot be empty" % _qualname(self))
@@ -1123,29 +1143,33 @@ class GenericMeta(TypingMeta, abc.ABCMeta):
             args = params
         elif self.__origin__ in (Generic, _Protocol):
             # Can't subscript Generic[...] or _Protocol[...].
-            raise TypeError("Cannot subscript already-subscripted %s" %
-                            repr(self))
+            raise TypeError(
+                "Cannot subscript already-subscripted %s" % repr(self))
         else:
             # Subscripting a regular Generic subclass.
             _check_generic(self, params)
             tvars = _type_vars(params)
             args = params
 
-        prepend = (self,) if self.__origin__ is None else ()
-        return self.__class__(self.__name__,
-                              prepend + self.__bases__,
-                              _no_slots_copy(self.__dict__),
-                              tvars=tvars,
-                              args=args,
-                              origin=self,
-                              extra=self.__extra__,
-                              orig_bases=self.__orig_bases__)
+        prepend = (self, ) if self.__origin__ is None else ()
+        return self.__class__(
+            self.__name__,
+            prepend + self.__bases__,
+            _no_slots_copy(self.__dict__),
+            tvars=tvars,
+            args=args,
+            origin=self,
+            extra=self.__extra__,
+            orig_bases=self.__orig_bases__)
 
     def __subclasscheck__(self, cls):
         if self.__origin__ is not None:
-            if sys._getframe(1).f_globals['__name__'] not in ['abc', 'functools']:
-                raise TypeError("Parameterized generics cannot be used with class "
-                                "or instance checks")
+            if sys._getframe(1).f_globals['__name__'] not in [
+                    'abc', 'functools'
+            ]:
+                raise TypeError(
+                    "Parameterized generics cannot be used with class "
+                    "or instance checks")
             return False
         if self is Generic:
             raise TypeError("Class %r cannot be used with class "
@@ -1161,17 +1185,15 @@ class GenericMeta(TypingMeta, abc.ABCMeta):
         return issubclass(instance.__class__, self)
 
     def __copy__(self):
-        return self.__class__(self.__name__, self.__bases__,
-                              _no_slots_copy(self.__dict__),
-                              self.__parameters__, self.__args__, self.__origin__,
-                              self.__extra__, self.__orig_bases__)
+        return self.__class__(
+            self.__name__, self.__bases__,
+            _no_slots_copy(self.__dict__), self.__parameters__, self.__args__,
+            self.__origin__, self.__extra__, self.__orig_bases__)
 
     def __setattr__(self, attr, value):
         # We consider all the subscripted generics as proxies for original class
-        if (
-            attr.startswith('__') and attr.endswith('__') or
-            attr.startswith('_abc_')
-        ):
+        if (attr.startswith('__') and attr.endswith('__')
+                or attr.startswith('_abc_')):
             super(GenericMeta, self).__setattr__(attr, value)
         else:
             super(GenericMeta, self._gorg).__setattr__(attr, value)
@@ -1248,9 +1270,9 @@ class TupleMeta(GenericMeta):
             # or a subscription of a subclass.
             return super().__getitem__(parameters)
         if parameters == ():
-            return super().__getitem__((_TypingEmpty,))
+            return super().__getitem__((_TypingEmpty, ))
         if not isinstance(parameters, tuple):
-            parameters = (parameters,)
+            parameters = (parameters, )
         if len(parameters) == 2 and parameters[1] is ...:
             msg = "Tuple[t, ...]: t must be a type."
             p = _type_check(parameters[0], msg)
@@ -1312,8 +1334,8 @@ class CallableMeta(GenericMeta):
                 arg_list.append(arg[0]._tree_repr(arg))
         if arg_list[0] == '...':
             return repr(tree[0]) + '[..., %s]' % arg_list[1]
-        return (repr(tree[0]) +
-                '[[%s], %s]' % (', '.join(arg_list[:-1]), arg_list[-1]))
+        return (repr(tree[0]) + '[[%s], %s]' %
+                (', '.join(arg_list[:-1]), arg_list[-1]))
 
     def __getitem__(self, parameters):
         """A thin wrapper around __getitem_inner__ to provide the latter
@@ -1331,7 +1353,7 @@ class CallableMeta(GenericMeta):
         else:
             if not isinstance(args, list):
                 raise TypeError("Callable[args, result]: args must be a list."
-                                " Got %.100r." % (args,))
+                                " Got %.100r." % (args, ))
             parameters = (tuple(args), result)
         return self.__getitem_inner__(parameters)
 
@@ -1344,7 +1366,7 @@ class CallableMeta(GenericMeta):
             return super().__getitem__((_TypingEllipsis, result))
         msg = "Callable[[arg, ...], result]: each arg must be a type."
         args = tuple(_type_check(arg, msg) for arg in args)
-        parameters = args + (result,)
+        parameters = args + (result, )
         return super().__getitem__(parameters)
 
 
@@ -1385,7 +1407,7 @@ class _ClassVar(_FinalTypingBase, _root=True):
     be used with isinstance() or issubclass().
     """
 
-    __slots__ = ('__type__',)
+    __slots__ = ('__type__', )
 
     def __init__(self, tp=None, **kwds):
         self.__type__ = tp
@@ -1393,11 +1415,12 @@ class _ClassVar(_FinalTypingBase, _root=True):
     def __getitem__(self, item):
         cls = type(self)
         if self.__type__ is None:
-            return cls(_type_check(item,
-                       '{} accepts only single type.'.format(cls.__name__[1:])),
-                       _root=True)
-        raise TypeError('{} cannot be further subscripted'
-                        .format(cls.__name__[1:]))
+            return cls(
+                _type_check(item, '{} accepts only single type.'.format(
+                    cls.__name__[1:])),
+                _root=True)
+        raise TypeError('{} cannot be further subscripted'.format(
+            cls.__name__[1:]))
 
     def _eval_type(self, globalns, localns):
         new_tp = _eval_type(self.__type__, globalns, localns)
@@ -1457,8 +1480,8 @@ def _get_defaults(func):
 
 
 _allowed_types = (types.FunctionType, types.BuiltinFunctionType,
-                  types.MethodType, types.ModuleType,
-                  WrapperDescriptorType, MethodWrapperType, MethodDescriptorType)
+                  types.MethodType, types.ModuleType, WrapperDescriptorType,
+                  MethodWrapperType, MethodDescriptorType)
 
 
 def get_type_hints(obj, globalns=None, localns=None):
@@ -1555,7 +1578,7 @@ def no_type_check(arg):
     if isinstance(arg, type):
         arg_attrs = arg.__dict__.copy()
         for attr, val in arg.__dict__.items():
-            if val in arg.__bases__ + (arg,):
+            if val in arg.__bases__ + (arg, ):
                 arg_attrs.pop(attr)
         for obj in arg_attrs.values():
             if isinstance(obj, types.FunctionType):
@@ -1665,27 +1688,24 @@ class _ProtocolMeta(GenericMeta):
             for attr in base.__dict__.keys():
                 # Include attributes not defined in any non-protocol bases.
                 for c in self.__mro__:
-                    if (c is not base and attr in c.__dict__ and
-                            not getattr(c, '_is_protocol', False)):
+                    if (c is not base and attr in c.__dict__
+                            and not getattr(c, '_is_protocol', False)):
                         break
                 else:
-                    if (not attr.startswith('_abc_') and
-                            attr != '__abstractmethods__' and
-                            attr != '__annotations__' and
-                            attr != '__weakref__' and
-                            attr != '_is_protocol' and
-                            attr != '_gorg' and
-                            attr != '__dict__' and
-                            attr != '__args__' and
-                            attr != '__slots__' and
-                            attr != '_get_protocol_attrs' and
-                            attr != '__next_in_mro__' and
-                            attr != '__parameters__' and
-                            attr != '__origin__' and
-                            attr != '__orig_bases__' and
-                            attr != '__extra__' and
-                            attr != '__tree_hash__' and
-                            attr != '__module__'):
+                    if (not attr.startswith('_abc_')
+                            and attr != '__abstractmethods__'
+                            and attr != '__annotations__'
+                            and attr != '__weakref__'
+                            and attr != '_is_protocol' and attr != '_gorg'
+                            and attr != '__dict__' and attr != '__args__'
+                            and attr != '__slots__'
+                            and attr != '_get_protocol_attrs'
+                            and attr != '__next_in_mro__'
+                            and attr != '__parameters__'
+                            and attr != '__origin__'
+                            and attr != '__orig_bases__'
+                            and attr != '__extra__' and attr != '__tree_hash__'
+                            and attr != '__module__'):
                         attrs.add(attr)
 
         return attrs
@@ -1709,29 +1729,30 @@ class _Protocol(metaclass=_ProtocolMeta):
 
 Hashable = collections_abc.Hashable  # Not generic.
 
-
 if hasattr(collections_abc, 'Awaitable'):
+
     class Awaitable(Generic[T_co], extra=collections_abc.Awaitable):
         __slots__ = ()
 
     __all__.append('Awaitable')
 
-
 if hasattr(collections_abc, 'Coroutine'):
-    class Coroutine(Awaitable[V_co], Generic[T_co, T_contra, V_co],
-                    extra=collections_abc.Coroutine):
+
+    class Coroutine(
+            Awaitable[V_co],
+            Generic[T_co, T_contra, V_co],
+            extra=collections_abc.Coroutine):
         __slots__ = ()
 
     __all__.append('Coroutine')
-
 
 if hasattr(collections_abc, 'AsyncIterable'):
 
     class AsyncIterable(Generic[T_co], extra=collections_abc.AsyncIterable):
         __slots__ = ()
 
-    class AsyncIterator(AsyncIterable[T_co],
-                        extra=collections_abc.AsyncIterator):
+    class AsyncIterator(
+            AsyncIterable[T_co], extra=collections_abc.AsyncIterator):
         __slots__ = ()
 
     __all__.append('AsyncIterable')
@@ -1795,9 +1816,11 @@ class SupportsRound(_Protocol[T_co]):
 
 
 if hasattr(collections_abc, 'Reversible'):
+
     class Reversible(Iterable[T_co], extra=collections_abc.Reversible):
         __slots__ = ()
 else:
+
     class Reversible(_Protocol[T_co]):
         __slots__ = ()
 
@@ -1814,22 +1837,26 @@ class Container(Generic[T_co], extra=collections_abc.Container):
 
 
 if hasattr(collections_abc, 'Collection'):
-    class Collection(Sized, Iterable[T_co], Container[T_co],
-                     extra=collections_abc.Collection):
+
+    class Collection(
+            Sized,
+            Iterable[T_co],
+            Container[T_co],
+            extra=collections_abc.Collection):
         __slots__ = ()
 
     __all__.append('Collection')
 
-
 # Callable was defined earlier.
 
 if hasattr(collections_abc, 'Collection'):
-    class AbstractSet(Collection[T_co],
-                      extra=collections_abc.Set):
+
+    class AbstractSet(Collection[T_co], extra=collections_abc.Set):
         __slots__ = ()
 else:
-    class AbstractSet(Sized, Iterable[T_co], Container[T_co],
-                      extra=collections_abc.Set):
+
+    class AbstractSet(
+            Sized, Iterable[T_co], Container[T_co], extra=collections_abc.Set):
         __slots__ = ()
 
 
@@ -1839,12 +1866,18 @@ class MutableSet(AbstractSet[T], extra=collections_abc.MutableSet):
 
 # NOTE: It is only covariant in the value type.
 if hasattr(collections_abc, 'Collection'):
-    class Mapping(Collection[KT], Generic[KT, VT_co],
-                  extra=collections_abc.Mapping):
+
+    class Mapping(
+            Collection[KT], Generic[KT, VT_co], extra=collections_abc.Mapping):
         __slots__ = ()
 else:
-    class Mapping(Sized, Iterable[KT], Container[KT], Generic[KT, VT_co],
-                  extra=collections_abc.Mapping):
+
+    class Mapping(
+            Sized,
+            Iterable[KT],
+            Container[KT],
+            Generic[KT, VT_co],
+            extra=collections_abc.Mapping):
         __slots__ = ()
 
 
@@ -1854,16 +1887,24 @@ class MutableMapping(Mapping[KT, VT], extra=collections_abc.MutableMapping):
 
 if hasattr(collections_abc, 'Reversible'):
     if hasattr(collections_abc, 'Collection'):
-        class Sequence(Reversible[T_co], Collection[T_co],
-                       extra=collections_abc.Sequence):
+
+        class Sequence(
+                Reversible[T_co], Collection[T_co],
+                extra=collections_abc.Sequence):
             __slots__ = ()
     else:
-        class Sequence(Sized, Reversible[T_co], Container[T_co],
-                       extra=collections_abc.Sequence):
+
+        class Sequence(
+                Sized,
+                Reversible[T_co],
+                Container[T_co],
+                extra=collections_abc.Sequence):
             __slots__ = ()
 else:
-    class Sequence(Sized, Iterable[T_co], Container[T_co],
-                   extra=collections_abc.Sequence):
+
+    class Sequence(
+            Sized, Iterable[T_co], Container[T_co],
+            extra=collections_abc.Sequence):
         __slots__ = ()
 
 
@@ -1921,15 +1962,16 @@ class MappingView(Sized, Iterable[T_co], extra=collections_abc.MappingView):
     __slots__ = ()
 
 
-class KeysView(MappingView[KT], AbstractSet[KT],
-               extra=collections_abc.KeysView):
+class KeysView(
+        MappingView[KT], AbstractSet[KT], extra=collections_abc.KeysView):
     __slots__ = ()
 
 
-class ItemsView(MappingView[Tuple[KT, VT_co]],
-                AbstractSet[Tuple[KT, VT_co]],
-                Generic[KT, VT_co],
-                extra=collections_abc.ItemsView):
+class ItemsView(
+        MappingView[Tuple[KT, VT_co]],
+        AbstractSet[Tuple[KT, VT_co]],
+        Generic[KT, VT_co],
+        extra=collections_abc.ItemsView):
     __slots__ = ()
 
 
@@ -1938,9 +1980,12 @@ class ValuesView(MappingView[VT_co], extra=collections_abc.ValuesView):
 
 
 if hasattr(contextlib, 'AbstractContextManager'):
-    class ContextManager(Generic[T_co], extra=contextlib.AbstractContextManager):
+
+    class ContextManager(
+            Generic[T_co], extra=contextlib.AbstractContextManager):
         __slots__ = ()
 else:
+
     class ContextManager(Generic[T_co]):
         __slots__ = ()
 
@@ -1959,15 +2004,16 @@ else:
                 # (https://bugs.python.org/issue25958), but we do not support
                 # that pattern here because this fallback class is only used
                 # in Python 3.5 and earlier.
-                if (any("__enter__" in B.__dict__ for B in C.__mro__) and
-                    any("__exit__" in B.__dict__ for B in C.__mro__)):
+                if (any("__enter__" in B.__dict__ for B in C.__mro__)
+                        and any("__exit__" in B.__dict__ for B in C.__mro__)):
                     return True
             return NotImplemented
 
 
 if hasattr(contextlib, 'AbstractAsyncContextManager'):
-    class AsyncContextManager(Generic[T_co],
-                              extra=contextlib.AbstractAsyncContextManager):
+
+    class AsyncContextManager(
+            Generic[T_co], extra=contextlib.AbstractAsyncContextManager):
         __slots__ = ()
 
     __all__.append('AsyncContextManager')
@@ -2008,8 +2054,10 @@ class Dict(dict, MutableMapping[KT, VT], extra=dict):
         return _generic_new(dict, cls, *args, **kwds)
 
 
-class DefaultDict(collections.defaultdict, MutableMapping[KT, VT],
-                  extra=collections.defaultdict):
+class DefaultDict(
+        collections.defaultdict,
+        MutableMapping[KT, VT],
+        extra=collections.defaultdict):
 
     __slots__ = ()
 
@@ -2033,8 +2081,10 @@ if hasattr(collections, 'ChainMap'):
     # ChainMap only exists in 3.3+
     __all__.append('ChainMap')
 
-    class ChainMap(collections.ChainMap, MutableMapping[KT, VT],
-                   extra=collections.ChainMap):
+    class ChainMap(
+            collections.ChainMap,
+            MutableMapping[KT, VT],
+            extra=collections.ChainMap):
 
         __slots__ = ()
 
@@ -2053,8 +2103,7 @@ else:
     _G_base = types.GeneratorType
 
 
-class Generator(Iterator[T_co], Generic[T_co, T_contra, V_co],
-                extra=_G_base):
+class Generator(Iterator[T_co], Generic[T_co, T_contra, V_co], extra=_G_base):
     __slots__ = ()
 
     def __new__(cls, *args, **kwds):
@@ -2065,12 +2114,14 @@ class Generator(Iterator[T_co], Generic[T_co, T_contra, V_co],
 
 
 if hasattr(collections_abc, 'AsyncGenerator'):
-    class AsyncGenerator(AsyncIterator[T_co], Generic[T_co, T_contra],
-                         extra=collections_abc.AsyncGenerator):
+
+    class AsyncGenerator(
+            AsyncIterator[T_co],
+            Generic[T_co, T_contra],
+            extra=collections_abc.AsyncGenerator):
         __slots__ = ()
 
     __all__.append('AsyncGenerator')
-
 
 # Internal type variable used for Type[].
 CT_co = TypeVar('CT_co', covariant=True, bound=type)
@@ -2110,9 +2161,11 @@ def _make_nmtuple(name, types):
     nm_tpl = collections.namedtuple(name, [n for n, t in types])
     # Prior to PEP 526, only _field_types attribute was assigned.
     # Now, both __annotations__ and _field_types are used to maintain compatibility.
-    nm_tpl.__annotations__ = nm_tpl._field_types = collections.OrderedDict(types)
+    nm_tpl.__annotations__ = nm_tpl._field_types = collections.OrderedDict(
+        types)
     try:
-        nm_tpl.__module__ = sys._getframe(2).f_globals.get('__name__', '__main__')
+        nm_tpl.__module__ = sys._getframe(2).f_globals.get(
+            '__name__', '__main__')
     except (AttributeError, ValueError):
         pass
     return nm_tpl
@@ -2121,15 +2174,14 @@ def _make_nmtuple(name, types):
 _PY36 = sys.version_info[:2] >= (3, 6)
 
 # attributes prohibited to set in NamedTuple class syntax
-_prohibited = ('__new__', '__init__', '__slots__', '__getnewargs__',
-               '_fields', '_field_defaults', '_field_types',
-               '_make', '_replace', '_asdict', '_source')
+_prohibited = ('__new__', '__init__', '__slots__', '__getnewargs__', '_fields',
+               '_field_defaults', '_field_types', '_make', '_replace',
+               '_asdict', '_source')
 
 _special = ('__module__', '__name__', '__qualname__', '__annotations__')
 
 
 class NamedTupleMeta(type):
-
     def __new__(cls, typename, bases, ns):
         if ns.get('_root', False):
             return super().__new__(cls, typename, bases, ns)
@@ -2146,16 +2198,18 @@ class NamedTupleMeta(type):
                 defaults.append(default_value)
                 defaults_dict[field_name] = default_value
             elif defaults:
-                raise TypeError("Non-default namedtuple field {field_name} cannot "
-                                "follow default field(s) {default_names}"
-                                .format(field_name=field_name,
-                                        default_names=', '.join(defaults_dict.keys())))
+                raise TypeError(
+                    "Non-default namedtuple field {field_name} cannot "
+                    "follow default field(s) {default_names}".format(
+                        field_name=field_name,
+                        default_names=', '.join(defaults_dict.keys())))
         nm_tpl.__new__.__defaults__ = tuple(defaults)
         nm_tpl._field_defaults = defaults_dict
         # update from user namespace without overriding special namedtuple attributes
         for key in ns:
             if key in _prohibited:
-                raise AttributeError("Cannot overwrite NamedTuple attribute " + key)
+                raise AttributeError("Cannot overwrite NamedTuple attribute " +
+                                     key)
             elif key not in _special and key not in nm_tpl._fields:
                 setattr(nm_tpl, key, ns[key])
         return nm_tpl
@@ -2230,7 +2284,6 @@ def NewType(name, tp):
 
 # Python-version-specific alias (Python 2: unicode; Python 3: str)
 Text = str
-
 
 # Constant that's True when type checking, but False here.
 TYPE_CHECKING = False
@@ -2388,11 +2441,10 @@ class io:
 io.__name__ = __name__ + '.io'
 sys.modules[io.__name__] = io
 
-
-Pattern = _TypeAlias('Pattern', AnyStr, type(stdlib_re.compile('')),
-                     lambda p: p.pattern)
-Match = _TypeAlias('Match', AnyStr, type(stdlib_re.match('', '')),
-                   lambda m: m.re.pattern)
+Pattern = _TypeAlias('Pattern', AnyStr,
+                     type(stdlib_re.compile('')), lambda p: p.pattern)
+Match = _TypeAlias('Match', AnyStr,
+                   type(stdlib_re.match('', '')), lambda m: m.re.pattern)
 
 
 class re:
@@ -2405,4 +2457,3 @@ class re:
 
 re.__name__ = __name__ + '.re'
 sys.modules[re.__name__] = re
-

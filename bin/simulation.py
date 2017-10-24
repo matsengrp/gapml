@@ -30,12 +30,14 @@ from collapsed_tree import CollapsedTree
 
 from constants import BARCODE_V7
 
+
 class Barcode:
     '''
     GESTALT target array with spacer sequences
     v7 barcode from GESTALT paper Table S4 is unedited barcode
     initial barcode state equal to v7 by default
     '''
+
     def __init__(self,
                  target_lambdas=scipy.ones(10),
                  repair_lambda=10,
@@ -47,25 +49,35 @@ class Barcode:
         # validate arguments
         for i, target_lambda in enumerate(target_lambdas, 1):
             if target_lambda < 0:
-                raise ValueError('{}th target rate {} is negative'.format(i, target_lambda))
+                raise ValueError('{}th target rate {} is negative'.format(
+                    i, target_lambda))
         if repair_lambda < 0:
-            raise ValueError('repair rate {} is negative'.format(repair_lambda))
+            raise ValueError(
+                'repair rate {} is negative'.format(repair_lambda))
         if not (0 <= repair_indel_probability <= 1):
-            raise ValueError('repair indel probability {} is outside the unit interval'.format(repair_indel_probability))
+            raise ValueError(
+                'repair indel probability {} is outside the unit interval'.
+                format(repair_indel_probability))
         if repair_deletion_lambda < 0:
-            raise ValueError('repair deletion parameter {} is negative'.format(repair_deletion_lambda))
+            raise ValueError('repair deletion parameter {} is negative'.format(
+                repair_deletion_lambda))
         if repair_insertion_lambda < 0:
-            raise ValueError('repair insertion parameter {} is negative'.format(repair_insertion_lambda))
+            raise ValueError(
+                'repair insertion parameter {} is negative'.format(
+                    repair_insertion_lambda))
         if set(''.join(unedited_barcode)) != set('ACGT'):
-            raise ValueError('barcode sequence {} must contain only capital letters (inserstions will be denoted in lower case)'.format(unedited_barcode))
+            raise ValueError(
+                'barcode sequence {} must contain only capital letters (inserstions will be denoted in lower case)'.
+                format(unedited_barcode))
         # The original barcode
         self.unedited_barcode = unedited_barcode
         # an editable copy of the barcode (as a list for mutability)
         self.barcode = list(barcode)
         # number of targets
-        self.n_targets = (len(self.barcode) - 1)//2
+        self.n_targets = (len(self.barcode) - 1) // 2
         if len(target_lambdas) != self.n_targets:
-            raise ValueError('must give {} target_lambdas'.format(self.n_targets))
+            raise ValueError('must give {} target_lambdas'.format(
+                self.n_targets))
         # poisson rates for each target
         self.target_lambdas = scipy.array(target_lambdas)
         # poisson rate for repair process
@@ -89,19 +101,23 @@ class Barcode:
         insertion sequence is placed between target deletions
         '''
         # indices into the self.barcode list (accounting for the spacers)
-        index1 = 1 + 2*min(target1, target2)
-        index2 = 1 + 2*max(target1, target2)
+        index1 = 1 + 2 * min(target1, target2)
+        index2 = 1 + 2 * max(target1, target2)
         # offset from 3' end of target for Cas9 cutting
-        cut_site = 6 # NOTE: need to ask Aaron about this
+        cut_site = 6  # NOTE: need to ask Aaron about this
         # sequence left of cut
         left = ','.join(self.barcode[:index1 + 1])[:-cut_site]
         # barcode sections between the two cut sites, if inter-target
         if target2 == target1:
             center = ''
         else:
-            center = '-' * cut_site + ',' + re.sub('[acgt]', '', ','.join(self.barcode[(index1 + 1):index2])).translate(maketrans('ACGT', '----')) + ',' + '-' * (len(self.barcode[index2]) - cut_site)
+            center = '-' * cut_site + ',' + re.sub('[acgt]', '', ','.join(
+                self.barcode[(index1 + 1):index2])).translate(
+                    maketrans('ACGT', '----')) + ',' + '-' * (
+                        len(self.barcode[index2]) - cut_site)
         # sequence right of cut
-        right = ','.join(self.barcode[index2:])[len(self.barcode[index2]) - cut_site:]
+        right = ','.join(
+            self.barcode[index2:])[len(self.barcode[index2]) - cut_site:]
         # left delete
         deleted = 0
         for position, letter in reversed(list(enumerate(left))):
@@ -149,12 +165,17 @@ class Barcode:
         self.indel(target1, target2, deletion_length, insertion)
         # update target_lambdas
         for target in range(self.n_targets):
-            index = 1 + 2*target
+            index = 1 + 2 * target
             # NOTE: this is more robust than checking for gap characters, since we might later model insertions
             if self.barcode[index] != self.unedited_barcode[index]:
                 self.target_lambdas[target] = 0
         # update which targets still need repair
-        self.needs_repair = {target for target in self.needs_repair if target < min(target1, target2) or target > max(target1, target2)}
+        self.needs_repair = {
+            target
+            for target in self.needs_repair
+            if target < min(target1, target2)
+            or target > max(target1, target2)
+        }
 
     def simulate(self, time):
         '''
@@ -170,23 +191,30 @@ class Barcode:
             # There's really a repair process at each cut site that needs repair (self.needs_repair),
             # but since repair rates are equal we can aggregate rates, and then choose one if the
             # aggregated repair event wins
-            event_lambdas = scipy.concatenate([self.target_lambdas, [len(self.needs_repair)*self.repair_lambda]])
+            event_lambdas = scipy.concatenate([
+                self.target_lambdas,
+                [len(self.needs_repair) * self.repair_lambda]
+            ])
             event_lambdas_total = event_lambdas.sum()
             # if barcode exhausted, we are done
             if event_lambdas_total == 0:
                 break
             # add time to the next event
-            t += expon.rvs(scale=1/event_lambdas_total)
+            t += expon.rvs(scale=1 / event_lambdas_total)
             # if we run out of time, we are done
             if t > time:
                 break
             # pick an event
-            event = choice(self.n_targets + 1, p=event_lambdas/event_lambdas_total)
+            event = choice(
+                self.n_targets + 1, p=event_lambdas / event_lambdas_total)
             # the last event represents the aggregated repair event
             if event == self.n_targets:
-                self.repair() # NOTE: random selection of which targets to repair happens in here
+                self.repair(
+                )  # NOTE: random selection of which targets to repair happens in here
             else:
-                self.needs_repair.add(event) # NOTE: if this target already needed repair, this doesn't change anything
+                self.needs_repair.add(
+                    event
+                )  # NOTE: if this target already needed repair, this doesn't change anything
 
     def events(self):
         '''return the list of observable indel events in the barcdoe'''
@@ -196,8 +224,11 @@ class Barcode:
         for indel in re.compile('[-acgt]+').finditer(str(self)):
             start = indel.start() - insertion_total
             # find the insertions(s) in this indel
-            insertion = ''.join(insertion.group(0) for insertion in re.compile('[acgt]+').finditer(indel.group(0)))
-            insertion_total =+ len(insertion)
+            insertion = ''.join(
+                insertion.group(0)
+                for insertion in re.compile('[acgt]+').finditer(
+                    indel.group(0)))
+            insertion_total = +len(insertion)
             end = indel.end() - insertion_total
             events.append((start, end, insertion))
         return events
@@ -211,6 +242,7 @@ class BarcodeTree():
     simulate tree of barcodes
     initialized with an instance of type Barcode (or any type with a simulation method)
     '''
+
     def __init__(self, barcode, birth_lambda, time=None, N=None):
         if birth_lambda < 0:
             raise ValueError('birth rate {} is negative'.format(birth_lambda))
@@ -230,7 +262,7 @@ class BarcodeTree():
             raise ValueError('time and N cannot both be None')
         # NOTE: N is not implemented, need to refactor as level-order simulation
         # time to the next division or end of simulation
-        t = expon.rvs(scale=1/self.birth_lambda)
+        t = expon.rvs(scale=1 / self.birth_lambda)
         if time is not None and time < t:
             t = time
         # define node for editing, and edit its barcode for the specified time
@@ -246,12 +278,14 @@ class BarcodeTree():
         if t < time:
             # not a leaf, so add two daughters
             # NOTE: daughters do not inherit DSBs (do not need repair)
-            daughter1 = BarcodeTree(node.barcode, birth_lambda=self.birth_lambda)
+            daughter1 = BarcodeTree(
+                node.barcode, birth_lambda=self.birth_lambda)
             daughter1.tree.barcode.needs_repair = set()
             # oooh, recursion
             daughter1.simulate(time - t, root=False)
             node.add_child(daughter1.tree)
-            daughter2 = BarcodeTree(node.barcode, birth_lambda=self.birth_lambda)
+            daughter2 = BarcodeTree(
+                node.barcode, birth_lambda=self.birth_lambda)
             daughter2.tree.barcode.needs_repair = set()
             daughter2.simulate(time - t, root=False)
             node.add_child(daughter2.tree)
@@ -272,14 +306,18 @@ class BarcodeTree():
         for i, leaf in enumerate(tree, 1):
             name = 'b{}'.format(i)
             leaf.name = name
-            barcode_sequence = re.sub('[-]', '', ''.join(leaf.barcode.barcode)).upper()
-            indel_events = ','.join(':'.join([str(start), str(end), str(insertion)]) for start, end, insertion in leaf.barcode.events())
-            sequences.append(SeqRecord(Seq(barcode_sequence,
-                                       generic_dna),
-                             id=name,
-                             description=indel_events,
-                             letter_annotations=dict(phred_quality=[60]*len(barcode_sequence))
-                             ))
+            barcode_sequence = re.sub('[-]', '',
+                                      ''.join(leaf.barcode.barcode)).upper()
+            indel_events = ','.join(':'.join([
+                str(start), str(end), str(insertion)
+            ]) for start, end, insertion in leaf.barcode.events())
+            sequences.append(
+                SeqRecord(
+                    Seq(barcode_sequence, generic_dna),
+                    id=name,
+                    description=indel_events,
+                    letter_annotations=dict(
+                        phred_quality=[60] * len(barcode_sequence))))
         return sequences
 
     def write_sequences(self, file):
@@ -290,22 +328,27 @@ class BarcodeTree():
         style = NodeStyle()
         style['size'] = 0
         for n in self.tree.traverse():
-           n.set_style(style)
+            n.set_style(style)
         for leaf in self.tree:
-           # get the motif list for indels in the format that SeqMotifFace expects
-           motifs = []
-           for match in re.compile('[acgt]+').finditer(str(leaf.barcode)):
-               motifs.append([match.start(), match.end(), '[]', match.end() - match.start(), 1, 'blue', 'blue', None])
-           seqFace = SeqMotifFace(seq=str(leaf.barcode).upper(),
-                                  motifs=motifs,
-                                  seqtype='nt',
-                                  seq_format='[]',
-                                  height=3,
-                                  gapcolor='red',
-                                  fgcolor='black',
-                                  bgcolor='lightgray',
-                                  width=5)
-           leaf.add_face(seqFace, 1)
+            # get the motif list for indels in the format that SeqMotifFace expects
+            motifs = []
+            for match in re.compile('[acgt]+').finditer(str(leaf.barcode)):
+                motifs.append([
+                    match.start(),
+                    match.end(), '[]',
+                    match.end() - match.start(), 1, 'blue', 'blue', None
+                ])
+            seqFace = SeqMotifFace(
+                seq=str(leaf.barcode).upper(),
+                motifs=motifs,
+                seqtype='nt',
+                seq_format='[]',
+                height=3,
+                gapcolor='red',
+                fgcolor='black',
+                bgcolor='lightgray',
+                width=5)
+            leaf.add_face(seqFace, 1)
         tree_style = TreeStyle()
         tree_style.show_scale = False
         tree_style.show_leaf_name = False
@@ -315,14 +358,18 @@ class BarcodeTree():
         '''plot profile of deletion frequency at each position over leaves'''
         n_leaves = len(self.tree)
         deletion_frequency = []
-        plt.figure(figsize=(5,1.5))
+        plt.figure(figsize=(5, 1.5))
         position = 0
         # loop through and get the deletion frequency of each site
         for bit_index, bit in enumerate(self.tree.barcode.unedited_barcode):
-            if len(bit) == 4: # the spacer seqs are length 4, we plot vertical bars to demarcate target boundaries
+            if len(
+                    bit
+            ) == 4:  # the spacer seqs are length 4, we plot vertical bars to demarcate target boundaries
                 plt.bar(position, 100, 4, facecolor='black', alpha=.2)
             for bit_position, letter in enumerate(bit):
-                deletion_frequency.append(100*sum(re.sub('[acgt]', '', leaf.barcode.barcode[bit_index])[bit_position] == '-' for leaf in self.tree)/n_leaves)
+                deletion_frequency.append(100 * sum(
+                    re.sub('[acgt]', '', leaf.barcode.barcode[bit_index])[
+                        bit_position] == '-' for leaf in self.tree) / n_leaves)
             position += len(bit)
         plt.plot(deletion_frequency, color='red', lw=2, clip_on=False)
         # another loop through to find the frequency that each site is the start of an insertion
@@ -332,18 +379,18 @@ class BarcodeTree():
             for insertion in re.compile('[acgt]+').finditer(str(leaf.barcode)):
                 start = insertion.start() - insertion_total
                 # find the insertions(s) in this indel
-                insertion_total =+ len(insertion.group(0))
-                insertion_start_frequency[start] += 100/n_leaves
+                insertion_total = +len(insertion.group(0))
+                insertion_start_frequency[start] += 100 / n_leaves
         plt.plot(insertion_start_frequency, color='blue', lw=2, clip_on=False)
         plt.xlim(0, len(deletion_frequency))
         plt.ylim(0, 100)
         plt.ylabel('Editing (%)')
         plt.tick_params(
-        axis='x',          # changes apply to the x-axis
-        which='both',      # both major and minor ticks are affected
-        bottom='off',      # ticks along the bottom edge are off
-        top='off',         # ticks along the top edge are off
-        labelbottom='off')
+            axis='x',  # changes apply to the x-axis
+            which='both',  # both major and minor ticks are affected
+            bottom='off',  # ticks along the bottom edge are off
+            top='off',  # ticks along the top edge are off
+            labelbottom='off')
         plt.tight_layout()
         plt.savefig(file)
 
@@ -352,25 +399,53 @@ class BarcodeTree():
         indels = pd.DataFrame(columns=('indel start', 'indel end'))
         i = 0
         for leaf in self.tree:
-            for match in re.compile('[-]+').finditer(re.sub('[acgt]', '', ''.join(leaf.barcode.barcode))):
+            for match in re.compile('[-]+').finditer(
+                    re.sub('[acgt]', '', ''.join(leaf.barcode.barcode))):
                 indels.loc[i] = match.start(), match.end()
                 i += 1
         bc_len = len(''.join(self.tree.barcode.unedited_barcode))
         plt.figure(figsize=(3, 3))
         bins = scipy.linspace(0, bc_len, 10 + 1)
-        g = (sns.jointplot('indel start', 'indel end', data=indels,
-                           stat_func=None, xlim=(0, bc_len - 1), ylim=(0, bc_len - 1),
-                           space=0, marginal_kws=dict(bins=bins, color='gray'), joint_kws=dict(alpha=.2, marker='+', color='black', zorder=2))
-             .plot_joint(plt.hist2d, bins=bins, norm=LogNorm(), cmap='Reds', zorder=0))
+        g = (sns.jointplot(
+            'indel start',
+            'indel end',
+            data=indels,
+            stat_func=None,
+            xlim=(0, bc_len - 1),
+            ylim=(0, bc_len - 1),
+            space=0,
+            marginal_kws=dict(bins=bins, color='gray'),
+            joint_kws=dict(alpha=.2, marker='+', color='black', zorder=2))
+             .plot_joint(
+                 plt.hist2d, bins=bins, norm=LogNorm(), cmap='Reds', zorder=0))
         position = 0
         for bit in self.tree.barcode.unedited_barcode:
-            if len(bit) == 4: # the spacer seqs are length 4, we plot bars to demarcate target boundaries
+            if len(
+                    bit
+            ) == 4:  # the spacer seqs are length 4, we plot bars to demarcate target boundaries
                 for ax in g.ax_marg_x, g.ax_joint:
-                    ax.bar(position, bc_len if ax == g.ax_joint else 1, 4, facecolor='gray', lw=0, zorder=1)
+                    ax.bar(
+                        position,
+                        bc_len if ax == g.ax_joint else 1,
+                        4,
+                        facecolor='gray',
+                        lw=0,
+                        zorder=1)
                 for ax in g.ax_marg_y, g.ax_joint:
-                    ax.barh(position, bc_len if ax == g.ax_joint else 1, 4, facecolor='gray', lw=0, zorder=1)
+                    ax.barh(
+                        position,
+                        bc_len if ax == g.ax_joint else 1,
+                        4,
+                        facecolor='gray',
+                        lw=0,
+                        zorder=1)
             position += len(bit)
-        g.ax_joint.plot([0, bc_len - 1], [0, bc_len - 1], ls='--', color='black', lw=1, alpha=.2)
+        g.ax_joint.plot(
+            [0, bc_len - 1], [0, bc_len - 1],
+            ls='--',
+            color='black',
+            lw=1,
+            alpha=.2)
         g.ax_joint.set_xticks([])
         g.ax_joint.set_yticks([])
         # plt.tight_layout()
@@ -378,32 +453,35 @@ class BarcodeTree():
 
     def event_joint(self, file):
         '''make a seaborn pairgrid plot showing deletion length, 3' deltion length, and insertion length'''
-        raise NotImplementedError("not correctly implemented, can't identify 5' from 3' when there is no insertion")
-        indels = pd.DataFrame(columns=("5' deletion length", "3' deletion length", 'insertion length'))
+        raise NotImplementedError(
+            "not correctly implemented, can't identify 5' from 3' when there is no insertion"
+        )
+        indels = pd.DataFrame(columns=(
+            "5' deletion length", "3' deletion length", 'insertion length'))
         i = 0
         for leaf in self.tree:
-            for indel in re.compile(r'(-*)([acgt]*)(-*)+').finditer(str(leaf.barcode)):
+            for indel in re.compile(r'(-*)([acgt]*)(-*)+').finditer(
+                    str(leaf.barcode)):
                 if len(indel.group(0)) > 0:
-                    indels.loc[i] = (len(indel.group(1)) + len(indel.group(3)), len(indel.group(2)))
+                    indels.loc[i] = (len(indel.group(1)) + len(indel.group(3)),
+                                     len(indel.group(2)))
                     i += 1
         plt.figure(figsize=(3, 3))
         sns.pairplot(indels)
         plt.tight_layout()
         plt.savefig(file)
 
-
     def n_leaves(self):
         return len(self.tree)
-
-
-
 
 
 class BarcodeForest():
     '''
     simulate forest of BarcodeTree, all same parameters
     '''
-    def __init__(self, barcode, birth_lambda, time=None, n=10, min_leaves=None):
+
+    def __init__(self, barcode, birth_lambda, time=None, n=10,
+                 min_leaves=None):
         self.trees = []
         ct = 0
         while len(self.trees) < n:
@@ -417,7 +495,8 @@ class BarcodeForest():
     def editing_profile(self, outbase):
         '''plot profile of deletion frequency at each position over leaves'''
         for i, tree in enumerate(self.trees, 1):
-            tree.editing_profile('{}.{}.editing_profile.pdf'.format(outbase, i))
+            tree.editing_profile('{}.{}.editing_profile.pdf'.format(
+                outbase, i))
 
     def indel_boundary(self, outbase):
         '''indel start/end plot for each tree'''
@@ -429,7 +508,6 @@ class BarcodeForest():
         for i, tree in enumerate(self.trees, 1):
             tree.event_joint('{}.{}.event_joint.pdf'.format(outbase, i))
 
-
     def summary_plots(self, file):
         n_cells = []
         n_genotypes = []
@@ -437,11 +515,19 @@ class BarcodeForest():
         indel_lens = []
         for tree in self.trees:
             # counter for the unique leaf genotypes
-            genotypes = Counter([''.join(leaf.barcode.barcode) for leaf in tree.tree])
+            genotypes = Counter(
+                [''.join(leaf.barcode.barcode) for leaf in tree.tree])
             n_genotypes.append(len(genotypes))
             n_cells.append(sum(genotypes.values()))
-            n_indels.append([len(re.findall('[-acgt]+', genotype)) for genotype in genotypes.elements()])
-            indel_lens.append([len(run.group(0)) for genotype in genotypes.elements() for run in re.finditer('-+', genotype)])
+            n_indels.append([
+                len(re.findall('[-acgt]+', genotype))
+                for genotype in genotypes.elements()
+            ])
+            indel_lens.append([
+                len(run.group(0))
+                for genotype in genotypes.elements()
+                for run in re.finditer('-+', genotype)
+            ])
 
         plt.figure(figsize=(12, 3))
         plt.subplot(1, 4, 1)
@@ -476,33 +562,64 @@ class BarcodeForest():
         for i, tree in enumerate(self.trees, 1):
             tree.render('{}.{}.pdf'.format(outbase, i))
 
+
 def main():
     '''do things, the main things'''
     parser = argparse.ArgumentParser(description='simulate GESTALT')
-    parser.add_argument('outbase', type=str, help='base name for plot and fastq output')
-    parser.add_argument('--target_lambdas', type=float, nargs='+', default=[1 for _ in range(10)], help='target cut poisson rates')
-    parser.add_argument('--repair_lambda', type=float, default=10, help='repair poisson rate')
-    parser.add_argument('--repair_indel_probability', type=float, default=.1, help='probability of deletion during repair')
-    parser.add_argument('--repair_deletion_lambda', type=float, default=2, help='poisson parameter for distribution of symmetric deltion about cut site(s)')
-    parser.add_argument('--repair_insertion_lambda', type=float, default=.5, help='poisson parameter for distribution of insertion in cut site(s)')
-    parser.add_argument('--birth_lambda', type=float, default=1, help='birth rate')
-    parser.add_argument('--time', type=float, default=5, help='how much time to simulate')
-    parser.add_argument('--min_leaves', type=int, default=0, help='condition on at least this many leaves')
-    parser.add_argument('--n_trees', type=int, default=1, help='number of trees in forest')
+    parser.add_argument(
+        'outbase', type=str, help='base name for plot and fastq output')
+    parser.add_argument(
+        '--target_lambdas',
+        type=float,
+        nargs='+',
+        default=[1 for _ in range(10)],
+        help='target cut poisson rates')
+    parser.add_argument(
+        '--repair_lambda', type=float, default=10, help='repair poisson rate')
+    parser.add_argument(
+        '--repair_indel_probability',
+        type=float,
+        default=.1,
+        help='probability of deletion during repair')
+    parser.add_argument(
+        '--repair_deletion_lambda',
+        type=float,
+        default=2,
+        help=
+        'poisson parameter for distribution of symmetric deltion about cut site(s)'
+    )
+    parser.add_argument(
+        '--repair_insertion_lambda',
+        type=float,
+        default=.5,
+        help='poisson parameter for distribution of insertion in cut site(s)')
+    parser.add_argument(
+        '--birth_lambda', type=float, default=1, help='birth rate')
+    parser.add_argument(
+        '--time', type=float, default=5, help='how much time to simulate')
+    parser.add_argument(
+        '--min_leaves',
+        type=int,
+        default=0,
+        help='condition on at least this many leaves')
+    parser.add_argument(
+        '--n_trees', type=int, default=1, help='number of trees in forest')
     parser.add_argument('--seed', type=int, default=0)
     args = parser.parse_args()
 
     np.random.seed(seed=args.seed)
 
-    forest = BarcodeForest(Barcode(target_lambdas=args.target_lambdas,
-                                   repair_lambda=args.repair_lambda,
-                                   repair_indel_probability=args.repair_indel_probability,
-                                   repair_deletion_lambda=args.repair_deletion_lambda,
-                                   repair_insertion_lambda=args.repair_insertion_lambda),
-                           birth_lambda=args.birth_lambda,
-                           time=args.time,
-                           min_leaves=args.min_leaves,
-                           n=args.n_trees)
+    forest = BarcodeForest(
+        Barcode(
+            target_lambdas=args.target_lambdas,
+            repair_lambda=args.repair_lambda,
+            repair_indel_probability=args.repair_indel_probability,
+            repair_deletion_lambda=args.repair_deletion_lambda,
+            repair_insertion_lambda=args.repair_insertion_lambda),
+        birth_lambda=args.birth_lambda,
+        time=args.time,
+        min_leaves=args.min_leaves,
+        n=args.n_trees)
     forest.editing_profile(args.outbase)
     forest.indel_boundary(args.outbase)
     # NOTE: function below not yet implemented
@@ -513,6 +630,7 @@ def main():
 
     with open(args.outbase + ".pkl", "wb") as f_pkl:
         pickle.dump(forest, f_pkl)
+
 
 if __name__ == "__main__":
     main()

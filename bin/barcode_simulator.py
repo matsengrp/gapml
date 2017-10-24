@@ -13,7 +13,10 @@ class BarcodeSimulator:
 
     This simulator assumes each barcode can have at most two cuts.
     """
-    def __init__(self, target_lambdas: ndarray, repair_rates: ndarray, left_del_lambda: float, right_del_lambda: float, insertion_lambda: float):
+
+    def __init__(self, target_lambdas: ndarray, repair_rates: ndarray,
+                 left_del_lambda: float, right_del_lambda: float,
+                 insertion_lambda: float):
         """
         @param target_lambdas: rate parameter of each target in the barcode
         @param repair_rates: rate parameter of repair for N cuts in the barcode (repair_rates[N - 1] = rate with N cut in the barcode)
@@ -32,10 +35,13 @@ class BarcodeSimulator:
         @param init_barcode: the initial state of the barcode
         @param time: the amount of time to simulate the barcode modification process
         """
-        barcode = Barcode(init_barcode.barcode, init_barcode.unedited_barcode, init_barcode.cut_sites)
+        barcode = Barcode(init_barcode.barcode, init_barcode.unedited_barcode,
+                          init_barcode.cut_sites)
         time_remain = time
         while time_remain > 0:
-            repair_time = expon.rvs(scale=1.0/self.repair_rates[len(barcode.needs_repair) - 1]) if len(barcode.needs_repair) else np.inf
+            repair_time = expon.rvs(scale=1.0 / self.repair_rates[
+                len(barcode.needs_repair) - 1]) if len(
+                    barcode.needs_repair) else np.inf
             if len(barcode.needs_repair) >= 2:
                 # No more than two cuts allowed in the barcode
                 event_times = [repair_time]
@@ -43,7 +49,10 @@ class BarcodeSimulator:
             else:
                 # If barcode has <=1 cuts, then barcode may get cut
                 active_targets = barcode.get_active_targets()
-                target_cut_times = [expon.rvs(scale=1.0/self.target_lambdas[i]) for i in active_targets]
+                target_cut_times = [
+                    expon.rvs(scale=1.0 / self.target_lambdas[i])
+                    for i in active_targets
+                ]
                 event_times = target_cut_times + [repair_time]
 
             race_winner = np.argmin(event_times)
@@ -66,7 +75,6 @@ class BarcodeSimulator:
                 insertion_length = poisson.rvs(self.insertion_lambda)
                 # TODO: make this more realistic. right now just random DNA inserted
                 insertion = ''.join(choice(list('acgt'), insertion_length))
-                barcode.indel(target1, target2, left_del_len, right_del_len, insertion)
+                barcode.indel(target1, target2, left_del_len, right_del_len,
+                              insertion)
         return barcode
-
-
