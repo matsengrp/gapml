@@ -40,6 +40,13 @@ class CLTSimulator:
         tree = CellLineageTree(root_barcode, cell_state, dist=0)
 
         self._simulate_tree(tree, time)
+
+        # Need to label the leaves (alive cells only) so that we
+        # can later prune the tree. Leaf names must be unique!
+        for idx, leaf in enumerate(tree, 1):
+            if not leaf.dead:
+                leaf.name = "leaf%d" % idx
+
         return tree
 
     def _simulate_tree(self, tree: CellLineageTree, time: float):

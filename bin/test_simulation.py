@@ -4,6 +4,8 @@ from clt_simulator import CLTSimulator
 from barcode_simulator import BarcodeSimulator
 from cell_state import CellTypeTree, CellType
 
+from clt_observer import CLTObserver
+
 from constants import *
 
 cell_type_tree = CellTypeTree(cell_type=None, rate=0.1, probability=1.0)
@@ -18,3 +20,9 @@ bcode_simulator = BarcodeSimulator(
 simulator = CLTSimulator(0.5, 0.01, cell_type_tree, bcode_simulator)
 clt = simulator.simulate(4)
 print(clt)
+obs = CLTObserver(0.5)
+leaves, pruned_clt = obs.observe_leaves(clt)
+print(leaves)
+print(pruned_clt)
+for l in pruned_clt:
+    print(l.barcode)
