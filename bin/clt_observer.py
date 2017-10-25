@@ -49,8 +49,6 @@ class CLTObserver:
                             cell_state=leaf.cell_state,
                             abundance=1,
                         )
-        # Modifies the cell lineage tree!
-        # TODO: is there a way to prune the tree efficiently without modifying the tree?
-        #       must we copy the tree and then prune? copying is bad for very big trees...
+
         clt.prune(observed_leaves)
         return observations, clt
