@@ -1,8 +1,11 @@
 from phylip_parse import hamming_distance
 
+from cell_lineage_tree import CellLineageTree
+
 
 class CollapsedTree:
-    def __init__(self, raw_tree, preserve_leaves=False):
+    @staticmethod
+    def collapse(raw_tree: CellLineageTree, preserve_leaves: bool=False):
         tree = raw_tree.copy()
 
         for node in tree.get_descendants(strategy='postorder'):
@@ -11,5 +14,5 @@ class CollapsedTree:
             if node.dist == 0 and (not node.is_leaf() or
                                    (node.is_leaf() and not preserve_leaves)):
                 node.delete(prevent_nondicotomic=False)
+        return tree
 
-        self.tree = tree

@@ -37,7 +37,7 @@ def parse_seqdict(fh, mode='mix'):
         "^\s*(?P<from>[a-zA-Z0-9>_.-]+)\s+(?P<id>[a-zA-Z0-9>_.-]+)\s+(yes\s+|no\s+|maybe\s+)?(?P<seq>[01?. \-]+)"
     )
     pattern_cont = re.compile("^\s*(?P<seq>[01?. \-]+)")
-    fh.next()
+    fh.readline()
     last_group_id = None
     for line in fh:
         m = pattern0.match(line)
