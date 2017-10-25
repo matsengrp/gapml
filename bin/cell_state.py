@@ -33,7 +33,7 @@ class CellTypeTree(TreeNode):
         super().__init__()
         self.add_feature("cell_type", cell_type)
         if cell_type is not None:
-            self.name = cell_type
+            self.name = str(cell_type)
         self.add_feature("rate", rate)
         self.add_feature("scale", 1.0 / rate if rate > 0 else None)
         self.add_feature("probability", probability)
@@ -51,3 +51,9 @@ class CellState:
         """
         self.categorical_state = categorical
         self.cts_state = cts
+
+    def __str__(self):
+        if self.cts_state is None:
+            return ",".join([leaf.name for leaf in self.categorical_state])
+        else:
+            return str(cts)

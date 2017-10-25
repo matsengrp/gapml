@@ -3,6 +3,9 @@ from typing import List
 from typing import Dict
 
 from constants import NUM_BARCODE_V7_TARGETS
+"""
+Objects for representing input from the event-encoded file from Aaron
+"""
 
 
 class EventType(Enum):

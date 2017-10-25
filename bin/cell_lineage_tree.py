@@ -24,7 +24,6 @@ class CellLineageTree(TreeNode):
         """
         super().__init__()
         self.dist = dist
-        self.name = str(barcode)
         self.add_feature("barcode", barcode)
         self.add_feature("cell_state", cell_state)
         self.add_feature("dead", dead)
