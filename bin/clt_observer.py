@@ -51,4 +51,4 @@ class CLTObserver:
                         )
 
         clt.prune(observed_leaves)
-        return observations.values(), clt
+        return list(observations.values()), clt
