@@ -68,9 +68,11 @@ class CellLineageTree(TreeNode):
 
     def savefig(self, file_name: str):
         '''render tree to image file_name'''
-        style = NodeStyle()
-        style['size'] = 0
         for n in self.traverse():
+            style = NodeStyle()
+            style['size'] = 5
+            style['fgcolor'] = CellType.get_color(
+                n.cell_state.categorical_state.cell_type)
             n.set_style(style)
         for leaf in self:
             # get the motif list for indels in the format that SeqMotifFace expects
@@ -90,8 +92,7 @@ class CellLineageTree(TreeNode):
                 gapcolor='red',
                 gap_format='[]',
                 fgcolor='black',
-                bgcolor=CellType.get_color(
-                    leaf.cell_state.categorical_state.cell_type),
+                bgcolor='grey',
                 width=5)
             leaf.add_face(seqFace, 0, position="aligned")
         tree_style = TreeStyle()
