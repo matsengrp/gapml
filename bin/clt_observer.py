@@ -24,12 +24,15 @@ class CLTObserver:
     def observe_leaves(self, cell_lineage_tree: CellLineageTree):
         """
         Samples leaves from the cell lineage tree, of those that are not dead
-        Modifies the cell lineage tree to be a CLT post-sampling!!!
+
+        TODO: this probably won't work very well for very large trees.
 
         @param cell_lineage_tree: tree to sample leaves from
 
         @return a list of the sampled observations (List[ObservedAlignedSeq])
+                a cell lineage tree with pruned leaves
         """
+        clt = cell_lineage_tree.copy()
         observations = {}
         observed_leaves = []
         for leaf in cell_lineage_tree:
@@ -49,6 +52,5 @@ class CLTObserver:
         # Modifies the cell lineage tree!
         # TODO: is there a way to prune the tree efficiently without modifying the tree?
         #       must we copy the tree and then prune? copying is bad for very big trees...
-        print(observed_leaves)
-        cell_lineage_tree.prune(observed_leaves)
-        return observations
+        clt.prune(observed_leaves)
+        return observations, clt

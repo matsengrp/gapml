@@ -20,7 +20,9 @@ bcode_simulator = BarcodeSimulator(
 simulator = CLTSimulator(0.5, 0.01, cell_type_tree, bcode_simulator)
 clt = simulator.simulate(4)
 print(clt)
-obs = CLTObserver(0.3)
-leaves = obs.observe_leaves(clt)
+obs = CLTObserver(0.5)
+leaves, pruned_clt = obs.observe_leaves(clt)
 print(leaves)
-print(clt)
+print(pruned_clt)
+for l in pruned_clt:
+    print(l.barcode)
