@@ -92,7 +92,7 @@ class CellLineageTree(TreeNode):
                 gapcolor='red',
                 gap_format='[]',
                 fgcolor='black',
-                bgcolor='grey',
+                bgcolor='lightgrey',
                 width=5)
             leaf.add_face(seqFace, 0, position="aligned")
         tree_style = TreeStyle()
