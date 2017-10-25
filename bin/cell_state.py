@@ -1,11 +1,13 @@
 from typing import List
 
 from numpy import ndarray
-from enum import Enum
+from enum import IntEnum
 from ete3 import TreeNode
 
+from constants import COLORS
 
-class CellType(Enum):
+
+class CellType(IntEnum):
     """
     enumeration of cell types
     """
@@ -13,6 +15,12 @@ class CellType(Enum):
     BRAIN = 1
     BLOOD = 2
     EYE = 3
+
+    @staticmethod
+    def get_color(cell_type):
+        if cell_type is None:
+            return "lightgray"
+        return COLORS[int(cell_type) - 1]
 
 
 class CellTypeTree(TreeNode):

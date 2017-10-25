@@ -40,8 +40,7 @@ def summary_plots(trees: List[CellLineageTree], file_name: str):
     indel_lens = []
     for tree in trees:
         # counter for the unique leaf genotypes
-        genotypes = Counter(
-            [''.join(leaf.barcode.barcode) for leaf in tree])
+        genotypes = Counter([''.join(leaf.barcode.barcode) for leaf in tree])
         n_genotypes.append(len(genotypes))
         n_cells.append(sum(genotypes.values()))
         n_indels.append([
@@ -87,4 +86,4 @@ def write_sequences(trees: List[CellLineageTree], outbase: str):
 
 def savefig(trees: List[CellLineageTree], outbase: str):
     for i, tree in enumerate(trees, 1):
-        tree.savefig('{}.{}.pdf'.format(outbase, i))
+        tree.savefig('{}.{}.svg'.format(outbase, i))

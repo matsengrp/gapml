@@ -73,8 +73,7 @@ class BarcodeSimulator:
                 target2 = max(barcode.needs_repair)
 
                 # Serves for a zero-inflated poisson for deletion/insertion process
-                indel_action = binom.rvs(
-                    n=1, p=self.indel_probability, size=3)
+                indel_action = binom.rvs(n=1, p=self.indel_probability, size=3)
 
                 # TODO: this may not be a realistic model. will need to update.
                 left_del_len = poisson.rvs(

@@ -14,7 +14,7 @@ from Bio.Alphabet import generic_dna
 from Bio import AlignIO, SeqIO
 
 from barcode import Barcode
-from cell_state import CellState
+from cell_state import CellState, CellType
 
 
 class CellLineageTree(TreeNode):
@@ -28,7 +28,7 @@ class CellLineageTree(TreeNode):
                  barcode: Barcode,
                  cell_state: CellState,
                  dist: float = 0,
-                 dead: bool=False):
+                 dead: bool = False):
         """
         @param barcode: the barcode at the CLT node -- this is allowed to be None
         @param cell_state: the cell state at the node
@@ -88,10 +88,12 @@ class CellLineageTree(TreeNode):
                 seq_format='[]',
                 height=3,
                 gapcolor='red',
+                gap_format='[]',
                 fgcolor='black',
-                bgcolor='lightgray',
+                bgcolor=CellType.get_color(
+                    leaf.cell_state.categorical_state.cell_type),
                 width=5)
-            leaf.add_face(seqFace, 1)
+            leaf.add_face(seqFace, 0, position="aligned")
         tree_style = TreeStyle()
         tree_style.show_scale = False
         tree_style.show_leaf_name = False
@@ -211,4 +213,3 @@ class CellLineageTree(TreeNode):
         sns.pairplot(indels)
         plt.tight_layout()
         plt.savefig(file_name)
-

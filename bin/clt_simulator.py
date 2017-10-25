@@ -97,7 +97,9 @@ class CLTSimulator:
             child_cell_types = tree.cell_state.categorical_state.children
             child_type_probs = [c.probability for c in child_cell_types]
             cell_type1, cell_type2 = np.random.choice(
-                a=2, size=2, p=child_type_probs)
+                a=len(child_type_probs),
+                size=len(child_cell_types),
+                p=child_type_probs)
             child1 = CellLineageTree(
                 branch_end_barcode,
                 CellState(categorical=child_cell_types[cell_type1]),
