@@ -23,33 +23,36 @@ def main():
         '--target-lambdas',
         type=float,
         nargs='+',
-        default=[1 for _ in range(10)],
-        help='target cut poisson rates')
+        default=[0.1 for _ in range(10)],
+        help='target cut rates')
     parser.add_argument(
-        '--repair-lambdas', type=float, default=[0.1,0.1], help='repair poisson rate')
+        '--repair-lambdas',
+        type=float,
+        default=[1, 2],
+        help='repair poisson rate')
     parser.add_argument(
         '--repair-indel-probability',
         type=float,
-        default=.1,
+        default=0.5,
         help='probability of deletion/insertion during repair')
     parser.add_argument(
         '--repair-deletion-lambda',
         type=float,
-        default=2,
+        default=3,
         help=
         'poisson parameter for distribution of symmetric deltion about cut site(s)'
     )
     parser.add_argument(
         '--repair-insertion-lambda',
         type=float,
-        default=.5,
+        default=0.2,
         help='poisson parameter for distribution of insertion in cut site(s)')
     parser.add_argument(
-        '--birth-lambda', type=float, default=0.4, help='birth rate')
+        '--birth-lambda', type=float, default=1.25, help='birth rate')
     parser.add_argument(
         '--death-lambda', type=float, default=0.01, help='death rate')
     parser.add_argument(
-        '--time', type=float, default=5, help='how much time to simulate')
+        '--time', type=float, default=4, help='how much time to simulate')
     parser.add_argument(
         '--n-trees', type=int, default=1, help='number of trees in forest')
     parser.add_argument('--seed', type=int, default=0)
