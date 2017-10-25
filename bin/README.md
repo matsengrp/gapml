@@ -1,3 +1,14 @@
+# Installing things!
+
+```
+virtualenv gestaltamania/bin
+cd gestaltamania/bin
+source bin/activate
+pip3 install --user scipy
+pip3 install --user pandas
+pip3 install --user matplotlib
+```
+
 # Code formatting
 
 Install `pip install yapf`.
