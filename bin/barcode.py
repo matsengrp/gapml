@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict, Tuple
 import re
 
 import numpy as np
@@ -28,6 +28,7 @@ class Barcode:
         self.unedited_barcode = unedited_barcode
         # an editable copy of the barcode (as a list for mutability)
         self.barcode = list(barcode)
+        self.sub_str_lens = [len(sub_str) for sub_str in barcode]
         self.cut_sites = cut_sites
         # number of targets
         self.n_targets = (len(self.barcode) - 1) // 2
@@ -109,24 +110,77 @@ class Barcode:
         # put it back together
         self.barcode = (left + insertion + center + right).split(',')
         # Update needs_repair
-        self.needs_repair.difference(range(target1, target2 + 1))
+        self.needs_repair = self.needs_repair.difference(set(range(target1, target2 + 1)))
+        # For now, our state diagram assumption says that a barcode
+        # will be fully repaired at any repair event
+        assert(len(self.needs_repair) == 0)
 
     def events(self):
         '''return the list of observable indel events in the barcdoe'''
         events = []
-        insertion_total = 0
         # find the indels
+        insertion_total = 0
         for indel in re.compile('[-acgt]+').finditer(str(self)):
             start = indel.start() - insertion_total
             # find the insertions(s) in this indel
             insertion = ''.join(
                 insertion.group(0)
-                for insertion in re.compile('[acgt]+').finditer(
-                    indel.group(0)))
-            insertion_total = +len(insertion)
+                for insertion in re.compile('[acgt]+').finditer(indel.group(0))
+            )
+            insertion_total += len(insertion)
             end = indel.end() - insertion_total
             events.append((start, end, insertion))
         return events
+
+    def process_events(self, events: List[Tuple[int, int, str]]):
+        """
+        Given a list of observed events, rerun the events and recreate the barcode
+        Assumes all events are NOT overlapping!!!
+        """
+        for evt in events:
+            del_start = evt[0]
+            del_end = evt[1]
+            insertion_str = evt[2]
+
+            # Determine which substrings to start and end at
+            # TODO: make this more efficient
+            idx = 0
+            for sub_str_idx, sub_str in enumerate(self.barcode):
+                sub_str_len = self.sub_str_lens[sub_str_idx]
+                if idx + sub_str_len > del_start and idx <= del_start:
+                    substr_start = sub_str_idx
+                    substr_start_inner_idx = del_start - idx
+                if idx + sub_str_len > del_end and idx <= del_end:
+                    substr_end = sub_str_idx
+                    substr_end_inner_idx = del_end - idx
+                idx += sub_str_len
+
+            # Now do the actual deletions
+            for sub_str_idx in range(substr_start, substr_end + 1):
+                curr_substr = self.barcode[sub_str_idx]
+                start_idx = substr_start_inner_idx if sub_str_idx == substr_start else 0
+                end_idx = substr_end_inner_idx if sub_str_idx == substr_end else self.sub_str_lens[
+                    sub_str_idx]
+
+                new_sub_str = []
+                non_insert_idx = 0
+                deleting = False
+                for substr_char in curr_substr:
+                    if non_insert_idx == start_idx:
+                        deleting = True
+                        # Do the insertion at the start of the deletion in the first substring block
+                        if sub_str_idx == substr_start:
+                            new_sub_str.append(insertion_str)
+                    if non_insert_idx == end_idx:
+                        deleting = False
+                    if deleting:
+                        new_sub_str.append("-")
+                    else:
+                        new_sub_str.append(substr_char)
+                    if substr_char in "ACTG":
+                        non_insert_idx += 1
+                self.barcode[sub_str_idx] = "".join(new_sub_str)
+
 
     def __repr__(self):
         return str(''.join(self.barcode))

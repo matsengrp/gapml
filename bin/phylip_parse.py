@@ -17,8 +17,8 @@ from Bio.Data.IUPACData import ambiguous_dna_values
 # iterate over recognized sections in the phylip output file.
 def sections(fh):
     patterns = {
-        ('sequences', 'mix'): "\s*\(\s*.\s*means\s+same",
-        "seqboot_dataset": "Data\s*set"
+        'leaves': "Name\s*Characters",
+        'edges': "\s*\(\s*.\s*means\s+same",
     }
     patterns = {k: re.compile(v, re.IGNORECASE) for (k, v) in patterns.items()}
     for line in fh:
@@ -28,28 +28,30 @@ def sections(fh):
                 break
 
 
-# iterate over entries in the sequences section
-def parse_seqdict(fh, mode='mix'):
-    #  152        sssssssssG AGGTGCAGCT GTTGGAGTCT GGGGGAGGCT TGGTACAGCC TGGGGGGTCC
-    seqs = defaultdict(str)
-    edges = []
+def parse_seqdict(fh):
+    """
+    @return the list of edges along the tree.
+                each edge is associated with a "difference sequence", which is the state at theupper node,
+                where "." means it is the same as in the node below the tree
+    """
+    # key: edge, val: diff between top and bottom node
+    edges = {}
     pattern0 = re.compile(
         "^\s*(?P<from>[a-zA-Z0-9>_.-]+)\s+(?P<id>[a-zA-Z0-9>_.-]+)\s+(yes\s+|no\s+|maybe\s+)?(?P<seq>[01?. \-]+)"
     )
     pattern_cont = re.compile("^\s*(?P<seq>[01?. \-]+)")
-    fh.next()
+    fh.readline()
     last_group_id = None
     for line in fh:
         m = pattern0.match(line)
         m_cont = pattern_cont.match(line)
         if m:
             last_blank = False
-            last_group_id = m.group("id")
-            edges.append((m.group("from"), m.group("id")))
-            seqs[last_group_id] = m.group("seq").replace(" ", "").upper()
+            last_edge_id = (m.group("from"), m.group("id"))
+            edges[last_edge_id] = m.group("seq").replace(" ", "").upper()
         elif m_cont:
             last_blank = False
-            seqs[last_group_id] += m_cont.group("seq").replace(" ", "").upper()
+            edges[last_edge_id] += m_cont.group("seq").replace(" ", "").upper()
         elif line.rstrip() == '':
             if last_blank:
                 break
@@ -58,47 +60,100 @@ def parse_seqdict(fh, mode='mix'):
                 continue
         else:
             break
-    return seqs, edges
+
+    return edges
 
 
-# parse the dnaml output file and return data structures containing a
-# list biopython.SeqRecords and a dict containing adjacency
-# relationships and distances between nodes.
+def parse_leaves(fh):
+    """
+    @return the list of the sequences at the leaves
+    """
+    fh.readline()
+    fh.readline()
+    pattern_cont = re.compile("^\s*(?P<seq>[01?. \-]+)")
+    pattern0 = re.compile("^(?P<leaf>[a-zA-Z0-9>_.-]+)\s*(?P<seq>[01?. \-]+)")
+
+    leaf_seqs = {}
+    last_leaf_id = None
+    for line in fh:
+        m = pattern0.match(line)
+        m_cont = pattern_cont.match(line)
+        if m:
+            last_blank = False
+            last_leaf_id = m.group("leaf")
+            leaf_seqs[last_leaf_id] = m.group("seq").replace(" ", "")
+        elif m_cont:
+            last_blank = False
+            leaf_seqs[last_leaf_id] += m_cont.group("seq").replace(" ", "")
+        elif line.rstrip() == '':
+            if last_blank:
+                break
+            else:
+                last_blank = True
+                continue
+        else:
+            break
+    return leaf_seqs
+
+
 def parse_outfile(outfile):
-    '''parse phylip outfile'''
+    '''parse phylip mix outfile'''
     trees = []
     # Ugg... for compilation need to let python know that these will definely both be defined :-/
     with open(outfile, 'rU') as fh:
         for sect in sections(fh):
-            if sect[0] == 'sequences':
-                sequences, edges = parse_seqdict(fh, sect[1])
-                trees.append(build_tree(sequences, edges))
+            if sect == 'leaves':
+                # This should always be called before the edges section is reached
+                leaves = parse_leaves(fh)
+            if sect == 'edges':
+                edges = parse_seqdict(fh)
+                trees.append(build_tree(leaves, edges))
     return trees
 
 
-# build a tree from a set of sequences and an adjacency dict.
-def build_tree(sequences, edges):
+# build a tree from a set of edges
+def build_tree(leaf_seqs, edges):
     # build an ete tree
     # first a dictionary of disconnected nodes
     seq_len = 0
     nodes = {}
-    for name in sequences:
-        node = Tree()
-        node.name = name
-        node.add_feature('barcode', sequences[node.name])
-        seq_len = len(node.barcode)
-        nodes[name] = node
-    for node_from, node_to in edges:
-        if node_from in nodes:
-            nodes[node_from].add_child(nodes[node_to])
+    for (node_from_name, node_to_name), diff_seq in edges.items():
+        if node_from_name not in nodes:
+            node_from = Tree()
+            node_from.name = node_from_name
+            nodes[node_from_name] = node_from
+        if node_to_name not in nodes:
+            node_to = Tree()
+            node_to.name = node_to_name
+            nodes[node_to_name] = node_to
         else:
-            assert (node_from == "root")
-            nodes[node_from] = Tree()
-            tree = nodes[node_from]
-            tree.add_child(nodes[node_to])
+            node_to = nodes[node_to_name]
+        node_to.add_feature("difference", diff_seq)
+        if node_to_name in leaf_seqs:
+            node_to.add_feature("binary_barcode", leaf_seqs[node_to_name])
+        else:
+            node_to.add_feature("binary_barcode", None)
 
-    tree.add_feature('barcode', "0" * seq_len)
-    return tree
+    root_node = nodes["root"]
+    root_node.add_feature("binary_barcode", None)
+
+    for node_from_name, node_to_name in edges:
+        nodes[node_from_name].add_child(nodes[node_to_name])
+
+    for node in root_node.iter_descendants("postorder"):
+        distance = 0
+        bcode_arr = []
+        for is_diff, bcode_char in zip(node.difference, node.binary_barcode):
+            if is_diff == ".":
+                bcode_arr.append(bcode_char)
+            else:
+                bcode_arr.append("0")
+                distance += 1
+        if node.up.binary_barcode is None:
+            node.up.binary_barcode = "".join(bcode_arr)
+        node.dist = distance
+
+    return root_node
 
 
 def hamming_distance(seq1, seq2):

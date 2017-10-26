@@ -32,42 +32,72 @@ class BarcodeSimulator:
         self.right_del_lambda = right_del_lambda
         self.insertion_lambda = insertion_lambda
 
+    def _race_repair_target_cutting(self, barcode: Barcode):
+        """
+        Race repair process and target cutting (with no regard to time limits)
+        @return race_winner: if a target cut won, then returns index of target
+                            if a repair won, then returns -1
+                            if no event happens (can't repair and can't cut), then returns None
+                event_time: the time of the event that won
+                            if no event happens, then returns None
+        """
+        num_needs_repair = len(barcode.needs_repair)
+        repair_scale = 1.0 / self.repair_rates[num_needs_repair - 1]
+        repair_time = expon.rvs(scale=repair_scale) if num_needs_repair else np.inf
+        active_targets = barcode.get_active_targets()
+        num_active_targets = len(active_targets)
+        if num_needs_repair >= 2 or (num_needs_repair >= 1 and num_active_targets == 0):
+            # Assumes no more than two cuts in barcode
+            # The other case is that there is nothing to cut
+            return -1, repair_time
+        elif num_active_targets > 0:
+            # If barcode has <=1 cuts, then barcode may get cut
+            target_cut_times = [
+                expon.rvs(scale=1.0 / self.target_lambdas[i])
+                for i in active_targets
+            ]
+            target_min_time = np.min(target_cut_times)
+            if repair_time < target_min_time:
+                # Repair process won
+                return -1, repair_time
+            else:
+                # Target cutting won
+                race_winner = active_targets[np.argmin(target_cut_times)]
+                return race_winner, target_min_time
+        else:
+            # Nothing to cut and nothing to repair
+            return None, None
+
+
     def simulate(self, init_barcode: Barcode, time: float):
         """
         @param init_barcode: the initial state of the barcode
         @param time: the amount of time to simulate the barcode modification process
+
+        @return barcode after the simulation procedure
+                    does not modify the barcode that got passed in :)
         """
         barcode = Barcode(init_barcode.barcode, init_barcode.unedited_barcode,
                           init_barcode.cut_sites)
         time_remain = time
         while time_remain > 0:
-            repair_time = expon.rvs(scale=1.0 / self.repair_rates[
-                len(barcode.needs_repair) - 1]) if len(
-                    barcode.needs_repair) else np.inf
-            if len(barcode.needs_repair) >= 2:
-                # No more than two cuts allowed in the barcode
-                event_times = [repair_time]
-                target_cut_times = []
-            else:
-                # If barcode has <=1 cuts, then barcode may get cut
-                active_targets = barcode.get_active_targets()
-                target_cut_times = [
-                    expon.rvs(scale=1.0 / self.target_lambdas[i])
-                    for i in active_targets
-                ]
-                event_times = target_cut_times + [repair_time]
-
-            race_winner = np.argmin(event_times)
-            event_time = np.min(event_times)
+            race_winner, event_time = self._race_repair_target_cutting(barcode)
+            if race_winner is None:
+                # Nothing to repair and nothing to cut
+                # no point in simulating the barcode process then
+                return barcode
             time_remain = max(time_remain - event_time, 0)
 
-            if time_remain == 0:
-                # Time is up, so nothing happened
-                time_remain = 0
-            elif race_winner < len(target_cut_times):
+            if time_remain > 0 and race_winner >= 0:
                 # One of the targets got cut
                 barcode.cut(race_winner)
-            else:
+                continue
+
+            # If barcode is still broken but we ran out of time, make sure we fix the barcode.
+            do_emergency_fix = time_remain == 0 and len(barcode.needs_repair)
+            # Or the repair process won the race so we just repair the barcode.
+            do_repair = time_remain > 0 and race_winner == -1
+            if do_emergency_fix or do_repair:
                 # A repair has happened
                 target1 = min(barcode.needs_repair)
                 target2 = max(barcode.needs_repair)

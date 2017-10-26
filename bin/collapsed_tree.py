@@ -1,15 +1,14 @@
-from phylip_parse import hamming_distance
+from ete3 import TreeNode
 
 
 class CollapsedTree:
-    def __init__(self, raw_tree, preserve_leaves=False):
+    @staticmethod
+    def collapse(raw_tree: TreeNode, preserve_leaves: bool = False):
         tree = raw_tree.copy()
 
         for node in tree.get_descendants(strategy='postorder'):
-            node.dist = hamming_distance(
-                str(node.up.barcode), str(node.barcode))
             if node.dist == 0 and (not node.is_leaf() or
                                    (node.is_leaf() and not preserve_leaves)):
+                # TODO: one day we might want to think about collapsing only if the cell states are the same
                 node.delete(prevent_nondicotomic=False)
-
-        self.tree = tree
+        return tree

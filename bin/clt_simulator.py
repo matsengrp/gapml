@@ -1,3 +1,4 @@
+import copy
 from scipy.stats import expon, multinomial
 import numpy as np
 
@@ -68,6 +69,7 @@ class CLTSimulator:
 
         branch_end_barcode = self.bcode_simulator.simulate(
             tree.barcode, time=branch_length)
+        assert(len(branch_end_barcode.needs_repair) == 0)
 
         if time < branch_length:
             # Time of event is past observation time
@@ -78,8 +80,9 @@ class CLTSimulator:
             # Cell division
             child1 = CellLineageTree(
                 branch_end_barcode, tree.cell_state, dist=branch_length)
+            branch_end_barcode2 = copy.deepcopy(branch_end_barcode)
             child2 = CellLineageTree(
-                branch_end_barcode, tree.cell_state, dist=branch_length)
+                branch_end_barcode2, tree.cell_state, dist=branch_length)
             tree.add_child(child1)
             tree.add_child(child2)
             self._simulate_tree(child1, remain_time)
@@ -104,8 +107,9 @@ class CLTSimulator:
                 branch_end_barcode,
                 CellState(categorical=child_cell_types[cell_type1]),
                 dist=branch_length)
+            branch_end_barcode2 = copy.deepcopy(branch_end_barcode)
             child2 = CellLineageTree(
-                branch_end_barcode,
+                branch_end_barcode2,
                 CellState(categorical=child_cell_types[cell_type2]),
                 dist=branch_length)
             tree.add_child(child1)
