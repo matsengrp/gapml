@@ -11,7 +11,10 @@ from Bio import SeqIO
 import numpy as np
 import warnings
 
-def write_seqs_to_phy(processed_seqs: Dict[str, List], all_event_dict: Dict[str, int], phy_file: str, abundance_file: str):
+
+def write_seqs_to_phy(processed_seqs: Dict[str, List],
+                      all_event_dict: Dict[str, int], phy_file: str,
+                      abundance_file: str):
     """
     @param processed_seqs: dict key = sequence id, dict val = [abundance, list of event ids]
     @param all_event_dict: dict key = event id, dict val = event phylip id
@@ -36,6 +39,7 @@ def write_seqs_to_phy(processed_seqs: Dict[str, List], all_event_dict: Dict[str,
             seq_name += " " * (10 - len(seq_name))
             f1.write("%s%s\n" % (seq_name, event_encoding))
             f2.write('{}\t{}\n'.format(seq_name, seq_abundance))
+
 
 def main():
     parser = argparse.ArgumentParser(description='convert to MIX')
@@ -72,6 +76,7 @@ def main():
     phy_file = args.outbase + '.phy',
     abundance_file = args.outbase + '.abundance'
     write_seqs_to_phy(processed_seqs, all_event_dict, phy_file, abundance_file)
+
 
 if __name__ == "__main__":
     main()

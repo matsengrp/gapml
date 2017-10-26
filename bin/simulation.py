@@ -54,7 +54,10 @@ def main():
     parser.add_argument(
         '--time', type=float, default=4, help='how much time to simulate')
     parser.add_argument(
-        '--sampling-rate', type=float, default=0.5, help='proportion cells sampled/barcodes successfully sequenced')
+        '--sampling-rate',
+        type=float,
+        default=0.5,
+        help='proportion cells sampled/barcodes successfully sequenced')
     parser.add_argument(
         '--n-trees', type=int, default=1, help='number of trees in forest')
     parser.add_argument('--seed', type=int, default=0)
@@ -95,6 +98,7 @@ def main():
 
     with open(args.outbase + ".pkl", "wb") as f_pkl:
         pickle.dump(forest, f_pkl)
+
 
 if __name__ == "__main__":
     main()

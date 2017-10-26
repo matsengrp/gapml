@@ -19,7 +19,8 @@ cell_type_tree.add_child(
     CellTypeTree(cell_type=CellType.EYE, rate=0, probability=0.5))
 
 bcode_simulator = BarcodeSimulator(
-    np.array([0.1] * NUM_BARCODE_V7_TARGETS), np.array([0.1, 0.1]), 0.8, 3, 3, 1)
+    np.array([0.1] * NUM_BARCODE_V7_TARGETS),
+    np.array([0.1, 0.1]), 0.8, 3, 3, 1)
 simulator = CLTSimulator(0.5, 0.01, cell_type_tree, bcode_simulator)
 clt = simulator.simulate(10)
 print(clt)

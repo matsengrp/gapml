@@ -57,7 +57,10 @@ def main():
     parser.add_argument(
         '--time', type=float, default=4, help='how much time to simulate')
     parser.add_argument(
-        '--sampling-rate', type=float, default=0.5, help='proportion cells sampled/barcodes successfully sequenced')
+        '--sampling-rate',
+        type=float,
+        default=0.5,
+        help='proportion cells sampled/barcodes successfully sequenced')
     parser.add_argument(
         '--n-trees', type=int, default=1, help='number of trees in forest')
     parser.add_argument('--seed', type=int, default=0)
@@ -101,7 +104,7 @@ def main():
             if str(node.up.barcode) == str(node.barcode):
                 node.dist = 0
         true_tree = CollapsedTree.collapse(pruned_clt)
-        
+
         par_est_trees = par_estimator.estimate(obs_leaves)
 
         # Display the true tree (rename leaves for visualization ease)
@@ -114,8 +117,10 @@ def main():
         par_est_t = par_est_trees[0]
         for leaf in par_est_t:
             leaf.name = str(leaf.barcode.events()) + str(leaf.cell_state)
-        print("ESTIMATE (1 out of %d equally parsimonious trees)" % len(par_est_trees))
+        print("ESTIMATE (1 out of %d equally parsimonious trees)" %
+              len(par_est_trees))
         print(par_est_t)
+
 
 if __name__ == "__main__":
     main()

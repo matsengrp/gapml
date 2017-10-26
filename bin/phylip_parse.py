@@ -59,13 +59,12 @@ def parse_seqdict(fh):
 
     return edges
 
+
 def parse_leaves(fh):
     fh.readline()
     fh.readline()
     pattern_cont = re.compile("^\s*(?P<seq>[01?. \-]+)")
-    pattern0 = re.compile(
-        "^(?P<leaf>[a-zA-Z0-9>_.-]+)\s*(?P<seq>[01?. \-]+)"
-    )
+    pattern0 = re.compile("^(?P<leaf>[a-zA-Z0-9>_.-]+)\s*(?P<seq>[01?. \-]+)")
 
     leaf_seqs = {}
     last_leaf_id = None
@@ -99,7 +98,7 @@ def parse_outfile(outfile):
     # Ugg... for compilation need to let python know that these will definely both be defined :-/
     with open(outfile, 'rU') as fh:
         for sect in sections(fh):
-            if sect== 'leaves':
+            if sect == 'leaves':
                 # This should always be called before the edges section is reached
                 leaves = parse_leaves(fh)
             if sect == 'edges':
