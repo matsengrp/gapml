@@ -30,11 +30,11 @@ par_estimator = CLTParsimonyEstimator()
 par_est_trees = par_estimator.estimate(obs_leaves)
 true_tree = (CollapsedTree.collapse(pruned_clt))
 for leaf in true_tree:
-    leaf.name = str(leaf.barcode.events())
+    leaf.name = str(leaf.barcode.events()) + str(leaf.cell_state)
 print(true_tree)
 print("ESTIMATES")
 par_est_t = par_est_trees[0]
 for leaf in par_est_t:
-    leaf_seq_id = int(leaf.name.replace("seq", ""))
-    leaf.name = str(obs_leaves[leaf_seq_id].barcode.events())
+    leaf.name = str(leaf.barcode.events()) + str(leaf.cell_state)
+
 print(par_est_t)

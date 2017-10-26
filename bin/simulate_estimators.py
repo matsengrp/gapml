@@ -9,6 +9,9 @@ from cell_state import CellTypeTree
 from clt_simulator import CLTSimulator
 from barcode_simulator import BarcodeSimulator
 from cell_state import CellTypeTree, CellType
+from clt_observer import CLTObserver
+from clt_estimator import CLTParsimonyEstimator
+from collapsed_tree import CollapsedTree
 
 from constants import *
 from summary_util import *
@@ -84,17 +87,35 @@ def main():
         clt = clt_simulator.simulate(args.time)
         forest.append(clt)
 
-    # Dump summary statistics
-    editing_profile(forest, args.outbase)
-    # indel_boundary(forest, args.outbase)
-    # NOTE: function below not yet implemented
-    # event_joint(forest, args.outbase)
-    write_sequences(forest, args.outbase)
     savefig(forest, args.outbase)
-    summary_plots(forest, args.outbase + '.summary_plots.pdf')
 
-    with open(args.outbase + ".pkl", "wb") as f_pkl:
-        pickle.dump(forest, f_pkl)
+    # Now sample the leaves and see what happens with parsimony
+    observer = CLTObserver(args.sampling_rate)
+    par_estimator = CLTParsimonyEstimator()
+    for clt in forest:
+        obs_leaves, pruned_clt = observer.observe_leaves(clt)
+        # Let the two methods compare just in terms of topology
+        # To do that, we need to collapse our tree.
+        # We collapse branches if the barcodes are identical.
+        for node in pruned_clt.get_descendants(strategy='postorder'):
+            if str(node.up.barcode) == str(node.barcode):
+                node.dist = 0
+        true_tree = CollapsedTree.collapse(pruned_clt)
+        
+        par_est_trees = par_estimator.estimate(obs_leaves)
+
+        # Display the true tree (rename leaves for visualization ease)
+        for leaf in true_tree:
+            leaf.name = str(leaf.barcode.events()) + str(leaf.cell_state)
+        print("TRUTH")
+        print(true_tree)
+
+        # For now, we just display the first estimated tree
+        par_est_t = par_est_trees[0]
+        for leaf in par_est_t:
+            leaf.name = str(leaf.barcode.events()) + str(leaf.cell_state)
+        print("ESTIMATE (1 out of %d equally parsimonious trees)" % len(par_est_trees))
+        print(par_est_t)
 
 if __name__ == "__main__":
     main()

@@ -67,7 +67,12 @@ class BarcodeSimulator:
             elif race_winner < len(target_cut_times):
                 # One of the targets got cut
                 barcode.cut(race_winner)
-            else:
+            
+            # If barcode is still broken but we ran our of time, make sure we fix the barcode.
+            do_emergency_fix = time_remain == 0 and len(barcode.needs_repair)
+            # Or the repair process won the race so we just repair the barcode.
+            do_repair = time_remain > 0 and race_winner == len(target_cut_times)
+            if do_emergency_fix or do_repair:
                 # A repair has happened
                 target1 = min(barcode.needs_repair)
                 target2 = max(barcode.needs_repair)
