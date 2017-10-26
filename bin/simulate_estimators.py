@@ -116,6 +116,7 @@ def main():
         for leaf in true_tree:
             leaf.name = str(leaf.barcode.events()) + str(leaf.cell_state)
             print(leaf.up.barcode.events())
+            print(leaf.barcode.all_commands)
             print(leaf.barcode.events())
             print("==%s==" % leaf.name)
         print("TRUTH")

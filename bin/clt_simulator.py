@@ -69,6 +69,7 @@ class CLTSimulator:
 
         branch_end_barcode = self.bcode_simulator.simulate(
             tree.barcode, time=branch_length)
+        assert(len(branch_end_barcode.needs_repair) == 0)
 
         if time < branch_length:
             # Time of event is past observation time
