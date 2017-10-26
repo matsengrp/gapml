@@ -9,6 +9,7 @@ import phylip_parse
 from collapsed_tree import CollapsedTree
 from cell_lineage_tree import CellLineageTree
 from barcode import Barcode
+from cell_state import CellState
 
 from constants import MIX_CFG_FILE
 
@@ -25,8 +26,9 @@ class CLTParsimonyEstimator(CLTEstimator):
     def _process_observations(self, observations: List[ObservedAlignedSeq]):
         """
         Prepares the observations to be sent to phylip
+        Each event is represented by a tuple (start idx, end idx, insertion)
 
-        @return processed_seqs: Dict[str, List[float, List[event_tuple]]]
+        @return processed_seqs: Dict[str, List[float, List[event_tuple], CellState]]
                     this maps the sequence names to event list and abundance
                 all_event_dict: Dict[event_tuple, event number]
                     maps events to their event number
@@ -37,15 +39,17 @@ class CLTParsimonyEstimator(CLTEstimator):
         all_events = set()
         for idx, obs in enumerate(observations):
             evts = obs.barcode.events()
-            processed_seqs["seq{}".format(idx)] = [obs.abundance, evts]
+            processed_seqs["seq{}".format(idx)] = [obs.abundance, evts, obs.cell_state]
             all_events.update(evts)
         all_event_dict = {event_id: i for i, event_id in enumerate(all_events)}
         event_list = [event_id for i, event_id in enumerate(all_events)]
         return processed_seqs, all_event_dict, event_list
 
-    def _do_convert(self, clt: CellLineageTree, tree: TreeNode,
-                    event_list: List[Tuple[int, int, str]],
-                    observations: List[ObservedAlignedSeq]):
+    def _do_convert(self,
+            clt: CellLineageTree,
+            tree: TreeNode,
+            event_list: List[Tuple[int, int, str]],
+            processed_obs: Dict[str, CellState]):
         """
         Performs the recursive process of forming a cell lineage tree
         """
@@ -58,22 +62,24 @@ class CLTParsimonyEstimator(CLTEstimator):
             events = [event_list[idx] for idx in child_event_ids]
             child_bcode = Barcode()
             child_bcode.process_events(events)
-            cell_state = None if not c.is_leaf() else observations[int(
-                c.name.replace("seq", ""))].cell_state
+            # TODO: remove this check when we start getting more sequences and larger trees!
+            assert(set(events) == set(child_bcode.events()))
+            cell_state = None if not c.is_leaf() else processed_obs[c.name]
             child_clt = CellLineageTree(child_bcode, cell_state=cell_state)
 
             clt.add_child(child_clt)
-            self._do_convert(child_clt, c, event_list, observations)
+            self._do_convert(child_clt, c, event_list, processed_obs)
 
-    def convert_tree_to_clt(self, tree: TreeNode,
-                            event_list: List[Tuple[int, int, str]],
-                            observations: List[ObservedAlignedSeq]):
+    def convert_tree_to_clt(self,
+            tree: TreeNode,
+            event_list: List[Tuple[int, int, str]],
+            processed_obs: Dict[str, CellState]):
         """
         Make a regular TreeNode to a Cell lineage tree
         """
         # TODO: update cell state maybe in the future?
         clt = CellLineageTree(Barcode(), cell_state=None)
-        self._do_convert(clt, tree, event_list, observations)
+        self._do_convert(clt, tree, event_list, processed_obs)
         return clt
 
     def estimate(self, observations: List[ObservedAlignedSeq]):
@@ -111,9 +117,11 @@ class CLTParsimonyEstimator(CLTEstimator):
                     if rf_dist[0] > 0:
                         uniq_trees.append(collapsed_est_tree)
 
+        # Get a mapping from cell to cell state
+        processed_obs = {k: v[2] for k, v in processed_seqs.items()}
         # Now convert these trees to CLTs
         uniq_clts = []
         for t in uniq_trees:
-            clt_new = self.convert_tree_to_clt(t, event_list, observations)
+            clt_new = self.convert_tree_to_clt(t, event_list, processed_obs)
             uniq_clts.append(clt_new)
         return uniq_clts

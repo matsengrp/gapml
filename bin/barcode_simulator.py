@@ -41,9 +41,9 @@ class BarcodeSimulator:
                           init_barcode.cut_sites)
         time_remain = time
         while time_remain > 0:
-            repair_time = expon.rvs(scale=1.0 / self.repair_rates[
-                len(barcode.needs_repair) - 1]) if len(
-                    barcode.needs_repair) else np.inf
+            num_needs_repair = len(barcode.needs_repair)
+            repair_scale = 1.0 / self.repair_rates[num_needs_repair - 1]
+            repair_time = expon.rvs(scale=repair_scale) if num_needs_repair else np.inf
             if len(barcode.needs_repair) >= 2:
                 # No more than two cuts allowed in the barcode
                 event_times = [repair_time]
@@ -68,7 +68,7 @@ class BarcodeSimulator:
                 # One of the targets got cut
                 barcode.cut(race_winner)
 
-            # If barcode is still broken but we ran our of time, make sure we fix the barcode.
+            # If barcode is still broken but we ran out of time, make sure we fix the barcode.
             do_emergency_fix = time_remain == 0 and len(barcode.needs_repair)
             # Or the repair process won the race so we just repair the barcode.
             do_repair = time_remain > 0 and race_winner == len(

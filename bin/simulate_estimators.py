@@ -1,3 +1,8 @@
+"""
+A simulation engine to see how well cell lineage estimation performs
+Right now, only contains parsimony
+"""
+
 from __future__ import division, print_function
 import pickle
 import numpy as np
@@ -90,7 +95,7 @@ def main():
         clt = clt_simulator.simulate(args.time)
         forest.append(clt)
 
-    savefig(forest, args.outbase)
+    #savefig(forest, args.outbase)
 
     # Now sample the leaves and see what happens with parsimony
     observer = CLTObserver(args.sampling_rate)
@@ -110,6 +115,9 @@ def main():
         # Display the true tree (rename leaves for visualization ease)
         for leaf in true_tree:
             leaf.name = str(leaf.barcode.events()) + str(leaf.cell_state)
+            print(leaf.up.barcode.events())
+            print(leaf.barcode.events())
+            print("==%s==" % leaf.name)
         print("TRUTH")
         print(true_tree)
 

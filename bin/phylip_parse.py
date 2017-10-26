@@ -28,8 +28,12 @@ def sections(fh):
                 break
 
 
-# iterate over entries in the sequences section
 def parse_seqdict(fh):
+    """
+    @return the list of edges along the tree.
+                each edge is associated with a "difference sequence", which is the state at theupper node,
+                where "." means it is the same as in the node below the tree
+    """
     # key: edge, val: diff between top and bottom node
     edges = {}
     pattern0 = re.compile(
@@ -61,6 +65,9 @@ def parse_seqdict(fh):
 
 
 def parse_leaves(fh):
+    """
+    @return the list of the sequences at the leaves
+    """
     fh.readline()
     fh.readline()
     pattern_cont = re.compile("^\s*(?P<seq>[01?. \-]+)")
@@ -89,11 +96,8 @@ def parse_leaves(fh):
     return leaf_seqs
 
 
-# parse the dnaml output file and return data structures containing a
-# list biopython.SeqRecords and a dict containing adjacency
-# relationships and distances between nodes.
 def parse_outfile(outfile):
-    '''parse phylip outfile'''
+    '''parse phylip mix outfile'''
     trees = []
     # Ugg... for compilation need to let python know that these will definely both be defined :-/
     with open(outfile, 'rU') as fh:
