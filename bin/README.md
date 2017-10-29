@@ -1,13 +1,23 @@
 # Installing things!
+You will need to have PHYLIP mix installed so that you can call `mix` on the command line.
+You also need conda installed (just install Minconda).
 
+To run our code, you need a conda virtual environment:
 ```
-virtualenv gestaltamania/bin
-cd gestaltamania/bin
-source bin/activate
-pip3 install --user scipy
-pip3 install --user pandas
-pip3 install --user matplotlib
+conda env create -f environment.yml -n <venv_name>
 ```
+
+Check that the following command can run (this checks that NodeStyle can be imported):
+```
+python3 -c "from PyQt4 import QtGui"
+```
+If you get an error message like `ImportError: /home/jfeng2/miniconda3/envs/gestaltamania/lib/python3.4/site-packages/PyQt4/../../../libstdc++.so.6: version 'CXXABI_1.3.8' not found`,
+then you should make sure libstdc++.so.6 symlinks to libstdc++.so.6.0.24 instead of libstdc++.so.6.0.19.
+
+Now activate the environment and onwards you go!
+
+If you want to test out the entire fitting pipeline, you should run `python3 simulate_estimators.py`.
+
 
 # Code formatting
 
