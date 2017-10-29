@@ -37,9 +37,9 @@ def parse_seqdict(fh):
     # key: edge, val: diff between top and bottom node
     edges = {}
     pattern0 = re.compile(
-        "^\s*(?P<from>[a-zA-Z0-9>_.-]+)\s+(?P<id>[a-zA-Z0-9>_.-]+)\s+(yes\s+|no\s+|maybe\s+)?(?P<seq>[01?. \-]+)"
+        "^\s*(?P<from>[a-zA-Z0-9>_-]+)\s+(?P<id>[a-zA-Z0-9>_.-]+)\s+(yes\s+|no\s+|maybe\s+)?(?P<seq>[01?. \-]+)"
     )
-    pattern_cont = re.compile("^\s*(?P<seq>[01?. \-]+)")
+    pattern_cont = re.compile("^(?P<seq>[01?. \-]+)")
     fh.readline()
     last_group_id = None
     for line in fh:
@@ -70,7 +70,7 @@ def parse_leaves(fh):
     """
     fh.readline()
     fh.readline()
-    pattern_cont = re.compile("^\s*(?P<seq>[01?. \-]+)")
+    pattern_cont = re.compile("^             (?P<seq>[01?. \-]+)")
     pattern0 = re.compile("^(?P<leaf>[a-zA-Z0-9>_.-]+)\s*(?P<seq>[01?. \-]+)")
 
     leaf_seqs = {}
@@ -96,8 +96,16 @@ def parse_leaves(fh):
     return leaf_seqs
 
 
-def parse_outfile(outfile):
+def parse_outfile(outfile, countfile):
     '''parse phylip mix outfile'''
+    if countfile is not None:
+        with open(countfile) as f:
+            # eat header
+            f.readline()
+            counts = {l.split()[0]:int(l.split()[1]) for l in f}
+    # No count, just make an empty count dictionary:
+    else:
+        counts = None
     trees = []
     # Ugg... for compilation need to let python know that these will definely both be defined :-/
     with open(outfile, 'rU') as fh:
@@ -107,15 +115,14 @@ def parse_outfile(outfile):
                 leaves = parse_leaves(fh)
             if sect == 'edges':
                 edges = parse_seqdict(fh)
-                trees.append(build_tree(leaves, edges))
+                trees.append(build_tree(leaves, edges, counts))
     return trees
 
 
 # build a tree from a set of edges
-def build_tree(leaf_seqs, edges):
+def build_tree(leaf_seqs, edges, counts=None):
     # build an ete tree
     # first a dictionary of disconnected nodes
-    seq_len = 0
     nodes = {}
     for (node_from_name, node_to_name), diff_seq in edges.items():
         if node_from_name not in nodes:
@@ -153,6 +160,13 @@ def build_tree(leaf_seqs, edges):
             node.up.binary_barcode = "".join(bcode_arr)
         node.dist = distance
 
+    if counts is not None:
+        for node in root_node.traverse():
+            if node.name in counts:
+                node.add_feature('frequency', counts[node.name])
+            else:
+                node.add_feature('frequency', 0)
+                
     return root_node
 
 
