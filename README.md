@@ -1,18 +1,15 @@
 # gestaltamania
 
-`simulation.py` <-- python3 script to simulate barcode editing as a Poisson process. `-h` flag for usage.
+# OLD STUFF - please read the other README
 
-# Using PHYLIP MIX
-Use options: O subgroup 1; 4; 5; P
+# OLD Pipeline
+python3 simulation.py
 
-# Pipeline
-python simulation.py
-
-python fasta_to_phylip.py
+python3 fasta_to_phylip.py
 
 mix
 
-python compare_trees.py
+python3 compare_trees.py
 
-# Parsing pipeline
+# Parsing pipeline for Aaron data
 python3 read_seq_data.py
