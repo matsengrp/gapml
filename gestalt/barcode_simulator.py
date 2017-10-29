@@ -120,22 +120,3 @@ class BarcodeSimulator:
                               insertion)
         return barcode
 
-    def events(self):
-        '''return the list of observable indel events in the barcdoe'''
-        events = []
-        insertion_total = 0
-        # find the indels
-        for indel in re.compile('[-acgt]+').finditer(str(self)):
-            start = indel.start() - insertion_total
-            # find the insertions(s) in this indel
-            insertion = ''.join(
-                insertion.group(0)
-                for insertion in re.compile('[acgt]+').finditer(
-                    indel.group(0)))
-            insertion_total = +len(insertion)
-            end = indel.end() - insertion_total
-            events.append((start, end, insertion))
-        return events
-
-    def __repr__(self):
-        return str(''.join(self.barcode))

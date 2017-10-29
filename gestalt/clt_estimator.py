@@ -38,7 +38,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         processed_seqs = {}
         all_events = set()
         for idx, obs in enumerate(observations):
-            evts = obs.barcode.events()
+            evts = obs.barcode.get_events()
             processed_seqs["seq{}".format(idx)] = [obs.abundance, evts, obs.cell_state]
             all_events.update(evts)
         all_event_dict = {event_id: i for i, event_id in enumerate(all_events)}
@@ -63,7 +63,7 @@ class CLTParsimonyEstimator(CLTEstimator):
             child_bcode = Barcode()
             child_bcode.process_events(events)
             # TODO: remove this check when we start getting more sequences and larger trees!
-            assert(set(events) == set(child_bcode.events()))
+            assert(set(events) == set(child_bcode.get_events()))
             cell_state = None if not c.is_leaf() else processed_obs[c.name]
             child_clt = CellLineageTree(child_bcode, cell_state=cell_state)
 

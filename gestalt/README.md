@@ -24,6 +24,15 @@ If you want to test out the entire fitting pipeline, you should run `python3 sim
 Install `pip install yapf`.
 Run `python3 format_code.py` -- uses https://github.com/google/yapf to format code.
 
+# Running tests
+To run all the tests:
+```
+python3 -m unittest discover
+```
+To run specific test module test/test\_me.py:
+```
+python3 -m unittest discover <test_me>
+```
 
 # GESTALT Code structure
 
