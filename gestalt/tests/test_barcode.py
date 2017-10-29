@@ -29,13 +29,13 @@ class BarcodeTestCase(unittest.TestCase):
         self.assertEqual(
             set(active_targets),
             set(range(self.NUM_TARGETS)))
-        
+
         self.barcode.cut(0)
         active_targets = self.barcode.get_active_targets()
         self.assertEqual(
             set(active_targets),
             set(range(1,self.NUM_TARGETS)))
-        
+
         self.barcode.indel(0, 0, 0, 0, "")
         active_targets = self.barcode.get_active_targets()
         self.assertEqual(

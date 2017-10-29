@@ -10,10 +10,9 @@ import argparse
 import matplotlib
 matplotlib.use('agg')
 
-from cell_state import CellTypeTree
+from cell_state import CellType, CellTypeTree
 from clt_simulator import CLTSimulator
 from barcode_simulator import BarcodeSimulator
-from cell_state import CellTypeTree, CellType
 from clt_observer import CLTObserver
 from clt_estimator import CLTParsimonyEstimator
 from collapsed_tree import CollapsedTree
