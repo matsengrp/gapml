@@ -26,7 +26,10 @@ def main():
     '''do things, the main things'''
     parser = argparse.ArgumentParser(description='simulate GESTALT')
     parser.add_argument(
-        'outbase', type=str, help='base name for plot and fastq output')
+        '--outbase',
+        type=str,
+        default="_output/test",
+        help='base name for plot and fastq output')
     parser.add_argument(
         '--target-lambdas',
         type=float,
@@ -114,7 +117,7 @@ def main():
 
         # Display the true tree (rename leaves for visualization ease)
         for leaf in true_tree:
-            leaf.name = str(leaf.barcode.events()) + str(leaf.cell_state)
+            leaf.name = str(leaf.barcode.get_events()) + str(leaf.cell_state)
         #    print(leaf.up.barcode.events())
         #    print(leaf.barcode.events())
         #    print("==%s==" % leaf.name)
@@ -124,7 +127,7 @@ def main():
         # For now, we just display the first estimated tree
         par_est_t = par_est_trees[0]
         for leaf in par_est_t:
-            leaf.name = str(leaf.barcode.events()) + str(leaf.cell_state)
+            leaf.name = str(leaf.barcode.get_events()) + str(leaf.cell_state)
         print("ESTIMATE (1 out of %d equally parsimonious trees)" %
               len(par_est_trees))
         print(par_est_t)

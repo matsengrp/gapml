@@ -52,7 +52,7 @@ class CellLineageTree(TreeNode):
                                       ''.join(leaf.barcode.barcode)).upper()
             indel_events = ','.join(':'.join([
                 str(start), str(end), str(insertion)
-            ]) for start, end, insertion in leaf.barcode.events())
+            ]) for start, end, insertion in leaf.barcode.get_events())
             sequences.append(
                 SeqRecord(
                     Seq(barcode_sequence, generic_dna),

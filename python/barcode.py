@@ -22,7 +22,10 @@ class Barcode:
         """
         @param barcode: the current state of the barcode
         @param unedited_barcode: the original state of the barcode
-        @param cut_sites: offset from 3' end of target for Cas9 cutting
+        @param cut_sites: offset from 3' end of target for Cas9 cutting,
+                        so a cut_site of 6 means that we start inserting
+                        such that the inserted seq is 6 nucleotides from
+                        the 3' end of the target
         """
         # The original barcode
         self.unedited_barcode = unedited_barcode
@@ -43,8 +46,8 @@ class Barcode:
         """
         # TODO: right now this code is pretty inefficient. we might want to cache which targets are active
         matches = [
-            self.unedited_barcode[2 * i + 1] == self.barcode[2 * i + 1]
-            for i in range(self.n_targets) if i not in self.needs_repair
+            i not in self.needs_repair and self.unedited_barcode[2 * i + 1] == self.barcode[2 * i + 1]
+            for i in range(self.n_targets)
         ]
         return np.where(matches)[0]
 
@@ -70,6 +73,9 @@ class Barcode:
         @param right_del_len: number of nucleotides to delete to the right
         @param insertion: sequence placed between target deletions
         '''
+        assert(target1 in self.needs_repair)
+        assert(target2 in self.needs_repair)
+
         # TODO: make this code more efficient
         # indices into the self.barcode list (accounting for the spacers)
         index1 = 1 + 2 * min(target1, target2)
@@ -82,7 +88,6 @@ class Barcode:
         if target2 == target1:
             center = ''
         else:
-            # TODO: check logic
             maketrans = str.maketrans
             center = '-' * cut_site + ',' + ','.join(
                 self.barcode[(index1 + 1):index2]).translate(
@@ -113,9 +118,10 @@ class Barcode:
         self.needs_repair = self.needs_repair.difference(set(range(target1, target2 + 1)))
         # For now, our state diagram assumption says that a barcode
         # will be fully repaired at any repair event
+        # TODO: We can remove this check when we are sure that the code is working
         assert(len(self.needs_repair) == 0)
 
-    def events(self):
+    def get_events(self):
         '''return the list of observable indel events in the barcdoe'''
         events = []
         # find the indels
@@ -143,7 +149,7 @@ class Barcode:
             insertion_str = evt[2]
 
             # Determine which substrings to start and end at
-            # TODO: make this more efficient
+            # TODO: make this more efficient?
             idx = 0
             for sub_str_idx, sub_str in enumerate(self.barcode):
                 sub_str_len = self.sub_str_lens[sub_str_idx]
