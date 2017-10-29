@@ -76,6 +76,9 @@ class CLTSimulator:
         @param tree: the root node to create a tree from
         @param time: the max amount of time to simulate from this node
         """
+        if time == 0:
+            return
+
         # Determine branch length and event at end of branch
         race_winner, branch_length = self._run_race(tree.cell_state)
         obs_branch_length = min(branch_length, time)
