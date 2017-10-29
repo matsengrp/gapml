@@ -1,5 +1,5 @@
 import copy
-from scipy.stats import expon, multinomial
+from scipy.stats import expon
 import numpy as np
 
 from cell_lineage_tree import CellLineageTree
