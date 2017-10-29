@@ -14,9 +14,13 @@ class BarcodeSimulator:
     This simulator assumes each barcode can have at most two cuts.
     """
 
-    def __init__(self, target_lambdas: ndarray, repair_rates: ndarray,
-                 indel_probability: float, left_del_lambda: float,
-                 right_del_lambda: float, insertion_lambda: float):
+    def __init__(self,
+        target_lambdas: ndarray,
+        repair_rates: ndarray,
+        indel_probability: float,
+        left_del_lambda: float,
+        right_del_lambda: float,
+        insertion_lambda: float):
         """
         @param target_lambdas: rate parameter of each target in the barcode
         @param repair_rates: rate parameter of repair for N cuts in the barcode (repair_rates[N - 1] = rate with N cut in the barcode)

@@ -27,11 +27,11 @@ Run `python3 format_code.py` -- uses https://github.com/google/yapf to format co
 # Running tests
 To run all the tests:
 ```
-python3 -m unittest discover
+python3 -m unittest
 ```
-To run specific test module test/test\_me.py:
+To run specific test module tests/test\_me.py:
 ```
-python3 -m unittest discover <test_me>
+python3 -m unittest tests.<test_me>
 ```
 
 # GESTALT Code structure
