@@ -100,7 +100,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         # Parse the outfile -- these are still regular Tree, not CellLineageTrees
         # In the future, we can simultaneously build a cell lineage tree while parsing the
         # output, rather than parsing output and later converting.
-        trees = phylip_parse.parse_outfile("outfile")
+        trees = phylip_parse.parse_outfile("outfile", "test.abundance")
 
         # Only return unique trees, so check if trees are equivalent by first collapsing them.
         # TODO: make this much more efficient - right now checks all other trees
