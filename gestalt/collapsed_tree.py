@@ -10,5 +10,6 @@ class CollapsedTree:
             if node.dist == 0 and (not node.is_leaf() or
                                    (node.is_leaf() and not preserve_leaves)):
                 # TODO: one day we might want to think about collapsing only if the cell states are the same
+                node.up.name = node.name
                 node.delete(prevent_nondicotomic=False)
         return tree
