@@ -6,8 +6,15 @@ from cell_lineage_tree import CellLineageTree
 
 
 class ObservedAlignedSeq:
-    def __init__(self, barcode: Barcode, cell_state: CellState,
-                 abundance: float):
+    def __init__(self,
+            barcode: Barcode,
+            cell_state: CellState,
+            abundance: float):
+        """
+        Stores barcodes that are observed.
+        Since these are stored using the barcode class,
+        it implicitly gives us the alignment
+        """
         self.barcode = barcode
         self.cell_state = cell_state
         self.abundance = abundance
