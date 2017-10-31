@@ -115,11 +115,9 @@ class Barcode:
         # put it back together
         self.barcode = (left + insertion + center + right).split(',')
         # Update needs_repair
+        # Currently assumes that during inter-target indels, any cuts in the middle
+        # also get repaired.
         self.needs_repair = self.needs_repair.difference(set(range(target1, target2 + 1)))
-        # For now, our state diagram assumption says that a barcode
-        # will be fully repaired at any repair event
-        # TODO: We can remove this check when we are sure that the code is working
-        assert(len(self.needs_repair) == 0)
 
     def get_events(self):
         '''return the list of observable indel events in the barcdoe'''

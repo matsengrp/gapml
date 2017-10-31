@@ -28,6 +28,8 @@ class BarcodeSimulator:
         @param left_del_lambda: poisson parameter for number of nucleotides deleted to the left of the DSB
         @param right_del_lambda: poisson parameter for number of nucleotides deleted to the right of the DSB
         @param insertion_lambda: poisson parameter for number of nucleotides insertd after DSB
+
+        # TODO: inflation probability parameter for indels is shared. maybe not realistic
         """
         self.target_lambdas = target_lambdas
         self.repair_rates = repair_rates
@@ -81,8 +83,13 @@ class BarcodeSimulator:
         @return barcode after the simulation procedure
                     does not modify the barcode that got passed in :)
         """
-        barcode = Barcode(init_barcode.barcode, init_barcode.unedited_barcode,
-                          init_barcode.cut_sites)
+        assert(init_barcode.n_targets == self.target_lambdas.size)
+
+        barcode = Barcode(
+            init_barcode.barcode,
+            init_barcode.unedited_barcode,
+            init_barcode.cut_sites)
+
         time_remain = time
         while time_remain > 0:
             race_winner, event_time = self._race_repair_target_cutting(barcode)
@@ -97,30 +104,37 @@ class BarcodeSimulator:
                 barcode.cut(race_winner)
                 continue
 
-            # If barcode is still broken but we ran out of time, make sure we fix the barcode.
-            do_emergency_fix = time_remain == 0 and len(barcode.needs_repair)
-            # Or the repair process won the race so we just repair the barcode.
-            do_repair = time_remain > 0 and race_winner == -1
-            if do_emergency_fix or do_repair:
-                # A repair has happened
-                target1 = min(barcode.needs_repair)
-                target2 = max(barcode.needs_repair)
-
-                # Serves for a zero-inflated poisson for deletion/insertion process
-                indel_action = binom.rvs(n=1, p=self.indel_probability, size=3)
-
-                # TODO: this may not be a realistic model. will need to update.
-                left_del_len = poisson.rvs(
-                    self.left_del_lambda) if indel_action[0] else 0
-                right_del_len = poisson.rvs(
-                    self.right_del_lambda) if indel_action[1] else 0
-
-                insertion_length = poisson.rvs(
-                    self.insertion_lambda) if indel_action[2] else 0
-
-                # TODO: make this more realistic. right now just random DNA inserted
-                insertion = ''.join(choice(list('acgt'), insertion_length))
-                barcode.indel(target1, target2, left_del_len, right_del_len,
-                              insertion)
+            # Do repair if one of the two bool flags is true:
+            ## (1) If barcode is still broken but we ran out of time, make sure we fix the barcode.
+            ## (2) the repair process won the race so we just repair the barcode.
+            self._do_repair(barcode)
         return barcode
 
+    def _do_repair(self, barcode: Barcode):
+        """
+        Repairs barcode.
+        Does focal deletion if only one cut.
+        Does inter-target deletion if 2 cuts.
+        """
+        target1 = min(barcode.needs_repair)
+        target2 = max(barcode.needs_repair)
+
+        # Serves for a zero-inflated poisson for deletion/insertion process
+        # Draw a separate RVs for each deletion/insertion process
+        indel_action = binom.rvs(n=1, p=self.indel_probability, size=3)
+
+        left_del_len = poisson.rvs(
+            self.left_del_lambda) if indel_action[0] else 0
+        right_del_len = poisson.rvs(
+            self.right_del_lambda) if indel_action[1] else 0
+        insertion_length = poisson.rvs(
+            self.insertion_lambda) if indel_action[2] else 0
+
+        # TODO: make this more realistic. right now just random DNA inserted
+        insertion = ''.join(choice(list('acgt'), insertion_length))
+        barcode.indel(
+            target1,
+            target2,
+            left_del_len,
+            right_del_len,
+            insertion)
