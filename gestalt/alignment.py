@@ -2,16 +2,35 @@ from Bio import pairwise2
 from math import log
 import warnings
 
-class AlignerNW():
+class Aligner():
     """
+    base class for aligners
+    """
+    def events(self, sequence: str, reference: str):
+        """
+        @param sequence: observed (edited) barcode nucleotide sequence
+        @param reference: design barcoded sequence to align to
+        """
+        raise NotImplementedError()
+
+class AlignerNW(Aligner):
+    """
+    Needleman-Wunsch alignment to identify indel events
     assuming perfect sequencing (no PCR or sequencing error) we make our
     mismatch penalty effectively infinite
     """
     def __init__(self, gap_open: float = -10, gap_extend: float = -.5):
+        """
+        @param gap_open: gap open penalty
+        @param gap_extend: gap extension penalty
+        """
         self.gap_open = gap_open
         self.gap_extend = gap_extend
 
     def events(self, sequence: str, reference: str):
+        """
+        @return indel events
+        """
         if not set(sequence) <= set('ACGT'):
             raise ValueError('invalid nucleotide sequence: {}'.format(sequence))
         if not set(reference) <= set('ACGT'):

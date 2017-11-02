@@ -1,7 +1,8 @@
 from typing import List, Dict, Tuple
 import re
-
 import numpy as np
+
+from alignment import Aligner
 
 from constants import BARCODE_V7, NUM_BARCODE_V7_TARGETS
 
@@ -119,15 +120,16 @@ class Barcode:
         # also get repaired.
         self.needs_repair = self.needs_repair.difference(set(range(target1, target2 + 1)))
 
-    def get_events(self, aligner=None):
+    def get_events(self, aligner: Aligner = None):
         '''
-        return the list of observable indel events in the barcdoe
-        aligner=None returns the actual simualted events, otherwise the function
-        specified by aligner is used
+        @param aligner object
+               must have events() method
+               None returns the actual simulated events
+        return the list of observable indel events in the barcode
         '''
-        events = []
         if aligner is None:
             # find the indels
+            events = []
             insertion_total = 0
             for indel in re.compile('[-acgt]+').finditer(str(self)):
                 start = indel.start() - insertion_total
@@ -140,7 +142,9 @@ class Barcode:
                 end = indel.end() - insertion_total
                 events.append((start, end, insertion))
         else:
-            raise NotImplementedError('aligner function {} not recognized'.format(aligner))
+            sequence = str(self.barcode).replace('-', '').upper()
+            reference = ''.join(self.unedited_barcode).replace('-', '').upper()
+            events = aligner.events(sequence, reference)
         return events
 
     def process_events(self, events: List[Tuple[int, int, str]]):
@@ -194,4 +198,4 @@ class Barcode:
 
 
     def __repr__(self):
-        return str(''.join(self.barcode))
+        return ''.join(self.barcode)

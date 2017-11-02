@@ -16,6 +16,7 @@ from barcode_simulator import BarcodeSimulator
 from clt_observer import CLTObserver
 from clt_estimator import CLTParsimonyEstimator
 from collapsed_tree import CollapsedTree
+from alignment import AlignerNW
 
 from constants import *
 from summary_util import *
@@ -71,6 +72,7 @@ def main():
     parser.add_argument(
         '--n-trees', type=int, default=1, help='number of trees in forest')
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--align', action='store_true')
     args = parser.parse_args()
 
     np.random.seed(seed=args.seed)
@@ -99,9 +101,12 @@ def main():
 
     #savefig(forest, args.outbase)
 
+    # define aligner
+    aligner = AlignerNW() if args.align else None
+
     # Now sample the leaves and see what happens with parsimony
     observer = CLTObserver(args.sampling_rate)
-    par_estimator = CLTParsimonyEstimator()
+    par_estimator = CLTParsimonyEstimator(aligner)
     for clt in forest:
         obs_leaves, pruned_clt = observer.observe_leaves(clt)
         # Let the two methods compare just in terms of topology

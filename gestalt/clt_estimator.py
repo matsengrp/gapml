@@ -10,11 +10,14 @@ from collapsed_tree import CollapsedTree
 from cell_lineage_tree import CellLineageTree
 from barcode import Barcode
 from cell_state import CellState
+from alignment import Aligner
 
 from constants import MIX_CFG_FILE
 
 
 class CLTEstimator:
+    def __init__(self, aligner: Aligner = None):
+        self.aligner = aligner
     def estimate(self, observations: List[ObservedAlignedSeq]):
         """
         @return an estimate of the cell lineage tree (post-sampling)
@@ -38,7 +41,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         processed_seqs = {}
         all_events = set()
         for idx, obs in enumerate(observations):
-            evts = obs.barcode.get_events()
+            evts = obs.barcode.get_events(aligner=self.aligner)
             processed_seqs["seq{}".format(idx)] = [obs.abundance, evts, obs.cell_state]
             all_events.update(evts)
         all_event_dict = {event_id: i for i, event_id in enumerate(all_events)}
@@ -63,7 +66,7 @@ class CLTParsimonyEstimator(CLTEstimator):
             child_bcode = Barcode()
             child_bcode.process_events(events)
             # TODO: remove this check when we start getting more sequences and larger trees!
-            assert(set(events) == set(child_bcode.get_events()))
+            assert(set(events) == set(child_bcode.get_events(aligner=self.aligner)))
             cell_state = None if not c.is_leaf() else processed_obs[c.name]
             child_clt = CellLineageTree(child_bcode, cell_state=cell_state)
 
