@@ -50,7 +50,8 @@ class AlignerNW():
             events.append((event_start, event_end, insertion))
         assert reference_position == len(reference)
         assert in_event == False
-        print(events)
+
+        return events
 
 
 # TODO:  can define different affine gap functions for each sequence and can be site-aware
