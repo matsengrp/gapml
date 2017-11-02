@@ -4,7 +4,7 @@ import warnings
 
 class AlignerNW():
     """
-    assuming not perfect sequencing (no PCR or sequencing error) we make our
+    assuming perfect sequencing (no PCR or sequencing error) we make our
     mismatch penalty effectively infinite
     """
     def __init__(self, gap_open: float = -10, gap_extend: float = -.5):
@@ -24,16 +24,17 @@ class AlignerNW():
         reference_position = 0
         in_event = False
         for sequence_nucleotide, reference_nucleotide in zip(*alns[0][0:2]):
+            print(in_event)
             # TODO: handle mismatches somehow, currently raise error
             if sequence_nucleotide != reference_nucleotide and not \
                (sequence_nucleotide == '-' or reference_nucleotide == '-'):
                raise NotImplementedError('mismatch {}, {}'.
                               format(sequence_nucleotide, reference_nucleotide))
             if not in_event:
-                if sequence_nucleotide == '-':
+                if sequence_nucleotide == '-' or reference_nucleotide == '-':
                     in_event = True
                     event_start = reference_position
-                    insertion = ''
+                    insertion = '' if sequence_nucleotide == '-' else sequence_nucleotide
             else:
                 if reference_nucleotide == '-':
                     insertion += sequence_nucleotide
@@ -42,9 +43,10 @@ class AlignerNW():
                         event_end = reference_position + 1
                         events.append((event_start, event_end, insertion))
                 else:
-                    in_event = False
-                    event_end = reference_position
-                    events.append((event_start, event_end, insertion))
+                    if sequence_nucleotide != '-' and reference_nucleotide != '-':
+                        in_event = False
+                        event_end = reference_position
+                        events.append((event_start, event_end, insertion))
             reference_position += (reference_nucleotide is not '-')
         print(events)
 
