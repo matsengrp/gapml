@@ -119,21 +119,28 @@ class Barcode:
         # also get repaired.
         self.needs_repair = self.needs_repair.difference(set(range(target1, target2 + 1)))
 
-    def get_events(self):
-        '''return the list of observable indel events in the barcdoe'''
+    def get_events(self, aligner=None):
+        '''
+        return the list of observable indel events in the barcdoe
+        aligner=None returns the actual simualted events, otherwise the function
+        specified by aligner is used
+        '''
         events = []
-        # find the indels
-        insertion_total = 0
-        for indel in re.compile('[-acgt]+').finditer(str(self)):
-            start = indel.start() - insertion_total
-            # find the insertions(s) in this indel
-            insertion = ''.join(
-                insertion.group(0)
-                for insertion in re.compile('[acgt]+').finditer(indel.group(0))
-            )
-            insertion_total += len(insertion)
-            end = indel.end() - insertion_total
-            events.append((start, end, insertion))
+        if aligner is None:
+            # find the indels
+            insertion_total = 0
+            for indel in re.compile('[-acgt]+').finditer(str(self)):
+                start = indel.start() - insertion_total
+                # find the insertions(s) in this indel
+                insertion = ''.join(
+                    insertion.group(0)
+                    for insertion in re.compile('[acgt]+').finditer(indel.group(0))
+                )
+                insertion_total += len(insertion)
+                end = indel.end() - insertion_total
+                events.append((start, end, insertion))
+        else:
+            raise NotImplementedError('aligner function {} not recognized'.format(aligner))
         return events
 
     def process_events(self, events: List[Tuple[int, int, str]]):
