@@ -106,8 +106,9 @@ class BarcodeSimulator:
 
             # Do repair if one of the two bool flags is true:
             ## (1) If barcode is still broken but we ran out of time, make sure we fix the barcode.
-            ## (2) the repair process won the race so we just repair the barcode.
-            self._do_repair(barcode)
+            ## (2) the repair process won the race so we just repair the barcode.        
+            if (time_remain == 0 and len(barcode.needs_repair) > 0) or race_winner == -1:
+                self._do_repair(barcode)
         return barcode
 
     def _do_repair(self, barcode: Barcode):
@@ -116,6 +117,8 @@ class BarcodeSimulator:
         Does focal deletion if only one cut.
         Does inter-target deletion if 2 cuts.
         """
+        if len(barcode.needs_repair) not in (1, 2):
+            raise ValueError('barcode contains {} cuts, cannot repair'.format(len(barcode.needs_repair)))
         target1 = min(barcode.needs_repair)
         target2 = max(barcode.needs_repair)
 
