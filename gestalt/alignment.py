@@ -38,7 +38,7 @@ class AlignerNW(Aligner):
         alns = pairwise2.align.globalms(sequence, reference,
                                         0, -10**10, self.gap_open, self.gap_extend)
         if len(alns) > 1:
-            warnings.warn('{} optimal alignments, just using first'.format(len(alns)))
+            warnings.warn('{} optimal alignments, using first'.format(len(alns)))
         events = []
         reference_position = 0
         in_event = False

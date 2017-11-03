@@ -1,5 +1,6 @@
 from typing import List, Dict, Tuple
 import subprocess
+import re
 
 from ete3 import Tree, TreeNode
 
@@ -42,6 +43,25 @@ class CLTParsimonyEstimator(CLTEstimator):
         all_events = set()
         for idx, obs in enumerate(observations):
             evts = obs.barcode.get_events(aligner=self.aligner)
+            # #### NOTE: sanity check on our event parsing ####
+            # # uncomment this block to inspect alignments that apparently mismatch
+            # test_barcode = Barcode()
+            # test_barcode.process_events(evts)
+            # observed = str(obs.barcode)
+            # # left align the insertions within each indel in "observed"
+            # for indel in list(re.compile('[-acgt]+').finditer(observed)):
+            #     insertion = re.compile('[acgt]+').search(indel.group(0))
+            #     if insertion is not None:
+            #         observed = observed[:indel.start()] + \
+            #                     insertion.group(0) + \
+            #                     re.sub('[acgt]+', '', indel.group(0)) + \
+            #                     observed[indel.end():]
+            # if str(test_barcode) != str(observed):
+            #     print(evts)
+            #     print(observed)
+            #     print(str(test_barcode))
+            #     input('[ENTER]')
+            # #### end sanity check ####
             processed_seqs["seq{}".format(idx)] = [obs.abundance, evts, obs.cell_state]
             all_events.update(evts)
         all_event_dict = {event_id: i for i, event_id in enumerate(all_events)}
@@ -65,8 +85,11 @@ class CLTParsimonyEstimator(CLTEstimator):
             events = [event_list[idx] for idx in child_event_ids]
             child_bcode = Barcode()
             child_bcode.process_events(events)
-            # TODO: remove this check when we start getting more sequences and larger trees!
-            assert(set(events) == set(child_bcode.get_events(aligner=self.aligner)))
+            # TODO: remove this assert when we start getting more sequences and larger trees!
+            # NOTE: this assert is not sufficient if an aligner is used due to
+            #       alignment ambiguities (e.g. left/right alignment and
+            #       inserted bases that match the template)
+            # assert(set(events) == set(child_bcode.get_events(aligner=self.aligner)))
             cell_state = None if not c.is_leaf() else processed_obs[c.name]
             child_clt = CellLineageTree(child_bcode, cell_state=cell_state)
 
