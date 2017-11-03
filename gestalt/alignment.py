@@ -42,7 +42,6 @@ class AlignerNW(Aligner):
         events = []
         reference_position = 0
         in_event = False
-        print(alns[0])
         for sequence_nucleotide, reference_nucleotide in zip(*alns[0][0:2]):
             # TODO: handle mismatches somehow, currently raise error
             if sequence_nucleotide != reference_nucleotide and not \
@@ -53,8 +52,12 @@ class AlignerNW(Aligner):
                 if sequence_nucleotide == '-' or reference_nucleotide == '-':
                     in_event = True
                     event_start = reference_position
-                    event_end = event_start + 1
-                    insertion = '' if sequence_nucleotide == '-' else sequence_nucleotide
+                    event_end = event_start
+                    if sequence_nucleotide == '-':
+                        event_end += 1
+                        insertion = ''
+                    else:
+                        insertion = sequence_nucleotide
             else:
                 if reference_nucleotide == '-':
                     insertion += sequence_nucleotide
@@ -62,11 +65,11 @@ class AlignerNW(Aligner):
                     event_end += 1
                 else:
                     in_event = False
-                    events.append((event_start, event_end, insertion))
+                    events.append((event_start, event_end, insertion.lower()))
             reference_position += (reference_nucleotide is not '-')
         if in_event:
             in_event = False
-            events.append((event_start, event_end, insertion))
+            events.append((event_start, event_end, insertion.lower()))
         assert reference_position == len(reference)
         assert in_event == False
 

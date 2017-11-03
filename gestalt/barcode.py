@@ -142,7 +142,7 @@ class Barcode:
                 end = indel.end() - insertion_total
                 events.append((start, end, insertion))
         else:
-            sequence = str(self.barcode).replace('-', '').upper()
+            sequence = str(self).replace('-', '').upper()
             reference = ''.join(self.unedited_barcode).replace('-', '').upper()
             events = aligner.events(sequence, reference)
         return events

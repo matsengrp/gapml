@@ -66,6 +66,11 @@ class CLTParsimonyEstimator(CLTEstimator):
             child_bcode = Barcode()
             child_bcode.process_events(events)
             # TODO: remove this check when we start getting more sequences and larger trees!
+            # events = child_bcode.get_events(aligner=self.aligner)
+            # print(events)
+            # print(child_bcode)
+            # child_bcode.process_events(events)
+            # print(child_bcode)
             assert(set(events) == set(child_bcode.get_events(aligner=self.aligner)))
             cell_state = None if not c.is_leaf() else processed_obs[c.name]
             child_clt = CellLineageTree(child_bcode, cell_state=cell_state)
