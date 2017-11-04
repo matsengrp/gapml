@@ -10,11 +10,6 @@ Objects for representing a barcode using an event-encoded format
 """
 
 
-class EventType(Enum):
-    DELETE = 1
-    INSERT = 2
-
-
 class Event:
     def __init__(
         self,
@@ -23,6 +18,9 @@ class Event:
         insert_str: str,
         targets: List[int] = []):
         """
+        @param start_pos: position where event begins
+        @param del_len: number of nucleotides deleted
+        @param insert_str: sequence of nucleotides inserted
         @param target: which target this event
         """
         self.start_pos = start_pos

@@ -42,7 +42,11 @@ def process_event_format7B(event_str: str):
 
 def process_barcode_format7B(target_str_list: List[str], cell_type_tree: CellTypeTree):
     """
-    Takes a barcode encoded in 7B format and returns the list of events
+    Converts 7B format barcode to python repr barcode
+
+    @param target_str_list: targets with events encoded in 7B format
+    @param cell_type_tree: the cell type associated with this barcode
+    @return barcode in event-encoded format
     """
     # Create a list of event strings for each target
     target_evt_strs = [
