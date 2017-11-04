@@ -14,7 +14,8 @@ from Bio.Alphabet import generic_dna
 from Bio import AlignIO, SeqIO
 
 from barcode import Barcode
-from cell_state import CellState, CellType
+from cell_state import CellState
+from common import get_color
 
 
 class CellLineageTree(TreeNode):
@@ -71,8 +72,7 @@ class CellLineageTree(TreeNode):
         for n in self.traverse():
             style = NodeStyle()
             style['size'] = 5
-            style['fgcolor'] = CellType.get_color(
-                n.cell_state.categorical_state.cell_type)
+            style['fgcolor'] = get_color(n.cell_state.categorical_state.cell_type)
             n.set_style(style)
         for leaf in self:
             # get the motif list for indels in the format that SeqMotifFace expects

@@ -3,13 +3,16 @@ from typing import Dict
 import numpy as np
 
 from read_seq_data import parse_reads_file_format7B
-from models import CellReads
+from all_reads import CellReads
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='read cell file')
     parser.add_argument(
-        'reads_file', type=str, help='Collapsed reads file: format 7B')
+        '--reads_file',
+        type=str,
+        default='/fh/fast/matsen_e/gestalt/fish_7B_UMI_collapsed_reads/fish_7B_UMI_collapsed_reads.txt',
+        help='Collapsed reads file: format 7B')
     return parser.parse_args()
 
 

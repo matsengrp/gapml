@@ -8,7 +8,6 @@ matplotlib.use('agg')
 from cell_state import CellTypeTree
 from clt_simulator import CLTSimulator
 from barcode_simulator import BarcodeSimulator
-from cell_state import CellTypeTree, CellType
 
 from constants import *
 from summary_util import *
@@ -61,11 +60,12 @@ def main():
     np.random.seed(seed=args.seed)
 
     # Create a cell-type tree
+    cell_types = ["brain", "blood"]
     cell_type_tree = CellTypeTree(cell_type=None, rate=0.1, probability=1.0)
     cell_type_tree.add_child(
-        CellTypeTree(cell_type=CellType.BRAIN, rate=0, probability=0.5))
+        CellTypeTree(cell_type=0, rate=0, probability=0.5))
     cell_type_tree.add_child(
-        CellTypeTree(cell_type=CellType.EYE, rate=0, probability=0.5))
+        CellTypeTree(cell_type=1, rate=0, probability=0.5))
 
     # Instantiate all the simulators
     bcode_simulator = BarcodeSimulator(
