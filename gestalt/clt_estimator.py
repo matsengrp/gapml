@@ -47,18 +47,9 @@ class CLTParsimonyEstimator(CLTEstimator):
             # # uncomment this block to inspect alignments that apparently mismatch
             # test_barcode = Barcode()
             # test_barcode.process_events(evts)
-            # observed = str(obs.barcode)
-            # # left align the insertions within each indel in "observed"
-            # for indel in list(re.compile('[-acgt]+').finditer(observed)):
-            #     insertion = re.compile('[acgt]+').search(indel.group(0))
-            #     if insertion is not None:
-            #         observed = observed[:indel.start()] + \
-            #                     insertion.group(0) + \
-            #                     re.sub('[acgt]+', '', indel.group(0)) + \
-            #                     observed[indel.end():]
-            # if str(test_barcode) != str(observed):
+            # if str(test_barcode).replace('-', '').upper() != str(obs.barcode).replace('-', '').upper():
             #     print(evts)
-            #     print(observed)
+            #     print(obs.barcode)
             #     print(str(test_barcode))
             #     input('[ENTER]')
             # #### end sanity check ####
