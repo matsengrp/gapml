@@ -6,30 +6,13 @@ from ete3 import TreeNode
 
 from constants import COLORS
 
-
-class CellType(IntEnum):
-    """
-    enumeration of cell types
-    """
-    #TODO: add more cell types
-    BRAIN = 1
-    BLOOD = 2
-    EYE = 3
-
-    @staticmethod
-    def get_color(cell_type):
-        if cell_type is None:
-            return "lightgray"
-        return COLORS[int(cell_type) - 1]
-
-
 class CellTypeTree(TreeNode):
     """
     Stores a cell-type tree with parameters for generating cell lineage trees
     """
 
     def __init__(self,
-                 cell_type: CellType = None,
+                 cell_type: int = None,
                  rate: float = 0,
                  probability: float = 1.0):
         """
@@ -43,7 +26,8 @@ class CellTypeTree(TreeNode):
         if cell_type is not None:
             self.name = str(cell_type)
         self.add_feature("rate", rate)
-        self.add_feature("scale", 1.0 / rate if rate > 0 else None)
+        if self.rate is not None:
+            self.add_feature("scale", 1.0 / rate if rate > 0 else None)
         self.add_feature("probability", probability)
 
 
