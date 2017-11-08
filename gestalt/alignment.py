@@ -41,7 +41,7 @@ class AlignerNW(Aligner):
             warnings.warn('{} optimal alignments, using first'.format(len(alns)))
         events = []
         reference_position = 0
-        in_event = False
+        in_event = False        
         for sequence_nucleotide, reference_nucleotide in zip(*alns[0][0:2]):
             # TODO: handle mismatches somehow, currently raise error
             if sequence_nucleotide != reference_nucleotide and not \
