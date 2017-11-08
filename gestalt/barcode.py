@@ -32,6 +32,7 @@ class Barcode:
         # an editable copy of the barcode (as a list for mutability)
         self.barcode = list(barcode)
         self.sub_str_lens = [len(sub_str) for sub_str in barcode]
+        self.total_len = sum(self.sub_str_lens)
         self.cut_sites = cut_sites
         # number of targets
         self.n_targets = (len(self.barcode) - 1) // 2
@@ -146,12 +147,17 @@ class Barcode:
             del_end = evt[1]
             insertion_str = evt[2]
 
+            # special case for insertion off the 3' end
+            if del_start == del_end == self.total_len:
+                self.barcode[-1] += insertion_str
+                continue
+
             # Determine which substrings to start and end at
             # TODO: make this more efficient?
             idx = 0
             for sub_str_idx, sub_str in enumerate(self.barcode):
                 sub_str_len = self.sub_str_lens[sub_str_idx]
-                if idx + sub_str_len > del_start and idx <= del_start:
+                if idx + sub_str_len >= del_start and idx <= del_start:
                     substr_start = sub_str_idx
                     substr_start_inner_idx = del_start - idx
                 if idx + sub_str_len >= del_end and idx <= del_end:
