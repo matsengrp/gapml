@@ -154,7 +154,7 @@ class Barcode:
                 if idx + sub_str_len > del_start and idx <= del_start:
                     substr_start = sub_str_idx
                     substr_start_inner_idx = del_start - idx
-                if idx + sub_str_len > del_end and idx <= del_end:
+                if idx + sub_str_len >= del_end and idx <= del_end:
                     substr_end = sub_str_idx
                     substr_end_inner_idx = del_end - idx
                 idx += sub_str_len
