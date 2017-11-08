@@ -1,7 +1,7 @@
 import unittest
 
 from barcode import Barcode
-from random import randint, choice
+from random import seed, randint, choice
 
 class BarcodeTestCase(unittest.TestCase):
     def setUp(self):
@@ -90,25 +90,25 @@ class BarcodeTestCase(unittest.TestCase):
         self.barcode.process_events(evts)
         self.assertTrue(self.barcode.get_events(), evts)
 
-    def test_process_get_events_equal(self):
+    def test_process_get_events(self):
         """
-        given any events vector, if we process the events, then ask for them
-        back, we should get the same events
+        given an event tuple, if we process the event into the barcode, then ask
+        for it back, we should get the same event. Let's test this with 1000
+        random events plus the special case of insertion off the 3' end
         """
-        barcode_str_len = len(str(self.barcode))
-        for _ in range(100):
-            self.barcode = Barcode(
-                self.ORIG_BARCODE,
-                self.ORIG_BARCODE,
-                self.CUT_SITES)
+        barcode_str_len = sum(self.barcode.sub_str_lens)
+        evts_list = []
+        for _ in range(1000):
             evt_start = randint(0, barcode_str_len - 1)
             evt_end = randint(evt_start, barcode_str_len)
             insertion_len = randint(0 if evt_end > evt_start else 1, 10)
             insertion = ''.join([choice('acgt') for _ in range(insertion_len)])
-            evts = [(evt_start, evt_end, insertion)]
-            print(evts)
-            print(self.barcode)
-            print(len(str(self.barcode)))
+            evts_list.append([(evt_start, evt_end, insertion)])
+        evts_list.append([(barcode_str_len, barcode_str_len, 'acgt')])
+        for evts in evts_list:
+            self.barcode = Barcode(
+                self.ORIG_BARCODE,
+                self.ORIG_BARCODE,
+                self.CUT_SITES)
             self.barcode.process_events(evts)
-            print(self.barcode)
             self.assertTrue(self.barcode.get_events(), evts)
