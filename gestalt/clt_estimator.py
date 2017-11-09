@@ -43,18 +43,6 @@ class CLTParsimonyEstimator(CLTEstimator):
         all_events = set()
         for idx, obs in enumerate(observations):
             evts = obs.barcode.get_events(aligner=self.aligner)
-            #### NOTE: sanity check on our event parsing ####
-            # uncomment this block to inspect alignments that apparently mismatch
-            test_barcode = Barcode()
-            test_barcode.process_events(evts)
-            evts_check = test_barcode.get_events()
-            if evts_check != evts:
-                print('   inferred events:', evts)
-                print('process/get events:', evts_check)
-                print('       actual:', obs.barcode)
-                print('reconstructed:', test_barcode)
-                input('[ENTER]')
-            #### end sanity check ####
             processed_seqs["seq{}".format(idx)] = [obs.abundance, evts, obs.cell_state]
             all_events.update(evts)
         all_event_dict = {event_id: i for i, event_id in enumerate(all_events)}
