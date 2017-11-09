@@ -141,6 +141,9 @@ class Barcode:
         return events
 
     def get_event_encoding(self):
+        """
+        @return a BarcodeEvents version of this barcode
+        """
         raw_events = self.get_events()
         target_evts = [[] for i in range(self.n_targets)]
         events = []

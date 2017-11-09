@@ -34,7 +34,9 @@ class CellLineageTree(TreeNode):
                  dead: bool = False,
                  n_id: int = None):
         """
-        @param barcode: the barcode at the CLT node -- this is allowed to be None
+        @param barcode OR barcode_events: the barcode at the CLT node.
+                            Only one of these two values should be given
+                            as input.
         @param cell_state: the cell state at the node
         @param dist: branch length from parent node
         @param dead: if the cell at that node is dead
@@ -47,6 +49,7 @@ class CellLineageTree(TreeNode):
             self.add_feature("barcode_events", barcode.get_event_encoding())
         else:
             self.add_feature("barcode_events", barcode_events)
+            # Maybe we'll need this conversion someday. For now we leave it empty.
             self.add_feature("barcode", None)
 
         self.add_feature("cell_state", cell_state)

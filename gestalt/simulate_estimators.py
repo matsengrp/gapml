@@ -15,7 +15,7 @@ from clt_simulator import CLTSimulator
 from barcode_simulator import BarcodeSimulator
 from clt_observer import CLTObserver
 from clt_estimator import CLTParsimonyEstimator
-from clt_likelihood import *
+from clt_likelihood_estimator import *
 from collapsed_tree import CollapsedTree
 
 from constants import *
