@@ -3,7 +3,7 @@ import argparse
 from typing import List
 
 from barcode_events import Event
-from barcode_events import BarcodeEvents
+from barcode_events import BarcodeEventsRaw
 from all_reads import CellReads
 from cell_state import CellTypeTree
 from constants import BARCODE_V7
@@ -16,7 +16,10 @@ from constants import NUM_BARCODE_V7_TARGETS
 def parse_args():
     parser = argparse.ArgumentParser(description='read cell file')
     parser.add_argument(
-        'reads_file', type=str, help='Collapsed reads file: format 7B')
+        '--reads_file',
+        type=str,
+        default="/fh/fast/matsen_e/gestalt/fish_7B_UMI_collapsed_reads/fish_7B_UMI_collapsed_reads.txt",
+        help='Collapsed reads file: format 7B')
     return parser.parse_args()
 
 
@@ -76,7 +79,7 @@ def process_barcode_format7B(target_str_list: List[str], cell_type_tree: CellTyp
         for evt in evts:
             events[evt].targets.append(target_idx)
 
-    return BarcodeEvents(target_evts, events, cell_type_tree)
+    return BarcodeEventsRaw(target_evts, events, cell_type_tree)
 
 
 def parse_reads_file_format7B(file_name,
