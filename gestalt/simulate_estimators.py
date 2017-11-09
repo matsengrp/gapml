@@ -15,6 +15,7 @@ from clt_simulator import CLTSimulator
 from barcode_simulator import BarcodeSimulator
 from clt_observer import CLTObserver
 from clt_estimator import CLTParsimonyEstimator
+from clt_likelihood import *
 from collapsed_tree import CollapsedTree
 
 from constants import *
@@ -113,24 +114,30 @@ def main():
                 node.dist = 0
         true_tree = CollapsedTree.collapse(pruned_clt)
 
-        par_est_trees = par_estimator.estimate(obs_leaves)
+        #par_est_trees = par_estimator.estimate(obs_leaves)
 
-        # Display the true tree (rename leaves for visualization ease)
-        for leaf in true_tree:
-            leaf.name = str(leaf.barcode.get_events()) + str(leaf.cell_state)
-        #    print(leaf.up.barcode.events())
-        #    print(leaf.barcode.events())
-        #    print("==%s==" % leaf.name)
-        print("TRUTH")
-        print(true_tree)
+        ## Display the true tree (rename leaves for visualization ease)
+        #for leaf in true_tree:
+        #    leaf.name = str(leaf.barcode.get_events()) + str(leaf.cell_state)
+        ##    print(leaf.up.barcode.events())
+        ##    print(leaf.barcode.events())
+        ##    print("==%s==" % leaf.name)
+        #print("TRUTH")
+        #print(true_tree)
 
-        # For now, we just display the first estimated tree
-        par_est_t = par_est_trees[0]
-        for leaf in par_est_t:
-            leaf.name = str(leaf.barcode.get_events()) + str(leaf.cell_state)
-        print("ESTIMATE (1 out of %d equally parsimonious trees)" %
-              len(par_est_trees))
-        print(par_est_t)
+        ## For now, we just display the first estimated tree
+        #par_est_t = par_est_trees[0]
+        #for leaf in par_est_t:
+        #    leaf.name = str(leaf.barcode.get_events()) + str(leaf.cell_state)
+        #print("ESTIMATE (1 out of %d equally parsimonious trees)" %
+        #      len(par_est_trees))
+        #print(par_est_t)
+
+        # trying out with true tree!!!
+        # TODO: convert observed aligned seq to barcode events!
+        model_params = CLTLikelihoodModel(pruned_clt, 10)
+        lasso_est = CLTLassoEstimator(obs_leaves, 0, model_params)
+        lasso_est.get_likelihood(model_params)
 
 
 if __name__ == "__main__":
