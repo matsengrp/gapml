@@ -198,7 +198,7 @@ class Barcode:
                         new_sub_str.append("-")
                     else:
                         new_sub_str.append(substr_char)
-                    if substr_char in "ACTG":
+                    if substr_char in "ACTG-":
                         non_insert_idx += 1
                 self.barcode[sub_str_idx] = "".join(new_sub_str)
 
