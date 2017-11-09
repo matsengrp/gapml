@@ -92,9 +92,9 @@ class BarcodeTestCase(unittest.TestCase):
 
     def test_process_get_events(self):
         """
-        given an event tuple, if we process the event into the barcode, then ask
+        Given an event tuple, if we process the event into the barcode, then ask
         for it back, we should get the same event. Let's test this with 1000
-        random events plus the special case of insertion off the 3' end
+        random events plus a few special cases.
         """
         barcode_str_len = sum(self.barcode.sub_str_lens)
         evts_list = []
@@ -104,11 +104,17 @@ class BarcodeTestCase(unittest.TestCase):
             insertion_len = randint(0 if evt_end > evt_start else 1, 10)
             insertion = ''.join([choice('acgt') for _ in range(insertion_len)])
             evts_list.append([(evt_start, evt_end, insertion)])
+        # special case 1: insertion off the 3' end
         evts_list.append([(barcode_str_len, barcode_str_len, 'acgt')])
+        # special case 2: multiple events
+        evts_list.append([(1, 4, ''), (5, 5, 'tac')])
         for evts in evts_list:
             self.barcode = Barcode(
                 self.ORIG_BARCODE,
                 self.ORIG_BARCODE,
                 self.CUT_SITES)
             self.barcode.process_events(evts)
-            self.assertTrue(self.barcode.get_events(), evts)
+            evts_get = self.barcode.get_events()
+            self.assertTrue(evts_get == evts,
+                            '\n  processed event: {}\n        got event: {}\n    processed seq: {}'
+                            .format(evts, evts_get, self.barcode))
