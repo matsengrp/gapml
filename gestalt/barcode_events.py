@@ -28,8 +28,13 @@ class Event:
         self.del_end = start_pos + del_len - 1
         self.insert_str = insert_str
         self.targets = targets
-        self.min_target = min(targets)
-        self.max_target = max(targets)
+        self.min_target = None if len(targets) == 0 else min(targets)
+        self.max_target = None if len(targets) == 0 else max(targets)
+        self.is_focal = self.min_target == self.max_target
+        self.is_placeholder = False
+
+    def is_equal(self, evt):
+        return self.start_pos == evt.start_pos and self.del_len == evt.del_len and self.insert_str == evt.insert_str
 
     def __str__(self):
         return self.get_str_id()
@@ -38,8 +43,28 @@ class Event:
         """
         Identifying string for this event
         """
-        return "%d-%d, %s" % (self.start_pos, self.del_end, self.insert_str)
+        return "(%d-%d, %s)" % (self.start_pos, self.del_end, self.insert_str)
 
+class PlaceholderEvent(Event):
+    def __init__(self, is_focal: bool, target: int):
+        """
+        just create a placeholder event
+        """
+        self.is_placeholder = True
+        self.is_focal = is_focal
+        self.targets = [target]
+
+    def __str__(self):
+        return self.get_str_id()
+
+    def is_equal(self, evt):
+        return False
+
+    def get_str_id(self):
+        """
+        Identifying string for this event
+        """
+        return "??"
 
 class BarcodeEvents:
     """
@@ -57,6 +82,7 @@ class BarcodeEvents:
         @param organ: organ the barcode was sequenced from
         """
         self.target_evts = target_evts
+        assert(all([len(t) <= 1 for t in target_evts]))
         self.uniq_events = events
         self.organ = organ
         self.num_targets = len(target_evts)
@@ -75,7 +101,10 @@ class BarcodeEvents:
         """
         Generates a string based on event details
         """
-        return ".".join([evt.get_str_id() for evt in self.uniq_events])
+        return "...".join([evt.get_str_id() for evt in self.uniq_events])
+
+    def __str__(self):
+        return self.get_str_id()
 
     def can_be_parent(self, barcode_evts):
         """
