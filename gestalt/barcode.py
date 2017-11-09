@@ -31,10 +31,9 @@ class Barcode:
         """
         # The original barcode
         self.unedited_barcode = unedited_barcode
+        self.orig_substr_lens = [len(s) for s in unedited_barcode]
         # an editable copy of the barcode (as a list for mutability)
         self.barcode = list(barcode)
-        self.sub_str_lens = [len(sub_str) for sub_str in barcode]
-        self.total_len = sum(self.sub_str_lens)
         self.cut_sites = cut_sites
         # number of targets
         self.n_targets = (len(self.barcode) - 1) // 2
@@ -42,9 +41,8 @@ class Barcode:
         self.needs_repair = set()
         # absolute positions of cut locations
         self.abs_cut_sites = [
-            sum(self.sub_str_lens[:2 * (i + 1)]) - cut_sites[i] for i in range(self.n_targets)
+            sum(self.orig_substr_lens[:2 * (i + 1)]) - cut_sites[i] for i in range(self.n_targets)
         ]
-
         assert (self.n_targets == len(self.cut_sites))
 
     def get_active_targets(self):
@@ -162,8 +160,11 @@ class Barcode:
                 target_idx for target_idx, cut_site in enumerate(self.abs_cut_sites)
                 if evt[0] <= cut_site and evt[1] >= cut_site
             ]
+            assert(len(matching_targets) > 0)
+
             for t in matching_targets:
                 target_evts[t].append(evt_i)
+
             events.append(Event(
                 start_pos = evt[0],
                 del_len = evt[1] - evt[0],
@@ -179,13 +180,15 @@ class Barcode:
         Given a list of observed events, rerun the events and recreate the barcode
         Assumes all events are NOT overlapping!!!
         """
+        sub_str_lens = [len(sub_str) for sub_str in self.barcode]
+        total_len = sum(sub_str_lens)
         for evt in events:
             del_start = evt[0]
             del_end = evt[1]
             insertion_str = evt[2]
 
             # special case for insertion off the 3' end
-            if del_start == del_end == self.total_len:
+            if del_start == del_end == total_len:
                 self.barcode[-1] += insertion_str
                 continue
 
@@ -206,7 +209,7 @@ class Barcode:
             for sub_str_idx in range(substr_start, substr_end + 1):
                 curr_substr = self.barcode[sub_str_idx]
                 start_idx = substr_start_inner_idx if sub_str_idx == substr_start else 0
-                end_idx = substr_end_inner_idx if sub_str_idx == substr_end else self.sub_str_lens[
+                end_idx = substr_end_inner_idx if sub_str_idx == substr_end else sub_str_lens[
                     sub_str_idx]
 
                 new_sub_str = []
