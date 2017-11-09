@@ -134,9 +134,8 @@ def main():
         #print(par_est_t)
 
         # trying out with true tree!!!
-        # TODO: convert observed aligned seq to barcode events!
         model_params = CLTLikelihoodModel(pruned_clt, 10)
-        lasso_est = CLTLassoEstimator(obs_leaves, 0, model_params)
+        lasso_est = CLTLassoEstimator(0, model_params)
         lasso_est.get_likelihood(model_params)
 
 
