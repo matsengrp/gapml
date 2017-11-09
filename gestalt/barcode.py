@@ -1,7 +1,8 @@
 from typing import List, Dict, Tuple
 import re
-
 import numpy as np
+
+from alignment import Aligner
 
 from constants import BARCODE_V7, NUM_BARCODE_V7_TARGETS
 
@@ -120,21 +121,31 @@ class Barcode:
         # also get repaired.
         self.needs_repair = self.needs_repair.difference(set(range(target1, target2 + 1)))
 
-    def get_events(self):
-        '''return the list of observable indel events in the barcdoe'''
-        events = []
-        # find the indels
-        insertion_total = 0
-        for indel in re.compile('[-acgt]+').finditer(str(self)):
-            start = indel.start() - insertion_total
-            # find the insertions(s) in this indel
-            insertion = ''.join(
-                insertion.group(0)
-                for insertion in re.compile('[acgt]+').finditer(indel.group(0))
-            )
-            insertion_total += len(insertion)
-            end = indel.end() - insertion_total
-            events.append((start, end, insertion))
+    def get_events(self, aligner: Aligner = None):
+        '''
+        @param aligner object
+               must have events() method
+               None returns the observable events using the true barcode state
+        return the list of observable indel events in the barcode
+        '''
+        if aligner is None:
+            # find the indels
+            events = []
+            insertion_total = 0
+            for indel in re.compile('[-acgt]+').finditer(str(self)):
+                start = indel.start() - insertion_total
+                # find the insertions(s) in this indel
+                insertion = ''.join(
+                    insertion.group(0)
+                    for insertion in re.compile('[acgt]+').finditer(indel.group(0))
+                )
+                insertion_total += len(insertion)
+                end = indel.end() - insertion_total
+                events.append((start, end, insertion))
+        else:
+            sequence = str(self).replace('-', '').upper()
+            reference = ''.join(self.unedited_barcode).upper()
+            events = aligner.events(sequence, reference)
         return events
 
     def process_events(self, events: List[Tuple[int, int, str]]):
@@ -193,4 +204,4 @@ class Barcode:
 
 
     def __repr__(self):
-        return str(''.join(self.barcode))
+        return ''.join(self.barcode)
