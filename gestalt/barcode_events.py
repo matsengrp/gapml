@@ -43,14 +43,13 @@ class BarcodeEvents:
     """
     Represents a barcode in event-encoding.
     Efficient for estimation procedures.
-    Also matches the encoding in Aaron's files
+
+    Use this representation for cleaned barcode representation where each target
+    can be associated with at most a single event.
     """
-    def __init__(self, target_evts: List[List[int]], events: List[Event], organ: CellTypeTree):
+    def __init__(self, target_evts: List[int], events: List[Event], organ: CellTypeTree):
         """
-        @param target_evts: for each target, the list of event idxs associated
-        TODO: Technically a single target cannot be associated with multiple events.
-            This is here because Aaron's alignment file give multiple events per target
-            We should probably do something about this...
+        @param target_evts: for each target, the event idx associated
         @param events: list defining the event for each event idx
         @param organ: organ the barcode was sequenced from
         """
@@ -68,3 +67,15 @@ class BarcodeEvents:
         @return whether this barcode can be a parent of this other barcode
         """
         raise NotImplementedError()
+
+class BarcodeEventsRaw(BarcodeEvents):
+    """
+    In aaron's data, there are cases where there are multiple events associated with a single
+    target. That doesn't make sense since each cut site can only be disturbed once.
+    We will refer to these barcode event encodings as the `raw` version.
+    """
+    def __init__(self, target_evts: List[List[int]], events: List[Event], organ: CellTypeTree):
+        self.target_evts = target_evts
+        self.uniq_events = events
+        self.organ = organ
+
