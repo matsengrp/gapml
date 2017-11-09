@@ -4,6 +4,7 @@ import numpy as np
 
 from alignment import Aligner
 
+from barcode_events import BarcodeEvents, Event
 from constants import BARCODE_V7, NUM_BARCODE_V7_TARGETS
 
 
@@ -39,6 +40,10 @@ class Barcode:
         self.n_targets = (len(self.barcode) - 1) // 2
         # a list of target indices that have a DSB and need repair
         self.needs_repair = set()
+        # absolute positions of cut locations
+        self.abs_cut_sites = [
+            sum(self.sub_str_lens[:2 * (i + 1)]) - cut_sites[i] for i in range(self.n_targets)
+        ]
 
         assert (self.n_targets == len(self.cut_sites))
 
@@ -147,6 +152,27 @@ class Barcode:
             reference = ''.join(self.unedited_barcode).upper()
             events = aligner.events(sequence, reference)
         return events
+
+    def get_event_encoding(self):
+        raw_events = self.get_events()
+        target_evts = [[] for i in range(self.n_targets)]
+        events = []
+        for evt_i, evt in enumerate(raw_events):
+            matching_targets = [
+                target_idx for target_idx, cut_site in enumerate(self.abs_cut_sites)
+                if evt[0] <= cut_site and evt[1] >= cut_site
+            ]
+            for t in matching_targets:
+                target_evts[t].append(evt_i)
+            events.append(Event(
+                start_pos = evt[0],
+                del_len = evt[1] - evt[0],
+                insert_str = evt[2],
+                targets = matching_targets,
+            ))
+
+        # TODO: add organ in here
+        return BarcodeEvents(target_evts, events, None)
 
     def process_events(self, events: List[Tuple[int, int, str]]):
         """
