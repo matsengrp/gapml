@@ -10,6 +10,7 @@ class Aligner():
         """
         @param sequence: observed (edited) barcode nucleotide sequence
         @param reference: design barcoded sequence to align to
+        @return events as a list of tuples of start, end, and insertion sequence
         """
         raise NotImplementedError()
 
@@ -19,11 +20,15 @@ class AlignerNW(Aligner):
     assuming perfect sequencing (no PCR or sequencing error) we make our
     mismatch penalty effectively infinite
     """
-    def __init__(self, gap_open: float = -10, gap_extend: float = -.5):
+    def __init__(self, match: float = 0, mismatch: float = -10**10, gap_open: float = -10, gap_extend: float = -.5):
         """
+        @param match: match score
+        @param mismatch: mismatch penalty (high default assumes only indels possible)
         @param gap_open: gap open penalty
         @param gap_extend: gap extension penalty
         """
+        self.match = match
+        self.mismatch = mismatch
         self.gap_open = gap_open
         self.gap_extend = gap_extend
 
@@ -35,19 +40,24 @@ class AlignerNW(Aligner):
             raise ValueError('invalid nucleotide sequence: {}'.format(sequence))
         if not set(reference) <= set('ACGT'):
             raise ValueError('invalid nucleotide sequence: {}'.format(reference))
+        # this function produces Needleman-Wunsch alignments
         alns = pairwise2.align.globalms(sequence, reference,
-                                        0, -10**10, self.gap_open, self.gap_extend)
+                                        self.match, self.mismatch, self.gap_open, self.gap_extend)
         if len(alns) > 1:
             warnings.warn('{} optimal alignments, using first'.format(len(alns)))
+        # process the alignment into a list of indel events
         events = []
         reference_position = 0
-        in_event = False        
+        in_event = False
+        # iterate through alignment character by character
         for sequence_nucleotide, reference_nucleotide in zip(*alns[0][0:2]):
             # TODO: handle mismatches somehow, currently raise error
             if sequence_nucleotide != reference_nucleotide and not \
                (sequence_nucleotide == '-' or reference_nucleotide == '-'):
                raise NotImplementedError('mismatch {}, {}'.
                               format(sequence_nucleotide, reference_nucleotide))
+            # if we are not in an event, and we find dashes, we must have just
+            # entered an event
             if not in_event:
                 if sequence_nucleotide == '-' or reference_nucleotide == '-':
                     in_event = True
@@ -58,6 +68,8 @@ class AlignerNW(Aligner):
                         insertion = ''
                     else:
                         insertion = sequence_nucleotide
+            # if we are in an event, we can distinguish insertions from
+            # deletions by which sequence has a dash
             else:
                 if reference_nucleotide == '-':
                     insertion += sequence_nucleotide
@@ -67,6 +79,7 @@ class AlignerNW(Aligner):
                     in_event = False
                     events.append((event_start, event_end, insertion.lower()))
             reference_position += (reference_nucleotide is not '-')
+        # special case of event ending at the end of the reference
         if in_event:
             in_event = False
             events.append((event_start, event_end, insertion.lower()))

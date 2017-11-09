@@ -125,7 +125,7 @@ class Barcode:
         '''
         @param aligner object
                must have events() method
-               None returns the actual simulated events
+               None returns the observable events using the true barcode state
         return the list of observable indel events in the barcode
         '''
         if aligner is None:
@@ -144,7 +144,7 @@ class Barcode:
                 events.append((start, end, insertion))
         else:
             sequence = str(self).replace('-', '').upper()
-            reference = ''.join(self.unedited_barcode).replace('-', '').upper()
+            reference = ''.join(self.unedited_barcode).upper()
             events = aligner.events(sequence, reference)
         return events
 
