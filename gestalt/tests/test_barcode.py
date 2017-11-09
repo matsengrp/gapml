@@ -108,6 +108,7 @@ class BarcodeTestCase(unittest.TestCase):
         evts_list.append([(barcode_str_len, barcode_str_len, 'acgt')])
         # special case 2: multiple events
         evts_list.append([(1, 4, ''), (5, 5, 'tac')])
+        evts_list.append([(2, 2, 'acg'), (3, 5, '')])
         for evts in evts_list:
             self.barcode = Barcode(
                 self.ORIG_BARCODE,
@@ -117,4 +118,4 @@ class BarcodeTestCase(unittest.TestCase):
             evts_get = self.barcode.get_events()
             self.assertTrue(evts_get == evts,
                             '\n  processed event: {}\n        got event: {}\n    processed seq: {}'
-                            .format(evts, evts_get, self.barcode))
+                            .format(evts, evts_get, self.barcode.barcode))
