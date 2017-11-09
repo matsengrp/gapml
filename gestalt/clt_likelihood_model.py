@@ -10,6 +10,10 @@ from common import product_list
 class CLTLikelihoodModel:
     """
     Stores model parameters
+    branch_lens: length of all the branches, indexed by node id at the end of the branch
+    target_lams: cutting rate for each target
+    cell_type_lams: rate of differentiating to a cell type
+    repair_lams: rate of repair (length 2 - focal and inter-target repair rate)
     """
     MAX_CUTS = 2
     UNCUT = 0
@@ -18,6 +22,12 @@ class CLTLikelihoodModel:
     NUM_EVENTS = 3
 
     def __init__(self, topology: CellLineageTree, num_targets: int):
+        """
+        @param topology: provides a topology only (ignore any branch lengths in this tree)
+        @param num_targets: number of targets in barcode
+
+        Will randomly initialize model parameters
+        """
         self.topology = topology
         self.num_targets = num_targets
         self.random_init()
