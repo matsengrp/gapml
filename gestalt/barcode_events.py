@@ -56,8 +56,20 @@ class BarcodeEvents:
         self.target_evts = target_evts
         self.uniq_events = events
         self.organ = organ
+        self.num_targets = len(target_evts)
+
+    def get_target_status_str(self):
+        """
+        Generates a string based on target status: uncut, repaired
+        """
+        return "".join([1 if len(self.target_evts[i]) else 0 for i in range(self.num_targets)])
+
+
 
     def get_str_id(self):
+        """
+        Generates a string based on event details
+        """
         return ".".join([evt.get_str_id() for evt in self.uniq_events])
 
     def can_be_parent(self, barcode_evts):

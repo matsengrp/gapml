@@ -29,18 +29,21 @@ class CellLineageTree(TreeNode):
                  barcode: Barcode,
                  cell_state: CellState,
                  dist: float = 0,
-                 dead: bool = False):
+                 dead: bool = False,
+                 n_id: int = None):
         """
         @param barcode: the barcode at the CLT node -- this is allowed to be None
         @param cell_state: the cell state at the node
         @param dist: branch length from parent node
         @param dead: if the cell at that node is dead
+        @param n_id: a node id -- useful for estimation
         """
         super().__init__()
         self.dist = dist
         self.add_feature("barcode", barcode)
         self.add_feature("cell_state", cell_state)
         self.add_feature("dead", dead)
+        self.add_feature("id", n_id)
 
     def _create_sequences(self):
         """
