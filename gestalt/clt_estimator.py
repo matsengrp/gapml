@@ -43,7 +43,6 @@ class CLTParsimonyEstimator(CLTEstimator):
         all_events = set()
         for idx, obs in enumerate(observations):
             evts = obs.barcode.get_events(aligner=self.aligner)
-            evts = [(46, 51, ''), (201, 207, ''), (209, 209, 't')]
             #### NOTE: sanity check on our event parsing ####
             # uncomment this block to inspect alignments that apparently mismatch
             test_barcode = Barcode()
