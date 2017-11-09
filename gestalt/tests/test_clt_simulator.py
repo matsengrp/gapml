@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 
-from cell_state import CellTypeTree, CellState, CellType
+from cell_state import CellTypeTree, CellState
 from cell_lineage_tree import CellLineageTree
 from clt_simulator import CLTSimulator
 from barcode_simulator import BarcodeSimulator
@@ -12,13 +12,13 @@ class CLTSimulatorTestCase(unittest.TestCase):
         #Create cell type tree
         self.cell_type_tree = CellTypeTree(cell_type=None, rate=0.1, probability=1.0)
         self.cell_type_tree.add_child(
-            CellTypeTree(cell_type=CellType.BRAIN, rate=0, probability=0.5))
+            CellTypeTree(cell_type=0, rate=0, probability=0.5))
         self.cell_type_tree.add_child(
-            CellTypeTree(cell_type=CellType.EYE, rate=0, probability=0.5))
+            CellTypeTree(cell_type=1, rate=0, probability=0.5))
 
         # Create barcode simulator
         self.bcode_simulator = BarcodeSimulator(
-            target_lambdas=[0.1] * 10,
+            target_lambdas=np.ones(10) * 0.1,
             repair_rates=[1, 2],
             indel_probability=0.1,
             left_del_lambda=1,
