@@ -5,6 +5,7 @@ import numpy as np
 from cell_lineage_tree import CellLineageTree
 from cell_state import CellTypeTree, CellState
 from barcode import Barcode
+from barcode_events import BarcodeEvents
 from barcode_simulator import BarcodeSimulator
 
 
@@ -40,7 +41,10 @@ class CLTSimulator:
         """
         root_barcode = Barcode()
         cell_state = CellState(categorical=self.cell_type_tree)
-        tree = CellLineageTree(root_barcode, cell_state, dist=0)
+        tree = CellLineageTree(
+            barcode=root_barcode,
+            cell_state=cell_state,
+            dist=0)
 
         self._simulate_tree(tree, time)
 
@@ -126,7 +130,10 @@ class CLTSimulator:
         """
         Observation time is up. Stop observing cell.
         """
-        child1 = CellLineageTree(branch_end_barcode, tree.cell_state, dist=branch_length)
+        child1 = CellLineageTree(
+            barcode=branch_end_barcode,
+            cell_state=tree.cell_state,
+            dist=branch_length)
         tree.add_child(child1)
 
     def _process_cell_birth(
@@ -141,10 +148,14 @@ class CLTSimulator:
         Make two cells with identical barcodes and cell states
         """
         child1 = CellLineageTree(
-            branch_end_barcode, tree.cell_state, dist=branch_length)
+            barcode=branch_end_barcode,
+            cell_state=tree.cell_state,
+            dist=branch_length)
         branch_end_barcode2 = copy.deepcopy(branch_end_barcode)
         child2 = CellLineageTree(
-            branch_end_barcode2, tree.cell_state, dist=branch_length)
+            barcode=branch_end_barcode2,
+            cell_state=tree.cell_state,
+            dist=branch_length)
         tree.add_child(child1)
         tree.add_child(child2)
         self._simulate_tree(child1, remain_time)
@@ -159,8 +170,8 @@ class CLTSimulator:
         Cell has died. Add a dead child cell to `tree`.
         """
         child1 = CellLineageTree(
-            branch_end_barcode,
-            tree.cell_state,
+            barcode=branch_end_barcode,
+            cell_state=tree.cell_state,
             dist=branch_length,
             dead=True)
         tree.add_child(child1)
@@ -186,16 +197,16 @@ class CLTSimulator:
 
         # Create child 1
         child1 = CellLineageTree(
-            branch_end_barcode,
-            CellState(categorical=child_cell_types[cell_type1]),
+            barcode=branch_end_barcode,
+            cell_state=CellState(categorical=child_cell_types[cell_type1]),
             dist=branch_length)
         tree.add_child(child1)
 
         # Create child 2 - make sure its barcode is a new object
         branch_end_barcode2 = copy.deepcopy(branch_end_barcode)
         child2 = CellLineageTree(
-            branch_end_barcode2,
-            CellState(categorical=child_cell_types[cell_type2]),
+            barcode=branch_end_barcode2,
+            cell_state=CellState(categorical=child_cell_types[cell_type2]),
             dist=branch_length)
         tree.add_child(child2)
 

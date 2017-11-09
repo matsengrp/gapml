@@ -28,6 +28,8 @@ class Event:
         self.del_end = start_pos + del_len - 1
         self.insert_str = insert_str
         self.targets = targets
+        self.min_target = min(targets)
+        self.max_target = max(targets)
 
     def __str__(self):
         return self.get_str_id()
@@ -59,13 +61,15 @@ class BarcodeEvents:
         self.organ = organ
         self.num_targets = len(target_evts)
 
+    def get_target_status(self):
+        return [1 if len(self.target_evts[i]) else 0 for i in range(self.num_targets)]
+
+
     def get_target_status_str(self):
         """
         Generates a string based on target status: uncut, repaired
         """
-        return "".join([1 if len(self.target_evts[i]) else 0 for i in range(self.num_targets)])
-
-
+        return "".join(self.get_target_status_str())
 
     def get_str_id(self):
         """
