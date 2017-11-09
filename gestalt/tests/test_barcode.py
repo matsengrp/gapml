@@ -106,7 +106,7 @@ class BarcodeTestCase(unittest.TestCase):
             evts_list.append([(evt_start, evt_end, insertion)])
         # special case 1: insertion off the 3' end
         evts_list.append([(barcode_str_len, barcode_str_len, 'acgt')])
-        # special case 2: multiple events
+        # special case 2: make sure multiple events don't interact in unexpected ways
         evts_list.append([(1, 4, ''), (5, 5, 'tac')])
         evts_list.append([(2, 2, 'acg'), (3, 5, '')])
         for evts in evts_list:
