@@ -16,27 +16,74 @@ class Event:
         start_pos: int,
         del_len: int,
         insert_str: str,
-        targets: List[int] = []):
+        targets: List[int] = None):
         """
         @param start_pos: position where event begins
         @param del_len: number of nucleotides deleted
         @param insert_str: sequence of nucleotides inserted
-        @param target: which target this event
+        @param targets: which targets this event is associated with
         """
         self.start_pos = start_pos
         self.del_len = del_len
         self.del_end = start_pos + del_len - 1
         self.insert_str = insert_str
-        self.targets = targets
+        self.set_targets(targets)
 
-    def __str__(self):
-        return self.get_str_id()
+    def get_targets(self):
+        return self._targets
+
+    def set_targets(self, targets: List[int]):
+        if targets is not None:
+            self._targets = targets
+            self.min_target = min(targets)
+            self.max_target = max(targets)
+            self.is_focal = self.min_target == self.max_target
+        else:
+            self._targets = []
+            self.is_focal = None
+            self.min_target = None
+            self.max_target = None
+
+    def add_target(self, target: int):
+        self._targets.append(target)
+        self.min_target = min(self._targets)
+        self.max_target = max(self._targets)
+        self.is_focal = self.min_target == self.max_target
+
+    def is_equal(self, evt):
+        return (self.start_pos == evt.start_pos
+                and self.del_len == evt.del_len
+                and self.insert_str == evt.insert_str)
 
     def get_str_id(self):
         """
         Identifying string for this event
         """
-        return "%d-%d, %s" % (self.start_pos, self.del_end, self.insert_str)
+        return "(%d-%d, %s)" % (self.start_pos, self.del_end, self.insert_str)
+
+    def __str__(self):
+        return self.get_str_id()
+
+
+class PlaceholderEvent(Event):
+    def __init__(self, is_focal: bool, target: int):
+        """
+        just create a placeholder event
+        """
+        self.is_focal = is_focal
+        self.targets = [target]
+
+    def is_equal(self, evt):
+        return False
+
+    def get_str_id(self):
+        """
+        Identifying string for this event
+        """
+        return "??"
+
+    def __str__(self):
+        return self.get_str_id()
 
 
 class BarcodeEvents:
@@ -47,26 +94,51 @@ class BarcodeEvents:
     Use this representation for cleaned barcode representation where each target
     can be associated with at most a single event.
     """
-    def __init__(self, target_evts: List[int], events: List[Event], organ: CellTypeTree):
+    def __init__(self, target_evts: List, events: List[Event], organ: CellTypeTree):
         """
-        @param target_evts: for each target, the event idx associated
+        @param target_evts: for each target, the event idx associated,
+                            idx of the event if an event occurred
+                            None if no event occurred
         @param events: list defining the event for each event idx
         @param organ: organ the barcode was sequenced from
         """
-        self.target_evts = target_evts
-        self.uniq_events = events
+        # These are private objects! Do not modify directly!
+        self._target_evts = target_evts
+        self._uniq_events = events
         self.organ = organ
+        self.num_targets = len(target_evts)
+
+    def add_event(self):
+        raise NotImplementedError()
+
+    def get_uniq_events(self):
+        return self._uniq_events
+
+    def get_event(self, target_idx: int):
+        """
+        @return the event associated with this target idx
+        """
+        target_evt_idx = self._target_evts[target_idx]
+        if target_evt_idx is not None:
+            return self._uniq_events[target_evt_idx]
+        else:
+            return None
+
+    def get_target_status(self):
+        """
+        @return a boolean array to indicate which targets are active (aka can be cut)
+        """
+        return [1 if self._target_evts[i] else 0 for i in range(self.num_targets)]
 
     def get_str_id(self):
-        return ".".join([evt.get_str_id() for evt in self.uniq_events])
+        """
+        Generates a string based on event details
+        """
+        return "...".join([evt.get_str_id() for evt in self._uniq_events])
 
-    def can_be_parent(self, barcode_evts):
-        """
-        @param barcode: BarcodeEvents
-                (I can't put it in the argument typing cause python3 typing is lame)
-        @return whether this barcode can be a parent of this other barcode
-        """
-        raise NotImplementedError()
+    def __str__(self):
+        return self.get_str_id()
+
 
 class BarcodeEventsRaw(BarcodeEvents):
     """
@@ -75,7 +147,6 @@ class BarcodeEventsRaw(BarcodeEvents):
     We will refer to these barcode event encodings as the `raw` version.
     """
     def __init__(self, target_evts: List[List[int]], events: List[Event], organ: CellTypeTree):
-        self.target_evts = target_evts
-        self.uniq_events = events
+        self._target_evts = target_evts
+        self._uniq_events = events
         self.organ = organ
-

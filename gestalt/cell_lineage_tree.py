@@ -14,6 +14,7 @@ from Bio.Alphabet import generic_dna
 from Bio import AlignIO, SeqIO
 
 from barcode import Barcode
+from barcode_events import BarcodeEvents
 from cell_state import CellState
 from common import get_color
 
@@ -26,21 +27,34 @@ class CellLineageTree(TreeNode):
     """
 
     def __init__(self,
-                 barcode: Barcode,
-                 cell_state: CellState,
+                 barcode: Barcode = None,
+                 barcode_events: BarcodeEvents = None,
+                 cell_state: CellState = None,
                  dist: float = 0,
-                 dead: bool = False):
+                 dead: bool = False,
+                 n_id: int = None):
         """
-        @param barcode: the barcode at the CLT node -- this is allowed to be None
+        @param barcode OR barcode_events: the barcode at the CLT node.
+                            Only one of these two values should be given
+                            as input.
         @param cell_state: the cell state at the node
         @param dist: branch length from parent node
         @param dead: if the cell at that node is dead
+        @param n_id: a node id -- useful for estimation
         """
         super().__init__()
         self.dist = dist
-        self.add_feature("barcode", barcode)
+        if barcode is not None:
+            self.add_feature("barcode", barcode)
+            self.add_feature("barcode_events", barcode.get_event_encoding())
+        else:
+            self.add_feature("barcode_events", barcode_events)
+            # Maybe we'll need this conversion someday. For now we leave it empty.
+            self.add_feature("barcode", None)
+
         self.add_feature("cell_state", cell_state)
         self.add_feature("dead", dead)
+        self.add_feature("id", n_id)
 
     def _create_sequences(self):
         """

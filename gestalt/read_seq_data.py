@@ -77,7 +77,7 @@ def process_barcode_format7B(target_str_list: List[str], cell_type_tree: CellTyp
     # Associate each event with the matching targets
     for target_idx, evts in enumerate(target_evts):
         for evt in evts:
-            events[evt].targets.append(target_idx)
+            evt_targets = events[evt].add_target(target_idx)
 
     return BarcodeEventsRaw(target_evts, events, cell_type_tree)
 
