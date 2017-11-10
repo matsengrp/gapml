@@ -2,6 +2,8 @@ import re
 import scipy
 import pandas as pd
 from ete3 import TreeNode, NodeStyle, SeqMotifFace, TreeStyle
+import matplotlib
+matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
 import seaborn as sns
