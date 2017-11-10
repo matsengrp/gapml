@@ -36,6 +36,36 @@ class ParsimonySolver:
                 or nestee_evt.max_target < nester_evt.max_target
         ))
 
+
+        """
+        newer better implementation? better for multifurcating.
+        maybe store barcode as a list of events instead. no mapping target to event
+        dictionary mapping edge targets to event
+        list of unresolved positions
+
+        intersect to figure out which targets were modified in all children
+            keep ? if all barcodes have ? in same position
+            if any barcode has 0/1, then use 0/1 in position
+
+        for each contiguous set of 1s:
+            if focal:
+                if all children nodes have same exact event, it's ancestral
+                else ancestral 0
+            else:
+                see if how many different barcode events it fully explains
+                if none, then non-edge targets are ?, edge targets 0
+                if exactly one, then it's ancestral
+                if > 1, then middle non-edge targets are ?, edge targets 0
+
+        return most parsimonious state:
+            stuff from above, with any unresolved states.
+            also, for each child bcode, return a list of resolved states and their resolved values
+
+        the parent function needs to propogate the resolved states down the tree
+
+        BY the end of the whole process, we should have ALL positions resolved.
+        it's not possible to have any unresolved positions since the root node is all zeros.
+        """
     @staticmethod
     def _get_parsimony_events(bcode_evt1: BarcodeEvents, bcode_evt2: BarcodeEvents):
         """
@@ -59,7 +89,13 @@ class ParsimonySolver:
             # there may be multiple events is that alignment from Aaron says so.
             # The solution one day will be to clean up the Aaron alignment
             new_evt = None
-            if e1.is_equal(e2):
+            if e1.is_placeholder and e2.is_placeholder:
+                new_evt = e1
+            elif e1.is_placeholder or e2.is_placeholder:
+                # One of the events is a placeholder
+                # HOLY SHIT WHAT DO WE DO
+                raise NotImplementedError()
+            elif e1.is_equal(e2):
                 # The most parsimonious is that the two events are exactly the same
                 # Then there are zero events needed to explain how the events arose
                 # aka parsimony score contribution zero!

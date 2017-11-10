@@ -28,6 +28,7 @@ class Event:
         self.del_end = start_pos + del_len - 1
         self.insert_str = insert_str
         self.set_targets(targets)
+        self.is_placeholder = False
 
     def get_targets(self):
         return self._targets
@@ -51,6 +52,9 @@ class Event:
         self.is_focal = self.min_target == self.max_target
 
     def is_equal(self, evt):
+        if evt.is_placeholder:
+            return False
+
         return (self.start_pos == evt.start_pos
                 and self.del_len == evt.del_len
                 and self.insert_str == evt.insert_str)
@@ -72,6 +76,7 @@ class PlaceholderEvent(Event):
         """
         self.is_focal = is_focal
         self.targets = [target]
+        self.is_placeholder = True
 
     def is_equal(self, evt):
         return False
