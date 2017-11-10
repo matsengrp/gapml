@@ -84,6 +84,7 @@ class BarcodeEvents:
         @param events: list defining the event for each event idx
         @param organ: organ the barcode was sequenced from
         """
+<<<<<<< HEAD
         # These are private objects! Do not modify directly!
         self._target_evts = target_evts
         self._uniq_events = events
