@@ -16,6 +16,7 @@ class Barcode:
 
     TODO: check that we are using the right barcode
     '''
+    INDEL_TRANS = {'A':'-', 'C':'-','G':'-','T':'-','a':None,'c':None,'g':None,'t':None}
 
     def __init__(self,
                  barcode: List[str] = BARCODE_V7,
@@ -60,6 +61,7 @@ class Barcode:
         """
         Marks this target as having a DSB
         """
+        assert(target_idx in self.get_active_targets())
         self.needs_repair.add(target_idx)
 
     def indel(self,
@@ -85,7 +87,7 @@ class Barcode:
         # indices into the self.barcode list (accounting for the spacers)
         index1 = 1 + 2 * min(target1, target2)
         index2 = 1 + 2 * max(target1, target2)
-        #  Deletermine which can cut
+        #  Determine which can cut
         cut_site = self.cut_sites[target1]
         # sequence left of cut
         left = ','.join(self.barcode[:index1 + 1])[:-cut_site]
@@ -93,14 +95,11 @@ class Barcode:
         if target2 == target1:
             center = ''
         else:
-            maketrans = str.maketrans
-            center = '-' * cut_site + ',' + ','.join(
-                self.barcode[(index1 + 1):index2]).translate(
-                    maketrans('ACGTacgt', '-' * 8)) + ',' + '-' * (
-                        len(self.barcode[index2]) - cut_site)
+            center = ('-' * cut_site + ',' + ','.join(
+                self.barcode[(index1 + 1):index2]).translate(str.maketrans(self.INDEL_TRANS)) +
+                ',' + '-' * (len(self.barcode[index2]) - cut_site))
         # sequence right of cut
-        right = ','.join(
-            self.barcode[index2:])[len(self.barcode[index2]) - cut_site:]
+        right = self.barcode[index2][-cut_site:] + ',' +  ','.join(self.barcode[index2 + 1:])
         # left delete
         deleted = 0
         for position, letter in reversed(list(enumerate(left))):
@@ -163,7 +162,7 @@ class Barcode:
                 target_idx for target_idx, cut_site in enumerate(self.abs_cut_sites)
                 if evt[0] <= cut_site and evt[1] >= cut_site
             ]
-            assert(len(matching_targets) > 0)
+            assert(matching_targets)
 
             for t in matching_targets:
                 assert(target_evts[t] is None)
