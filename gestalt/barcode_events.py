@@ -16,20 +16,38 @@ class Event:
         start_pos: int,
         del_len: int,
         insert_str: str,
-        targets: List[int]):
+        targets: List[int] = None):
         """
         @param start_pos: position where event begins
         @param del_len: number of nucleotides deleted
         @param insert_str: sequence of nucleotides inserted
-        @param target: which target this event is associated with
+        @param targets: which targets this event is associated with
         """
         self.start_pos = start_pos
         self.del_len = del_len
         self.del_end = start_pos + del_len - 1
         self.insert_str = insert_str
-        self.targets = targets
-        self.min_target = min(targets)
-        self.max_target = max(targets)
+        self.set_targets(targets)
+
+    def get_targets(self):
+        return self._targets
+
+    def set_targets(self, targets: List[int]):
+        if targets is not None:
+            self._targets = targets
+            self.min_target = min(targets)
+            self.max_target = max(targets)
+            self.is_focal = self.min_target == self.max_target
+        else:
+            self._targets = []
+            self.is_focal = None
+            self.min_target = None
+            self.max_target = None
+
+    def add_target(self, target: int):
+        self._targets.append(target)
+        self.min_target = min(self._targets)
+        self.max_target = max(self._targets)
         self.is_focal = self.min_target == self.max_target
 
     def is_equal(self, evt):
@@ -84,13 +102,11 @@ class BarcodeEvents:
         @param events: list defining the event for each event idx
         @param organ: organ the barcode was sequenced from
         """
-<<<<<<< HEAD
         # These are private objects! Do not modify directly!
         self._target_evts = target_evts
         self._uniq_events = events
         self.organ = organ
         self.num_targets = len(target_evts)
-        assert(self.num_targets == 10)
 
     def add_event(self):
         raise NotImplementedError()
