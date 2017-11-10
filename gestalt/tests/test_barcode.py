@@ -96,7 +96,7 @@ class BarcodeTestCase(unittest.TestCase):
         for it back, we should get the same event. Let's test this with 1000
         random events plus a few special cases.
         """
-        barcode_str_len = sum(self.barcode.sub_str_lens)
+        barcode_str_len = len(str(self.barcode))
         evts_list = []
         for _ in range(1000):
             evt_start = randint(0, barcode_str_len - 1)

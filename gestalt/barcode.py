@@ -200,7 +200,7 @@ class Barcode:
             # TODO: make this more efficient?
             idx = 0
             for sub_str_idx, sub_str in enumerate(self.barcode):
-                sub_str_len = self.sub_str_lens[sub_str_idx]
+                sub_str_len = sub_str_lens[sub_str_idx]
                 if idx + sub_str_len >= del_start and idx <= del_start:
                     substr_start = sub_str_idx
                     substr_start_inner_idx = del_start - idx

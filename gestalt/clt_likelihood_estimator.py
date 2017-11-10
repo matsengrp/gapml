@@ -40,6 +40,7 @@ class CLTLassoEstimator(CLTEstimator):
         @return The likelihood for proposed theta, the gradient too if requested
         """
         ParsimonySolver.annotate_parsimony_states(model_params.topology)
+        print(model_params.topology.get_ascii(attributes=["parsimony_barcode_events"], show_internal=True))
         self._get_bcode_likelihood(model_params)
         raise NotImplementedError()
 
