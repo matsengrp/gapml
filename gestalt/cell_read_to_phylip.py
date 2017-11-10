@@ -24,7 +24,7 @@ def make_phylip_lines(cell_reads: CellReads, evt_to_id_dict: Dict[str, int]):
     lines = []
     for barcode_i, barcode in enumerate(cell_reads.uniq_barcodes):
         event_idxs = [
-            evt_to_id_dict[evt.get_str_id()] for evt in barcode.uniq_events
+            evt_to_id_dict[evt.get_str_id()] for evt in barcode.get_uniq_events()
         ]
         event_arr = np.zeros((num_events, ), dtype=int)
         event_arr[event_idxs] = 1

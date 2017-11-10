@@ -156,7 +156,7 @@ class Barcode:
         @return a BarcodeEvents version of this barcode
         """
         raw_events = self.get_events()
-        target_evts = [[] for i in range(self.n_targets)]
+        target_evts = [None for i in range(self.n_targets)]
         events = []
         for evt_i, evt in enumerate(raw_events):
             matching_targets = [
@@ -166,7 +166,8 @@ class Barcode:
             assert(len(matching_targets) > 0)
 
             for t in matching_targets:
-                target_evts[t].append(evt_i)
+                assert(target_evts[t] is None)
+                target_evts[t] = evt_i
 
             events.append(Event(
                 start_pos = evt[0],

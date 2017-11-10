@@ -43,60 +43,62 @@ class ParsimonySolver:
                 these two barcodes
         """
         num_targets = bcode_evt1.num_targets
-        target_evts = [[] for i in range(num_targets)]
+        target_evts = [None for i in range(num_targets)]
         pars_evts = []
         num_evts = 0
         last_evt = None
         for idx in range(num_targets):
             # Check that both targets are associated with an event
-            if bcode_evt1.target_evts[idx] and bcode_evt2.target_evts[idx]:
-                # We assume that each target is associated with only one event
-                # TODO: We'll clean this up in the future. The only reason
-                # there may be multiple events is that alignment from Aaron says so.
-                # The solution one day will be to clean up the Aaron alignment
-                e1 = bcode_evt1.uniq_events[bcode_evt1.target_evts[idx][0]]
-                e2 = bcode_evt2.uniq_events[bcode_evt2.target_evts[idx][0]]
-                new_evt = None
-                if e1.is_equal(e2):
-                    # The most parsimonious is that the two events are exactly the same
-                    # Then there are zero events needed to explain how the events arose
-                    # aka parsimony score contribution zero!
-                    new_evt = e1
-                elif e1.is_focal and e2.is_focal:
-                    # If both events focal but are different events, they can't possibly
-                    # have arisen from the same focal event. The only explanation possible
-                    # is that they arose separately on each branch from an initial unmodified
-                    # target.
-                    continue
-                else:
-                    # At least one event is inter-target
-                    # They can't be explained using a parsimony score of zero, but a parsimony
-                    # score of one is possible if one event is completely nested within another.
-                    if ParsimonySolver._is_nested(e1, e2):
-                        # e2 is nested inside e1
-                        new_evt = e2
-                    elif ParsimonySolver._is_nested(e2, e1):
-                        # e1 is nested inside e2
-                        new_evt = e1
-                    else:
-                        # No nesting, so events must have arisen separately and there is a
-                        # parsimony score contribution of two. However there is ambiguity as to
-                        # the original state of the intervening targets. It is possible that in
-                        # there was an event located at this target overlapped by both events.
-                        # To indicate ambiguity, use a place holder event.
-                        new_evt = PlaceholderEvent(is_focal=False, target=idx)
+            e1 = bcode_evt1.get_event(idx)
+            e2 = bcode_evt2.get_event(idx)
+            if e1 is None or e2 is None:
+                continue
 
-                # Add this shared parsimony event to the list!
-                if last_evt is not None and new_evt.is_equal(last_evt):
-                    # If we have the same shared event as before, just need to add a pointer
-                    # from the target list
-                    target_evts[idx].append(num_evts - 1)
+            # We assume that each target is associated with only one event
+            # TODO: We'll clean this up in the future. The only reason
+            # there may be multiple events is that alignment from Aaron says so.
+            # The solution one day will be to clean up the Aaron alignment
+            new_evt = None
+            if e1.is_equal(e2):
+                # The most parsimonious is that the two events are exactly the same
+                # Then there are zero events needed to explain how the events arose
+                # aka parsimony score contribution zero!
+                new_evt = e1
+            elif e1.is_focal and e2.is_focal:
+                # If both events focal but are different events, they can't possibly
+                # have arisen from the same focal event. The only explanation possible
+                # is that they arose separately on each branch from an initial unmodified
+                # target.
+                continue
+            else:
+                # At least one event is inter-target
+                # They can't be explained using a parsimony score of zero, but a parsimony
+                # score of one is possible if one event is completely nested within another.
+                if ParsimonySolver._is_nested(e1, e2):
+                    # e2 is nested inside e1
+                    new_evt = e2
+                elif ParsimonySolver._is_nested(e2, e1):
+                    # e1 is nested inside e2
+                    new_evt = e1
                 else:
-                    # This is a completely new event
-                    target_evts[idx].append(num_evts)
-                    pars_evts.append(new_evt)
-                    num_evts += 1
-                last_evt = new_evt
+                    # No nesting, so events must have arisen separately and there is a
+                    # parsimony score contribution of two. However there is ambiguity as to
+                    # the original state of the intervening targets. It is possible that in
+                    # there was an event located at this target overlapped by both events.
+                    # To indicate ambiguity, use a place holder event.
+                    new_evt = PlaceholderEvent(is_focal=False, target=idx)
+
+            # Add this shared parsimony event to the list!
+            if last_evt is not None and new_evt.is_equal(last_evt):
+                # If we have the same shared event as before, just need to add a pointer
+                # from the target list
+                target_evts[idx] = num_evts - 1
+            else:
+                # This is a completely new event
+                target_evts[idx] = num_evts
+                pars_evts.append(new_evt)
+                num_evts += 1
+            last_evt = new_evt
 
         # TODO: add organ type?
         return BarcodeEvents(target_evts, pars_evts, organ=None)
