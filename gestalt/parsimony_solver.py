@@ -102,10 +102,20 @@ class ParsimonySolver:
             # not overlapping
             # progress whichever barcode's end pos is behind
             if e1.start_end[0] > e2.start_end[1]:
-                idx2 += 1
+                if e2_semi_explained:
+                    b2_events = b2_events[:idx2] + b2_events[idx2 + 1:]
+                    e2_semi_explained = False
+                    n2 -= 1
+                else:
+                    idx2 += 1
                 continue
             elif e2.start_end[0] > e1.start_end[1]:
-                idx1 += 1
+                if e1_semi_explained:
+                    b1_events = b1_events[:idx1] + b1_events[idx1 + 1:]
+                    e1_semi_explained = False
+                    n1 -= 1
+                else:
+                    idx1 += 1
                 continue
 
             # overlapping
@@ -128,11 +138,13 @@ class ParsimonySolver:
                     if e2_semi_explained:
                         b2_events = b2_events[:idx2] + b2_events[idx2 + 1:]
                         e2_semi_explained = False
+                        n2 -= 1
                     else:
                         idx2 += 1
                 else:
                     if e1_semi_explained:
                         b1_events = b1_events[:idx1] + b1_events[idx1 + 1:]
+                        n1 -= 1
                         e1_semi_explained = False
                     else:
                         idx1 += 1
@@ -150,8 +162,10 @@ class ParsimonySolver:
 
         all_parsimony_two_evts, b1_events, b2_events = self._cycle_through_evts(
                 b1_events, b2_events, self._is_two_score)
+        # any barcode events remaining are unresolved
 
         all_parsimony_evts = all_parsimony_zero_evts + all_parsimony_one_evts + all_parsimony_two_evts
+        # TODO: order events!
         return BarcodeEvents(all_parsimony_evts)
 
 

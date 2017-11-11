@@ -157,6 +157,10 @@ class BarcodeEvents:
         """
         # TODO: check that events are given in order!
         self.events = events
+        start_ends = [[evt.start_pos, evt.del_end] for evt in events]
+        start_ends = [i for tup in start_ends for i in tup]
+        for i in range(len(start_ends) - 1):
+            assert(start_ends[i] < start_ends[i + 1])
         self.num_targets = 10 #len(target_evts)
 
     def __str__(self):

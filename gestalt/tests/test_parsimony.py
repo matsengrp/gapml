@@ -7,7 +7,6 @@ class ParsimonyTestCase(unittest.TestCase):
     def setUp(self):
         self.solver = ParsimonySolver([1 + i * 5 for i in range(9)])
 
-    @unittest.skip("demonstrating skipping")
     def test_none(self):
         e1s = UnresolvedEvents(
             event=Event(start_pos=1, del_len=2, insert_str="", min_target=0, max_target=0)
@@ -39,7 +38,6 @@ class ParsimonyTestCase(unittest.TestCase):
         pars_bcode = self.solver.get_parsimony_barcode([b1, b2])
         self.assertEqual(pars_bcode.events, [])
 
-    @unittest.skip("demonstrating skipping")
     def test_zero(self):
         e0 = UnresolvedEvents(
             event=Event(start_pos=0, del_len=2, insert_str="", min_target=0, max_target=0)
@@ -63,7 +61,6 @@ class ParsimonyTestCase(unittest.TestCase):
         pars_bcode = self.solver.get_parsimony_barcode([b1, b2])
         self.assertEqual(pars_bcode.events, [e1])
 
-    @unittest.skip("demonstrating skipping")
     def test_one(self):
         e0 = UnresolvedEvents(
             event=Event(start_pos=0, del_len=2, insert_str="", min_target=0, max_target=0)
@@ -94,12 +91,15 @@ class ParsimonyTestCase(unittest.TestCase):
         # check matching at the end pos
         b3 = BarcodeEvents([e3])
         pars_bcode = self.solver.get_parsimony_barcode([b2, b3])
-        self.assertEqual(pars_bcode.events, [e3])
+        self.assertEqual(
+            [str(i) for i in pars_bcode.events], [str(e3)])
 
         # cannot use all the targets to explain
-        b4 = BarcodeEvents([e3, e4])
+        b4 = BarcodeEvents([e4, e3])
         pars_bcode = self.solver.get_parsimony_barcode([b2, b4])
-        self.assertEqual(pars_bcode.events, [e3])
+        self.assertEqual(
+            [str(i) for i in pars_bcode.events],
+            [str(e4)])
 
         # single long inter-target can explain many events
         b5 = BarcodeEvents([e5])
@@ -118,6 +118,9 @@ class ParsimonyTestCase(unittest.TestCase):
         )
         e4 = UnresolvedEvents(
             event=Event(start_pos=19, del_len=10, insert_str="", min_target=3, max_target=5)
+        )
+        e5 = UnresolvedEvents(
+            event=Event(start_pos=10, del_len=11, insert_str="", min_target=2, max_target=3)
         )
         b0 = BarcodeEvents([e0])
         b1 = BarcodeEvents([e1])
