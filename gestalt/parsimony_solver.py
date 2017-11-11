@@ -15,10 +15,13 @@ class ParsimonySolver:
         """
         get the most parsimonious states for each node given the topology
         """
+        print(tree)
         for node in tree.traverse("postorder"):
             if node.is_leaf():
                 node.add_feature("parsimony_barcode_events", node.barcode_events)
-            if node.is_root():
+                node.add_feature("fun", [str(i) for i in node.barcode_events.events])
+            elif node.is_root():
+                print(node.get_ascii(attributes=["fun"], show_internal=True))
                 # do something
                 1/0
             else:
@@ -26,6 +29,7 @@ class ParsimonySolver:
                     [c.parsimony_barcode_events for c in node.get_children()]
                 )
                 node.add_feature("parsimony_barcode_events", pars_bcode_evts)
+                node.add_feature("fun", [str(i) for i in pars_bcode_evts.events])
                 # TODO: propagate anything down if needed
 
 

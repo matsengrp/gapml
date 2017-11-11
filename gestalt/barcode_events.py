@@ -159,34 +159,8 @@ class BarcodeEvents:
         self.events = events
         self.num_targets = 10 #len(target_evts)
 
-    def get_target_status(self):
-        """
-        @return ????
-        """
-        raise NotImplementedError()
-        target_status = [None for i in range(self.num_targets)]
-        for evt in self._uniq_events:
-            target_status[evt.min_target + 1: evt.max_target] = self.UNRESOLVED
-            target_status[evt.min_target] = self.INACTIVE
-            target_status[evt.max_target] = self.INACTIVE
-        for evt in self.unresolved_pos:
-            target_status[evt.target] = self.UNRESOLVED
-        return target_status
-
     def __str__(self):
         if self.events:
             return "...".join([str(evts) for evts in self.events])
         else:
             return "not_modified"
-
-
-class BarcodeEventsRaw(BarcodeEvents):
-    """
-    In aaron's data, there are cases where there are multiple events associated with a single
-    target. That doesn't make sense since each cut site can only be disturbed once.
-    We will refer to these barcode event encodings as the `raw` version.
-    """
-    def __init__(self, events: List[Event]):
-        self._target_evts = target_evts
-        self._uniq_events = events
-        self.organ = organ

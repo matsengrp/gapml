@@ -4,7 +4,7 @@ import numpy as np
 
 from alignment import Aligner
 
-from barcode_events import BarcodeEvents, Event
+from barcode_events import BarcodeEvents, Event, UnresolvedEvents
 from constants import BARCODE_V7, NUM_BARCODE_V7_TARGETS
 
 
@@ -169,15 +169,15 @@ class Barcode:
                 assert(target_evts[t] is None)
                 target_evts[t] = evt_i
 
-            events.append([Event(
+            events.append(UnresolvedEvents(
+                event=Event(
                 evt[0],
                 evt[1] - evt[0],
                 evt[2],
                 min(matching_targets),
                 max(matching_targets)
-            )])
+            )))
 
-        # TODO: add organ in here
         return BarcodeEvents(events)
 
     def process_events(self, events: List[Tuple[int, int, str]]):
