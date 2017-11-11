@@ -64,7 +64,7 @@ def main():
     parser.add_argument(
         '--death-lambda', type=float, default=0.01, help='death rate')
     parser.add_argument(
-        '--time', type=float, default=4, help='how much time to simulate')
+        '--time', type=float, default=2, help='how much time to simulate')
     parser.add_argument(
         '--sampling-rate',
         type=float,

@@ -1,6 +1,6 @@
-from enum import Enum
 from typing import List
 from typing import Dict
+import numpy as np
 
 from cell_state import CellTypeTree
 from constants import NUM_BARCODE_V7_TARGETS
@@ -10,86 +10,133 @@ Objects for representing a barcode using an event-encoded format
 """
 
 
-class Event:
-    def __init__(
-        self,
+class Event(tuple):
+    def __new__(
+        cls,
         start_pos: int,
         del_len: int,
         insert_str: str,
-        targets: List[int] = None):
+        min_target: int,
+        max_target: int):
         """
         @param start_pos: position where event begins
         @param del_len: number of nucleotides deleted
         @param insert_str: sequence of nucleotides inserted
         @param targets: which targets this event is associated with
         """
-        self.start_pos = start_pos
-        self.del_len = del_len
-        self.del_end = start_pos + del_len - 1
-        self.insert_str = insert_str
-        self.set_targets(targets)
-        self.is_placeholder = False
+        return tuple.__new__(cls, (start_pos, del_len, insert_str, min_target, max_target))
 
-    def get_targets(self):
-        return self._targets
+    def __getnewargs__(self):
+        return (self.start_pos, self.del_len, self.insert_str, self.min_target, self.max_target)
 
-    def set_targets(self, targets: List[int]):
-        if targets is not None:
-            self._targets = targets
-            self.min_target = min(targets)
-            self.max_target = max(targets)
-            self.is_focal = self.min_target == self.max_target
-        else:
-            self._targets = []
-            self.is_focal = None
-            self.min_target = None
-            self.max_target = None
+    @property
+    def start_pos(self):
+        return self[0]
 
-    def add_target(self, target: int):
-        self._targets.append(target)
-        self.min_target = min(self._targets)
-        self.max_target = max(self._targets)
-        self.is_focal = self.min_target == self.max_target
+    @property
+    def del_len(self):
+        return self[1]
 
-    def is_equal(self, evt):
-        if evt.is_placeholder:
-            return False
+    @property
+    def del_end(self):
+        return self.start_pos + self.del_len - 1
 
-        return (self.start_pos == evt.start_pos
-                and self.del_len == evt.del_len
-                and self.insert_str == evt.insert_str)
+    @property
+    def insert_str(self):
+        return self[2]
 
-    def get_str_id(self):
+    @property
+    def min_target(self):
+        return self[3]
+
+    @property
+    def max_target(self):
+        return self[4]
+
+    @property
+    def start_end(self):
+        return (self.min_target, self.max_target)
+
+class EventWildcard(tuple):
+    def __new__(
+        cls,
+        start_pos: int,
+        del_len: int,
+        min_target: int,
+        max_target: int):
         """
-        Identifying string for this event
+        @param start_pos: position where event begins
+        @param del_len: number of nucleotides deleted
         """
-        return "(%d-%d, %s)" % (self.start_pos, self.del_end, self.insert_str)
+        return tuple.__new__(cls, (start_pos, del_len, min_target, max_target))
 
-    def __str__(self):
-        return self.get_str_id()
+    def __getnewargs__(self):
+        return (self.start_pos, self.del_len, self.min_target, self.max_target)
 
+    @property
+    def start_pos(self):
+        return self[0]
 
-class PlaceholderEvent(Event):
-    def __init__(self, is_focal: bool, target: int):
-        """
-        just create a placeholder event
-        """
-        self.is_focal = is_focal
-        self.targets = [target]
-        self.is_placeholder = True
+    @property
+    def del_len(self):
+        return self[1]
 
-    def is_equal(self, evt):
+    @property
+    def del_end(self):
+        return self.start_pos + self.del_len - 1
+
+    @property
+    def min_target(self):
+        return self[-2]
+
+    @property
+    def max_target(self):
+        return self[-1]
+
+    @property
+    def start_end(self):
+        return (self.min_target, self.max_target)
+
+    def is_compatible(self, evt: Event):
+        if evt.start_pos == self.start_pos:
+            if evt.max_target < self.max_target:
+                return True
+            elif evt.del_end == self.del_end:
+                return True
+        elif evt.del_end == self.del_end:
+            if evt.min_target < self.min_target:
+                return True
         return False
 
-    def get_str_id(self):
-        """
-        Identifying string for this event
-        """
-        return "??"
+class UnresolvedEvents:
+    def __init__(self, event: Event = None, wildcard: EventWildcard = None):
+        self.event = event if event else None
+        self.wildcard = wildcard if wildcard else None
+        self._val = event if event else wildcard
+        assert(not(self.event and self.wildcard))
 
     def __str__(self):
-        return self.get_str_id()
+        return str(self._val)
 
+    @property
+    def start_pos(self):
+        return self._val.start_pos
+
+    @property
+    def del_end(self):
+        return self._val.del_end
+
+    @property
+    def start_end(self):
+        return self._val.start_end
+
+    @property
+    def min_target(self):
+        return self._val.min_target
+
+    @property
+    def max_target(self):
+        return self._val.max_target
 
 class BarcodeEvents:
     """
@@ -99,50 +146,38 @@ class BarcodeEvents:
     Use this representation for cleaned barcode representation where each target
     can be associated with at most a single event.
     """
-    def __init__(self, target_evts: List, events: List[Event], organ: CellTypeTree):
-        """
-        @param target_evts: for each target, the event idx associated,
-                            idx of the event if an event occurred
-                            None if no event occurred
-        @param events: list defining the event for each event idx
-        @param organ: organ the barcode was sequenced from
-        """
-        # These are private objects! Do not modify directly!
-        self._target_evts = target_evts
-        self._uniq_events = events
-        self.organ = organ
-        self.num_targets = len(target_evts)
+    ACTIVE = 0
+    INACTIVE = 1
+    UNRESOLVED = 2
 
-    def add_event(self):
-        raise NotImplementedError()
-
-    def get_uniq_events(self):
-        return self._uniq_events
-
-    def get_event(self, target_idx: int):
+    def __init__(self, events: List[UnresolvedEvents]):
         """
-        @return the event associated with this target idx
+        @param events: tuples of tuples of events
+                    a tuple of events means either event may have happened
         """
-        target_evt_idx = self._target_evts[target_idx]
-        if target_evt_idx is not None:
-            return self._uniq_events[target_evt_idx]
-        else:
-            return None
+        # TODO: check that events are given in order!
+        self.events = events
+        self.num_targets = 10 #len(target_evts)
 
     def get_target_status(self):
         """
-        @return a boolean array to indicate which targets are active (aka can be cut)
+        @return ????
         """
-        return [1 if self._target_evts[i] else 0 for i in range(self.num_targets)]
-
-    def get_str_id(self):
-        """
-        Generates a string based on event details
-        """
-        return "...".join([evt.get_str_id() for evt in self._uniq_events])
+        raise NotImplementedError()
+        target_status = [None for i in range(self.num_targets)]
+        for evt in self._uniq_events:
+            target_status[evt.min_target + 1: evt.max_target] = self.UNRESOLVED
+            target_status[evt.min_target] = self.INACTIVE
+            target_status[evt.max_target] = self.INACTIVE
+        for evt in self.unresolved_pos:
+            target_status[evt.target] = self.UNRESOLVED
+        return target_status
 
     def __str__(self):
-        return self.get_str_id()
+        if self.events:
+            return "...".join([str(evts) for evts in self.events])
+        else:
+            return "not_modified"
 
 
 class BarcodeEventsRaw(BarcodeEvents):
@@ -151,7 +186,7 @@ class BarcodeEventsRaw(BarcodeEvents):
     target. That doesn't make sense since each cut site can only be disturbed once.
     We will refer to these barcode event encodings as the `raw` version.
     """
-    def __init__(self, target_evts: List[List[int]], events: List[Event], organ: CellTypeTree):
+    def __init__(self, events: List[Event]):
         self._target_evts = target_evts
         self._uniq_events = events
         self.organ = organ

@@ -1,140 +1,236 @@
+from typing import List
+import numpy as np
+
 from cell_lineage_tree import CellLineageTree
-from barcode_events import Event, BarcodeEvents, PlaceholderEvent
+from barcode_events import Event, EventWildcard, UnresolvedEvents, BarcodeEvents
 
 class ParsimonySolver:
     """
     Our in-built parsimony engine
     """
-    @staticmethod
-    def annotate_parsimony_states(tree: CellLineageTree):
+    def __init__(self, cut_sites: List[int]):
+        self.cut_sites = cut_sites
+
+    def annotate_parsimony_states(self, tree: CellLineageTree):
         """
         get the most parsimonious states for each node given the topology
         """
         for node in tree.traverse("postorder"):
             if node.is_leaf():
                 node.add_feature("parsimony_barcode_events", node.barcode_events)
+            if node.is_root():
+                # do something
+                1/0
             else:
-                children_nodes = node.get_children()
-                # Find the most parsimonious barcode to explain the events observed
-                # in children
-                pars_bcode_evts = children_nodes[0].parsimony_barcode_events
-                for c in node.children[1:]:
-                     pars_bcode_evts = ParsimonySolver._get_parsimony_events(
-                             c.parsimony_barcode_events,
-                             pars_bcode_evts)
+                pars_bcode_evts = self.get_parsimony_barcode(
+                    [c.parsimony_barcode_events for c in node.get_children()]
+                )
                 node.add_feature("parsimony_barcode_events", pars_bcode_evts)
+                # TODO: propagate anything down if needed
 
-    @staticmethod
-    def _is_nested(nester_evt: Event, nestee_evt: Event):
+
+    def get_parsimony_barcode(self, child_bcodes: List[BarcodeEvents]):
+        intersect_bcode = child_bcodes[0]
+        for c in child_bcodes[1:]:
+            intersect_bcode = self._get_parsimony_barcode(intersect_bcode, c)
+        return intersect_bcode
+
+
+    def _cycle_through_evts(self, b1_events: List[UnresolvedEvents], b2_events: List[UnresolvedEvents], FUNCTION):
+        parsimony_events = []
+        idx1 = 0
+        idx2 = 0
+        n1 = len(b1_events)
+        n2 = len(b2_events)
+        while idx1 < n1 and idx2 < n2:
+            e1 = b1_events[idx1]
+            e2 = b2_events[idx2]
+
+            # not overlapping
+            # progress whichever barcode's end pos is behind
+            if e1.start_end[0] > e2.start_end[1]:
+                idx2 += 1
+                continue
+            elif e2.start_end[0] > e1.start_end[1]:
+                idx1 += 1
+                continue
+
+            # overlapping
+            use_in_ancestral, pars_evt, idxs_explained = FUNCTION(e1, e2)
+            if use_in_ancestral:
+                parsimony_events.append(pars_evt)
+                # throw away the true events. dont throw away wildcards
+                if 0 in idxs_explained:
+                    b1_events = b1_events[:idx1] + b1_events[idx1 + 1:]
+                    n1 -= 1
+                if 1 in idxs_explained:
+                    b2_events = b2_events[:idx2] + b2_events[idx2 + 1:]
+                    n2 -= 1
+                if len(idxs_explained) == 1:
+                    # TODO: track the resolved wildcard
+                    print("do something")
+            else:
+                if e1.start_end[1] > e2.start_end[1]:
+                    idx2 += 1
+                else:
+                    idx1 += 1
+        return parsimony_events, b1_events, b2_events
+
+
+
+    def _cycle_through_evts_one(self, b1_events: List[UnresolvedEvents], b2_events: List[UnresolvedEvents]):
+        parsimony_events = []
+        idx1 = 0
+        idx2 = 0
+        n1 = len(b1_events)
+        n2 = len(b2_events)
+        e1_semi_explained = False
+        e2_semi_explained = False
+        targets_explained = []
+        # By checking in this order, if we have two events that could be explained by the same event
+        # but the same event cannot explain both events at once, we will choose the first nested event
+        # TODO: maybe we will change this one day. for now, it's not too bad since i think it's really
+        # unlikely?
+        while idx1 < n1 and idx2 < n2:
+            e1 = b1_events[idx1]
+            e2 = b2_events[idx2]
+
+            # not overlapping
+            # progress whichever barcode's end pos is behind
+            if e1.start_end[0] > e2.start_end[1]:
+                idx2 += 1
+                continue
+            elif e2.start_end[0] > e1.start_end[1]:
+                idx1 += 1
+                continue
+
+            # overlapping
+            use_in_ancestral, pars_evt, idxs_explained, targets_explained = self._is_one_score(
+                    e1, e2, e1_semi_explained, e2_semi_explained, targets_explained)
+            if use_in_ancestral:
+                parsimony_events.append(pars_evt)
+                if 0 in idxs_explained:
+                    b1_events = b1_events[:idx1] + b1_events[idx1 + 1:]
+                    e2_semi_explained = True
+                    e1_semi_explained = False
+                    n1 -= 1
+                if 1 in idxs_explained:
+                    b2_events = b2_events[:idx2] + b2_events[idx2 + 1:]
+                    e1_semi_explained = True
+                    e2_semi_explained = False
+                    n2 -= 1
+            else:
+                if e1.start_end[1] > e2.start_end[1]:
+                    if e2_semi_explained:
+                        b2_events = b2_events[:idx2] + b2_events[idx2 + 1:]
+                        e2_semi_explained = False
+                    else:
+                        idx2 += 1
+                else:
+                    if e1_semi_explained:
+                        b1_events = b1_events[:idx1] + b1_events[idx1 + 1:]
+                        e1_semi_explained = False
+                    else:
+                        idx1 += 1
+        return parsimony_events, b1_events, b2_events
+
+
+    def _get_parsimony_barcode(self, b1: BarcodeEvents, b2: BarcodeEvents):
+        b1_events = list(b1.events)
+        b2_events = list(b2.events)
+        all_parsimony_zero_evts, b1_events, b2_events = self._cycle_through_evts(
+                b1_events, b2_events, self._is_zero_score)
+
+        all_parsimony_one_evts, b1_events, b2_events = self._cycle_through_evts_one(
+                b1_events, b2_events)
+
+        all_parsimony_two_evts, b1_events, b2_events = self._cycle_through_evts(
+                b1_events, b2_events, self._is_two_score)
+
+        all_parsimony_evts = all_parsimony_zero_evts + all_parsimony_one_evts + all_parsimony_two_evts
+        return BarcodeEvents(all_parsimony_evts)
+
+
+    def _is_zero_score(self, evt1: UnresolvedEvents, evt2: UnresolvedEvents):
+        if evt1.event and evt2.event:
+            if evt1.event == evt2.event:
+                return True, evt1, (0, 1)
+        elif evt1.event and evt2.wildcard:
+            if evt2.wildcard.is_compatible(evt1.event):
+                return True, evt1, (0,)
+        elif evt2.event and evt1.wildcard:
+            if evt1.wildcard.is_compatible(evt2.event):
+                return True, evt1, (1,)
+        return False, None, None
+
+
+    def _is_nested(self, nester_evt: Event, nestee_evt: Event):
         """
         @returns whether nestee_evt is completely nested inside nester_evt
         """
         return (nester_evt.start_pos <= nestee_evt.start_pos
-            and nestee_evt.del_end <= nestee_evt.del_end
+            and nestee_evt.del_end <= nester_evt.del_end
             and (
                 nester_evt.min_target < nestee_evt.min_target
                 or nestee_evt.max_target < nester_evt.max_target
         ))
 
 
-        """
-        newer better implementation? better for multifurcating.
-        maybe store barcode as a list of events instead. no mapping target to event
-        dictionary mapping edge targets to event
-        list of unresolved positions
+    def _is_one_score(self, evt1: UnresolvedEvents, evt2: UnresolvedEvents, e1_semi_explained, e2_semi_explained, old_targets_explained):
+        if evt1.event and evt2.event:
+            potential_targets_explained = list(range(
+                max(evt1.event.min_target, evt2.event.min_target),
+                min(evt1.event.max_target, evt2.event.max_target) + 1))
+            # You cannot explain the more than one event by using all the targets
+            if e1_semi_explained:
+                if len(potential_targets_explained + old_targets_explained) == evt1.event.max_target - evt1.event.min_target + 1:
+                    return False, None, None, []
+            if e2_semi_explained:
+                if len(potential_targets_explained + old_targets_explained) == evt2.event.max_target - evt2.event.min_target + 1:
+                    return False, None, None, []
+            if self._is_nested(evt1.event, evt2.event):
+                assert(not e2_semi_explained)
+                return True, evt2, (1,), old_targets_explained + potential_targets_explained
+            elif self._is_nested(evt2.event, evt1.event):
+                assert(not e1_semi_explained)
+                return True, evt1, (0,), old_targets_explained + potential_targets_explained
+        return False, None, None, []
 
-        intersect to figure out which targets were modified in all children
-            keep ? if all barcodes have ? in same position
-            if any barcode has 0/1, then use 0/1 in position
 
-        for each contiguous set of 1s:
-            if focal:
-                if all children nodes have same exact event, it's ancestral
-                else ancestral 0
-            else:
-                see if how many different barcode events it fully explains
-                if none, then non-edge targets are ?, edge targets 0
-                if exactly one, then it's ancestral
-                if > 1, then middle non-edge targets are ?, edge targets 0
+    def _is_two_score(self, evt1: UnresolvedEvents, evt2: UnresolvedEvents):
+        event1_first = evt1.del_end < evt2.del_end
 
-        return most parsimonious state:
-            stuff from above, with any unresolved states.
-            also, for each child bcode, return a list of resolved states and their resolved values
+        start_pos = max(evt1.start_pos, evt2.start_pos)
+        start_same = evt1.start_pos == evt2.start_pos
+        del_end = min(evt1.del_end, evt2.del_end)
+        end_same = evt1.del_end == evt2.del_end
 
-        the parent function needs to propogate the resolved states down the tree
+        min_target = max(evt1.min_target, evt2.min_target)
+        if evt1.min_target == evt2.min_target and not start_same:
+            start_pos = self.cut_sites[evt1.min_target] + 1
+            min_target += 1
 
-        BY the end of the whole process, we should have ALL positions resolved.
-        it's not possible to have any unresolved positions since the root node is all zeros.
-        """
-    @staticmethod
-    def _get_parsimony_events(bcode_evt1: BarcodeEvents, bcode_evt2: BarcodeEvents):
-        """
-        @return BarcodeEvents containing the most parsimonious set of events between
-                these two barcodes
-        """
-        num_targets = bcode_evt1.num_targets
-        target_evts = [None for i in range(num_targets)]
-        pars_evts = []
-        num_evts = 0
-        last_evt = None
-        for idx in range(num_targets):
-            # Check that both targets are associated with an event
-            e1 = bcode_evt1.get_event(idx)
-            e2 = bcode_evt2.get_event(idx)
-            if e1 is None or e2 is None:
-                continue
+        max_target = min(evt1.max_target, evt2.max_target)
+        if evt1.max_target == evt2.max_target and not end_same:
+            del_end = self.cut_sites[evt1.max_target] - 1
+            max_target -= 1
 
-            # We assume that each target is associated with only one event
-            # TODO: We'll clean this up in the future. The only reason
-            # there may be multiple events is that alignment from Aaron says so.
-            # The solution one day will be to clean up the Aaron alignment
-            new_evt = None
-            if e1.is_placeholder and e2.is_placeholder:
-                new_evt = e1
-            elif e1.is_placeholder or e2.is_placeholder:
-                # One of the events is a placeholder
-                # HOLY SHIT WHAT DO WE DO
-                raise NotImplementedError()
-            elif e1.is_equal(e2):
-                # The most parsimonious is that the two events are exactly the same
-                # Then there are zero events needed to explain how the events arose
-                # aka parsimony score contribution zero!
-                new_evt = e1
-            elif e1.is_focal and e2.is_focal:
-                # If both events focal but are different events, they can't possibly
-                # have arisen from the same focal event. The only explanation possible
-                # is that they arose separately on each branch from an initial unmodified
-                # target.
-                continue
-            else:
-                # At least one event is inter-target
-                # They can't be explained using a parsimony score of zero, but a parsimony
-                # score of one is possible if one event is completely nested within another.
-                if ParsimonySolver._is_nested(e1, e2):
-                    # e2 is nested inside e1
-                    new_evt = e2
-                elif ParsimonySolver._is_nested(e2, e1):
-                    # e1 is nested inside e2
-                    new_evt = e1
-                else:
-                    # No nesting, so events must have arisen separately and there is a
-                    # parsimony score contribution of two. However there is ambiguity as to
-                    # the original state of the intervening targets. It is possible that in
-                    # there was an event located at this target overlapped by both events.
-                    # To indicate ambiguity, use a place holder event.
-                    new_evt = PlaceholderEvent(is_focal=False, target=idx)
+        if start_same and end_same:
+            # then the insert string must have been different
+            # we need to chop off one of the edges. we're going to do it at random
+            # TODO: maybe there is a better way in the future. but we really dont want
+            # to deal with too many possibilities in the parsimony tree.
+            # it's probably fine since this is really unlikely.
+            coin_flip = np.random.binomial(1, p=.5)
+            if coin_flip == 0:
+                min_target += 1
+                start_pos = self.cut_sites[evt1.min_target] + 1
 
-            # Add this shared parsimony event to the list!
-            if last_evt is not None and new_evt.is_equal(last_evt):
-                # If we have the same shared event as before, just need to add a pointer
-                # from the target list
-                target_evts[idx] = num_evts - 1
-            else:
-                # This is a completely new event
-                target_evts[idx] = num_evts
-                pars_evts.append(new_evt)
-                num_evts += 1
-            last_evt = new_evt
-
-        # TODO: add organ type?
-        return BarcodeEvents(target_evts, pars_evts, organ=None)
+        if min_target > max_target or del_end <= start_pos:
+            return False, None, None
+        wildcard = EventWildcard(
+            start_pos,
+            del_end - start_pos,
+            min_target,
+            max_target)
+        return True, UnresolvedEvents(wildcard=wildcard), (0 if event1_first else 1,)
