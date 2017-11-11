@@ -43,19 +43,12 @@ class AlignerNW(Aligner):
         # this function produces Needleman-Wunsch alignments
         alns = pairwise2.align.globalms(sequence, reference,
                                         self.match, self.mismatch, self.gap_open, self.gap_extend)
-        if len(alns) > 1:
-            warnings.warn('{} optimal alignments, using first'.format(len(alns)))
-        # process the alignment into a list of indel events
         events = []
         reference_position = 0
         in_event = False
+        # taking the first alignment only
         # iterate through alignment character by character
         for sequence_nucleotide, reference_nucleotide in zip(*alns[0][0:2]):
-            # TODO: handle mismatches somehow, currently raise error
-            if sequence_nucleotide != reference_nucleotide and not \
-               (sequence_nucleotide == '-' or reference_nucleotide == '-'):
-               raise NotImplementedError('mismatch {}, {}'.
-                              format(sequence_nucleotide, reference_nucleotide))
             # if we are not in an event, and we find dashes, we must have just
             # entered an event
             if not in_event:

@@ -1,6 +1,7 @@
 from typing import List, Dict, Tuple
 import re
 import numpy as np
+from numpy.random import choice
 
 from alignment import Aligner
 
@@ -233,6 +234,36 @@ class Barcode:
                     if substr_char in "ACTG-":
                         non_insert_idx += 1
                 self.barcode[sub_str_idx] = "".join(new_sub_str)
+
+    def observe_with_errors(self, error_rate: float):
+        """
+        @param error_rate: probability of each base being erroneous
+        @return copy of barcode with random errors, uniform over alternative
+                bases
+        NOTE: to be used after any editing, since get_active_targets will not
+              work as expected with base errors
+        """
+        assert (0 <= error_rate <= 1)
+        if error_rate == 0:
+            return self
+        barcode_with_errors = []
+        nucs = 'acgt'
+        for substr_idx, substr in enumerate(self.barcode):
+            new_substr = ''
+            for substr_char in substr:
+                if substr_char == '-':
+                    new_substr += substr_char
+                else:
+                    probs = [(error_rate/3 if nuc != substr_char.lower()
+                                          else (1 - error_rate))
+                             for nuc in nucs]
+                    new_substr += choice(list(nucs.upper() if substr_char.isupper() else nucs),
+                                         p=probs)
+            barcode_with_errors.append(new_substr)
+
+        return Barcode(barcode=barcode_with_errors,
+                       unedited_barcode=self.unedited_barcode,
+                       cut_sites=self.cut_sites)
 
 
     def __repr__(self):

@@ -114,7 +114,8 @@ class CellLineageTree(TreeNode):
         tree_style = TreeStyle()
         tree_style.show_scale = False
         tree_style.show_leaf_name = False
-        self.render(file_name, tree_style=tree_style)
+        # NOTE: need to return for display in IPython using file_name = "%%inline"
+        return self.render(file_name, tree_style=tree_style)
 
     def editing_profile(self, file_name: str):
         '''plot profile_name of deletion frequency at each position over leaves'''

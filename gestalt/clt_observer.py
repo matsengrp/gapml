@@ -21,12 +21,15 @@ class ObservedAlignedSeq:
 
 
 class CLTObserver:
-    def __init__(self, sampling_rate: float):
+    def __init__(self, sampling_rate: float, error_rate: float = 0):
         """
         @param sampling_rate: the rate at which barcodes from the alive leaf cells are observed
+        @param error_rate: sequencing error, introduce alternative bases uniformly at this rate
         """
-        assert (sampling_rate <= 1 and sampling_rate > 0)
+        assert (0 < sampling_rate <= 1)
+        assert (0 <= error_rate <= 1)
         self.sampling_rate = sampling_rate
+        self.error_rate = error_rate
 
     def observe_leaves(self, cell_lineage_tree: CellLineageTree):
         """
@@ -52,7 +55,7 @@ class CLTObserver:
                         observations[cell_id].abundance += 1
                     else:
                         observations[cell_id] = ObservedAlignedSeq(
-                            barcode=leaf.barcode,
+                            barcode=leaf.barcode.observe_with_errors(self.error_rate),
                             cell_state=leaf.cell_state,
                             abundance=1,
                         )
