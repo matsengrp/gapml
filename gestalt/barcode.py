@@ -4,7 +4,7 @@ import numpy as np
 
 from alignment import Aligner
 
-from barcode_events import BarcodeEvents, Event, UnresolvedEvents
+from barcode_events import BarcodeEvents, Event
 from constants import BARCODE_V7, NUM_BARCODE_V7_TARGETS
 
 
@@ -169,14 +169,13 @@ class Barcode:
                 assert(target_evts[t] is None)
                 target_evts[t] = evt_i
 
-            events.append(UnresolvedEvents(
-                event=Event(
+            events.append(Event(
                 evt[0],
-                evt[1] - evt[0],
-                evt[2],
-                min(matching_targets),
-                max(matching_targets)
-            )))
+                evt[1] - evt[0] + 1,
+                min_target=min(matching_targets),
+                max_target=max(matching_targets),
+                insert_str=evt[2],
+            ))
 
         return BarcodeEvents(events)
 

@@ -15,7 +15,7 @@ class MaxEventSolver:
         """
         get the most parsimonious states for each node given the topology
         """
-        print(tree)
+        print(tree.get_ascii(attributes=["barcode_events"], show_internal=True))
         for node in tree.traverse("postorder"):
             if node.is_leaf():
                 node.add_feature("parsimony_barcode_events", node.barcode_events)
@@ -30,7 +30,6 @@ class MaxEventSolver:
                 )
                 node.add_feature("parsimony_barcode_events", pars_bcode_evts)
                 node.add_feature("fun", [str(i) for i in pars_bcode_evts.events])
-                # TODO: propagate anything down if needed
 
 
     def get_parsimony_barcode(self, child_bcodes: List[BarcodeEvents]):
@@ -39,31 +38,43 @@ class MaxEventSolver:
             intersect_bcode = self._get_parsimony_barcode(intersect_bcode, c)
         return intersect_bcode
 
-    def _get_parsimony_barcode(parent_bcode: BarcodeEvents, child_bcode: BarcodeEvents):
-        child_idx = 0
-        child_evt = child_bcode.events[child_idx]
-        new_parent_events = []
-        for par_evt in parent_bcode.events:
-            while child_evt.del_end < par_evt.start_pos:
-                child_idx += 1
-                if child_idx == len(child_bcode.events):
-                    # we're done with cycling through child, so we're done
-                    return new_parent_events
-                child_evt = child_bcode.events[child_idx]
+    def _get_parsimony_barcode(self, parent_bcode: BarcodeEvents, child_bcode: BarcodeEvents):
+        if len(child_bcode.events) == 0:
+            return BarcodeEvents()
 
-            # Check if events overlap
-            if par_evt.del_end < child_evt.start_pos:
+        child_idx = 0
+        par_idx = 0
+        num_child_evts = len(child_bcode.events)
+        num_par_evts = len(parent_bcode.events)
+        new_parent_events = []
+        while par_idx < num_par_evts and child_idx < num_child_evts:
+            par_evt = parent_bcode.events[par_idx]
+            child_evt = child_bcode.events[child_idx]
+
+            if child_evt.del_end < par_evt.start_pos:
+                child_idx += 1
                 continue
-            else:
-                # Now we have overlapping events
-                
+            elif par_evt.del_end < child_evt.start_pos:
+                par_idx += 1
+                continue
+
+            # Now we have overlapping events
+            if par_evt.generalized_equals(child_evt) or self._is_nested(child_evt, par_evt):
                 # Is parent event valid?
-                if par_evt.generalized_equals(child_evt) or self._is_nested(par_evt, child_evt):
-                    new_parent_events.append(par_evt)
-                else:
-                    # No parent is not valid. Make new parent
-                    new_par = self._make_new_parent(par_evt, child_evt)
+                new_parent_events.append(par_evt)
+            elif self._is_nested(par_evt, child_evt):
+                # make child event the parent instead?
+                new_parent_events.append(child_evt)
+            else:
+                # Make a completely new parent event
+                new_par = self._make_new_parent(par_evt, child_evt)
+                if new_par is not None:
                     new_parent_events.append(new_par)
+
+            if par_evt.del_end > child_evt.del_end:
+                child_idx += 1
+            else:
+                par_idx += 1
 
         return BarcodeEvents(new_parent_events)
 
@@ -99,14 +110,19 @@ class MaxEventSolver:
 
         if start_same and end_same:
             # then the insert string must have been different
+            if min_target == max_target:
+                return None
             # we need to chop off one of the edges. we're going to do it at random
             # TODO: maybe there is a better way in the future. but we really dont want
             # to deal with too many possibilities in the parsimony tree.
             # it's probably fine since this is really unlikely.
             coin_flip = np.random.binomial(1, p=.5)
             if coin_flip == 0:
+                start_pos = self.cut_sites[min_target] + 1
                 min_target += 1
-                start_pos = self.cut_sites[evt1.min_target] + 1
+            else:
+                del_end = self.cut_sites[max_target] - 1
+                max_target -= 1
 
         if min_target > max_target or del_end <= start_pos:
             return None
@@ -114,6 +130,6 @@ class MaxEventSolver:
             return Event(
                 start_pos,
                 del_end - start_pos,
-                "*",
                 min_target,
-                max_target)
+                max_target,
+                insert_str="*")

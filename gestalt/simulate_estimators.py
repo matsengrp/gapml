@@ -16,7 +16,7 @@ from barcode_simulator import BarcodeSimulator
 from clt_observer import CLTObserver
 from clt_estimator import CLTParsimonyEstimator
 from clt_likelihood_estimator import *
-from parsimony_solver import ParsimonySolver
+from parsimony_solver import MaxEventSolver
 from collapsed_tree import CollapsedTree
 from alignment import AlignerNW
 
@@ -141,7 +141,7 @@ def main():
 
         # trying out with true tree!!!
         model_params = CLTLikelihoodModel(pruned_clt, 10)
-        parsimony_solver = ParsimonySolver(pruned_clt.barcode.abs_cut_sites)
+        parsimony_solver = MaxEventSolver(pruned_clt.barcode.abs_cut_sites)
         lasso_est = CLTLassoEstimator(0, model_params, parsimony_solver)
         lasso_est.get_likelihood(model_params)
 
