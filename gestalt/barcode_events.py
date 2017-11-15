@@ -21,13 +21,17 @@ class Event(tuple):
         """
         @param start_pos: position where event begins
         @param del_len: number of nucleotides deleted
-        @param insert_str: sequence of nucleotides inserted
+        @param insert_str: sequence of nucleotides inserted, if *, then it is wildcard
         @param targets: which targets this event is associated with
         """
         return tuple.__new__(cls, (start_pos, del_len, insert_str, min_target, max_target))
 
     def __getnewargs__(self):
         return (self.start_pos, self.del_len, self.insert_str, self.min_target, self.max_target)
+
+    @property
+    def is_wildcard(self):
+        return insert_str == "*"
 
     @property
     def start_pos(self):
@@ -57,86 +61,17 @@ class Event(tuple):
     def start_end(self):
         return (self.min_target, self.max_target)
 
-class EventWildcard(tuple):
-    def __new__(
-        cls,
-        start_pos: int,
-        del_len: int,
-        min_target: int,
-        max_target: int):
-        """
-        @param start_pos: position where event begins
-        @param del_len: number of nucleotides deleted
-        """
-        return tuple.__new__(cls, (start_pos, del_len, min_target, max_target))
-
-    def __getnewargs__(self):
-        return (self.start_pos, self.del_len, self.min_target, self.max_target)
-
     @property
-    def start_pos(self):
-        return self[0]
-
-    @property
-    def del_len(self):
-        return self[1]
-
-    @property
-    def del_end(self):
-        return self.start_pos + self.del_len - 1
-
-    @property
-    def min_target(self):
-        return self[-2]
-
-    @property
-    def max_target(self):
-        return self[-1]
-
-    @property
-    def start_end(self):
-        return (self.min_target, self.max_target)
-
-    def is_compatible(self, evt: Event):
-        if evt.start_pos == self.start_pos:
-            if evt.max_target < self.max_target:
+    def generalized_equals(self, child_evt: Event):
+        if (self.start_pos == child_evt.start_pos and
+                self.del_len == child_evt.del_end and
+                self.min_target == child_evt.min_target and
+                self.max_target == child_evt.max_target):
+            if self.is_wildcard or child_evt.is_wildcard:
                 return True
-            elif evt.del_end == self.del_end:
-                return True
-        elif evt.del_end == self.del_end:
-            if evt.min_target < self.min_target:
-                return True
+            else:
+                return self.insert_str == child_evt.insert_str
         return False
-
-class UnresolvedEvents:
-    def __init__(self, event: Event = None, wildcard: EventWildcard = None):
-        self.event = event if event else None
-        self.wildcard = wildcard if wildcard else None
-        self._val = event if event else wildcard
-        assert(not(self.event and self.wildcard))
-
-    def __str__(self):
-        return str(self._val)
-
-    @property
-    def start_pos(self):
-        return self._val.start_pos
-
-    @property
-    def del_end(self):
-        return self._val.del_end
-
-    @property
-    def start_end(self):
-        return self._val.start_end
-
-    @property
-    def min_target(self):
-        return self._val.min_target
-
-    @property
-    def max_target(self):
-        return self._val.max_target
 
 class BarcodeEvents:
     """
@@ -150,7 +85,7 @@ class BarcodeEvents:
     INACTIVE = 1
     UNRESOLVED = 2
 
-    def __init__(self, events: List[UnresolvedEvents]):
+    def __init__(self, events: List[Event]):
         """
         @param events: tuples of tuples of events
                     a tuple of events means either event may have happened
