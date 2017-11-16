@@ -80,22 +80,17 @@ class BarcodeEvents:
     Use this representation for cleaned barcode representation where each target
     can be associated with at most a single event.
     """
-    ACTIVE = 0
-    INACTIVE = 1
-    UNRESOLVED = 2
-
-    def __init__(self, events: List[Event] = []):
+    def __init__(self, events: List[Event] = [], num_targets=10):
         """
         @param events: tuples of tuples of events
                     a tuple of events means either event may have happened
         """
-        # TODO: check that events are given in order!
         self.events = events
         start_ends = [[evt.start_pos, evt.del_end] for evt in events]
         start_ends = [i for tup in start_ends for i in tup]
         for i in range(len(start_ends) - 1):
             assert(start_ends[i] <= start_ends[i + 1])
-        self.num_targets = 10 #len(target_evts)
+        self.num_targets = num_targets
 
     def __str__(self):
         if self.events:

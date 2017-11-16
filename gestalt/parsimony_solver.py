@@ -4,41 +4,48 @@ import numpy as np
 from cell_lineage_tree import CellLineageTree
 from barcode_events import Event, BarcodeEvents
 
-class MaxEventSolver:
+class AncestralEventsFinder:
     """
     Our in-built "parsimony" engine
     """
     def __init__(self, cut_sites: List[int]):
         self.cut_sites = cut_sites
 
-    def annotate_parsimony_states(self, tree: CellLineageTree):
+    def annotate_ancestral_events(self, tree: CellLineageTree):
         """
         get the most parsimonious states for each node given the topology
         """
         print(tree.get_ascii(attributes=["barcode_events"], show_internal=True))
         for node in tree.traverse("postorder"):
             if node.is_leaf():
-                node.add_feature("parsimony_barcode_events", node.barcode_events)
+                node.add_feature("reference_ancestral_events", node.barcode_events)
                 node.add_feature("fun", [str(i) for i in node.barcode_events.events])
             elif node.is_root():
                 print(node.get_ascii(attributes=["fun"], show_internal=True))
                 # do something
                 1/0
             else:
-                pars_bcode_evts = self.get_parsimony_barcode(
-                    [c.parsimony_barcode_events for c in node.get_children()]
+                pars_bcode_evts = self.get_possible_parent_events(
+                    [c.reference_ancestral_events for c in node.get_children()]
                 )
-                node.add_feature("parsimony_barcode_events", pars_bcode_evts)
+                node.add_feature("reference_ancestral_events", pars_bcode_evts)
                 node.add_feature("fun", [str(i) for i in pars_bcode_evts.events])
 
 
-    def get_parsimony_barcode(self, child_bcodes: List[BarcodeEvents]):
+    def get_possible_parent_events(self, child_bcodes: List[BarcodeEvents]):
+        # TODO: is there a python reduce function?
         intersect_bcode = child_bcodes[0]
         for c in child_bcodes[1:]:
-            intersect_bcode = self._get_parsimony_barcode(intersect_bcode, c)
+            intersect_bcode = self._get_possible_parent_events(intersect_bcode, c)
         return intersect_bcode
 
-    def _get_parsimony_barcode(self, parent_bcode: BarcodeEvents, child_bcode: BarcodeEvents):
+    def _get_possible_parent_events(self, parent_bcode: BarcodeEvents, child_bcode: BarcodeEvents):
+        """
+        @param parent_bcode: barcode to treat as parent
+        @param child_bcode: barcode to treat as child
+        @return BarcodeEvents with the union of all possible events that could be
+                in the parent barcode
+        """
         if len(child_bcode.events) == 0:
             return BarcodeEvents()
 
@@ -91,6 +98,9 @@ class MaxEventSolver:
 
 
     def _make_new_parent(self, evt1: Event, evt2: Event):
+        """
+        Intersect the two events to create a new parent event
+        """
         event1_first = evt1.del_end < evt2.del_end
 
         start_pos = max(evt1.start_pos, evt2.start_pos)
@@ -100,11 +110,15 @@ class MaxEventSolver:
 
         min_target = max(evt1.min_target, evt2.min_target)
         if evt1.min_target == evt2.min_target and not start_same:
+            # min target is the same but their cuts are different
+            # Therefore min target must have been unedited originally
             start_pos = self.cut_sites[evt1.min_target] + 1
             min_target += 1
 
         max_target = min(evt1.max_target, evt2.max_target)
         if evt1.max_target == evt2.max_target and not end_same:
+            # max target is the same but cuts are different
+            # Therefore max target must have been unedited originally
             del_end = self.cut_sites[evt1.max_target] - 1
             max_target -= 1
 
@@ -114,7 +128,7 @@ class MaxEventSolver:
                 return None
             # we need to chop off one of the edges. we're going to do it at random
             # TODO: maybe there is a better way in the future. but we really dont want
-            # to deal with too many possibilities in the parsimony tree.
+            # to deal with too many possibilities in the tree.
             # it's probably fine since this is really unlikely.
             coin_flip = np.random.binomial(1, p=.5)
             if coin_flip == 0:
