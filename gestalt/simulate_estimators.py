@@ -16,6 +16,7 @@ from barcode_simulator import BarcodeSimulator
 from clt_observer import CLTObserver
 from clt_estimator import CLTParsimonyEstimator
 from clt_likelihood_estimator import *
+from ancestral_events_finder import AncestralEventsFinder
 from collapsed_tree import CollapsedTree
 from alignment import AlignerNW
 
@@ -64,7 +65,7 @@ def main():
     parser.add_argument(
         '--death-lambda', type=float, default=0.01, help='death rate')
     parser.add_argument(
-        '--time', type=float, default=4, help='how much time to simulate')
+        '--time', type=float, default=2, help='how much time to simulate')
     parser.add_argument(
         '--sampling-rate',
         type=float,
@@ -140,7 +141,8 @@ def main():
 
         # trying out with true tree!!!
         model_params = CLTLikelihoodModel(pruned_clt, 10)
-        lasso_est = CLTLassoEstimator(0, model_params)
+        anc_evts_finder = AncestralEventsFinder(pruned_clt.barcode.abs_cut_sites)
+        lasso_est = CLTLassoEstimator(0, model_params, anc_evts_finder)
         lasso_est.get_likelihood(model_params)
 
 

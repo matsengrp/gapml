@@ -5,7 +5,7 @@ from numpy import ndarray
 
 from clt_estimator import CLTEstimator
 from clt_likelihood_model import CLTLikelihoodModel
-from parsimony_solver import ParsimonySolver
+from ancestral_events_finder import AncestralEventsFinder
 
 
 class CLTCalculations:
@@ -26,7 +26,8 @@ class CLTLassoEstimator(CLTEstimator):
     def __init__(
         self,
         penalty_param: float,
-        model_params: CLTLikelihoodModel):
+        model_params: CLTLikelihoodModel,
+        anc_evt_finder: AncestralEventsFinder):
         """
         @param penalty_param: lasso penalty parameter
         @param model_params: initial CLT model params
@@ -34,13 +35,13 @@ class CLTLassoEstimator(CLTEstimator):
         self.penalty_param = penalty_param
         self.model_params = model_params
         self.num_targets = model_params.num_targets
+        self.anc_evt_finder = anc_evt_finder
 
     def get_likelihood(self, model_params: CLTLikelihoodModel, get_grad: bool = False):
         """
         @return The likelihood for proposed theta, the gradient too if requested
         """
-        ParsimonySolver.annotate_parsimony_states(model_params.topology)
-        print(model_params.topology.get_ascii(attributes=["parsimony_barcode_events"], show_internal=True))
+        self.anc_evt_finder.annotate_ancestral_events(model_params.topology)
         self._get_bcode_likelihood(model_params)
         raise NotImplementedError()
 

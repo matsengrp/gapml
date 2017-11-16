@@ -170,14 +170,14 @@ class Barcode:
                 target_evts[t] = evt_i
 
             events.append(Event(
-                start_pos = evt[0],
-                del_len = evt[1] - evt[0],
-                insert_str = evt[2],
-                targets = matching_targets,
+                evt[0],
+                evt[1] - evt[0] + 1,
+                min_target=min(matching_targets),
+                max_target=max(matching_targets),
+                insert_str=evt[2],
             ))
 
-        # TODO: add organ in here
-        return BarcodeEvents(target_evts, events, None)
+        return BarcodeEvents(events)
 
     def process_events(self, events: List[Tuple[int, int, str]]):
         """
