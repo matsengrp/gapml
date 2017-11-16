@@ -6,16 +6,17 @@ from barcode_events import Event, BarcodeEvents
 
 class AncestralEventsFinder:
     """
-    Our in-built "parsimony" engine
+    Our in-built engine for finding the union of all possible
+    events in the internal nodes.
     """
     def __init__(self, cut_sites: List[int]):
         self.cut_sites = cut_sites
 
     def annotate_ancestral_events(self, tree: CellLineageTree):
         """
-        get the most parsimonious states for each node given the topology
+        Find all possible events in the internal nodes.
+        (Finds a set of events of which parsimony is a subset, I think)
         """
-        print(tree.get_ascii(attributes=["barcode_events"], show_internal=True))
         for node in tree.traverse("postorder"):
             if node.is_leaf():
                 node.add_feature("reference_ancestral_events", node.barcode_events)
