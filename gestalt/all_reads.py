@@ -17,7 +17,7 @@ class CellReads:
         uniq_barcodes = []
         uniq_strs = set()
         for bcode in self.all_barcodes:
-            barcode_id = bcode.get_str_id()
+            barcode_id = str(bcode)
             if barcode_id in uniq_strs:
                 continue
             else:
@@ -31,8 +31,8 @@ class CellReads:
         """
         evt_weight_dict = dict()
         for barcode_evts in self.all_barcodes:
-            for evt in barcode_evts.get_uniq_events():
-                evt_id = evt.get_str_id()
+            for evt in barcode_evts.events:
+                evt_id = str(evt)
                 if evt_id not in evt_weight_dict:
                     evt_weight_dict[evt_id] = 1
                 else:
