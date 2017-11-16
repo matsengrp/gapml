@@ -89,7 +89,7 @@ class AncestralEventsTestCase(unittest.TestCase):
         pars_bcode = self.solver.get_possible_parent_events([b0, b1])
         self.assertEqual(
             [str(i) for i in pars_bcode.events],
-            [str(Event(start_pos=2, del_len=4, min_target=1, max_target=1, insert_str="*"))])
+            [str(Event(start_pos=2, del_len=5, min_target=1, max_target=1, insert_str="*"))])
 
         b3 = BarcodeEvents([e3, e4])
         b4 = BarcodeEvents([e5])
@@ -97,8 +97,8 @@ class AncestralEventsTestCase(unittest.TestCase):
         self.assertEqual(
             [str(i) for i in pars_bcode.events],
             [
-                str(Event(start_pos=10, del_len=6, min_target=2, max_target=2, insert_str="*")),
-                str(Event(start_pos=19, del_len=1, min_target=3, max_target=3, insert_str="*"))
+                str(Event(start_pos=10, del_len=7, min_target=2, max_target=2, insert_str="*")),
+                str(Event(start_pos=19, del_len=2, min_target=3, max_target=3, insert_str="*"))
             ])
 
         b6 = BarcodeEvents([e6])
