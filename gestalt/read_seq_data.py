@@ -4,7 +4,7 @@ from typing import List
 
 from barcode_events import Event
 from barcode_events import BarcodeEvents
-from all_reads import CellReads
+from all_reads import CellReads, CellRead
 from cell_state import CellTypeTree
 from constants import BARCODE_V7
 from constants import BARCODE_V7_LEN
@@ -120,7 +120,10 @@ def parse_reads_file_format7B(file_name,
                 if max_read is not None and len(all_barcodes) == max_read:
                     break
 
-    return CellReads(all_barcodes)
+    organ_dict = {}
+    for organ_str, cell_type in organ_cell_types.items():
+        organ_dict[cell_type.cell_type] = organ_str
+    return CellReads(all_barcodes, organ_dict)
 
 def process_barcode_newformat(target_str_list: List[str], cell_type_tree: CellTypeTree):
     """
@@ -140,12 +143,11 @@ def process_barcode_newformat(target_str_list: List[str], cell_type_tree: CellTy
             else:
                 min_targ, max_targ = evt_target_dict[evt_str]
                 evt_target_dict[evt_str] = (min(min_targ, targ_idx), max(max_targ, targ_idx))
-    print(evt_target_dict)
     events = [
         process_event_format7B(event_str, min_targ, max_targ) for event_str, (min_targ, max_targ) in evt_target_dict.items() if event_str not in NO_EVENT_STRS
     ]
 
-    return BarcodeEvents(events)
+    return CellRead(BarcodeEvents(events), cell_type_tree)
 
 def parse_reads_file_newformat(file_name,
                             organ_data_idx=1,
@@ -184,7 +186,10 @@ def parse_reads_file_newformat(file_name,
                 if max_read is not None and len(all_barcodes) == max_read:
                     break
 
-    return CellReads(all_barcodes)
+    organ_dict = {}
+    for organ_str, cell_type in organ_cell_types.items():
+        organ_dict[cell_type.cell_type] = organ_str
+    return CellReads(all_barcodes, organ_dict)
 
 def main():
     args = parse_args()

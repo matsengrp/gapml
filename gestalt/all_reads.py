@@ -1,16 +1,27 @@
-from typing import List
+from typing import List, Dict
 
+from cell_state import CellTypeTree
 from barcode_events import BarcodeEvents
 
+class CellRead:
+    def  __init__(self, barcode: BarcodeEvents, organ: CellTypeTree):
+        # TODO: make organ an int?
+        self.barcode = barcode
+        self.organ = organ
+
+    @property
+    def events(self):
+        return self.barcode.events
 
 class CellReads:
-    def __init__(self, all_barcodes: List[BarcodeEvents]):
+    def __init__(self, all_barcodes: List[BarcodeEvents], organ_dict: Dict[CellTypeTree, str]):
         """
         @param all_barcodes: all the barcodes in the cell reads data
         """
         self.all_barcodes = all_barcodes
+        self.organ_dict = organ_dict
         self.event_abundance = self._get_event_abundance()
-        self.event_str_ids = self.event_abundance.keys()
+        self.uniq_events = set([evt for barcode_evts in self.all_barcodes for evt in barcode_evts.events])
         self.uniq_barcodes = self._get_uniq_barcodes()
 
     def _get_uniq_barcodes(self):

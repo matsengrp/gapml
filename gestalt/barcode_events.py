@@ -58,6 +58,10 @@ class Event(tuple):
         return self[4]
 
     @property
+    def insert_len(self):
+        return len(self[4])
+
+    @property
     def start_end(self):
         return (self.min_target, self.max_target)
 
@@ -88,7 +92,6 @@ class BarcodeEvents:
         self.events = sorted(events, key=lambda evt: evt.start_pos)
         start_ends = [[evt.start_pos, evt.del_end] for evt in self.events]
         start_ends = [i for tup in start_ends for i in tup]
-        print(start_ends)
         for i in range(len(start_ends) - 1):
             assert(start_ends[i] <= start_ends[i + 1])
         self.num_targets = num_targets
