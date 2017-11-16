@@ -96,6 +96,12 @@ class BarcodeEvents:
             assert(start_ends[i] <= start_ends[i + 1])
         self.num_targets = num_targets
 
+    def get_used_targets(self):
+        disturbed_targets = set()
+        for evt in self.events:
+            disturbed_targets.update(list(range(evt.min_target, evt.max_target + 1)))
+        return disturbed_targets
+
     def __str__(self):
         if self.events:
             return "..".join([str(evts) for evts in self.events])
