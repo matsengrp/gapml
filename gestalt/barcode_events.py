@@ -43,7 +43,7 @@ class Event(tuple):
 
     @property
     def del_end(self):
-        return self.start_pos + self.del_len - 1
+        return self.start_pos + self.del_len
 
     @property
     def min_target(self):
@@ -56,6 +56,10 @@ class Event(tuple):
     @property
     def insert_str(self):
         return self[4]
+
+    @property
+    def insert_len(self):
+        return len(self[4])
 
     @property
     def start_end(self):
@@ -85,12 +89,18 @@ class BarcodeEvents:
         @param events: tuples of tuples of events
                     a tuple of events means either event may have happened
         """
-        self.events = events
-        start_ends = [[evt.start_pos, evt.del_end] for evt in events]
+        self.events = sorted(events, key=lambda evt: evt.start_pos)
+        start_ends = [[evt.start_pos, evt.del_end] for evt in self.events]
         start_ends = [i for tup in start_ends for i in tup]
         for i in range(len(start_ends) - 1):
             assert(start_ends[i] <= start_ends[i + 1])
         self.num_targets = num_targets
+
+    def get_used_targets(self):
+        disturbed_targets = set()
+        for evt in self.events:
+            disturbed_targets.update(list(range(evt.min_target, evt.max_target + 1)))
+        return disturbed_targets
 
     def __str__(self):
         if self.events:
