@@ -87,7 +87,7 @@ def parse_reads_file_format7B(file_name,
             if organ_str not in CONTROL_ORGANS:
                 # First process the organ
                 if organ_str not in organ_cell_types:
-                    cell_type_tree = CellTypeTree(num_organs, rate=None, probability=None)
+                    cell_type_tree = CellTypeTree(num_organs, rate=None)
                     organ_cell_types[organ_str] = cell_type_tree
                     num_organs += 1
                 cell_type_tree = organ_cell_types[organ_str]
@@ -147,7 +147,7 @@ def parse_reads_file_newformat(file_name,
 
     organ_dict = {}
     for organ_str, cell_type in organ_cell_types.items():
-        organ_dict[cell_type.cell_type] = organ_str
+        organ_dict[cell_type.get_gen_name()] = organ_str
     return CellReads(all_barcodes, organ_dict)
 
 def main():

@@ -10,9 +10,11 @@ import argparse
 import matplotlib
 matplotlib.use('agg')
 
-from cell_state import CellTypeTree
+from cell_state import CellState, CellTypeTree
+from cell_state_simulator import CellTypeSimulator
 from clt_simulator import CLTSimulator
 from barcode_simulator import BarcodeSimulator
+from barcode import Barcode
 from clt_observer import CLTObserver
 from clt_estimator import CLTParsimonyEstimator
 from clt_likelihood_estimator import *
@@ -81,11 +83,11 @@ def main():
 
     # Create a cell-type tree
     cell_types = ["brain", "eye"]
-    cell_type_tree = CellTypeTree(cell_type=None, rate=0.1, probability=1.0)
+    cell_type_tree = CellTypeTree(cell_type=None, rate=0)
     cell_type_tree.add_child(
-        CellTypeTree(cell_type=0, rate=0, probability=0.5))
+        CellTypeTree(cell_type=0, rate=0.05))
     cell_type_tree.add_child(
-        CellTypeTree(cell_type=1, rate=0, probability=0.5))
+        CellTypeTree(cell_type=1, rate=0.05))
 
     # Instantiate all the simulators
     bcode_simulator = BarcodeSimulator(
@@ -93,13 +95,20 @@ def main():
         np.array(args.repair_lambdas), args.repair_indel_probability,
         args.repair_deletion_lambda, args.repair_deletion_lambda,
         args.repair_insertion_lambda)
-    clt_simulator = CLTSimulator(args.birth_lambda, args.death_lambda,
-                                 cell_type_tree, bcode_simulator)
+    cell_type_simulator = CellTypeSimulator(cell_type_tree)
+    clt_simulator = CLTSimulator(
+            args.birth_lambda,
+            args.death_lambda,
+            cell_type_simulator,
+            bcode_simulator)
 
     # Simulate the trees
     forest = []
     for t in range(args.n_trees):
-        clt = clt_simulator.simulate(args.time)
+        clt = clt_simulator.simulate(
+                Barcode(),
+                CellState(categorical=cell_type_tree),
+                args.time)
         forest.append(clt)
 
     #savefig(forest, args.outbase)
