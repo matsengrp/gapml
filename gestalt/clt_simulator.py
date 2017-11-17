@@ -4,6 +4,7 @@ import numpy as np
 
 from cell_lineage_tree import CellLineageTree
 from cell_state import CellTypeTree, CellState
+from cell_state_simulator import CellStateSimulator
 from barcode import Barcode
 from barcode_events import BarcodeEvents
 from barcode_simulator import BarcodeSimulator
@@ -20,7 +21,7 @@ class CLTSimulator:
     def __init__(self,
         birth_rate: float,
         death_rate: float,
-        cell_type_tree: CellTypeTree,
+        cell_state_simulator: CellStateSimulator,
         bcode_simulator: BarcodeSimulator):
         """
         @param birth_rate: the CTMC rate param for cell division
@@ -30,20 +31,18 @@ class CLTSimulator:
         """
         self.birth_scale = 1.0 / birth_rate
         self.death_scale = 1.0 / death_rate
-        self.cell_type_tree = cell_type_tree
+        self.cell_state_simulator = cell_state_simulator
         self.bcode_simulator = bcode_simulator
 
-    def simulate(self, time: float):
+    def simulate(self, root_barcode: Barcode, root_cell_state: CellState, time: float):
         """
         Generates a CLT based on the model
 
         @param time: amount of time to simulate the CLT
         """
-        root_barcode = Barcode()
-        cell_state = CellState(categorical=self.cell_type_tree)
         tree = CellLineageTree(
             barcode=root_barcode,
-            cell_state=cell_state,
+            cell_state=root_cell_state,
             dist=0)
 
         self._simulate_tree(tree, time)
@@ -56,20 +55,17 @@ class CLTSimulator:
 
         return tree
 
-    def _run_race(self, cell_state):
+    def _run_race(self):
         """
         Run the race to determine branch length and event at end of branch
         Does not take into account the maximum observation time!
-        @return race_winner: 0 means birth, 1 means death, 2 means speciate
+        @return race_winner: 0 means birth, 1 means death
                 branch_length: time til the next event
         """
         t_birth = expon.rvs(scale=self.birth_scale)
         t_death = expon.rvs(scale=self.death_scale)
-        speciate_scale = cell_state.categorical_state.scale
-        t_speciate = expon.rvs(
-            scale=speciate_scale) if speciate_scale is not None else np.inf
-        race_winner = np.argmin([t_birth, t_death, t_speciate])
-        branch_length = np.min([t_birth, t_death, t_speciate])
+        race_winner = np.argmin([t_birth, t_death])
+        branch_length = np.min([t_birth, t_death])
         return race_winner, branch_length
 
 
@@ -84,9 +80,13 @@ class CLTSimulator:
             return
 
         # Determine branch length and event at end of branch
-        race_winner, branch_length = self._run_race(tree.cell_state)
+        race_winner, branch_length = self._run_race()
         obs_branch_length = min(branch_length, time)
         remain_time = time - obs_branch_length
+
+        branch_end_cell_state = self.cell_state_simulator.simulate(
+            tree.cell_state,
+            time=obs_branch_length)
 
         branch_end_barcode = self.bcode_simulator.simulate(
             tree.barcode,
@@ -100,39 +100,36 @@ class CLTSimulator:
             self._process_observe_end(
                 tree,
                 obs_branch_length,
+                branch_end_cell_state,
                 branch_end_barcode)
         elif race_winner == 0:
             # Cell division
             self._process_cell_birth(
                 tree,
                 obs_branch_length,
+                branch_end_cell_state,
                 branch_end_barcode,
                 remain_time)
-        elif race_winner == 1:
+        else:
             # Cell died
             self._process_cell_death(
                 tree,
                 obs_branch_length,
+                branch_end_cell_state,
                 branch_end_barcode)
-        else:
-            # Cell-type differentiation
-            self._process_speciate(
-                tree,
-                obs_branch_length,
-                branch_end_barcode,
-                remain_time)
 
     def _process_observe_end(
         self,
         tree: CellLineageTree,
         branch_length: float,
+        branch_end_cell_state: CellState,
         branch_end_barcode: Barcode):
         """
         Observation time is up. Stop observing cell.
         """
         child1 = CellLineageTree(
             barcode=branch_end_barcode,
-            cell_state=tree.cell_state,
+            cell_state=branch_end_cell_state,
             dist=branch_length)
         tree.add_child(child1)
 
@@ -140,6 +137,7 @@ class CLTSimulator:
         self,
         tree: CellLineageTree,
         branch_length: float,
+        branch_end_cell_state: CellState,
         branch_end_barcode: Barcode,
         remain_time: float):
         """
@@ -149,12 +147,12 @@ class CLTSimulator:
         """
         child1 = CellLineageTree(
             barcode=branch_end_barcode,
-            cell_state=tree.cell_state,
+            cell_state=branch_end_cell_state,
             dist=branch_length)
         branch_end_barcode2 = copy.deepcopy(branch_end_barcode)
         child2 = CellLineageTree(
             barcode=branch_end_barcode2,
-            cell_state=tree.cell_state,
+            cell_state=branch_end_cell_state,
             dist=branch_length)
         tree.add_child(child1)
         tree.add_child(child2)
@@ -165,51 +163,14 @@ class CLTSimulator:
         self,
         tree: CellLineageTree,
         branch_length: float,
+        branch_end_cell_state: CellState,
         branch_end_barcode: Barcode):
         """
         Cell has died. Add a dead child cell to `tree`.
         """
         child1 = CellLineageTree(
             barcode=branch_end_barcode,
-            cell_state=tree.cell_state,
+            cell_state=branch_end_cell_state,
             dist=branch_length,
             dead=True)
         tree.add_child(child1)
-
-    def _process_speciate(
-        self,
-        tree: CellLineageTree,
-        branch_length: float,
-        branch_end_barcode: Barcode,
-        remain_time: float):
-        """
-        Cell differentiates
-        Two children cells with same barcode, descendant cell types
-            from cell type tree. Pick descendant cell type at random.
-        """
-        # Decide children cell types
-        child_cell_types = tree.cell_state.categorical_state.children
-        child_type_probs = [c.probability for c in child_cell_types]
-        cell_type1, cell_type2 = np.random.choice(
-            a=len(child_type_probs),
-            size=len(child_cell_types),
-            p=child_type_probs)
-
-        # Create child 1
-        child1 = CellLineageTree(
-            barcode=branch_end_barcode,
-            cell_state=CellState(categorical=child_cell_types[cell_type1]),
-            dist=branch_length)
-        tree.add_child(child1)
-
-        # Create child 2 - make sure its barcode is a new object
-        branch_end_barcode2 = copy.deepcopy(branch_end_barcode)
-        child2 = CellLineageTree(
-            barcode=branch_end_barcode2,
-            cell_state=CellState(categorical=child_cell_types[cell_type2]),
-            dist=branch_length)
-        tree.add_child(child2)
-
-        # Recurse
-        self._simulate_tree(child1, remain_time)
-        self._simulate_tree(child2, remain_time)

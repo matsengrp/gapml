@@ -13,22 +13,23 @@ class CellTypeTree(TreeNode):
 
     def __init__(self,
                  cell_type: int = None,
-                 rate: float = 0,
-                 probability: float = 1.0):
+                 rate: float = 0):
         """
         @param cell_type: the cell type of this node is the union of labeled cell types of the
                             descendant nodes (including this node)
-        @param rate: the cell-type differentiation rate
-        @param probability: the probability of going from parent to this node
+        @param rate: the cell-type differentiation rate to this cell type from its parent
         """
         super().__init__()
         self.add_feature("cell_type", cell_type)
-        if cell_type is not None:
-            self.name = str(cell_type)
         self.add_feature("rate", rate)
         if self.rate is not None:
             self.add_feature("scale", 1.0 / rate if rate > 0 else None)
-        self.add_feature("probability", probability)
+
+    def get_gen_name(self):
+        if self.cell_type is not None:
+            return str(self.cell_type)
+        else:
+            return ",".join([leaf.get_gen_name() for leaf in self])
 
 
 class CellState:
@@ -46,6 +47,6 @@ class CellState:
 
     def __str__(self):
         if self.cts_state is None:
-            return ",".join([leaf.name for leaf in self.categorical_state])
+            return self.categorical_state.get_gen_name()
         else:
             return str(cts)
