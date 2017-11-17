@@ -31,7 +31,7 @@ class CLTObserver:
         self.sampling_rate = sampling_rate
         self.error_rate = error_rate
 
-    def observe_leaves(self, cell_lineage_tree: CellLineageTree):
+    def observe_leaves(self, cell_lineage_tree: CellLineageTree, give_pruned_clt: bool = True):
         """
         Samples leaves from the cell lineage tree, of those that are not dead
 
@@ -60,5 +60,8 @@ class CLTObserver:
                             abundance=1,
                         )
 
-        clt.prune(observed_leaves)
-        return list(observations.values()), clt
+        if give_pruned_clt:
+            clt.prune(observed_leaves)
+            return list(observations.values()), clt
+        else:
+            return list(observations.values())

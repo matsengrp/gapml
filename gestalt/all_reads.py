@@ -14,20 +14,20 @@ class CellRead:
         return self.barcode.events
 
 class CellReads:
-    def __init__(self, all_barcodes: List[BarcodeEvents], organ_dict: Dict[CellTypeTree, str]):
+    def __init__(self, reads: List[CellRead], organ_dict: Dict[str, str]):
         """
-        @param all_barcodes: all the barcodes in the cell reads data
+        @param organ_dict: provides a way to map between an organ id and organ name
         """
-        self.all_barcodes = all_barcodes
+        self.reads = reads
         self.organ_dict = organ_dict
         self.event_abundance = self._get_event_abundance()
-        self.uniq_events = set([evt for barcode_evts in self.all_barcodes for evt in barcode_evts.events])
+        self.uniq_events = set([evt for barcode_evts in self.reads for evt in barcode_evts.events])
         self.uniq_barcodes = self._get_uniq_barcodes()
 
     def _get_uniq_barcodes(self):
         uniq_barcodes = []
         uniq_strs = set()
-        for bcode in self.all_barcodes:
+        for bcode in self.reads:
             barcode_id = str(bcode)
             if barcode_id in uniq_strs:
                 continue
@@ -41,7 +41,7 @@ class CellReads:
         @return dictionary mapping event id to number of times the event was seen
         """
         evt_weight_dict = dict()
-        for barcode_evts in self.all_barcodes:
+        for barcode_evts in self.reads:
             for evt in barcode_evts.events:
                 evt_id = str(evt)
                 if evt_id not in evt_weight_dict:

@@ -171,7 +171,7 @@ class Barcode:
 
             events.append(Event(
                 evt[0],
-                evt[1] - evt[0] + 1,
+                evt[1] - evt[0],
                 min_target=min(matching_targets),
                 max_target=max(matching_targets),
                 insert_str=evt[2],
