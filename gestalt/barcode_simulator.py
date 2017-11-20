@@ -1,7 +1,7 @@
 from numpy import ndarray
 import numpy as np
-from scipy.stats import expon, poisson, binom
-from numpy.random import choice
+from scipy.stats import expon, poisson
+from numpy.random import choice, random
 
 from barcode import Barcode
 
@@ -106,7 +106,7 @@ class BarcodeSimulator:
 
             # Do repair if one of the two bool flags is true:
             ## (1) If barcode is still broken but we ran out of time, make sure we fix the barcode.
-            ## (2) the repair process won the race so we just repair the barcode.        
+            ## (2) the repair process won the race so we just repair the barcode.
             if (time_remain == 0 and len(barcode.needs_repair) > 0) or race_winner == -1:
                 self._do_repair(barcode)
         return barcode
@@ -124,14 +124,15 @@ class BarcodeSimulator:
 
         # Serves for a zero-inflated poisson for deletion/insertion process
         # Draw a separate RVs for each deletion/insertion process
-        indel_action = binom.rvs(n=1, p=self.indel_probability, size=3)
+        do_insertion = random() < self.indel_probability
+        do_deletion  = random() < self.indel_probability
 
-        left_del_len = poisson.rvs(
-            self.left_del_lambda) if indel_action[0] else 0
-        right_del_len = poisson.rvs(
-            self.right_del_lambda) if indel_action[1] else 0
         insertion_length = poisson.rvs(
-            self.insertion_lambda) if indel_action[2] else 0
+            self.insertion_lambda) if do_insertion else 0
+        left_del_len = poisson.rvs(
+            self.left_del_lambda) if do_deletion else 0
+        right_del_len = poisson.rvs(
+            self.right_del_lambda) if do_deletion else 0
 
         # TODO: make this more realistic. right now just random DNA inserted
         insertion = ''.join(choice(list('acgt'), insertion_length))
