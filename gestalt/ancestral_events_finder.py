@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple
 import numpy as np
 
 from cell_lineage_tree import CellLineageTree
@@ -9,8 +9,10 @@ class AncestralEventsFinder:
     Our in-built engine for finding the union of all possible
     events in the internal nodes.
     """
-    def __init__(self, cut_sites: List[int]):
-        self.cut_sites = cut_sites
+    def __init__(self, orig_length: int, active_positions: List[Tuple[int, int]]):
+        self.orig_length = orig_length
+        self.active_pos = active_positions
+        self.n_targets = len(active_positions)
 
     def annotate_ancestral_events(self, tree: CellLineageTree):
         """
@@ -23,6 +25,7 @@ class AncestralEventsFinder:
                 node.add_feature("fun", [str(i) for i in node.barcode_events.events])
             elif node.is_root():
                 print(node.get_ascii(attributes=["fun"], show_internal=True))
+                #print(node.get_ascii(attributes=["cell_state"], show_internal=True))
                 # do something
                 1/0
             else:
@@ -90,54 +93,32 @@ class AncestralEventsFinder:
         """
         @returns whether nestee_evt is completely nested inside nester_evt
         """
-        return (nester_evt.start_pos <= nestee_evt.start_pos
-            and nestee_evt.del_end <= nester_evt.del_end
-            and (
-                nester_evt.min_target < nestee_evt.min_target
-                or nestee_evt.max_target < nester_evt.max_target
-        ))
-
+        if (nester_evt.start_pos <= nestee_evt.start_pos
+                and nestee_evt.del_end <= nester_evt.del_end):
+            if nester_evt.is_wildcard:
+                return (nester_evt.min_target <= nestee_evt.min_target
+                        and nestee_evt.max_target <= nester_evt.max_target)
+            else:
+                return (nester_evt.min_target < nestee_evt.min_target
+                    and nestee_evt.max_target < nester_evt.max_target)
+        else:
+            return False
 
     def _make_new_parent(self, evt1: Event, evt2: Event):
         """
         Intersect the two events to create a new parent event
         """
-        event1_first = evt1.del_end < evt2.del_end
-
-        start_pos = max(evt1.start_pos, evt2.start_pos)
-        start_same = evt1.start_pos == evt2.start_pos
-        del_end = min(evt1.del_end, evt2.del_end)
-        end_same = evt1.del_end == evt2.del_end
-
         min_target = max(evt1.min_target, evt2.min_target)
-        if evt1.min_target == evt2.min_target and not start_same:
-            # min target is the same but their cuts are different
-            # Therefore min target must have been unedited originally
-            start_pos = self.cut_sites[evt1.min_target] + 1
-            min_target += 1
-
         max_target = min(evt1.max_target, evt2.max_target)
-        if evt1.max_target == evt2.max_target and not end_same:
-            # max target is the same but cuts are different
-            # Therefore max target must have been unedited originally
-            del_end = self.cut_sites[evt1.max_target] - 1
+
+        if not (evt1.is_wildcard and evt2.is_wildcard):
+            min_target += 1
             max_target -= 1
 
-        if start_same and end_same:
-            # then the insert string must have been different
-            if min_target == max_target:
-                return None
-            # we need to chop off one of the edges. we're going to do it at random
-            # TODO: maybe there is a better way in the future. but we really dont want
-            # to deal with too many possibilities in the tree.
-            # it's probably fine since this is really unlikely.
-            coin_flip = np.random.binomial(1, p=.5)
-            if coin_flip == 0:
-                start_pos = self.cut_sites[min_target] + 1
-                min_target += 1
-            else:
-                del_end = self.cut_sites[max_target] - 1
-                max_target -= 1
+        # Start pos is the first position where we don't disturb min_target - 1
+        start_pos = self.active_pos[min_target - 1][1] if min_target > 0 else 0
+        # End pos is the first position where we don't disturb max_target + 1
+        del_end = self.active_pos[max_target + 1][0] if max_target < self.n_targets - 1 else self.barcode_length
 
         if min_target > max_target or del_end <= start_pos:
             return None

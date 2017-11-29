@@ -149,8 +149,11 @@ def main():
         #print(par_est_t)
 
         # trying out with true tree!!!
+        print(pruned_clt.get_ascii(attributes=["barcode_events"], show_internal=True))
         model_params = CLTLikelihoodModel(pruned_clt, 10)
-        anc_evts_finder = AncestralEventsFinder(pruned_clt.barcode.abs_cut_sites)
+        anc_evts_finder = AncestralEventsFinder(
+            pruned_clt.barcode.orig_length,
+            pruned_clt.barcode.target_active_positions)
         lasso_est = CLTLassoEstimator(0, model_params, anc_evts_finder)
         lasso_est.get_likelihood(model_params)
 
