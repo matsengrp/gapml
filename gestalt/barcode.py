@@ -124,11 +124,12 @@ class Barcode:
         # also get repaired.
         self.needs_repair = self.needs_repair.difference(set(range(target1, target2 + 1)))
 
-    def get_events(self, aligner: Aligner = None):
+    def get_events(self, aligner: Aligner = None, left_align: bool = False):
         '''
-        @param aligner object
-               must have events() method
-               None returns the observable events using the true barcode state
+        @param aligner: Aligner object
+                        must have events() method
+                        None returns the observable events using the true barcode state
+        @param left_align: left-align indels
         return the list of observable indel events in the barcode
         '''
         if aligner is None:
@@ -149,6 +150,10 @@ class Barcode:
             sequence = str(self).replace('-', '').upper()
             reference = ''.join(self.unedited_barcode).upper()
             events = aligner.events(sequence, reference)
+        if left_align:
+            raise NotImplementedError()
+            # for event in events:
+            #     barcode_copy =
         return events
 
     def get_event_encoding(self):
