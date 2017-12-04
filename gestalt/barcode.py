@@ -34,6 +34,7 @@ class Barcode:
         # The original barcode
         self.unedited_barcode = unedited_barcode
         self.orig_substr_lens = [len(s) for s in unedited_barcode]
+        self.orig_length = sum(self.orig_substr_lens)
         # an editable copy of the barcode (as a list for mutability)
         self.barcode = list(barcode)
         self.cut_sites = cut_sites
@@ -44,6 +45,20 @@ class Barcode:
         # absolute positions of cut locations
         self.abs_cut_sites = [
             sum(self.orig_substr_lens[:2 * (i + 1)]) - cut_sites[i] for i in range(self.n_targets)
+        ]
+        # Range of positions for each target
+        # regarding which positions must be unedited
+        # for this target to still be active.
+        self.target_active_lens = [
+            sum(self.orig_substr_lens[2 * (i + 1): 2 * (i + 1) + 2])
+            for i in range(self.n_targets)
+        ]
+        self.target_active_positions = [
+            (
+                max(0, c - active_len // 2),
+                min(c + active_len // 2, self.orig_length)
+            )
+            for c, active_len in zip(self.abs_cut_sites, self.target_active_lens)
         ]
         assert (self.n_targets == len(self.cut_sites))
 
