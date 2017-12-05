@@ -13,9 +13,9 @@ class BarcordSimulatorTestCase(unittest.TestCase):
             self.TARGET_LAM,
             self.REPAIR_RATES,
             indel_probability=1,
-            left_del_lambda=2,
-            right_del_lambda=2,
-            insertion_lambda=1)
+            left_del_mu=2,
+            right_del_mu=2,
+            insertion_mu=1)
 
     def test_race_process_only_cut_possible(self):
         # Nothing to repair, only one thing to cut
