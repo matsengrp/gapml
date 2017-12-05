@@ -57,8 +57,9 @@ class CLTSimulatorTestCase(unittest.TestCase):
             branch_end_barcode=new_barcode,
             remain_time=0.5)
         children = leaf.get_children()
-        self.assertEqual(len(children), 2)
+        self.assertEqual(len(children), 1)
         for c in children:
+            self.assertEqual(len(c.children), 2)
             self.assertEqual(c.dist, 1)
             self.assertEqual(c.dead, False)
             self.assertEqual(c.cell_state, leaf.cell_state)

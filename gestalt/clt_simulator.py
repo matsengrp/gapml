@@ -96,6 +96,7 @@ class CLTSimulator:
         assert(len(branch_end_barcode.needs_repair) == 0)
 
         if remain_time <= 0:
+            assert remain_time == 0
             # Time of event is past observation time
             self._process_observe_end(
                 tree,
@@ -145,19 +146,27 @@ class CLTSimulator:
 
         Make two cells with identical barcodes and cell states
         """
-        child1 = CellLineageTree(
+        child0 = CellLineageTree(
             barcode=branch_end_barcode,
             cell_state=branch_end_cell_state,
             dist=branch_length)
+        child1 = CellLineageTree(
+            barcode=branch_end_barcode,
+            cell_state=branch_end_cell_state,
+            dist=0)
         branch_end_barcode2 = copy.deepcopy(branch_end_barcode)
         child2 = CellLineageTree(
             barcode=branch_end_barcode2,
             cell_state=branch_end_cell_state,
-            dist=branch_length)
-        tree.add_child(child1)
-        tree.add_child(child2)
+            dist=0)
+        child0.add_child(child1)
+        child0.add_child(child2)
+        tree.add_child(child0)
         self._simulate_tree(child1, remain_time)
         self._simulate_tree(child2, remain_time)
+        child1.delete()
+        child2.delete()
+
 
     def _process_cell_death(
         self,

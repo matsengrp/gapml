@@ -61,7 +61,10 @@ class CLTObserver:
                         )
 
         if give_pruned_clt:
-            clt.prune(observed_leaves)
+            # NOTE: ete's prune function removes unifurcations,
+            #       so we prune from descendent of root to keep the root unifurcation
+            assert len(clt.children) == 1
+            clt.children[0].prune(observed_leaves)
             return list(observations.values()), clt
         else:
             return list(observations.values())
