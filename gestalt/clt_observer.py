@@ -44,12 +44,12 @@ class CLTObserver:
         """
         clt = cell_lineage_tree.copy()
         observations = {}
-        observed_leaves = []
+        observed_leaves = set()
         for leaf in cell_lineage_tree:
             if not leaf.dead:
                 is_sampled = np.random.binomial(1, self.sampling_rate)
                 if is_sampled:
-                    observed_leaves.append(leaf.name)
+                    observed_leaves.add(leaf.name)
                     cell_id = (str(leaf.barcode), str(leaf.cell_state))
                     if cell_id in observations:
                         observations[cell_id].abundance += 1
@@ -61,10 +61,15 @@ class CLTObserver:
                         )
 
         if give_pruned_clt:
-            # NOTE: ete's prune function removes unifurcations,
-            #       so we prune from descendent of root to keep the root unifurcation
-            assert len(clt.children) == 1
-            clt.children[0].prune(observed_leaves)
+            for node in clt.iter_descendants():
+                if sum((node2.name in observed_leaves) for node2 in node.traverse()) == 0:
+                    node.detach()
+            # remove remaining unifurcations
+            for node in clt.iter_descendants():
+                parent = node.up
+                if len(node.children) == 1:
+                    node.delete(prevent_nondicotomic=False, preserve_branch_length=True)
+
             return list(observations.values()), clt
         else:
             return list(observations.values())
