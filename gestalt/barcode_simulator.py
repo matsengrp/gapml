@@ -1,7 +1,8 @@
 from numpy import ndarray
 import numpy as np
-from scipy.stats import expon, poisson, binom
-from numpy.random import choice
+from scipy.stats import expon
+from numpy.random import choice, random
+from scipy.stats import nbinom
 
 from barcode import Barcode
 
@@ -14,29 +15,48 @@ class BarcodeSimulator:
     This simulator assumes each barcode can have at most two cuts.
     """
 
+    @staticmethod
+    def my_nbinom(mu: float, alpha: float):
+        """
+        reparameterize negative binomial in terms of mean and dispersion
+        @param mu: mean of negative binomial
+        @param alpha: dispersion of negative binomial
+        @return corresponding scipy.stats.nbinom
+        """
+        p = 1 - mu / (mu + 1 / alpha)
+        n = 1 / alpha
+        return nbinom(n, p)
+
     def __init__(self,
         target_lambdas: ndarray,
         repair_rates: ndarray,
         indel_probability: float,
-        left_del_lambda: float,
-        right_del_lambda: float,
-        insertion_lambda: float):
+        left_del_mu: float,
+        right_del_mu: float,
+        insertion_mu: float,
+        left_del_alpha: float = 1.,
+        right_del_alpha: float = 1.,
+        insertion_alpha: float = 1.):
         """
         @param target_lambdas: rate parameter of each target in the barcode
         @param repair_rates: rate parameter of repair for N cuts in the barcode (repair_rates[N - 1] = rate with N cut in the barcode)
         @param indel_probability: the probability of making an insertion/deletion (currently this zero-inflation parameter is shared)
-        @param left_del_lambda: poisson parameter for number of nucleotides deleted to the left of the DSB
-        @param right_del_lambda: poisson parameter for number of nucleotides deleted to the right of the DSB
-        @param insertion_lambda: poisson parameter for number of nucleotides insertd after DSB
+        @param left_del_mu: NB mean for number of nucleotides deleted to the left of the DSB
+        @param right_del_mu: NB mean for number of nucleotides deleted to the right of the DSB
+        @param insertion_mu: NB mean for number of nucleotides insertd after DSB
+        @param left_del_alpha: NB dispersion for number of nucleotides deleted to the left of the DSB
+        @param right_del_alpha: NB dispersion for number of nucleotides deleted to the right of the DSB
+        @param insertion_alpha: NB dispersion for number of nucleotides insertd after DSB
 
         # TODO: inflation probability parameter for indels is shared. maybe not realistic
         """
         self.target_lambdas = target_lambdas
         self.repair_rates = repair_rates
         self.indel_probability = indel_probability
-        self.left_del_lambda = left_del_lambda
-        self.right_del_lambda = right_del_lambda
-        self.insertion_lambda = insertion_lambda
+
+        self.left_del_distribution  = self.my_nbinom(left_del_mu,  left_del_alpha)
+        self.right_del_distribution = self.my_nbinom(right_del_mu, right_del_alpha)
+        self.insertion_distribution = self.my_nbinom(insertion_mu, insertion_alpha)
 
     def _race_repair_target_cutting(self, barcode: Barcode):
         """
@@ -106,7 +126,7 @@ class BarcodeSimulator:
 
             # Do repair if one of the two bool flags is true:
             ## (1) If barcode is still broken but we ran out of time, make sure we fix the barcode.
-            ## (2) the repair process won the race so we just repair the barcode.        
+            ## (2) the repair process won the race so we just repair the barcode.
             if (time_remain == 0 and len(barcode.needs_repair) > 0) or race_winner == -1:
                 self._do_repair(barcode)
         return barcode
@@ -122,16 +142,14 @@ class BarcodeSimulator:
         target1 = min(barcode.needs_repair)
         target2 = max(barcode.needs_repair)
 
-        # Serves for a zero-inflated poisson for deletion/insertion process
+        # Serves for a zero-inflated negative binomial for deletion/insertion process
         # Draw a separate RVs for each deletion/insertion process
-        indel_action = binom.rvs(n=1, p=self.indel_probability, size=3)
+        do_insertion = random() < self.indel_probability
+        do_deletion  = random() < self.indel_probability
 
-        left_del_len = poisson.rvs(
-            self.left_del_lambda) if indel_action[0] else 0
-        right_del_len = poisson.rvs(
-            self.right_del_lambda) if indel_action[1] else 0
-        insertion_length = poisson.rvs(
-            self.insertion_lambda) if indel_action[2] else 0
+        insertion_length = self.insertion_distribution.rvs() if do_insertion else 0
+        left_del_len     = self.left_del_distribution.rvs() if do_deletion else 0
+        right_del_len    = self.right_del_distribution.rvs() if do_deletion else 0
 
         # TODO: make this more realistic. right now just random DNA inserted
         insertion = ''.join(choice(list('acgt'), insertion_length))

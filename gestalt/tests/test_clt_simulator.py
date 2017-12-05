@@ -22,9 +22,9 @@ class CLTSimulatorTestCase(unittest.TestCase):
             target_lambdas=np.ones(10) * 0.1,
             repair_rates=[1, 2],
             indel_probability=0.1,
-            left_del_lambda=1,
-            right_del_lambda=1,
-            insertion_lambda=1)
+            left_del_mu=1,
+            right_del_mu=1,
+            insertion_mu=1)
 
         # Cell State simulator
         self.cell_state_simulator = CellTypeSimulator(
@@ -98,4 +98,3 @@ class CLTSimulatorTestCase(unittest.TestCase):
             self.assertEqual(c.dist, 1)
             self.assertEqual(c.dead, True)
             self.assertTrue(c.cell_state, leaf.cell_state)
-
