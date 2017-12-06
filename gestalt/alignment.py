@@ -20,17 +20,20 @@ class AlignerNW(Aligner):
     assuming perfect sequencing (no PCR or sequencing error) we make our
     mismatch penalty effectively infinite
     """
-    def __init__(self, match: float = 0, mismatch: float = -10**10, gap_open: float = -10, gap_extend: float = -.5):
+    def __init__(self, match: float = 0, mismatch: float = -10**10,
+                 gap_open: float = -10, gap_extend: float = -.5, yield_all=False):
         """
         @param match: match score
         @param mismatch: mismatch penalty (high default assumes only indels possible)
         @param gap_open: gap open penalty
         @param gap_extend: gap extension penalty
+        @param yield_all: yield all equally optimal alignments, else return first
         """
         self.match = match
         self.mismatch = mismatch
         self.gap_open = gap_open
         self.gap_extend = gap_extend
+        self.yield_all = yield_all
 
     def events(self, sequence: str, reference: str):
         """
@@ -43,44 +46,47 @@ class AlignerNW(Aligner):
         # this function produces Needleman-Wunsch alignments
         alns = pairwise2.align.globalms(sequence, reference,
                                         self.match, self.mismatch, self.gap_open, self.gap_extend)
-        events = []
-        reference_position = 0
-        in_event = False
-        # taking the first alignment only
-        # iterate through alignment character by character
-        for sequence_nucleotide, reference_nucleotide in zip(*alns[0][0:2]):
-            # if we are not in an event, and we find dashes, we must have just
-            # entered an event
-            if not in_event:
-                if sequence_nucleotide == '-' or reference_nucleotide == '-':
-                    in_event = True
-                    event_start = reference_position
-                    event_end = event_start
-                    if sequence_nucleotide == '-':
-                        event_end += 1
-                        insertion = ''
-                    else:
-                        insertion = sequence_nucleotide
-            # if we are in an event, we can distinguish insertions from
-            # deletions by which sequence has a dash
-            else:
-                if reference_nucleotide == '-':
-                    insertion += sequence_nucleotide
-                elif sequence_nucleotide == '-':
-                    event_end += 1
-                else:
-                    in_event = False
-                    events.append((event_start, event_end, insertion.lower()))
-            reference_position += (reference_nucleotide is not '-')
-        # special case of event ending at the end of the reference
-        if in_event:
+        for aln in alns:
+            events = []
+            reference_position = 0
             in_event = False
-            events.append((event_start, event_end, insertion.lower()))
-        assert reference_position == len(reference)
-        assert in_event == False
+            # taking the first alignment only
+            # iterate through alignment character by character
+            for sequence_nucleotide, reference_nucleotide in zip(*alns[0][0:2]):
+                # if we are not in an event, and we find dashes, we must have just
+                # entered an event
+                if not in_event:
+                    if sequence_nucleotide == '-' or reference_nucleotide == '-':
+                        in_event = True
+                        event_start = reference_position
+                        event_end = event_start
+                        if sequence_nucleotide == '-':
+                            event_end += 1
+                            insertion = ''
+                        else:
+                            insertion = sequence_nucleotide
+                # if we are in an event, we can distinguish insertions from
+                # deletions by which sequence has a dash
+                else:
+                    if reference_nucleotide == '-':
+                        insertion += sequence_nucleotide
+                    elif sequence_nucleotide == '-':
+                        event_end += 1
+                    else:
+                        in_event = False
+                        events.append((event_start, event_end, insertion.lower()))
+                reference_position += (reference_nucleotide is not '-')
+            # special case of event ending at the end of the reference
+            if in_event:
+                in_event = False
+                events.append((event_start, event_end, insertion.lower()))
+            assert reference_position == len(reference)
+            assert in_event == False
 
-        return events
-
+            if self.yield_all:
+                yield events
+            else:
+                return events
 
 # TODO:  can define different affine gap functions for each sequence and can be site-aware
 #

@@ -60,6 +60,9 @@ class CLTObserver:
                             abundance=1,
                         )
 
+        if len(observations) == 0:
+            raise RuntimeError('all lineages extinct, nothing to observe')
+
         if give_pruned_clt:
             for node in clt.iter_descendants():
                 if sum((node2.name in observed_leaves) for node2 in node.traverse()) == 0:
@@ -69,7 +72,6 @@ class CLTObserver:
                 parent = node.up
                 if len(node.children) == 1:
                     node.delete(prevent_nondicotomic=False, preserve_branch_length=True)
-
             return list(observations.values()), clt
         else:
             return list(observations.values())
