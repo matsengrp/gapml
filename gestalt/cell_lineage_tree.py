@@ -117,11 +117,15 @@ class CellLineageTree(TreeNode):
         # NOTE: need to return for display in IPython using file_name = "%%inline"
         return self.render(file_name, tree_style=tree_style)
 
-    def editing_profile(self, file_name: str):
-        '''plot profile_name of deletion frequency at each position over leaves'''
+    def editing_profile(self, file_name: str = None):
+        '''
+        plot profile_name of deletion frequency at each position over leaves
+        @param file_name: name of file to save, None for no savefig
+        @return: figure handle
+        '''
         n_leaves = len(self)
         deletion_frequency = []
-        plt.figure(figsize=(5, 1.5))
+        fig = plt.figure(figsize=(5, 1.5))
         position = 0
         # loop through and get the deletion frequency of each site
         for bit_index, bit in enumerate(self.barcode.unedited_barcode):
@@ -135,15 +139,15 @@ class CellLineageTree(TreeNode):
             position += len(bit)
         plt.plot(deletion_frequency, color='red', lw=2, clip_on=False)
         # another loop through to find the frequency that each site is the start of an insertion
-        insertion_start_frequency = scipy.zeros(len(str(self.barcode)))
+        insertion_flank_frequency = scipy.zeros(len(str(self.barcode)))
         for leaf in self:
             insertion_total = 0
             for insertion in re.compile('[acgt]+').finditer(str(leaf.barcode)):
                 start = insertion.start() - insertion_total
-                # find the insertions(s) in this indel
-                insertion_total = +len(insertion.group(0))
-                insertion_start_frequency[start] += 100 / n_leaves
-        plt.plot(insertion_start_frequency, color='blue', lw=2, clip_on=False)
+                end = insertion.end() - insertion_total
+                insertion_flank_frequency[start:end] += 100 / n_leaves
+                insertion_total += len(insertion.group(0))
+        plt.plot(insertion_flank_frequency, color='blue', lw=2, clip_on=False)
         plt.xlim(0, len(deletion_frequency))
         plt.ylim(0, 100)
         plt.ylabel('Editing (%)')
@@ -154,7 +158,9 @@ class CellLineageTree(TreeNode):
             top='off',  # ticks along the top edge are off
             labelbottom='off')
         plt.tight_layout()
-        plt.savefig(file_name)
+        if file_name is not None:
+            plt.savefig(file_name)
+        return fig
 
     def indel_boundary(self, file_name: str):
         '''plot a scatter of indel start/end positions'''
