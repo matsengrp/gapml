@@ -52,7 +52,7 @@ class AlignerNW(Aligner):
             in_event = False
             # taking the first alignment only
             # iterate through alignment character by character
-            for sequence_nucleotide, reference_nucleotide in zip(*alns[0][0:2]):
+            for sequence_nucleotide, reference_nucleotide in zip(*aln[0:2]):
                 # if we are not in an event, and we find dashes, we must have just
                 # entered an event
                 if not in_event:
@@ -75,7 +75,8 @@ class AlignerNW(Aligner):
                     else:
                         in_event = False
                         events.append((event_start, event_end, insertion.lower()))
-                reference_position += (reference_nucleotide is not '-')
+                if reference_nucleotide is not '-':
+                    reference_position += 1
             # special case of event ending at the end of the reference
             if in_event:
                 in_event = False
