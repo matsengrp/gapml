@@ -21,19 +21,19 @@ class AlignerNW(Aligner):
     mismatch penalty effectively infinite
     """
     def __init__(self, match: float = 0, mismatch: float = -10**10,
-                 gap_open: float = -10, gap_extend: float = -.5, yield_all=False):
+                 gap_open: float = -10, gap_extend: float = -.5, return_all=False):
         """
         @param match: match score
         @param mismatch: mismatch penalty (high default assumes only indels possible)
         @param gap_open: gap open penalty
         @param gap_extend: gap extension penalty
-        @param yield_all: yield all equally optimal alignments, else return first
+        @param return_all: return all equally optimal alignments, else return first
         """
         self.match = match
         self.mismatch = mismatch
         self.gap_open = gap_open
         self.gap_extend = gap_extend
-        self.yield_all = yield_all
+        self.return_all = return_all
 
     def events(self, sequence: str, reference: str):
         """
@@ -46,6 +46,8 @@ class AlignerNW(Aligner):
         # this function produces Needleman-Wunsch alignments
         alns = pairwise2.align.globalms(sequence, reference,
                                         self.match, self.mismatch, self.gap_open, self.gap_extend)
+        if self.return_all:
+            events_list = []
         for aln in alns:
             events = []
             reference_position = 0
@@ -84,10 +86,11 @@ class AlignerNW(Aligner):
             assert reference_position == len(reference)
             assert in_event == False
 
-            if self.yield_all:
-                yield events
+            if self.return_all:
+                events_list.append(events)
             else:
                 return events
+        return events_list
 
 # TODO:  can define different affine gap functions for each sequence and can be site-aware
 #
