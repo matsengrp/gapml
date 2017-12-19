@@ -102,13 +102,13 @@ class CellLineageTree(TreeNode):
                 motifs.append([
                     match.start(),
                     match.end(), '[]',
-                    match.end() - match.start(), 10, 'blue', 'blue', None
+                    match.end() - match.start(), 10, 'black', 'blue', None
                 ])
             for match in re.compile('[-]+').finditer(str(leaf.barcode)):
                 motifs.append([
                     match.start(),
                     match.end(), '[]',
-                    match.end() - match.start(), 10, 'red', 'red', None
+                    match.end() - match.start(), 10, 'black', 'red', None
                 ])
             seqFace = SeqMotifFace(
                 seq=str(leaf.barcode).upper(),
