@@ -171,11 +171,11 @@ class Barcode:
             #     barcode_copy =
         return events
 
-    def get_event_encoding(self):
+    def get_event_encoding(self, aligner: Aligner = None):
         """
         @return a BarcodeEvents version of this barcode
         """
-        raw_events = self.get_events()
+        raw_events = self.get_events(aligner=aligner)
         target_evts = [None for i in range(self.n_targets)]
         events = []
         for evt_i, evt in enumerate(raw_events):

@@ -53,11 +53,13 @@ class CLTParsimonyEstimator(CLTEstimator):
             clt: CellLineageTree,
             tree: TreeNode,
             event_list: List[Tuple[int, int, str]],
-            processed_obs: Dict[str, CellState]):
+            processed_obs: Dict[str, CellState],
+            processed_abund: Dict[str, int]):
         """
         Performs the recursive process of forming a cell lineage tree
         """
         for c in tree.children:
+            branch_length = sum(x != y for x, y in zip(c.binary_barcode, c.up.binary_barcode))
             child_event_ids = [
                 evt_idx
                 for evt_idx, barcode_char in enumerate(c.binary_barcode)
@@ -67,21 +69,26 @@ class CLTParsimonyEstimator(CLTEstimator):
             child_bcode = Barcode()
             child_bcode.process_events(events)
             cell_state = None if not c.is_leaf() else processed_obs[c.name]
-            child_clt = CellLineageTree(child_bcode, cell_state=cell_state)
+            cell_abundance = 0 if not c.is_leaf() else processed_abund[c.name]
+            child_clt = CellLineageTree(child_bcode,
+                                        cell_state=cell_state,
+                                        abundance=cell_abundance,
+                                        dist=branch_length)
 
             clt.add_child(child_clt)
-            self._do_convert(child_clt, c, event_list, processed_obs)
+            self._do_convert(child_clt, c, event_list, processed_obs, processed_abund)
 
     def convert_tree_to_clt(self,
             tree: TreeNode,
             event_list: List[Tuple[int, int, str]],
-            processed_obs: Dict[str, CellState]):
+            processed_obs: Dict[str, CellState],
+            processed_abund: Dict[str, int]):
         """
         Make a regular TreeNode to a Cell lineage tree
         """
         # TODO: update cell state maybe in the future?
         clt = CellLineageTree(Barcode(), cell_state=None)
-        self._do_convert(clt, tree, event_list, processed_obs)
+        self._do_convert(clt, tree, event_list, processed_obs, processed_abund)
         return clt
 
     def estimate(self, observations: List[ObservedAlignedSeq]):
@@ -121,9 +128,11 @@ class CLTParsimonyEstimator(CLTEstimator):
 
         # Get a mapping from cell to cell state
         processed_obs = {k: v[2] for k, v in processed_seqs.items()}
+        # Get a mapping from cell to abundance
+        processed_abund = {k: v[0] for k, v in processed_seqs.items()}
         # Now convert these trees to CLTs
         uniq_clts = []
         for t in uniq_trees:
-            clt_new = self.convert_tree_to_clt(t, event_list, processed_obs)
+            clt_new = self.convert_tree_to_clt(t, event_list, processed_obs, processed_abund)
             uniq_clts.append(clt_new)
         return uniq_clts

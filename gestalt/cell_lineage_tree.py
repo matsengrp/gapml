@@ -1,7 +1,7 @@
 import re
 import scipy
 import pandas as pd
-from ete3 import TreeNode, NodeStyle, SeqMotifFace, TreeStyle
+from ete3 import TreeNode, NodeStyle, SeqMotifFace, TreeStyle, TextFace, RectFace
 import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
@@ -34,7 +34,8 @@ class CellLineageTree(TreeNode):
                  cell_state: CellState = None,
                  dist: float = 0,
                  dead: bool = False,
-                 n_id: int = None):
+                 n_id: int = None,
+                 abundance: int = 1):
         """
         @param barcode OR barcode_events: the barcode at the CLT node.
                             Only one of these two values should be given
@@ -57,6 +58,7 @@ class CellLineageTree(TreeNode):
         self.add_feature("cell_state", cell_state)
         self.add_feature("dead", dead)
         self.add_feature("id", n_id)
+        self.add_feature("abundance", abundance)
 
     def _create_sequences(self):
         """
@@ -85,37 +87,50 @@ class CellLineageTree(TreeNode):
 
     def savefig(self, file_name: str):
         '''render tree to image file_name'''
-        for n in self.traverse():
+        # we make a copy, so face attributes are not retained in self
+        self_copy = self.copy()
+        max_abundance = max(leaf.abundance for leaf in self_copy)
+        for n in self_copy.traverse():
             style = NodeStyle()
             style['size'] = 5
-            style['fgcolor'] = get_color(n.cell_state.categorical_state.cell_type)
+            style['fgcolor'] = 'black' if n.cell_state is None else get_color(n.cell_state.categorical_state.cell_type)
             n.set_style(style)
-        for leaf in self:
+        for leaf in self_copy:
             # get the motif list for indels in the format that SeqMotifFace expects
             motifs = []
             for match in re.compile('[acgt]+').finditer(str(leaf.barcode)):
                 motifs.append([
                     match.start(),
                     match.end(), '[]',
-                    match.end() - match.start(), 1, 'blue', 'blue', None
+                    match.end() - match.start(), 10, 'blue', 'blue', None
+                ])
+            for match in re.compile('[-]+').finditer(str(leaf.barcode)):
+                motifs.append([
+                    match.start(),
+                    match.end(), '[]',
+                    match.end() - match.start(), 10, 'red', 'red', None
                 ])
             seqFace = SeqMotifFace(
                 seq=str(leaf.barcode).upper(),
                 motifs=motifs,
                 seqtype='nt',
                 seq_format='[]',
-                height=3,
+                height=10,
                 gapcolor='red',
                 gap_format='[]',
                 fgcolor='black',
-                bgcolor='lightgrey',
-                width=5)
+                bgcolor='lightgrey')
             leaf.add_face(seqFace, 0, position="aligned")
+            T = TextFace(text=leaf.abundance)
+            if max_abundance > 1:
+                leaf.add_face(T, 1, position="aligned")
+                R = RectFace(100*leaf.abundance/max_abundance, 10, 'black', 'black')
+                leaf.add_face(R, 2, position="aligned")
         tree_style = TreeStyle()
         tree_style.show_scale = False
         tree_style.show_leaf_name = False
         # NOTE: need to return for display in IPython using file_name = "%%inline"
-        return self.render(file_name, tree_style=tree_style)
+        return self_copy.render(file_name, tree_style=tree_style)
 
     def editing_profile(self, file_name: str = None):
         '''
@@ -123,7 +138,7 @@ class CellLineageTree(TreeNode):
         @param file_name: name of file to save, None for no savefig
         @return: figure handle
         '''
-        n_leaves = len(self)
+        n_leaves = sum(leaf.abundance for leaf in self)
         deletion_frequency = []
         fig = plt.figure(figsize=(5, 1.5))
         position = 0
@@ -134,8 +149,8 @@ class CellLineageTree(TreeNode):
                 plt.bar(position, 100, 4, facecolor='black', alpha=.2)
             for bit_position, letter in enumerate(bit):
                 deletion_frequency.append(100 * sum(
-                    re.sub('[acgt]', '', leaf.barcode.barcode[bit_index])[
-                        bit_position] == '-' for leaf in self) / n_leaves)
+                    leaf.abundance * int(re.sub('[acgt]', '', leaf.barcode.barcode[bit_index])[
+                        bit_position] == '-') for leaf in self) / n_leaves)
             position += len(bit)
         plt.plot(deletion_frequency, color='red', lw=2, clip_on=False)
         # another loop through to find the frequency that each site is the start of an insertion
@@ -145,7 +160,7 @@ class CellLineageTree(TreeNode):
             for insertion in re.compile('[acgt]+').finditer(str(leaf.barcode)):
                 start = insertion.start() - insertion_total
                 end = insertion.end() - insertion_total
-                insertion_flank_frequency[start:end] += 100 / n_leaves
+                insertion_flank_frequency[start:end] += 100 * leaf.abundance / n_leaves
                 insertion_total += len(insertion.group(0))
         plt.plot(insertion_flank_frequency, color='blue', lw=2, clip_on=False)
         plt.xlim(0, len(deletion_frequency))

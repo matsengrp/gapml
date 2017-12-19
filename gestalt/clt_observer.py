@@ -3,7 +3,7 @@ import numpy as np
 from barcode import Barcode
 from cell_state import CellState
 from cell_lineage_tree import CellLineageTree
-
+from alignment import Aligner
 
 class ObservedAlignedSeq:
     def __init__(self,
@@ -21,7 +21,9 @@ class ObservedAlignedSeq:
 
 
 class CLTObserver:
-    def __init__(self, sampling_rate: float, error_rate: float = 0):
+    def __init__(self, sampling_rate: float,
+                 error_rate: float = 0,
+                 aligner: Aligner = None):
         """
         @param sampling_rate: the rate at which barcodes from the alive leaf cells are observed
         @param error_rate: sequencing error, introduce alternative bases uniformly at this rate
@@ -30,8 +32,11 @@ class CLTObserver:
         assert (0 <= error_rate <= 1)
         self.sampling_rate = sampling_rate
         self.error_rate = error_rate
+        self.aligner = aligner
 
-    def observe_leaves(self, cell_lineage_tree: CellLineageTree, give_pruned_clt: bool = True):
+    def observe_leaves(self,
+                       cell_lineage_tree: CellLineageTree,
+                       give_pruned_clt: bool = True):
         """
         Samples leaves from the cell lineage tree, of those that are not dead
 
@@ -50,7 +55,7 @@ class CLTObserver:
                 is_sampled = np.random.binomial(1, self.sampling_rate)
                 if is_sampled:
                     observed_leaves.add(leaf.name)
-                    cell_id = (str(leaf.barcode), str(leaf.cell_state))
+                    cell_id = (str(leaf.barcode.get_events(aligner=self.aligner)), str(leaf.cell_state))
                     if cell_id in observations:
                         observations[cell_id].abundance += 1
                     else:
@@ -72,6 +77,7 @@ class CLTObserver:
                 parent = node.up
                 if len(node.children) == 1:
                     node.delete(prevent_nondicotomic=False, preserve_branch_length=True)
+            assert sum(leaf.abundance for leaf in observations.values()) == len(clt)
             return list(observations.values()), clt
         else:
             return list(observations.values())

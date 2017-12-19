@@ -26,7 +26,7 @@ class CellTypeTree(TreeNode):
             self.add_feature("scale", 1.0 / rate if rate > 0 else None)
 
     def get_gen_name(self):
-        if self.cell_type is not None:
+        if self.cell_type is not None or len(self.children) == 0:
             return str(self.cell_type)
         else:
             return ",".join([leaf.get_gen_name() for leaf in self])
