@@ -117,14 +117,10 @@ class CLTParsimonyEstimator(CLTEstimator):
         uniq_trees = []
         for t in trees:
             collapsed_est_tree = CollapsedTree.collapse(t)
-            if len(uniq_trees) == 0:
+            if len(uniq_trees) == 0 or min(collapsed_est_tree.robinson_foulds(uniq_t,
+                                                                              unrooted_trees=True)[0]
+                                           for uniq_t in uniq_trees) > 0:
                 uniq_trees.append(collapsed_est_tree)
-            else:
-                for uniq_t in uniq_trees:
-                    rf_dist = collapsed_est_tree.robinson_foulds(
-                        uniq_t, unrooted_trees=True)
-                    if rf_dist[0] > 0:
-                        uniq_trees.append(collapsed_est_tree)
 
         # Get a mapping from cell to cell state
         processed_obs = {k: v[2] for k, v in processed_seqs.items()}
