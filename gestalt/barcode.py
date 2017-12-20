@@ -49,17 +49,12 @@ class Barcode:
         # Range of positions for each target
         # regarding which positions must be unedited
         # for this target to still be active.
-        self.target_active_lens = [
-            sum(self.orig_substr_lens[2 * (i + 1): 2 * (i + 1) + 2])
-            for i in range(self.n_targets)
-        ]
-        self.target_active_positions = [
-            (
-                max(0, c - active_len // 2),
-                min(c + active_len // 2, self.orig_length)
-            )
-            for c, active_len in zip(self.abs_cut_sites, self.target_active_lens)
-        ]
+        self.target_active_positions = []
+        cumsum = np.cumsum(self.orig_substr_lens)
+        for i in range(self.n_targets):
+            right = cumsum[2 * (i + 1) - 1]
+            left = right - self.orig_substr_lens[2 * (i + 1) - 1]
+            self.target_active_positions.append((left, right))
         assert (self.n_targets == len(self.cut_sites))
 
     def get_active_targets(self):
@@ -176,24 +171,18 @@ class Barcode:
         @return a BarcodeEvents version of this barcode
         """
         raw_events = self.get_events(aligner=aligner)
-        target_evts = [None for i in range(self.n_targets)]
         events = []
         for evt_i, evt in enumerate(raw_events):
-            matching_targets = [
-                target_idx for target_idx, cut_site in enumerate(self.abs_cut_sites)
-                if evt[0] <= cut_site and evt[1] >= cut_site
-            ]
-            assert(matching_targets)
-
-            for t in matching_targets:
-                assert(target_evts[t] is None)
-                target_evts[t] = evt_i
+            matching_targets = []
+            for tgt_i, (left, right) in enumerate(self.target_active_positions):
+                if evt[0] < right and (evt[1] - 1) >= left:
+                    matching_targets.append(tgt_i)
 
             events.append(Event(
                 evt[0],
                 evt[1] - evt[0],
-                min_target=min(matching_targets),
-                max_target=max(matching_targets),
+                min_target=min(matching_targets) if matching_targets else None,
+                max_target=max(matching_targets) if matching_targets else None,
                 insert_str=evt[2],
             ))
 
