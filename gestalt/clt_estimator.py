@@ -11,14 +11,11 @@ from collapsed_tree import CollapsedTree
 from cell_lineage_tree import CellLineageTree
 from barcode import Barcode
 from cell_state import CellState
-from alignment import Aligner
 
 from constants import MIX_CFG_FILE
 
 
 class CLTEstimator:
-    def __init__(self, aligner: Aligner = None):
-        self.aligner = aligner
     def estimate(self, observations: List[ObservedAlignedSeq]):
         """
         @return an estimate of the cell lineage tree (post-sampling)
@@ -42,7 +39,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         processed_seqs = {}
         all_events = set()
         for idx, obs in enumerate(observations):
-            evts = obs.barcode.get_events(aligner=self.aligner)
+            evts = obs.events
             processed_seqs["seq{}".format(idx)] = [obs.abundance, evts, obs.cell_state]
             all_events.update(evts)
         all_event_dict = {event_id: i for i, event_id in enumerate(all_events)}
@@ -111,16 +108,24 @@ class CLTParsimonyEstimator(CLTEstimator):
         # output, rather than parsing output and later converting.
         trees = phylip_parse.parse_outfile("outfile", "test.abundance")
 
-        # Only return unique trees, so check if trees are equivalent by first collapsing them.
+        print('trees pre-collapse: {}'.format(len(trees)))
+
+        # Only return unique trees, so check if trees are equivalent by first
+        # collapsing them to get multifurcating trees
         # TODO: make this much more efficient - right now checks all other trees
         #       to see if there is an equiv tree.
         uniq_trees = []
         for t in trees:
             collapsed_est_tree = CollapsedTree.collapse(t)
+            # that should have only collapsed internal nodes because the taxa
+            # should be unique
+            assert len(collapsed_est_tree) == len(t)
             if len(uniq_trees) == 0 or min(collapsed_est_tree.robinson_foulds(uniq_t,
                                                                               unrooted_trees=True)[0]
                                            for uniq_t in uniq_trees) > 0:
                 uniq_trees.append(collapsed_est_tree)
+
+        print('trees post-collapse: {}'.format(len(uniq_trees)))
 
         # Get a mapping from cell to cell state
         processed_obs = {k: v[2] for k, v in processed_seqs.items()}

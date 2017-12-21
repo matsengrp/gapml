@@ -1,3 +1,4 @@
+from typing import List, Dict, Tuple
 import numpy as np
 
 from barcode import Barcode
@@ -8,6 +9,7 @@ from alignment import Aligner
 class ObservedAlignedSeq:
     def __init__(self,
             barcode: Barcode,
+            events: List[Tuple[int, int, str]],
             cell_state: CellState,
             abundance: float):
         """
@@ -16,6 +18,7 @@ class ObservedAlignedSeq:
         it implicitly gives us the alignment
         """
         self.barcode = barcode
+        self.events = events
         self.cell_state = cell_state
         self.abundance = abundance
 
@@ -50,17 +53,21 @@ class CLTObserver:
         clt = cell_lineage_tree.copy()
         observations = {}
         observed_leaves = set()
-        for leaf in cell_lineage_tree:
+        for leaf in clt:
             if not leaf.dead:
                 is_sampled = np.random.binomial(1, self.sampling_rate)
                 if is_sampled:
                     observed_leaves.add(leaf.name)
-                    cell_id = (str(leaf.barcode.get_events(aligner=self.aligner)), str(leaf.cell_state))
+                    barcode_with_errors = leaf.barcode.observe_with_errors(self.error_rate)
+                    barcode_with_errors_events = barcode_with_errors.get_events(aligner=self.aligner)
+                    leaf.barcode = barcode_with_errors
+                    cell_id = (str(barcode_with_errors_events), str(leaf.cell_state))
                     if cell_id in observations:
                         observations[cell_id].abundance += 1
                     else:
                         observations[cell_id] = ObservedAlignedSeq(
-                            barcode=leaf.barcode.observe_with_errors(self.error_rate),
+                            barcode=barcode_with_errors,
+                            events=barcode_with_errors_events,
                             cell_state=leaf.cell_state,
                             abundance=1,
                         )

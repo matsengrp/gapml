@@ -16,7 +16,7 @@ def write_seqs_to_phy(processed_seqs: Dict[str, List],
                       all_event_dict: Dict[str, int], phy_file: str,
                       abundance_file: str):
     """
-    @param processed_seqs: dict key = sequence id, dict val = [abundance, list of event ids]
+    @param processed_seqs: dict key = sequence id, dict val = [abundance, list of events, cell state]
     @param all_event_dict: dict key = event id, dict val = event phylip id
     @param phy_file: name of file to input to phylip
     @param abundance_file: name of file with abundance values
