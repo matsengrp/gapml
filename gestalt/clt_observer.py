@@ -2,6 +2,7 @@ from typing import List, Dict, Tuple
 import numpy as np
 
 from barcode import Barcode
+from barcode_events import BarcodeEvents
 from cell_state import CellState
 from cell_lineage_tree import CellLineageTree
 from alignment import Aligner
@@ -9,7 +10,7 @@ from alignment import Aligner
 class ObservedAlignedSeq:
     def __init__(self,
             barcode: Barcode,
-            events: List[Tuple[int, int, str]],
+            barcode_events: BarcodeEvents,
             cell_state: CellState,
             abundance: float):
         """
@@ -18,7 +19,7 @@ class ObservedAlignedSeq:
         it implicitly gives us the alignment
         """
         self.barcode = barcode
-        self.events = events
+        self.barcode_events = barcode_events
         self.cell_state = cell_state
         self.abundance = abundance
 
@@ -59,15 +60,16 @@ class CLTObserver:
                 if is_sampled:
                     observed_leaves.add(leaf.name)
                     barcode_with_errors = leaf.barcode.observe_with_errors(self.error_rate)
-                    barcode_with_errors_events = barcode_with_errors.get_events(aligner=self.aligner)
+                    barcode_with_errors_events = barcode_with_errors.get_event_encoding(aligner=self.aligner)
                     leaf.barcode = barcode_with_errors
+                    leaf.barcode_events = barcode_with_errors_events
                     cell_id = (str(barcode_with_errors_events), str(leaf.cell_state))
                     if cell_id in observations:
                         observations[cell_id].abundance += 1
                     else:
                         observations[cell_id] = ObservedAlignedSeq(
                             barcode=barcode_with_errors,
-                            events=barcode_with_errors_events,
+                            barcode_events=barcode_with_errors_events,
                             cell_state=leaf.cell_state,
                             abundance=1,
                         )
@@ -85,6 +87,8 @@ class CLTObserver:
                 if len(node.children) == 1:
                     node.delete(prevent_nondicotomic=False, preserve_branch_length=True)
             assert sum(leaf.abundance for leaf in observations.values()) == len(clt)
+            assert set(leaf.barcode_events for leaf in clt) == \
+                   set(obs.barcode_events for obs in observations.values())
             return list(observations.values()), clt
         else:
             return list(observations.values())

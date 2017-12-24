@@ -23,8 +23,18 @@ def write_seqs_to_phy(processed_seqs: Dict[str, List],
     """
     num_events = len(all_event_dict)
 
+
+    # Some events hide others, so we build a dictionary mapping event ids to the
+    # ids of the events they hide. We will use this to encode indeterminate states.
+    hidden_events = {all_event_dict[evt]:
+                     [all_event_dict[evt2] for evt2 in all_event_dict
+                      if evt2 is not evt and evt.hides(evt2)]
+                     for evt in all_event_dict}
+
     # Output file for PHYLIP
-    # Format is very dumb: species name must be 10 characters long, followed by sequence of 0 and 1s
+    # species name must be 10 characters long, followed by a sequence of 0s and
+    # 1s indicating unique event absence and presence, respectively, with the
+    # "?" character for undetermined states (i.e. hidden events)
     with open(phy_file, "w") as f1, open(abundance_file, "w") as f2:
         f1.write("%d %d\n" % (len(processed_seqs), num_events))
         f2.write('id\tabundance\n')
@@ -32,9 +42,14 @@ def write_seqs_to_phy(processed_seqs: Dict[str, List],
             seq_abundance = seq_data[0]
             seq_events = seq_data[1]
             event_idxs = [all_event_dict[seq_ev] for seq_ev in seq_events]
-            event_arr = np.zeros((num_events, ), dtype=int)
-            event_arr[event_idxs] = 1
-            event_encoding = "".join([str(c) for c in event_arr.tolist()])
+            event_arr = np.array(['0' for _ in range(num_events)])
+            event_arr[event_idxs] = '1'
+            indeterminate_idxs = list(set([hidden_idx
+                                           for event_idx in event_idxs
+                                           for hidden_idx in hidden_events[event_idx]]))
+            assert(set(indeterminate_idxs).isdisjoint(set(event_idxs)))
+            event_arr[indeterminate_idxs] = "?"
+            event_encoding = "".join([c for c in event_arr.tolist()])
             seq_name = seq_id
             seq_name += " " * (10 - len(seq_name))
             f1.write("%s%s\n" % (seq_name, event_encoding))

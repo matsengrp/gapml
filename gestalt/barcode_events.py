@@ -76,6 +76,20 @@ class Event(tuple):
                 return self.insert_str == child_evt.insert_str
         return False
 
+    def hides(self, other):
+        """return True if this event hides another event (None if incompatible)"""
+        if other.start_pos > self.start_pos \
+        and other.start_pos + other.del_len < self.start_pos + self.del_len:
+            return True
+        elif other.start_pos > self.start_pos + self.del_len - 1 \
+        or   other.start_pos + other.del_len - 1 < self.start_pos \
+        or   (other.start_pos < self.start_pos and \
+              other.start_pos + other.del_len - 1 > self.start_pos + self.del_len - 1):
+            return False
+        else:
+            return None
+
+
 class BarcodeEvents:
     """
     Represents a barcode in event-encoding.
