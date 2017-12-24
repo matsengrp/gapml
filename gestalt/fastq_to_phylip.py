@@ -14,22 +14,24 @@ import warnings
 
 def write_seqs_to_phy(processed_seqs: Dict[str, List],
                       all_event_dict: Dict[str, int], phy_file: str,
-                      abundance_file: str):
+                      abundance_file: str, encode_hidden=True):
     """
     @param processed_seqs: dict key = sequence id, dict val = [abundance, list of events, cell state]
     @param all_event_dict: dict key = event id, dict val = event phylip id
     @param phy_file: name of file to input to phylip
     @param abundance_file: name of file with abundance values
+    @param mark_hidden: whether or not to encode hidden states as "?"
     """
     num_events = len(all_event_dict)
 
 
     # Some events hide others, so we build a dictionary mapping event ids to the
     # ids of the events they hide. We will use this to encode indeterminate states.
-    hidden_events = {all_event_dict[evt]:
-                     [all_event_dict[evt2] for evt2 in all_event_dict
-                      if evt2 is not evt and evt.hides(evt2)]
-                     for evt in all_event_dict}
+    if encode_hidden:
+        hidden_events = {all_event_dict[evt]:
+                         [all_event_dict[evt2] for evt2 in all_event_dict
+                          if evt2 is not evt and evt.hides(evt2)]
+                         for evt in all_event_dict}
 
     # Output file for PHYLIP
     # species name must be 10 characters long, followed by a sequence of 0s and
@@ -44,12 +46,13 @@ def write_seqs_to_phy(processed_seqs: Dict[str, List],
             event_idxs = [all_event_dict[seq_ev] for seq_ev in seq_events]
             event_arr = np.array(['0' for _ in range(num_events)])
             event_arr[event_idxs] = '1'
-            indeterminate_idxs = list(set([hidden_idx
-                                           for event_idx in event_idxs
-                                           for hidden_idx in hidden_events[event_idx]]))
-            assert(set(indeterminate_idxs).isdisjoint(set(event_idxs)))
-            event_arr[indeterminate_idxs] = "?"
-            event_encoding = "".join([c for c in event_arr.tolist()])
+            if encode_hidden:
+                indeterminate_idxs = list(set([hidden_idx
+                                               for event_idx in event_idxs
+                                               for hidden_idx in hidden_events[event_idx]]))
+                assert(set(indeterminate_idxs).isdisjoint(set(event_idxs)))
+                event_arr[indeterminate_idxs] = "?"
+            event_encoding = "".join(event_arr)
             seq_name = seq_id
             seq_name += " " * (10 - len(seq_name))
             f1.write("%s%s\n" % (seq_name, event_encoding))

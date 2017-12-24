@@ -90,7 +90,8 @@ class CLTParsimonyEstimator(CLTEstimator):
         self._do_convert(clt, tree, event_list, processed_obs, processed_abund)
         return clt
 
-    def estimate(self, observations: List[ObservedAlignedSeq]):
+    def estimate(self, observations: List[ObservedAlignedSeq],
+                 encode_hidden: bool = True):
         """
         @return a list of unique cell lineage tree estimates
                 calls out to mix on the command line
@@ -101,7 +102,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         processed_seqs, event_dict, event_list = self._process_observations(
             observations)
         write_seqs_to_phy(processed_seqs, event_dict, "infile",
-                          "test.abundance")
+                          "test.abundance", encode_hidden=encode_hidden)
         cmd = ["rm -f outfile outtree && mix < mix.cfg"]
         res = subprocess.call(cmd, shell=True)
         assert (res == 0)
