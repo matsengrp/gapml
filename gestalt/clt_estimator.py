@@ -119,7 +119,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         #       to see if there is an equiv tree.
         uniq_trees = []
         for t in trees:
-            collapsed_est_tree = CollapsedTree.collapse(t)
+            collapsed_est_tree = CollapsedTree.collapse(t, deduplicate_sisters=False)
             # that should have only collapsed internal nodes because the taxa
             # should be unique
             assert len(collapsed_est_tree) == len(t)
