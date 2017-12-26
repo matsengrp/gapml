@@ -193,6 +193,8 @@ class Barcode:
         Given a list of observed events, rerun the events and recreate the barcode
         Assumes all events are NOT overlapping!!!
         """
+        # initialize barcode to unedited states
+        self.barcode = list(self.unedited_barcode)
         sub_str_lens = [len(sub_str) for sub_str in self.barcode]
         total_len = sum(sub_str_lens)
         for evt in events:
