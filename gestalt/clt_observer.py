@@ -61,7 +61,10 @@ class CLTObserver:
                     observed_leaves.add(leaf.name)
                     barcode_with_errors = leaf.barcode.observe_with_errors(self.error_rate)
                     barcode_with_errors_events = barcode_with_errors.get_event_encoding(aligner=self.aligner)
-                    leaf.barcode = barcode_with_errors
+                    leaf.barcode.process_events([(event.start_pos,
+                                                  event.start_pos + event.del_len,
+                                                  event.insert_str)
+                                                 for event in barcode_with_errors_events.events])
                     leaf.barcode_events = barcode_with_errors_events
                     cell_id = (str(barcode_with_errors_events), str(leaf.cell_state))
                     if cell_id in observations:
