@@ -33,6 +33,7 @@ def parse_seqdict(fh):
     @return the list of edges along the tree.
                 each edge is associated with a "difference sequence", which is the state at theupper node,
                 where "." means it is the same as in the node below the tree
+    NOTE: "below" means toward the root in Joe-speak
     """
     # key: edge, val: diff between top and bottom node
     edges = {}
@@ -137,28 +138,44 @@ def build_tree(leaf_seqs, edges, counts=None):
             node_to = nodes[node_to_name]
         node_to.add_feature("difference", diff_seq)
         if node_to_name in leaf_seqs:
+            binary_barcode_len = len(leaf_seqs[node_to_name])
             node_to.add_feature("binary_barcode", leaf_seqs[node_to_name])
         else:
             node_to.add_feature("binary_barcode", None)
 
     root_node = nodes["root"]
-    root_node.add_feature("binary_barcode", None)
+    root_node.add_feature("binary_barcode", "".join(['0'] * binary_barcode_len))
 
     for node_from_name, node_to_name in edges:
         nodes[node_from_name].add_child(nodes[node_to_name])
 
-    for node in root_node.iter_descendants("postorder"):
-        distance = 0
-        bcode_arr = []
-        for is_diff, bcode_char in zip(node.difference, node.binary_barcode):
-            if is_diff == ".":
-                bcode_arr.append(bcode_char)
-            else:
-                bcode_arr.append("0")
-                distance += 1
-        if node.up.binary_barcode is None:
-            node.up.binary_barcode = "".join(bcode_arr)
-        node.dist = distance
+    # generate binary barcodes
+    for node in root_node.iter_descendants("preorder"):
+        bcode = ''
+        for is_diff, bcode_char in zip(node.difference, node.up.binary_barcode):
+            bcode += bcode_char if is_diff == "." else is_diff
+        if node.is_leaf():
+            assert node.binary_barcode == bcode
+        else:
+            node.binary_barcode = bcode
+
+    assert set(root_node.binary_barcode) == set('0')
+
+    # make random choices for ambiguous internal states, respecting tree inheritance
+    sequence_length = len(root_node.binary_barcode)
+    for node in root_node.iter_descendants():
+        for site in range(sequence_length):
+            symbol = node.binary_barcode[site]
+            if symbol == '?':
+                new_symbol = random.choice(('0', '1'))
+                for node2 in node.traverse(is_leaf_fn=lambda n: False if symbol in [n2.binary_barcode[site] for n2 in n.children] else True):
+                    if node2.binary_barcode[site] == symbol:
+                        node2.binary_barcode = node2.binary_barcode[:site] + new_symbol + node2.binary_barcode[(site+1):]
+
+    # compute branch lengths
+    root_node.dist = 0 # no branch above root
+    for node in root_node.iter_descendants():
+        node.dist = hamming_distance(node.binary_barcode, node.up.binary_barcode)
 
     if counts is not None:
         for node in root_node.traverse():
@@ -166,7 +183,7 @@ def build_tree(leaf_seqs, edges, counts=None):
                 node.add_feature('frequency', counts[node.name])
             else:
                 node.add_feature('frequency', 0)
-                
+
     return root_node
 
 
