@@ -161,21 +161,10 @@ def build_tree(leaf_seqs, edges, counts=None):
 
     assert set(root_node.binary_barcode) == set('0')
 
-    # make random choices for ambiguous internal states, respecting tree inheritance
-    sequence_length = len(root_node.binary_barcode)
-    for node in root_node.iter_descendants():
-        for site in range(sequence_length):
-            symbol = node.binary_barcode[site]
-            if symbol == '?':
-                new_symbol = random.choice(('0', '1'))
-                for node2 in node.traverse(is_leaf_fn=lambda n: False if symbol in [n2.binary_barcode[site] for n2 in n.children] else True):
-                    if node2.binary_barcode[site] == symbol:
-                        node2.binary_barcode = node2.binary_barcode[:site] + new_symbol + node2.binary_barcode[(site+1):]
-
-    # compute branch lengths
+    # compute branch lengths as Hamming distance with "?" states counting as 1/2
     root_node.dist = 0 # no branch above root
     for node in root_node.iter_descendants():
-        node.dist = hamming_distance(node.binary_barcode, node.up.binary_barcode)
+        node.dist = sum((.5 if (x == '?' or y == '?') else 1.) * int(x != y) for x, y in zip(node.binary_barcode, node.up.binary_barcode))
 
     if counts is not None:
         for node in root_node.traverse():
@@ -185,8 +174,3 @@ def build_tree(leaf_seqs, edges, counts=None):
                 node.add_feature('frequency', 0)
 
     return root_node
-
-
-def hamming_distance(seq1, seq2):
-    '''Hamming distance between two sequences of equal length'''
-    return sum(x != y for x, y in zip(seq1, seq2))
