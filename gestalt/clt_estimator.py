@@ -56,7 +56,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         Performs the recursive process of forming a cell lineage tree
         """
         for c in tree.children:
-            branch_length = sum(x != y for x, y in zip(c.binary_barcode, c.up.binary_barcode))
+            branch_length = c.dist
             child_event_ids = [
                 evt_idx
                 for evt_idx, barcode_char in enumerate(c.binary_barcode)
