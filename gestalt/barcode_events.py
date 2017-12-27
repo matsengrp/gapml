@@ -77,17 +77,12 @@ class Event(tuple):
         return False
 
     def hides(self, other):
-        """return True if this event hides another event (None if incompatible)"""
-        if other.start_pos > self.start_pos \
-        and other.start_pos + other.del_len < self.start_pos + self.del_len:
+        """return True if this event hides another event"""
+        if other.start_pos >= self.start_pos \
+        and other.start_pos + other.del_len <= self.start_pos + self.del_len:
             return True
-        elif other.start_pos > self.start_pos + self.del_len - 1 \
-        or   other.start_pos + other.del_len - 1 < self.start_pos \
-        or   (other.start_pos < self.start_pos and \
-              other.start_pos + other.del_len - 1 > self.start_pos + self.del_len - 1):
-            return False
         else:
-            return None
+            return False
 
 
 class BarcodeEvents:
