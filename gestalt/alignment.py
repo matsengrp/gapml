@@ -20,7 +20,7 @@ class AlignerNW(Aligner):
     assuming perfect sequencing (no PCR or sequencing error) we make our
     mismatch penalty effectively infinite
     """
-    def __init__(self, match: float = 0, mismatch: float = -10**10,
+    def __init__(self, match: float = 0, mismatch: float = -1,
                  gap_open: float = -10, gap_extend: float = -.5, return_all=False):
         """
         @param match: match score
