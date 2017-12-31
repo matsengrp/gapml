@@ -91,7 +91,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         return clt
 
     def estimate(self, observations: List[ObservedAlignedSeq],
-                 encode_hidden: bool = True):
+                 encode_hidden: bool = False):
         """
         @return a list of unique cell lineage tree estimates
                 calls out to mix on the command line
@@ -111,7 +111,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         # output, rather than parsing output and later converting.
         trees = phylip_parse.parse_outfile("outfile", "test.abundance")
 
-        print('trees pre-collapse: {}'.format(len(trees)))
+        # print('trees pre-collapse: {}'.format(len(trees)))
 
         # Only return unique trees, so check if trees are equivalent by first
         # collapsing them to get multifurcating trees
@@ -128,7 +128,7 @@ class CLTParsimonyEstimator(CLTEstimator):
                                            for uniq_t in uniq_trees) > 0:
                 uniq_trees.append(collapsed_est_tree)
 
-        print('trees post-collapse: {}'.format(len(uniq_trees)))
+        # print('trees post-collapse: {}'.format(len(uniq_trees)))
 
         # Get a mapping from cell to cell state
         processed_obs = {k: v[2] for k, v in processed_seqs.items()}
