@@ -161,26 +161,26 @@ def build_tree(leaf_seqs, edges, counts=None):
 
     assert set(root_node.binary_barcode) == set('0')
 
-    # make random choices for ambiguous internal states, respecting tree inheritance
-    sequence_length = len(root_node.binary_barcode)
-    for node in root_node.iter_descendants():
-        for site in range(sequence_length):
-            symbol = node.binary_barcode[site]
-            if symbol == '?':
-                new_symbol = random.choice(('0', '1'))
-                for node2 in node.traverse(is_leaf_fn=lambda n: False if symbol in [n2.binary_barcode[site] for n2 in n.children] else True):
-                    if node2.binary_barcode[site] == symbol:
-                        node2.binary_barcode = node2.binary_barcode[:site] + new_symbol + node2.binary_barcode[(site+1):]
+    # # make random choices for ambiguous internal states, respecting tree inheritance
+    # sequence_length = len(root_node.binary_barcode)
+    # for node in root_node.iter_descendants():
+    #     for site in range(sequence_length):
+    #         symbol = node.binary_barcode[site]
+    #         if symbol == '?':
+    #             new_symbol = '0'#random.choice(('0', '1'))
+    #             for node2 in node.traverse(is_leaf_fn=lambda n: False if symbol in [n2.binary_barcode[site] for n2 in n.children] else True):
+    #                 if node2.binary_barcode[site] == symbol:
+    #                     node2.binary_barcode = node2.binary_barcode[:site] + new_symbol + node2.binary_barcode[(site+1):]
 
     # compute branch lengths
     root_node.dist = 0 # no branch above root
     for node in root_node.iter_descendants():
-        node.dist = 0 if node.binary_barcode == node.up.binary_barcode else 1
+        node.dist = sum(x != y for x, y in zip(node.binary_barcode, node.up.binary_barcode)) # 0 if node.binary_barcode == node.up.binary_barcode else 1
 
-    # convert the leaves back to contain "?"
-    # NOTE: don't compute branch lengths from binary_barcode differences after this
-    for leaf in root_node:
-        leaf.binary_barcode = leaf_seqs[leaf.name]
+    # # # convert the leaves back to contain "?"
+    # # # NOTE: don't compute branch lengths from binary_barcode differences after this
+    # for leaf in root_node:
+    #     leaf.binary_barcode = leaf_seqs[leaf.name]
 
     if counts is not None:
         for node in root_node.traverse():
