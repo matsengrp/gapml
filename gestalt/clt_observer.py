@@ -40,7 +40,7 @@ class CLTObserver:
 
     def observe_leaves(self,
                        cell_lineage_tree: CellLineageTree,
-                       give_pruned_clt: bool = True):
+                       give_pruned_clt: bool = True, seed: int = None):
         """
         Samples leaves from the cell lineage tree, of those that are not dead
 
@@ -51,6 +51,7 @@ class CLTObserver:
         @return a list of the sampled observations (List[ObservedAlignedSeq])
                 a cell lineage tree with pruned leaves
         """
+        np.random.seed(seed)
         clt = cell_lineage_tree.copy()
         observations = {}
         observed_leaves = set()
