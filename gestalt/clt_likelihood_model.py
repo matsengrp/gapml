@@ -22,15 +22,14 @@ class CLTLikelihoodModel:
     CUT = 2
     NUM_EVENTS = 3
 
-    def __init__(self, topology: CellLineageTree, bcode_metadata: BarcodeMetadata):
+    def __init__(self, topology: CellLineageTree, bcode_meta: BarcodeMetadata):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
-        @param num_targets: number of targets in barcode
-
         Will randomly initialize model parameters
         """
         self.topology = topology
-        self.bcode_metadata = bcode_metadata
+        self.bcode_meta = bcode_meta
+        self.num_targets = bcode_meta.num_targets
         self.random_init()
 
     def set_vals(self, branch_lens: ndarray, target_lams: ndarray, cell_type_lams: ndarray, repair_lams: ndarray):

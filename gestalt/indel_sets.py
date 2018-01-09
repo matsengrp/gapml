@@ -2,6 +2,7 @@ from typing import List
 from typing import Dict
 
 from barcode_events import BarcodeEvents
+from barcode_metadata import BarcodeMetadata
 
 class IndelSet(tuple):
     """
@@ -37,8 +38,23 @@ class Wildcard(IndelSet):
         return self[0]
 
     @property
+    def min_deact_target(self):
+        return self.min_target
+
+    @property
     def max_target(self):
         return self[1]
+
+    @property
+    def max_deact_target(self):
+        return self.max_target
+
+    @property
+    def inner_wc(self):
+        return self
+
+    def get_singleton(self):
+        return None
 
     @staticmethod
     def intersect(wc1, wc2):
@@ -54,13 +70,15 @@ class SingletonWC(IndelSet):
     def __new__(cls,
             start_pos: int,
             del_len: int,
+            min_deact_target: int,
             min_target: int,
             max_target: int,
+            max_deact_target: int,
             insert_str: str = ""):
-        return tuple.__new__(cls, (start_pos, del_len, min_target, max_target, insert_str))
+        return tuple.__new__(cls, (start_pos, del_len, min_deact_target, min_target, max_target, max_deact_target, insert_str))
 
     def __getnewargs__(self):
-        return (self.start_pos, self.del_len, self.min_target, self.max_target, self.insert_str)
+        return (self.start_pos, self.del_len, self.min_deact_target, self.min_target, self.max_target, self.max_deact_target, self.insert_str)
 
     @property
     def start_pos(self):
@@ -75,21 +93,30 @@ class SingletonWC(IndelSet):
         return self.start_pos + self.del_len
 
     @property
-    def min_target(self):
+    def min_deact_target(self):
         return self[2]
 
     @property
-    def max_target(self):
+    def min_target(self):
         return self[3]
 
     @property
-    def insert_str(self):
+    def max_target(self):
         return self[4]
 
     @property
-    def insert_len(self):
-        return len(self[4])
+    def max_deact_target(self):
+        return self[5]
 
+    @property
+    def insert_str(self):
+        return self[6]
+
+    @property
+    def insert_len(self):
+        return len(self.insert_str)
+
+    # TODO: make this a function instead?
     @property
     def inner_wc(self):
         if self.max_target - 1 >= self.min_target + 1:
@@ -97,16 +124,74 @@ class SingletonWC(IndelSet):
         else:
             return None
 
+    def get_singleton(self):
+        return Singleton(self.start_pos, self.del_len, self.min_deact_target, self.min_target, self.max_target, self.max_deact_target, self.insert_str)
+
+class Singleton(IndelSet):
+    """
+    Actually the same definition as an Event right now....
+    Actually a singleton now... so same as event?
+    TODO: do not repeat code?
+    """
+    def __new__(cls,
+            start_pos: int,
+            del_len: int,
+            min_deact_target: int,
+            min_target: int,
+            max_target: int,
+            max_deact_target: int,
+            insert_str: str = ""):
+        return tuple.__new__(cls, (start_pos, del_len, min_deact_target, min_target, max_target, max_deact_target, insert_str))
+
+    def __getnewargs__(self):
+        return (self.start_pos, self.del_len, self.min_deact_target, self.min_target, self.max_target, self.max_deact_target, self.insert_str)
+
+    @property
+    def start_pos(self):
+        return self[0]
+
+    @property
+    def del_len(self):
+        return self[1]
+
+    @property
+    def del_end(self):
+        return self.start_pos + self.del_len
+
+    @property
+    def min_deact_target(self):
+        return self[2]
+
+    @property
+    def min_target(self):
+        return self[3]
+
+    @property
+    def max_target(self):
+        return self[4]
+
+    @property
+    def max_deact_target(self):
+        return self[5]
+
+    @property
+    def insert_str(self):
+        return self[6]
+
+    @property
+    def insert_len(self):
+        return len(self.insert_str)
+
 class TargetTract(IndelSet):
     def __new__(cls,
             min_deact_targ: int,
             min_targ: int,
             max_targ: int,
             max_deact_targ: int):
-        return tuple.__new__(cls, (min_deact_targ, min_target, max_target, max_deact_targ))
+        return tuple.__new__(cls, (min_deact_targ, min_targ, max_targ, max_deact_targ))
 
     def __getnewargs__(self):
-        return (self.min_deact_targ, self.min_target, self.max_target, self.max_deact_targ)
+        return (self.min_deact_targ, self.min_targ, self.max_targ, self.max_deact_targ)
 
     @property
     def min_deact_target(self):
@@ -130,17 +215,28 @@ class AncState:
         self.indel_set_list = indel_set_list
 
     def __str__(self):
-        return "..".join([str(d) for d in self.indel_set_list])
+        if self.indel_set_list:
+            return "..".join([str(d) for d in self.indel_set_list])
+        else:
+            return "unmod"
 
     @staticmethod
-    def create_for_observed_allele(allele: BarcodeEvents):
+    def create_for_observed_allele(allele: BarcodeEvents, bcode_meta: BarcodeMetadata):
         """
         Create AncStsate for a leaf node
         """
         indel_set_list = []
         for evt in allele.events:
+            min_deact_target, max_deact_target = bcode_meta.get_min_max_deact_targets(evt)
             indel_set_list.append(
-                SingletonWC(evt.start_pos, evt.del_len, evt.min_target, evt.max_target, evt.insert_str))
+                SingletonWC(
+                    evt.start_pos,
+                    evt.del_len,
+                    min_deact_target,
+                    evt.min_target,
+                    evt.max_target,
+                    max_deact_target,
+                    evt.insert_str))
         return AncState(indel_set_list)
 
     @staticmethod

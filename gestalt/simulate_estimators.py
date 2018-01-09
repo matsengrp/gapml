@@ -18,9 +18,10 @@ from barcode import Barcode
 from clt_observer import CLTObserver
 from clt_estimator import CLTParsimonyEstimator
 from clt_likelihood_estimator import *
-from ancestral_events_finder import AncestralEventsFinder
 from collapsed_tree import CollapsedTree
 from alignment import AlignerNW
+from barcode_metadata import BarcodeMetadata
+from approximator import ApproximatorLB
 
 from constants import *
 from summary_util import *
@@ -153,10 +154,10 @@ def main():
         print(pruned_clt.get_ascii(attributes=["barcode_events"], show_internal=True))
         print("TRYYY")
         # TODO: make this more useful?
-        bcode_meta = BarcodeMetadata(10, "test test", [], [])
+        bcode_meta = BarcodeMetadata()
         model_params = CLTLikelihoodModel(pruned_clt, bcode_meta)
-        anc_evts_finder = AncestralEventsFinder()
-        lasso_est = CLTLassoEstimator(0, model_params, anc_evts_finder)
+        approximator = ApproximatorLB(2,1)
+        lasso_est = CLTLassoEstimator(0, model_params, approximator)
         lasso_est.get_likelihood(model_params)
 
 
