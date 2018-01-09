@@ -4,9 +4,11 @@ from typing import List
 from numpy import ndarray
 
 from clt_estimator import CLTEstimator
+from cell_lineage_tree import CellLineageTree
 from clt_likelihood_model import CLTLikelihoodModel
 from ancestral_events_finder import AncestralEventsFinder
 
+import state_sum as StateSum
 
 class CLTCalculations:
     """
@@ -37,16 +39,30 @@ class CLTLassoEstimator(CLTEstimator):
         self.num_targets = model_params.num_targets
         self.anc_evt_finder = anc_evt_finder
 
+        # Annotate with ancestral states
+        self.anc_evt_finder.annotate_ancestral_states(model_params.topology)
+        # Construct transition boolean matrix -- via state sum approximation
+        self.annotate_transition_bool_matrices(model_params.topology)
+
+
     def get_likelihood(self, model_params: CLTLikelihoodModel, get_grad: bool = False):
         """
         @return The likelihood for proposed theta, the gradient too if requested
         """
-        self.anc_evt_finder.annotate_ancestral_events(model_params.topology)
-        self._get_bcode_likelihood(model_params)
         raise NotImplementedError()
 
-    def _get_bcode_likelihood(self, model_params: CLTLikelihoodModel):
-        """
-        calculates likelihood of just the barcode section
-        """
-        trans_mat = model_params.create_transition_matrix()
+    def annotate_transition_bool_matrices(self, topology: CellLineageTree):
+        for node in tree.traverse("preorder"):
+            if node.is_root():
+                node.add_feature("state_sum", StateSum())
+            else:
+                approx_ancestor = node.up
+                create_branch_transition_bool_matrix(approx_ancestor, node)
+
+    def create_branch_transition_bool_matrix(self, approx_anc: CellLineageTree, node: CellLineageTree):
+        par_state_sum = node.up.state_sum
+        max_anc_state = node.anc_state
+        for tts in par_state_sum:
+            # Partition the TTs first according to max_anc_state
+            StateSum.partition_tts(tts, max_anc_state)
+

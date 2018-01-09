@@ -118,7 +118,7 @@ def main():
 
     # Now sample the leaves and see what happens with parsimony
     observer = CLTObserver(args.sampling_rate)
-    par_estimator = CLTParsimonyEstimator(aligner)
+    par_estimator = CLTParsimonyEstimator()
     for clt in forest:
         obs_leaves, pruned_clt = observer.observe_leaves(clt)
         # Let the two methods compare just in terms of topology
@@ -149,11 +149,13 @@ def main():
         #print(par_est_t)
 
         # trying out with true tree!!!
+        print("TRRR")
         print(pruned_clt.get_ascii(attributes=["barcode_events"], show_internal=True))
-        model_params = CLTLikelihoodModel(pruned_clt, 10)
-        anc_evts_finder = AncestralEventsFinder(
-            pruned_clt.barcode.orig_length,
-            pruned_clt.barcode.target_active_positions)
+        print("TRYYY")
+        # TODO: make this more useful?
+        bcode_meta = BarcodeMetadata(10, "test test", [], [])
+        model_params = CLTLikelihoodModel(pruned_clt, bcode_meta)
+        anc_evts_finder = AncestralEventsFinder()
         lasso_est = CLTLassoEstimator(0, model_params, anc_evts_finder)
         lasso_est.get_likelihood(model_params)
 

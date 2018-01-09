@@ -8,8 +8,6 @@ from constants import NUM_BARCODE_V7_TARGETS
 """
 Objects for representing a barcode using an event-encoded format
 """
-
-
 class Event(tuple):
     def __new__(
         cls,
@@ -21,17 +19,13 @@ class Event(tuple):
         """
         @param start_pos: position where event begins
         @param del_len: number of nucleotides deleted
-        @param insert_str: sequence of nucleotides inserted, if *, then it is wildcard
+        @param insert_str: sequence of nucleotides inserted
         @param targets: which targets this event is associated with
         """
         return tuple.__new__(cls, (start_pos, del_len, min_target, max_target, insert_str))
 
     def __getnewargs__(self):
         return (self.start_pos, self.del_len, self.min_target, self.max_target, self.insert_str)
-
-    @property
-    def is_wildcard(self):
-        return self.insert_str == "*"
 
     @property
     def start_pos(self):
@@ -64,17 +58,6 @@ class Event(tuple):
     @property
     def start_end(self):
         return (self.min_target, self.max_target)
-
-    def generalized_equals(self, child_evt):
-        if (self.start_pos == child_evt.start_pos and
-                self.del_len == child_evt.del_len and
-                self.min_target == child_evt.min_target and
-                self.max_target == child_evt.max_target):
-            if self.is_wildcard or child_evt.is_wildcard:
-                return True
-            else:
-                return self.insert_str == child_evt.insert_str
-        return False
 
     def hides(self, other):
         """return True if this event hides another event"""
@@ -117,8 +100,8 @@ class BarcodeEvents:
     def __hash__(self):
         return hash(tuple(self.events))
 
-    def __lt__(self, other):
-        return self.events < other.events
+#    def __lt__(self, other):
+#        return self.events < other.events
 
     def __str__(self):
         if self.events:

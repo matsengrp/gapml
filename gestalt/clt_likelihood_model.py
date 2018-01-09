@@ -5,6 +5,7 @@ from numpy import ndarray
 from scipy.sparse import coo_matrix, csr_matrix
 
 from cell_lineage_tree import CellLineageTree
+from barcode_metadata import BarcodeMetadata
 from common import product_list
 
 class CLTLikelihoodModel:
@@ -21,7 +22,7 @@ class CLTLikelihoodModel:
     CUT = 2
     NUM_EVENTS = 3
 
-    def __init__(self, topology: CellLineageTree, num_targets: int):
+    def __init__(self, topology: CellLineageTree, bcode_metadata: BarcodeMetadata):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
         @param num_targets: number of targets in barcode
@@ -29,7 +30,7 @@ class CLTLikelihoodModel:
         Will randomly initialize model parameters
         """
         self.topology = topology
-        self.num_targets = num_targets
+        self.bcode_metadata = bcode_metadata
         self.random_init()
 
     def set_vals(self, branch_lens: ndarray, target_lams: ndarray, cell_type_lams: ndarray, repair_lams: ndarray):
