@@ -223,7 +223,7 @@ class AncState:
     @staticmethod
     def create_for_observed_allele(allele: BarcodeEvents, bcode_meta: BarcodeMetadata):
         """
-        Create AncStsate for a leaf node
+        Create AncState for a leaf node
         """
         indel_set_list = []
         for evt in allele.events:

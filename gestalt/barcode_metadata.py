@@ -43,7 +43,7 @@ class BarcodeMetadata:
         else:
             min_deact_target = evt.min_target
 
-        if evt.max_target <= self.num_targets - 1 and self.pos_sites[evt.max_target + 1][0] <= evt.del_end - 1:
+        if evt.max_target < self.num_targets - 1 and self.pos_sites[evt.max_target + 1][0] <= evt.del_end - 1:
             max_deact_target = evt.max_target + 1
         else:
             max_deact_target = evt.max_target
