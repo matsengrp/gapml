@@ -94,15 +94,6 @@ class BarcodeEvents:
             disturbed_targets.update(list(range(evt.min_target, evt.max_target + 1)))
         return disturbed_targets
 
-    def __eq__(self, other):
-        return self.events == other.events
-
-    def __hash__(self):
-        return hash(tuple(self.events))
-
-#    def __lt__(self, other):
-#        return self.events < other.events
-
     def __str__(self):
         if self.events:
             return "..".join([str(evts) for evts in self.events])
