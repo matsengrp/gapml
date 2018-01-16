@@ -18,9 +18,10 @@ from barcode import Barcode
 from clt_observer import CLTObserver
 from clt_estimator import CLTParsimonyEstimator
 from clt_likelihood_estimator import *
-from ancestral_events_finder import AncestralEventsFinder
 from collapsed_tree import CollapsedTree
 from alignment import AlignerNW
+from barcode_metadata import BarcodeMetadata
+from approximator import ApproximatorLB
 
 from constants import *
 from summary_util import *
@@ -113,14 +114,10 @@ def main():
 
     #savefig(forest, args.outbase)
 
-    # define aligner
-    aligner = AlignerNW() if args.align else None
-
     # Now sample the leaves and see what happens with parsimony
     observer = CLTObserver(args.sampling_rate)
-    par_estimator = CLTParsimonyEstimator(aligner)
     for clt in forest:
-        obs_leaves, pruned_clt = observer.observe_leaves(clt)
+        obs_leaves, pruned_clt = observer.observe_leaves(clt, seed = args.seed)
         # Let the two methods compare just in terms of topology
         # To do that, we need to collapse our tree.
         # We collapse branches if the barcodes are identical.
@@ -129,32 +126,12 @@ def main():
                 node.dist = 0
         true_tree = CollapsedTree.collapse(pruned_clt)
 
-        #par_est_trees = par_estimator.estimate(obs_leaves)
-
-        ## Display the true tree (rename leaves for visualization ease)
-        #for leaf in true_tree:
-        #    leaf.name = str(leaf.barcode.get_events()) + str(leaf.cell_state)
-        ##    print(leaf.up.barcode.events())
-        ##    print(leaf.barcode.events())
-        ##    print("==%s==" % leaf.name)
-        #print("TRUTH")
-        #print(true_tree)
-
-        ## For now, we just display the first estimated tree
-        #par_est_t = par_est_trees[0]
-        #for leaf in par_est_t:
-        #    leaf.name = str(leaf.barcode.get_events()) + str(leaf.cell_state)
-        #print("ESTIMATE (1 out of %d equally parsimonious trees)" %
-        #      len(par_est_trees))
-        #print(par_est_t)
-
         # trying out with true tree!!!
         print(pruned_clt.get_ascii(attributes=["barcode_events"], show_internal=True))
-        model_params = CLTLikelihoodModel(pruned_clt, 10)
-        anc_evts_finder = AncestralEventsFinder(
-            pruned_clt.barcode.orig_length,
-            pruned_clt.barcode.target_active_positions)
-        lasso_est = CLTLassoEstimator(0, model_params, anc_evts_finder)
+        bcode_meta = BarcodeMetadata()
+        model_params = CLTLikelihoodModel(pruned_clt, bcode_meta)
+        approximator = ApproximatorLB(2,1)
+        lasso_est = CLTLassoEstimator(0, model_params, approximator)
         lasso_est.get_likelihood(model_params)
 
 
