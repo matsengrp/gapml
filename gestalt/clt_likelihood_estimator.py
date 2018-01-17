@@ -49,5 +49,14 @@ class CLTLassoEstimator(CLTEstimator):
         """
         @return The likelihood for proposed theta, the gradient too if requested
         """
-        model_params.create_transition_matrices()
+        transition_matrices = model_params.create_transition_matrices()
+
+        L = [dict() for _ in range(model_params.num_nonroot_nodes + 1)]
+        for node in model_params.topology.traverse("postorder"):
+            if not node.is_leaf():
+                for child in node.children:
+                    for tts in node.state_sum.tts_set:
+                        model_params.get_prob_unmasked_trims(
+                            child.anc_state,
+                            tts)
         raise NotImplementedError()

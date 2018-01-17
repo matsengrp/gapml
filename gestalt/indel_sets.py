@@ -182,6 +182,21 @@ class Singleton(IndelSet):
     def insert_len(self):
         return len(self.insert_str)
 
+    @property
+    def is_left_long(self):
+        return self.min_deact_target != self.min_target
+
+    @property
+    def is_right_long(self):
+        return self.max_deact_target != self.max_target
+
+    def get_target_tract(self):
+        return TargetTract(
+                self.min_deact_target,
+                self.min_target,
+                self.max_target,
+                self.max_deact_target)
+
 class TargetTract(IndelSet):
     def __new__(cls,
             min_deact_targ: int,
