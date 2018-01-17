@@ -49,4 +49,5 @@ class CLTLassoEstimator(CLTEstimator):
         """
         @return The likelihood for proposed theta, the gradient too if requested
         """
+        model_params.create_transition_matrices()
         raise NotImplementedError()
