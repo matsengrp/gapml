@@ -130,7 +130,7 @@ def main():
         print(pruned_clt.get_ascii(attributes=["barcode_events"], show_internal=True))
         bcode_meta = BarcodeMetadata()
         model_params = CLTLikelihoodModel(pruned_clt, bcode_meta)
-        approximator = ApproximatorLB(2,1)
+        approximator = ApproximatorLB(extra_steps = 2, anc_generations = 1, bcode_metadata = bcode_meta)
         lasso_est = CLTLassoEstimator(0, model_params, approximator)
         lasso_est.get_likelihood(model_params)
 

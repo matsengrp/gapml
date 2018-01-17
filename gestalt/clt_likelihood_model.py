@@ -30,10 +30,11 @@ class CLTLikelihoodModel:
         self.topology = topology
         node_id = 0
         for node in topology.traverse(self.NODE_ORDER):
-            if not node.is_root():
-                node.add_feature("node_id", node_id)
-                node_id += 1
-        self.num_nonroot_nodes = node_id
+            node.add_feature("node_id", node_id)
+            if node.is_root():
+                self.root_node_id = node_id
+            node_id += 1
+        self.num_nodes = node_id
         self.bcode_meta = bcode_meta
         self.num_targets = bcode_meta.num_targets
         self.random_init()
@@ -70,7 +71,9 @@ class CLTLikelihoodModel:
         Randomly initialize model parameters
         """
         self.set_vals(
-            branch_lens = np.random.gamma(gamma_prior[0], gamma_prior[1], self.num_nonroot_nodes),
+            # TODO: right now this is initialized to have one extra branch lenght that is ignored
+            #       probably want to clean this up later?
+            branch_lens = np.random.gamma(gamma_prior[0], gamma_prior[1], self.num_nodes),
             target_lams = 0.5 * np.ones(self.num_targets),
             trim_long_probs = 0.1 * np.ones(2),
             trim_zero_prob = 0.5,
@@ -84,17 +87,17 @@ class CLTLikelihoodModel:
     def create_transition_matrices(self):
         """
         Create transition matrix for each branch
-        @return list of matrices in the order of the nodes according to self.NODE_ORDER
+        @return dictionary of matrices mapping node id to matrix
+
+        TODO: maybe return a list instead of dictionary
         """
-        transition_matrices = []
+        transition_matrices = dict()
         for node in self.topology.traverse(self.NODE_ORDER):
             if not node.is_root():
                 # TODO: this should not be node.anc if statesum used a larger number
                 ref_anc = node.up
                 trans_mat = self._create_transition_matrix(node, ref_anc)
-                transition_matrices.append(trans_mat)
-                print("node", node.anc_state)
-                print("mat", trans_mat)
+                transition_matrices[node.node_id] = trans_mat
         return transition_matrices
 
     def _create_transition_matrix(self, node: CellLineageTree, ref_anc: CellLineageTree):
@@ -107,7 +110,7 @@ class CLTLikelihoodModel:
         # Determine the values in the transition matrix by considering all possible states
         # starting at the ref_anc's StateSum.
         # Recurse through all of its children to build out the transition matrix
-        for tts in ref_anc.state_sum.tts_set:
+        for tts in ref_anc.state_sum.tts_list:
             tts_partition_info = dict()
             tts_partition = ApproximatorLB.partition(tts, node.anc_state)
             for indel_set in indel_set_list:

@@ -89,20 +89,23 @@ class ApproximatorLB:
     1. extra_steps: the number of steps from the StateSum of the ancestor node
     2. anc_generations: the number of generations above the current node to use as a "lower bound" of the StateSum of the current node
     """
-    def __init__(self, extra_steps: int, anc_generations: int):
+    def __init__(self, extra_steps: int, anc_generations: int, bcode_metadata: BarcodeMetadata):
         self.extra_steps = extra_steps
         self.anc_generations = anc_generations
         # TODO: implement the code for anc_generations > 1
         assert anc_generations == 1
+        self.bcode_meta = bcode_metadata
 
     def annotate_state_sum_transitions(self, tree: CellLineageTree):
         for node in tree.traverse("preorder"):
             if node.is_root():
-                node.add_feature("state_sum", StateSum(set([()])))
+                node.add_feature("state_sum", StateSum([()]))
             else:
                 # TODO: make this look up self.anc_generations rather than only one
                 anc = node.up
                 transition_graph_dict, state_sum = self.get_branch_state_sum_transitions(anc, node)
+                if node.is_leaf():
+                    state_sum = StateSum.create_for_observed_allele(node.barcode_events, self.bcode_meta)
                 node.add_feature("state_sum", state_sum)
                 node.add_feature("transition_graph_dict", transition_graph_dict)
 
@@ -117,12 +120,12 @@ class ApproximatorLB:
         anc_partition = ApproximatorLB.partition(anc.anc_state.indel_set_list, node.anc_state)
 
         # For each state in in the ancestral node's StateSum, find the subgraph of nearby target tract repr
-        node_state_sum = StateSum(set())
+        node_state_sum = set()
         # Stores previously-explored subgraphs from a particular root node and max_indel_set
         subgraph_dict = {}
         # Stores previously-calculated partitioned state sums and max_indel_set
         sub_state_sums_dict = {}
-        for tts in anc.state_sum.tts_set:
+        for tts in anc.state_sum.tts_list:
             # Partition each state in the ancestral node's StateSum according to node's anc_state
             tts_partition = ApproximatorLB.partition(tts, node.anc_state)
             tts_sub_state_sums = []
@@ -154,7 +157,7 @@ class ApproximatorLB:
                 merge_target_tract_groups(tup_tt_groups) for tup_tt_groups in product_state_sums
             ])
 
-        return subgraph_dict, node_state_sum
+        return subgraph_dict, StateSum(node_state_sum)
 
     def walk_tt_group_subgraph(self, max_indel_set: IndelSet, tt_grp_rt: Tuple[TargetTract]):
         """
