@@ -271,8 +271,6 @@ class CLTLikelihoodModel:
         """
         @param tts: the current target tract representation
         @return the hazard to transitioning away from the current state.
-
-        TODO: maybe make this code less repetitive
         """
         # First compute sum of hazards for all focal deletions
         focal_hazards = self._get_hazard_list(tts, trim_left=True, trim_right=True)
