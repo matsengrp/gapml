@@ -1,11 +1,11 @@
 from typing import Tuple, List, Set, Dict
-from functools import reduce
 import itertools
 
 from indel_sets import TargetTract, AncState, IndelSet, SingletonWC
 from cell_lineage_tree import CellLineageTree
 from state_sum import StateSum
 from barcode_metadata import BarcodeMetadata
+from common import merge_target_tract_groups
 
 class TransitionToNode:
     """
@@ -31,14 +31,21 @@ class TransitionToNode:
             tt_group_new = ()
             tt_evt_added = False
             for i, tt in enumerate(tt_group_orig):
+                if i == 0:
+                    if tt_evt.max_deact_target < tt.min_deact_target:
+                        tt_group_new += (tt_evt,)
+                        tt_evt_added = True
+
                 if tt.max_deact_target < tt_evt.min_deact_target or tt_evt.max_deact_target < tt.min_deact_target:
                     tt_group_new += (tt,)
 
-                if i + 1 < len(tt_group_orig):
+                if not tt_evt_added and i < len(tt_group_orig) - 1:
                     next_tt = tt_group_orig[i + 1]
                     if next_tt.min_deact_target > tt_evt.max_deact_target:
                         tt_group_new += (tt_evt,)
                         tt_evt_added = True
+            if not tt_evt_added:
+                tt_group_new += (tt_evt,)
             return TransitionToNode(tt_evt, tt_group_new)
         else:
             return TransitionToNode(tt_evt, (tt_evt,))
@@ -51,12 +58,17 @@ class TransitionGraph:
     def __init__(self, edges: Dict[Tuple[TargetTract], Set[TransitionToNode]] = dict()):
         self.edges = edges
 
+    def get_children(self, node: Tuple[TargetTract]):
+        return self.edges[node]
+
     def get_nodes(self):
         return self.edges.keys()
 
     def add_edge(self, from_node: Tuple[TargetTract], to_node: TransitionToNode):
         if to_node in self.edges[from_node]:
             raise ValueError("Edge already exists?")
+        if to_node.tt_group == from_node:
+            raise ValueError("Huh they are the same")
         self.edges[from_node].add(to_node)
 
     def add_node(self, node: Tuple[TargetTract]):
@@ -80,14 +92,13 @@ class ApproximatorLB:
     def __init__(self, extra_steps: int, anc_generations: int):
         self.extra_steps = extra_steps
         self.anc_generations = anc_generations
+        # TODO: implement the code for anc_generations > 1
+        assert anc_generations == 1
 
     def annotate_state_sum_transitions(self, tree: CellLineageTree):
         for node in tree.traverse("preorder"):
             if node.is_root():
                 node.add_feature("state_sum", StateSum(set([()])))
-            elif node.is_leaf():
-                # TODO: Deal with a leaf which only has one possible state
-                continue
             else:
                 # TODO: make this look up self.anc_generations rather than only one
                 anc = node.up
@@ -140,7 +151,7 @@ class ApproximatorLB:
             # Finally take the "product" of these sub_state_sums to form state sum
             product_state_sums = itertools.product(*tts_sub_state_sums)
             node_state_sum.update([
-                reduce(lambda x,y: x + y, tup_tt_groups) for tup_tt_groups in product_state_sums
+                merge_target_tract_groups(tup_tt_groups) for tup_tt_groups in product_state_sums
             ])
 
         return subgraph_dict, node_state_sum
