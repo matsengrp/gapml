@@ -1,7 +1,7 @@
 import numpy as np
 import itertools
 from functools import reduce
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
 from indel_sets import TargetTract
 

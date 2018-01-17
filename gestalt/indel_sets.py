@@ -209,6 +209,13 @@ class TargetTract(IndelSet):
     def max_deact_target(self):
         return self[3]
 
+    @property
+    def is_left_long(self):
+        return self.min_deact_target != self.min_target
+
+    @property
+    def is_right_long(self):
+        return self.max_deact_target != self.max_target
 
 class AncState:
     def __init__(self, indel_set_list: List[IndelSet] = []):
