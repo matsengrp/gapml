@@ -16,7 +16,8 @@ class CLTLikelihoodModel:
     branch_lens: length of all the branches, indexed by node id at the end of the branch
     target_lams: cutting rate for each target
     cell_type_lams: rate of differentiating to a cell type
-    repair_lams: rate of repair (length 2 - focal and inter-target repair rate)
+
+    TODO: write tests!!!!
     """
     UNLIKELY = "unlikely"
 
@@ -113,9 +114,6 @@ class CLTLikelihoodModel:
                         "start": tt_tuple,
                         "graph": node.transition_graph_dict[graph_key]}
             self._add_transition_dict_row(tts_partition_info, indel_set_list, transition_dict)
-
-        if len(transition_dict) == 1:
-            return None
 
         # Add unlikely state
         transition_dict[self.UNLIKELY] = dict()

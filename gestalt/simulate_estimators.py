@@ -127,7 +127,7 @@ def main():
         true_tree = CollapsedTree.collapse(pruned_clt)
 
         # trying out with true tree!!!
-        print(pruned_clt.get_ascii(attributes=["name"], show_internal=True))
+        print(pruned_clt.get_ascii(attributes=["barcode_events"], show_internal=True))
         bcode_meta = BarcodeMetadata()
         model_params = CLTLikelihoodModel(pruned_clt, bcode_meta)
         approximator = ApproximatorLB(2,1)
