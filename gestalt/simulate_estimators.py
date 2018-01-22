@@ -12,7 +12,8 @@ matplotlib.use('agg')
 from cell_state import CellState, CellTypeTree
 from cell_state_simulator import CellTypeSimulator
 from clt_simulator import CLTSimulator
-from allele_simulator import AlleleSimulator
+from allele_simulator_cut_repair import AlleleSimulatorCutRepair
+from allele_simulator_simult import AlleleSimulatorSimultaneous
 from allele import Allele
 from clt_observer import CLTObserver
 from clt_estimator import CLTParsimonyEstimator
@@ -43,8 +44,12 @@ def main():
     parser.add_argument(
         '--repair-lambdas',
         type=float,
-        default=[1, 2],
-        help='repair poisson rate')
+        default=None,
+        help="""
+        repair poisson rate, used for non-simult cut/repair.
+        first one is poisson for focal, second is poisson param for inter-target
+        ex: [1,2]
+        """)
     parser.add_argument(
         '--repair-indel-probability',
         type=float,
@@ -90,11 +95,17 @@ def main():
 
     # Instantiate all the simulators
     bcode_meta = BarcodeMetadata()
-    allele_simulator = AlleleSimulator(
-        np.array(args.target_lambdas),
-        np.array(args.repair_lambdas), args.repair_indel_probability,
-        args.repair_deletion_lambda, args.repair_deletion_lambda,
-        args.repair_insertion_lambda)
+    if args.repair_lambdas:
+        allele_simulator = AlleleSimulatorCutRepair(
+            np.array(args.target_lambdas),
+            np.array(args.repair_lambdas), args.repair_indel_probability,
+            args.repair_deletion_lambda, args.repair_deletion_lambda,
+            args.repair_insertion_lambda)
+    else:
+        model_params = CLTLikelihoodModel(None, bcode_meta)
+        allele_simulator = AlleleSimulatorSimultaneous(
+            bcode_meta,
+            model_params)
     cell_type_simulator = CellTypeSimulator(cell_type_tree)
     clt_simulator = CLTSimulator(
             args.birth_lambda,
@@ -106,7 +117,7 @@ def main():
     forest = []
     for t in range(args.n_trees):
         clt = clt_simulator.simulate(
-                Allele(),
+                Allele(BARCODE_V7, bcode_meta),
                 CellState(categorical=cell_type_tree),
                 args.time)
         forest.append(clt)
@@ -127,10 +138,10 @@ def main():
 
         # trying out with true tree!!!
         print(pruned_clt.get_ascii(attributes=["allele_events"], show_internal=True))
-        model_params = CLTLikelihoodModel(pruned_clt, bcode_meta)
         approximator = ApproximatorLB(extra_steps = 2, anc_generations = 1, bcode_metadata = bcode_meta)
-        lasso_est = CLTLassoEstimator(0, model_params, approximator)
-        lasso_est.get_likelihood(model_params)
+        init_model_params = CLTLikelihoodModel(pruned_clt, bcode_meta)
+        lasso_est = CLTLassoEstimator(0, init_model_params, approximator)
+        lasso_est.get_likelihood(init_model_params)
 
 
 if __name__ == "__main__":

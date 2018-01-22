@@ -23,35 +23,44 @@ class BarcodeMetadata:
         self.unedited_barcode = unedited_barcode
         self.orig_substr_lens = [len(s) for s in unedited_barcode]
         self.orig_length = sum(self.orig_substr_lens)
-        self.num_targets = (len(self.unedited_barcode) - 1) // 2
+        self.n_targets = (len(self.unedited_barcode) - 1) // 2
 
         self.cut_sites = cut_sites
         # absolute positions of cut locations
         self.abs_cut_sites = [
-            sum(self.orig_substr_lens[:2 * (i + 1)]) - cut_sites[i] for i in range(self.num_targets)
+            sum(self.orig_substr_lens[:2 * (i + 1)]) - cut_sites[i] for i in range(self.n_targets)
         ]
 
         # Range of positions for each target
         # regarding which positions must be unedited
         # for this target to still be active.
         self.pos_sites = []
-        for i in range(self.num_targets):
+        for i in range(self.n_targets):
             cut_site = self.abs_cut_sites[i]
             right = min(self.orig_length - 1, cut_site + crucial_pos_len[1])
             left = max(0, cut_site - crucial_pos_len[0])
             self.pos_sites.append((left, right))
 
+        # Min length of a long trim for target i -- left
         self.left_long_trim_min = [
-            self.abs_cut_sites[i] - self.pos_sites[i - 1][1] for i in range(1, self.num_targets)]
+            self.abs_cut_sites[i] - self.pos_sites[i - 1][1] for i in range(1, self.n_targets)]
+        # Min length of a long trim for target i -- right
         self.right_long_trim_min = [
-            self.pos_sites[i + 1][0] - self.abs_cut_sites[i] for i in range(self.num_targets - 1)]
+            self.pos_sites[i + 1][0] - self.abs_cut_sites[i] for i in range(self.n_targets - 1)]
 
+        # Max length of any trim for target i -- left
         self.left_max_trim = [
-            self.abs_cut_sites[i] - self.abs_cut_sites[i - 1] for i in range(1, self.num_targets)]
+            self.abs_cut_sites[i] - self.abs_cut_sites[i - 1] for i in range(1, self.n_targets)]
+        # TODO: right now this just copies over the max from the 1st target
         self.left_max_trim = [self.left_max_trim[0]] + self.left_max_trim
+        self.left_long_trim_min = [self.left_max_trim[0]] + self.left_long_trim_min
+
+        # Max length of any trim for target i -- right
         self.right_max_trim = [
-            self.abs_cut_sites[i + 1] - self.abs_cut_sites[i] for i in range(self.num_targets - 1)]
+            self.abs_cut_sites[i + 1] - self.abs_cut_sites[i] for i in range(self.n_targets - 1)]
+        # TODO: right now this just copies over the max from the 1st target
         self.right_max_trim += [self.right_max_trim[-1]]
+        self.right_long_trim_min += [self.right_max_trim[-1]]
 
     def get_min_max_deact_targets(self, evt: Event):
         if evt.min_target > 1 and evt.start_pos < self.pos_sites[evt.min_target - 1][1]:
@@ -59,7 +68,7 @@ class BarcodeMetadata:
         else:
             min_deact_target = evt.min_target
 
-        if evt.max_target < self.num_targets - 1 and self.pos_sites[evt.max_target + 1][0] <= evt.del_end - 1:
+        if evt.max_target < self.n_targets - 1 and self.pos_sites[evt.max_target + 1][0] <= evt.del_end - 1:
             max_deact_target = evt.max_target + 1
         else:
             max_deact_target = evt.max_target

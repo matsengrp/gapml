@@ -6,6 +6,7 @@ from cell_lineage_tree import CellLineageTree
 from state_sum import StateSum
 from barcode_metadata import BarcodeMetadata
 from common import merge_target_tract_groups
+from clt_likelihood_model import CLTLikelihoodModel
 
 class TransitionToNode:
     """
@@ -117,7 +118,7 @@ class ApproximatorLB:
         # Partition the ancestral node's anc_state according to node's anc_state.
         # Used for deciding which states to add in node's StateSum since node's StateSum is
         # composed of states that cannot be < ancestor node's anc_state.
-        anc_partition = ApproximatorLB.partition(anc.anc_state.indel_set_list, node.anc_state)
+        anc_partition = CLTLikelihoodModel.partition(anc.anc_state.indel_set_list, node.anc_state)
 
         # For each state in in the ancestral node's StateSum, find the subgraph of nearby target tract repr
         node_state_sum = set()
@@ -127,7 +128,7 @@ class ApproximatorLB:
         sub_state_sums_dict = {}
         for tts in anc.state_sum.tts_list:
             # Partition each state in the ancestral node's StateSum according to node's anc_state
-            tts_partition = ApproximatorLB.partition(tts, node.anc_state)
+            tts_partition = CLTLikelihoodModel.partition(tts, node.anc_state)
             tts_sub_state_sums = []
             for max_indel_set in node.anc_state.indel_set_list:
                 tt_tuple_start = tts_partition[max_indel_set]
@@ -200,7 +201,7 @@ class ApproximatorLB:
                 # Find available actions
                 active_any_targs = ApproximatorLB.get_active_any_trim_targets(max_indel_set, tt_grp_start)
                 # Get possible target tract events
-                tt_evts = ApproximatorLB.get_possible_any_trim_target_tracts(active_any_targs)
+                tt_evts = CLTLikelihoodModel.get_possible_target_tracts(active_any_targs)
                 # Add possible target tract events to the graph
                 for tt_evt in tt_evts:
                     to_node = TransitionToNode.create_transition_to(tt_grp_start, tt_evt)
@@ -226,34 +227,6 @@ class ApproximatorLB:
             return set()
 
     @staticmethod
-    def partition(tts: Tuple[IndelSet], anc_state: AncState):
-        """
-        TODO: maybe move this to some other function?
-        @return split tts according to anc_state: Dict[IndelSet, Tuple[TargetTract]]
-        """
-        parts = {indel_set : () for indel_set in anc_state.indel_set_list}
-
-        tts_idx = 0
-        n_tt = len(tts)
-        anc_state_idx = 0
-        n_anc_state = len(anc_state.indel_set_list)
-        while tts_idx < n_tt and anc_state_idx < n_anc_state:
-            cur_tt = tts[tts_idx]
-            indel_set = anc_state.indel_set_list[anc_state_idx]
-
-            if cur_tt.max_deact_target < indel_set.min_deact_target:
-                tts_idx += 1
-                continue
-            elif indel_set.max_deact_target < cur_tt.min_deact_target:
-                anc_state_idx += 1
-                continue
-
-            # Should be overlapping now
-            parts[indel_set] = parts[indel_set] + (cur_tt,)
-            tts_idx += 1
-        return parts
-
-    @staticmethod
     def get_active_any_trim_targets(indel_set: IndelSet, tt_grp: Tuple[TargetTract]):
         """
         @return
@@ -274,47 +247,3 @@ class ApproximatorLB:
                 active_any_targs = list(range(wc.min_target, wc.max_target + 1))
 
         return active_any_targs
-
-    @staticmethod
-    def get_possible_any_trim_target_tracts(active_any_targs: List[int]):
-        """
-        @param active_any_targs: a list of active targets that can be cut with any trim
-        @return a set of possible target tracts
-        """
-        n_any_targs = len(active_any_targs)
-
-        # Take one step from this TT group using two step procedure
-        # 1. enumerate all possible start positions for target tract
-        # 2. enumerate all possible end positions for target tract
-
-        # List possible starts of the target tracts
-        all_starts = [[] for _ in range(n_any_targs)]
-        for i0_prime, t0_prime in enumerate(active_any_targs):
-            # No left trim overflow
-            all_starts[i0_prime].append((t0_prime, t0_prime))
-            # Determine if left trim overflow allowed
-            if i0_prime < n_any_targs - 1 and active_any_targs[i0_prime + 1] == t0_prime + 1:
-                # Add in the long left trim overflow
-                all_starts[i0_prime + 1].append((t0_prime, t0_prime + 1))
-
-        # Create possible ends of the target tracts
-        all_ends = [[] for i in range(n_any_targs)]
-        for i1_prime, t1_prime in enumerate(active_any_targs):
-            # No right trim overflow
-            all_ends[i1_prime].append((t1_prime, t1_prime))
-            # Determine if right trim overflow allowed
-            if i1_prime > 0 and active_any_targs[i1_prime - 1] == t1_prime - 1:
-                # Add in the right trim overflow
-                all_ends[i1_prime - 1].append((t1_prime - 1, t1_prime))
-
-        # Finally create all possible target tracts by combining possible start and ends
-        tt_evts = set()
-        for j, tt_starts in enumerate(all_starts):
-            for k in range(j, n_any_targs):
-                tt_ends = all_ends[k]
-                for tt_start in tt_starts:
-                    for tt_end in tt_ends:
-                        tt_evt = TargetTract(tt_start[0], tt_start[1], tt_end[0], tt_end[1])
-                        tt_evts.add(tt_evt)
-
-        return tt_evts
