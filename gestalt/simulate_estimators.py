@@ -4,7 +4,6 @@ Right now, only contains parsimony
 """
 
 from __future__ import division, print_function
-import pickle
 import numpy as np
 import argparse
 import matplotlib
@@ -83,7 +82,6 @@ def main():
     np.random.seed(seed=args.seed)
 
     # Create a cell-type tree
-    cell_types = ["brain", "eye"]
     cell_type_tree = CellTypeTree(cell_type=None, rate=0)
     cell_type_tree.add_child(
         CellTypeTree(cell_type=0, rate=0.05))
@@ -91,6 +89,7 @@ def main():
         CellTypeTree(cell_type=1, rate=0.05))
 
     # Instantiate all the simulators
+    bcode_meta = BarcodeMetadata()
     allele_simulator = AlleleSimulator(
         np.array(args.target_lambdas),
         np.array(args.repair_lambdas), args.repair_indel_probability,
@@ -128,7 +127,6 @@ def main():
 
         # trying out with true tree!!!
         print(pruned_clt.get_ascii(attributes=["allele_events"], show_internal=True))
-        bcode_meta = BarcodeMetadata()
         model_params = CLTLikelihoodModel(pruned_clt, bcode_meta)
         approximator = ApproximatorLB(extra_steps = 2, anc_generations = 1, bcode_metadata = bcode_meta)
         lasso_est = CLTLassoEstimator(0, model_params, approximator)
