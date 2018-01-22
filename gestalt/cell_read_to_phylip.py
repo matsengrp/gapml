@@ -18,18 +18,18 @@ def parse_args():
 
 def make_phylip_lines(cell_reads: CellReads, evt_to_id_dict: Dict[str, int]):
     """
-    convert each BarcodeEvents object to PHYLIP MIX inputs
+    convert each AlleleEvents object to PHYLIP MIX inputs
     """
     num_events = len(cell_reads.event_str_ids)
     lines = []
-    for barcode_i, barcode in enumerate(cell_reads.uniq_barcodes):
+    for allele_i, allele in enumerate(cell_reads.uniq_alleles):
         event_idxs = [
-            evt_to_id_dict[evt.get_str_id()] for evt in barcode.get_uniq_events()
+            evt_to_id_dict[evt.get_str_id()] for evt in allele.get_uniq_events()
         ]
         event_arr = np.zeros((num_events, ), dtype=int)
         event_arr[event_idxs] = 1
         event_encoding = "".join([str(c) for c in event_arr.tolist()])
-        seq_name = str(barcode_i)
+        seq_name = str(allele_i)
         seq_name += " " * (10 - len(seq_name))
         lines.append("%s%s\n" % (seq_name, event_encoding))
     return lines

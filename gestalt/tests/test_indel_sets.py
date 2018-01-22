@@ -2,7 +2,7 @@ import unittest
 
 from indel_sets import *
 
-class BarcodeTestCase(unittest.TestCase):
+class AlleleTestCase(unittest.TestCase):
     def test_intersection(self):
         w = Wildcard(2,4)
         s = SingletonWC(1,10,1,1,"Asdf")

@@ -20,7 +20,7 @@ class CollapsedTree:
                 for leaf in tree:
                     abundance = 1
                     for sister in leaf.get_sisters():
-                        if sister.barcode_events.events == leaf.barcode_events.events:
+                        if sister.allele_events.events == leaf.allele_events.events:
                             abundance += 1
                             leaf.remove_sister(sister)
                             did_something = True

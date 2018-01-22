@@ -1,7 +1,7 @@
 from typing import List
 from typing import Dict
 
-from barcode_events import BarcodeEvents
+from allele_events import AlleleEvents
 from barcode_metadata import BarcodeMetadata
 
 class IndelSet(tuple):
@@ -243,7 +243,7 @@ class AncState:
             return "unmod"
 
     @staticmethod
-    def create_for_observed_allele(allele: BarcodeEvents, bcode_meta: BarcodeMetadata):
+    def create_for_observed_allele(allele: AlleleEvents, bcode_meta: BarcodeMetadata):
         """
         Create AncState for a leaf node
         """

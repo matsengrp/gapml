@@ -6,7 +6,7 @@ from cell_state import CellTypeTree
 from constants import NUM_BARCODE_V7_TARGETS
 
 """
-Objects for representing a barcode using an event-encoded format
+Objects for representing a allele using an event-encoded format
 """
 class Event(tuple):
     def __new__(
@@ -68,12 +68,12 @@ class Event(tuple):
             return False
 
 
-class BarcodeEvents:
+class AlleleEvents:
     """
-    Represents a barcode in event-encoding.
+    Represents a allele in event-encoding.
     Efficient for estimation procedures.
 
-    Use this representation for cleaned barcode representation where each target
+    Use this representation for cleaned allele representation where each target
     can be associated with at most a single event.
     """
     def __init__(self, events: List[Event] = [], num_targets=10):

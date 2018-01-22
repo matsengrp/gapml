@@ -2,7 +2,7 @@ from typing import List, Tuple
 import numpy as np
 
 from cell_lineage_tree import CellLineageTree
-from barcode_events import Event, BarcodeEvents
+from allele_events import Event, AlleleEvents
 from indel_sets import AncState
 
 from barcode_metadata import BarcodeMetadata
@@ -17,7 +17,7 @@ def annotate_ancestral_states(tree: CellLineageTree, bcode_meta: BarcodeMetadata
     """
     for node in tree.traverse("postorder"):
         if node.is_leaf():
-            node.add_feature("anc_state", AncState.create_for_observed_allele(node.barcode_events, bcode_meta))
+            node.add_feature("anc_state", AncState.create_for_observed_allele(node.allele_events, bcode_meta))
         elif node.is_root():
             node.add_feature("anc_state", AncState())
             print(node.get_ascii(attributes=["anc_state"], show_internal=True))

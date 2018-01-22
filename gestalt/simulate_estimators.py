@@ -4,7 +4,6 @@ Right now, only contains parsimony
 """
 
 from __future__ import division, print_function
-import pickle
 import numpy as np
 import argparse
 import matplotlib
@@ -13,8 +12,8 @@ matplotlib.use('agg')
 from cell_state import CellState, CellTypeTree
 from cell_state_simulator import CellTypeSimulator
 from clt_simulator import CLTSimulator
-from barcode_simulator import BarcodeSimulator
-from barcode import Barcode
+from allele_simulator import AlleleSimulator
+from allele import Allele
 from clt_observer import CLTObserver
 from clt_estimator import CLTParsimonyEstimator
 from clt_likelihood_estimator import *
@@ -73,7 +72,7 @@ def main():
         '--sampling-rate',
         type=float,
         default=0.5,
-        help='proportion cells sampled/barcodes successfully sequenced')
+        help='proportion cells sampled/alleles successfully sequenced')
     parser.add_argument(
         '--n-trees', type=int, default=1, help='number of trees in forest')
     parser.add_argument('--seed', type=int, default=0)
@@ -83,7 +82,6 @@ def main():
     np.random.seed(seed=args.seed)
 
     # Create a cell-type tree
-    cell_types = ["brain", "eye"]
     cell_type_tree = CellTypeTree(cell_type=None, rate=0)
     cell_type_tree.add_child(
         CellTypeTree(cell_type=0, rate=0.05))
@@ -91,7 +89,8 @@ def main():
         CellTypeTree(cell_type=1, rate=0.05))
 
     # Instantiate all the simulators
-    bcode_simulator = BarcodeSimulator(
+    bcode_meta = BarcodeMetadata()
+    allele_simulator = AlleleSimulator(
         np.array(args.target_lambdas),
         np.array(args.repair_lambdas), args.repair_indel_probability,
         args.repair_deletion_lambda, args.repair_deletion_lambda,
@@ -101,13 +100,13 @@ def main():
             args.birth_lambda,
             args.death_lambda,
             cell_type_simulator,
-            bcode_simulator)
+            allele_simulator)
 
     # Simulate the trees
     forest = []
     for t in range(args.n_trees):
         clt = clt_simulator.simulate(
-                Barcode(),
+                Allele(),
                 CellState(categorical=cell_type_tree),
                 args.time)
         forest.append(clt)
@@ -120,15 +119,14 @@ def main():
         obs_leaves, pruned_clt = observer.observe_leaves(clt, seed = args.seed)
         # Let the two methods compare just in terms of topology
         # To do that, we need to collapse our tree.
-        # We collapse branches if the barcodes are identical.
+        # We collapse branches if the alleles are identical.
         for node in pruned_clt.get_descendants(strategy='postorder'):
-            if str(node.up.barcode) == str(node.barcode):
+            if str(node.up.allele) == str(node.allele):
                 node.dist = 0
         true_tree = CollapsedTree.collapse(pruned_clt)
 
         # trying out with true tree!!!
-        print(pruned_clt.get_ascii(attributes=["barcode_events"], show_internal=True))
-        bcode_meta = BarcodeMetadata()
+        print(pruned_clt.get_ascii(attributes=["allele_events"], show_internal=True))
         model_params = CLTLikelihoodModel(pruned_clt, bcode_meta)
         approximator = ApproximatorLB(extra_steps = 2, anc_generations = 1, bcode_metadata = bcode_meta)
         lasso_est = CLTLassoEstimator(0, model_params, approximator)

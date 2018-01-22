@@ -40,7 +40,7 @@ def summary_plots(trees: List[CellLineageTree], file_name: str):
     indel_lens = []
     for tree in trees:
         # counter for the unique leaf genotypes
-        genotypes = Counter([''.join(leaf.barcode.barcode) for leaf in tree])
+        genotypes = Counter([''.join(leaf.allele.allele) for leaf in tree])
         n_genotypes.append(len(genotypes))
         n_cells.append(sum(genotypes.values()))
         n_indels.append([
