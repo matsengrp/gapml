@@ -15,8 +15,8 @@ from Bio.SeqRecord import SeqRecord
 from Bio.Alphabet import generic_dna
 from Bio import AlignIO, SeqIO
 
-from barcode import Barcode
-from barcode_events import BarcodeEvents
+from allele import Allele
+from allele_events import AlleleEvents
 from cell_state import CellState
 from common import get_color
 
@@ -29,15 +29,15 @@ class CellLineageTree(TreeNode):
     """
 
     def __init__(self,
-                 barcode: Barcode = None,
-                 barcode_events: BarcodeEvents = None,
+                 allele: Allele = None,
+                 allele_events: AlleleEvents = None,
                  cell_state: CellState = None,
                  dist: float = 0,
                  dead: bool = False,
                  n_id: int = None,
                  abundance: int = 1):
         """
-        @param barcode OR barcode_events: the barcode at the CLT node.
+        @param allele OR allele_events: the allele at the CLT node.
                             Only one of these two values should be given
                             as input.
         @param cell_state: the cell state at the node
@@ -47,13 +47,13 @@ class CellLineageTree(TreeNode):
         """
         super().__init__()
         self.dist = dist
-        if barcode is not None:
-            self.add_feature("barcode", barcode)
-            self.add_feature("barcode_events", barcode.get_event_encoding())
+        if allele is not None:
+            self.add_feature("allele", allele)
+            self.add_feature("allele_events", allele.get_event_encoding())
         else:
-            self.add_feature("barcode_events", barcode_events)
+            self.add_feature("allele_events", allele_events)
             # Maybe we'll need this conversion someday. For now we leave it empty.
-            self.add_feature("barcode", None)
+            self.add_feature("allele", None)
 
         self.add_feature("cell_state", cell_state)
         self.add_feature("dead", dead)
@@ -62,23 +62,23 @@ class CellLineageTree(TreeNode):
 
     def _create_sequences(self):
         """
-        @return sequences for leaf barcodes
+        @return sequences for leaf alleles
         """
         sequences = []
         for i, leaf in enumerate(self, 1):
             name = 'b{}'.format(i)
-            barcode_sequence = re.sub('[-]', '',
-                                      ''.join(leaf.barcode.barcode)).upper()
+            allele_sequence = re.sub('[-]', '',
+                                      ''.join(leaf.allele.allele)).upper()
             indel_events = ','.join(':'.join([
                 str(start), str(end), str(insertion)
-            ]) for start, end, insertion in leaf.barcode.get_events())
+            ]) for start, end, insertion in leaf.allele.get_events())
             sequences.append(
                 SeqRecord(
-                    Seq(barcode_sequence, generic_dna),
+                    Seq(allele_sequence, generic_dna),
                     id=name,
                     description=indel_events,
                     letter_annotations=dict(
-                        phred_quality=[60] * len(barcode_sequence))))
+                        phred_quality=[60] * len(allele_sequence))))
         return sequences
 
     def write_sequences(self, file_name: str):
@@ -98,20 +98,20 @@ class CellLineageTree(TreeNode):
         for leaf in self_copy:
             # get the motif list for indels in the format that SeqMotifFace expects
             motifs = []
-            for match in re.compile('[acgt]+').finditer(str(leaf.barcode)):
+            for match in re.compile('[acgt]+').finditer(str(leaf.allele)):
                 motifs.append([
                     match.start(),
                     match.end(), '[]',
                     match.end() - match.start(), 10, 'black', 'blue', None
                 ])
-            for match in re.compile('[-]+').finditer(str(leaf.barcode)):
+            for match in re.compile('[-]+').finditer(str(leaf.allele)):
                 motifs.append([
                     match.start(),
                     match.end(), '[]',
                     match.end() - match.start(), 10, 'black', 'red', None
                 ])
             seqFace = SeqMotifFace(
-                seq=str(leaf.barcode).upper(),
+                seq=str(leaf.allele).upper(),
                 motifs=motifs,
                 seqtype='nt',
                 seq_format='[]',
@@ -143,21 +143,21 @@ class CellLineageTree(TreeNode):
         fig = plt.figure(figsize=(5, 1.5))
         position = 0
         # loop through and get the deletion frequency of each site
-        for bit_index, bit in enumerate(self.barcode.unedited_barcode):
+        for bit_index, bit in enumerate(self.allele.unedited_allele):
             if len(bit) == 4:
                 # the spacer seqs are length 4, we plot vertical bars to demarcate target boundaries
                 plt.bar(position, 100, 4, facecolor='black', alpha=.2)
             for bit_position, letter in enumerate(bit):
                 deletion_frequency.append(100 * sum(
-                    leaf.abundance * int(re.sub('[acgt]', '', leaf.barcode.barcode[bit_index])[
+                    leaf.abundance * int(re.sub('[acgt]', '', leaf.allele.allele[bit_index])[
                         bit_position] == '-') for leaf in self) / n_leaves)
             position += len(bit)
         plt.plot(deletion_frequency, color='red', lw=2, clip_on=False)
         # another loop through to find the frequency that each site is the start of an insertion
-        insertion_flank_frequency = scipy.zeros(len(str(self.barcode)))
+        insertion_flank_frequency = scipy.zeros(len(str(self.allele)))
         for leaf in self:
             insertion_total = 0
-            for insertion in re.compile('[acgt]+').finditer(str(leaf.barcode)):
+            for insertion in re.compile('[acgt]+').finditer(str(leaf.allele)):
                 start = insertion.start() - insertion_total
                 end = insertion.end() - insertion_total
                 insertion_flank_frequency[start:end] += 100 * leaf.abundance / n_leaves
@@ -183,10 +183,10 @@ class CellLineageTree(TreeNode):
         i = 0
         for leaf in self:
             for match in re.compile('[-]+').finditer(
-                    re.sub('[acgt]', '', ''.join(leaf.barcode.barcode))):
+                    re.sub('[acgt]', '', ''.join(leaf.allele.allele))):
                 indels.loc[i] = match.start(), match.end()
                 i += 1
-        bc_len = len(''.join(self.barcode.unedited_barcode))
+        bc_len = len(''.join(self.allele.unedited_allele))
         plt.figure(figsize=(3, 3))
         bins = scipy.linspace(0, bc_len, 10 + 1)
         g = (sns.jointplot(
@@ -202,7 +202,7 @@ class CellLineageTree(TreeNode):
              .plot_joint(
                  plt.hist2d, bins=bins, norm=LogNorm(), cmap='Reds', zorder=0))
         position = 0
-        for bit in self.barcode.unedited_barcode:
+        for bit in self.allele.unedited_allele:
             if len(bit) == 4:
                 # the spacer seqs are length 4, we plot bars to demarcate target boundaries
                 for ax in g.ax_marg_x, g.ax_joint:
@@ -243,7 +243,7 @@ class CellLineageTree(TreeNode):
         i = 0
         for leaf in self:
             for indel in re.compile(r'(-*)([acgt]*)(-*)+').finditer(
-                    str(leaf.barcode)):
+                    str(leaf.allele)):
                 if len(indel.group(0)) > 0:
                     indels.loc[i] = (len(indel.group(1)) + len(indel.group(3)),
                                      len(indel.group(2)))

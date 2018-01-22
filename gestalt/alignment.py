@@ -8,8 +8,8 @@ class Aligner():
     """
     def events(self, sequence: str, reference: str):
         """
-        @param sequence: observed (edited) barcode nucleotide sequence
-        @param reference: design barcoded sequence to align to
+        @param sequence: observed (edited) allele nucleotide sequence
+        @param reference: design alleled sequence to align to
         @return events as a list of tuples of start, end, and insertion sequence
         """
         raise NotImplementedError()

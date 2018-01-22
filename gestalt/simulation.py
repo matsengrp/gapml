@@ -7,7 +7,7 @@ matplotlib.use('agg')
 
 from cell_state import CellTypeTree
 from clt_simulator import CLTSimulator
-from barcode_simulator import BarcodeSimulator
+from allele_simulator import AlleleSimulator
 
 from constants import *
 from summary_util import *
@@ -68,13 +68,13 @@ def main():
         CellTypeTree(cell_type=1, rate=0, probability=0.5))
 
     # Instantiate all the simulators
-    bcode_simulator = BarcodeSimulator(
+    allele_simulator = AlleleSimulator(
         np.array(args.target_lambdas),
         np.array(args.repair_lambdas), args.repair_indel_probability,
         args.repair_deletion_lambda, args.repair_deletion_lambda,
         args.repair_insertion_lambda)
     clt_simulator = CLTSimulator(args.birth_lambda, args.death_lambda,
-                                 cell_type_tree, bcode_simulator)
+                                 cell_type_tree, allele_simulator)
 
     # Simulate the trees
     forest = []

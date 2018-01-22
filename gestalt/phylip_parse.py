@@ -138,49 +138,49 @@ def build_tree(leaf_seqs, edges, counts=None):
             node_to = nodes[node_to_name]
         node_to.add_feature("difference", diff_seq)
         if node_to_name in leaf_seqs:
-            binary_barcode_len = len(leaf_seqs[node_to_name])
-            node_to.add_feature("binary_barcode", leaf_seqs[node_to_name])
+            binary_allele_len = len(leaf_seqs[node_to_name])
+            node_to.add_feature("binary_allele", leaf_seqs[node_to_name])
         else:
-            node_to.add_feature("binary_barcode", None)
+            node_to.add_feature("binary_allele", None)
 
     root_node = nodes["root"]
-    root_node.add_feature("binary_barcode", "".join(['0'] * binary_barcode_len))
+    root_node.add_feature("binary_allele", "".join(['0'] * binary_allele_len))
 
     for node_from_name, node_to_name in edges:
         nodes[node_from_name].add_child(nodes[node_to_name])
 
-    # generate binary barcodes
+    # generate binary alleles
     for node in root_node.iter_descendants("preorder"):
-        bcode = ''
-        for is_diff, bcode_char in zip(node.difference, node.up.binary_barcode):
-            bcode += bcode_char if is_diff == "." else is_diff
+        allele = ''
+        for is_diff, allele_char in zip(node.difference, node.up.binary_allele):
+            allele += allele_char if is_diff == "." else is_diff
         if node.is_leaf():
-            assert node.binary_barcode == bcode
+            assert node.binary_allele == allele
         else:
-            node.binary_barcode = bcode
+            node.binary_allele = allele
 
-    assert set(root_node.binary_barcode) == set('0')
+    assert set(root_node.binary_allele) == set('0')
 
     # # make random choices for ambiguous internal states, respecting tree inheritance
-    # sequence_length = len(root_node.binary_barcode)
+    # sequence_length = len(root_node.binary_allele)
     # for node in root_node.iter_descendants():
     #     for site in range(sequence_length):
-    #         symbol = node.binary_barcode[site]
+    #         symbol = node.binary_allele[site]
     #         if symbol == '?':
     #             new_symbol = '0'#random.choice(('0', '1'))
-    #             for node2 in node.traverse(is_leaf_fn=lambda n: False if symbol in [n2.binary_barcode[site] for n2 in n.children] else True):
-    #                 if node2.binary_barcode[site] == symbol:
-    #                     node2.binary_barcode = node2.binary_barcode[:site] + new_symbol + node2.binary_barcode[(site+1):]
+    #             for node2 in node.traverse(is_leaf_fn=lambda n: False if symbol in [n2.binary_allele[site] for n2 in n.children] else True):
+    #                 if node2.binary_allele[site] == symbol:
+    #                     node2.binary_allele = node2.binary_allele[:site] + new_symbol + node2.binary_allele[(site+1):]
 
     # compute branch lengths
     root_node.dist = 0 # no branch above root
     for node in root_node.iter_descendants():
-        node.dist = sum(x != y for x, y in zip(node.binary_barcode, node.up.binary_barcode)) # 0 if node.binary_barcode == node.up.binary_barcode else 1
+        node.dist = sum(x != y for x, y in zip(node.binary_allele, node.up.binary_allele)) # 0 if node.binary_allele == node.up.binary_allele else 1
 
     # # # convert the leaves back to contain "?"
-    # # # NOTE: don't compute branch lengths from binary_barcode differences after this
+    # # # NOTE: don't compute branch lengths from binary_allele differences after this
     # for leaf in root_node:
-    #     leaf.binary_barcode = leaf_seqs[leaf.name]
+    #     leaf.binary_allele = leaf_seqs[leaf.name]
 
     if counts is not None:
         for node in root_node.traverse():

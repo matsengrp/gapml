@@ -2,7 +2,7 @@ from typing import List, Tuple, Set
 
 from indel_sets import TargetTract, AncState
 from barcode_metadata import BarcodeMetadata
-from barcode_events import BarcodeEvents
+from allele_events import AlleleEvents
 
 class StateSum:
     def __init__(self, tts_list: List[Tuple[TargetTract]]):
@@ -12,7 +12,7 @@ class StateSum:
         return " OR ".join([str(tts) for tts in self.tts_list])
 
     @staticmethod
-    def create_for_observed_allele(allele: BarcodeEvents, bcode_meta: BarcodeMetadata):
+    def create_for_observed_allele(allele: AlleleEvents, bcode_meta: BarcodeMetadata):
         """
         Create AncState for a leaf node
         """

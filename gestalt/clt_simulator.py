@@ -5,9 +5,9 @@ import numpy as np
 from cell_lineage_tree import CellLineageTree
 from cell_state import CellTypeTree, CellState
 from cell_state_simulator import CellStateSimulator
-from barcode import Barcode
-from barcode_events import BarcodeEvents
-from barcode_simulator import BarcodeSimulator
+from allele import Allele
+from allele_events import AlleleEvents
+from allele_simulator import AlleleSimulator
 
 
 class CLTSimulator:
@@ -15,33 +15,33 @@ class CLTSimulator:
     Class for simulating cell lineage trees.
     Subclass this to play around with different generative models.
 
-    This class is generates CLT based on cell division/death/cell-type-differentiation. Barcode is independently modified along branches.
+    This class is generates CLT based on cell division/death/cell-type-differentiation. Allele is independently modified along branches.
     """
 
     def __init__(self,
         birth_rate: float,
         death_rate: float,
         cell_state_simulator: CellStateSimulator,
-        bcode_simulator: BarcodeSimulator):
+        allele_simulator: AlleleSimulator):
         """
         @param birth_rate: the CTMC rate param for cell division
         @param death_rate: the CTMC rate param for cell death
         @param cell_type_tree: the tree that specifies how cells differentiate
-        @param bcode_simulator: a simulator for how barcodes get modified
+        @param allele_simulator: a simulator for how alleles get modified
         """
         self.birth_scale = 1.0 / birth_rate
         self.death_scale = 1.0 / death_rate
         self.cell_state_simulator = cell_state_simulator
-        self.bcode_simulator = bcode_simulator
+        self.allele_simulator = allele_simulator
 
-    def simulate(self, root_barcode: Barcode, root_cell_state: CellState, time: float):
+    def simulate(self, root_allele: Allele, root_cell_state: CellState, time: float):
         """
         Generates a CLT based on the model
 
         @param time: amount of time to simulate the CLT
         """
         tree = CellLineageTree(
-            barcode=root_barcode,
+            allele=root_allele,
             cell_state=root_cell_state,
             dist=0)
 
@@ -88,12 +88,12 @@ class CLTSimulator:
             tree.cell_state,
             time=obs_branch_length)
 
-        branch_end_barcode = self.bcode_simulator.simulate(
-            tree.barcode,
+        branch_end_allele = self.allele_simulator.simulate(
+            tree.allele,
             time=obs_branch_length)
-        # Cells are not allowed to reach the end of a branch but have barcode
+        # Cells are not allowed to reach the end of a branch but have allele
         # cut up into multiple pieces
-        assert(len(branch_end_barcode.needs_repair) == 0)
+        assert(len(branch_end_allele.needs_repair) == 0)
 
         if remain_time <= 0:
             assert remain_time == 0
@@ -102,14 +102,14 @@ class CLTSimulator:
                 tree,
                 obs_branch_length,
                 branch_end_cell_state,
-                branch_end_barcode)
+                branch_end_allele)
         elif race_winner == 0:
             # Cell division
             self._process_cell_birth(
                 tree,
                 obs_branch_length,
                 branch_end_cell_state,
-                branch_end_barcode,
+                branch_end_allele,
                 remain_time)
         else:
             # Cell died
@@ -117,19 +117,19 @@ class CLTSimulator:
                 tree,
                 obs_branch_length,
                 branch_end_cell_state,
-                branch_end_barcode)
+                branch_end_allele)
 
     def _process_observe_end(
         self,
         tree: CellLineageTree,
         branch_length: float,
         branch_end_cell_state: CellState,
-        branch_end_barcode: Barcode):
+        branch_end_allele: Allele):
         """
         Observation time is up. Stop observing cell.
         """
         child1 = CellLineageTree(
-            barcode=branch_end_barcode,
+            allele=branch_end_allele,
             cell_state=branch_end_cell_state,
             dist=branch_length)
         tree.add_child(child1)
@@ -139,24 +139,24 @@ class CLTSimulator:
         tree: CellLineageTree,
         branch_length: float,
         branch_end_cell_state: CellState,
-        branch_end_barcode: Barcode,
+        branch_end_allele: Allele,
         remain_time: float):
         """
         Cell division
 
-        Make two cells with identical barcodes and cell states
+        Make two cells with identical alleles and cell states
         """
         child0 = CellLineageTree(
-            barcode=branch_end_barcode,
+            allele=branch_end_allele,
             cell_state=branch_end_cell_state,
             dist=branch_length)
         child1 = CellLineageTree(
-            barcode=branch_end_barcode,
+            allele=branch_end_allele,
             cell_state=branch_end_cell_state,
             dist=0)
-        branch_end_barcode2 = copy.deepcopy(branch_end_barcode)
+        branch_end_allele2 = copy.deepcopy(branch_end_allele)
         child2 = CellLineageTree(
-            barcode=branch_end_barcode2,
+            allele=branch_end_allele2,
             cell_state=branch_end_cell_state,
             dist=0)
         child0.add_child(child1)
@@ -173,12 +173,12 @@ class CLTSimulator:
         tree: CellLineageTree,
         branch_length: float,
         branch_end_cell_state: CellState,
-        branch_end_barcode: Barcode):
+        branch_end_allele: Allele):
         """
         Cell has died. Add a dead child cell to `tree`.
         """
         child1 = CellLineageTree(
-            barcode=branch_end_barcode,
+            allele=branch_end_allele,
             cell_state=branch_end_cell_state,
             dist=branch_length,
             dead=True)

@@ -9,7 +9,7 @@ from fastq_to_phylip import write_seqs_to_phy
 import phylip_parse
 from collapsed_tree import CollapsedTree
 from cell_lineage_tree import CellLineageTree
-from barcode import Barcode
+from allele import Allele
 from cell_state import CellState
 
 from constants import MIX_CFG_FILE
@@ -39,7 +39,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         processed_seqs = {}
         all_events = set()
         for idx, obs in enumerate(observations):
-            evts = obs.barcode_events.events
+            evts = obs.allele_events.events
             processed_seqs["seq{}".format(idx)] = [obs.abundance, evts, obs.cell_state]
             all_events.update(evts)
         all_event_dict = {event_id: i for i, event_id in enumerate(all_events)}
@@ -59,17 +59,17 @@ class CLTParsimonyEstimator(CLTEstimator):
             branch_length = c.dist
             child_event_ids = [
                 evt_idx
-                for evt_idx, barcode_char in enumerate(c.binary_barcode)
-                if barcode_char == "1"
+                for evt_idx, allele_char in enumerate(c.binary_allele)
+                if allele_char == "1"
             ]
             events = [event_list[idx] for idx in child_event_ids]
-            child_bcode = Barcode()
-            child_bcode.process_events([(event.start_pos,
+            child_allele = Allele()
+            child_allele.process_events([(event.start_pos,
                                          event.start_pos + event.del_len,
                                          event.insert_str) for event in events])
             cell_state = None if not c.is_leaf() else processed_obs[c.name]
             cell_abundance = 0 if not c.is_leaf() else processed_abund[c.name]
-            child_clt = CellLineageTree(child_bcode,
+            child_clt = CellLineageTree(child_allele,
                                         cell_state=cell_state,
                                         abundance=cell_abundance,
                                         dist=branch_length)
@@ -86,7 +86,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         Make a regular TreeNode to a Cell lineage tree
         """
         # TODO: update cell state maybe in the future?
-        clt = CellLineageTree(Barcode(), cell_state=None)
+        clt = CellLineageTree(Allele(), cell_state=None)
         self._do_convert(clt, tree, event_list, processed_obs, processed_abund)
         return clt
 

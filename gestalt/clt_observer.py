@@ -1,25 +1,25 @@
 from typing import List, Dict, Tuple
 import numpy as np
 
-from barcode import Barcode
-from barcode_events import BarcodeEvents
+from allele import Allele
+from allele_events import AlleleEvents
 from cell_state import CellState
 from cell_lineage_tree import CellLineageTree
 from alignment import Aligner
 
 class ObservedAlignedSeq:
     def __init__(self,
-            barcode: Barcode,
-            barcode_events: BarcodeEvents,
+            allele: Allele,
+            allele_events: AlleleEvents,
             cell_state: CellState,
             abundance: float):
         """
-        Stores barcodes that are observed.
-        Since these are stored using the barcode class,
+        Stores alleles that are observed.
+        Since these are stored using the allele class,
         it implicitly gives us the alignment
         """
-        self.barcode = barcode
-        self.barcode_events = barcode_events
+        self.allele = allele
+        self.allele_events = allele_events
         self.cell_state = cell_state
         self.abundance = abundance
 
@@ -29,7 +29,7 @@ class CLTObserver:
                  error_rate: float = 0,
                  aligner: Aligner = None):
         """
-        @param sampling_rate: the rate at which barcodes from the alive leaf cells are observed
+        @param sampling_rate: the rate at which alleles from the alive leaf cells are observed
         @param error_rate: sequencing error, introduce alternative bases uniformly at this rate
         """
         assert (0 < sampling_rate <= 1)
@@ -60,20 +60,20 @@ class CLTObserver:
                 is_sampled = np.random.binomial(1, self.sampling_rate)
                 if is_sampled:
                     observed_leaves.add(leaf.name)
-                    barcode_with_errors = leaf.barcode.observe_with_errors(self.error_rate)
-                    barcode_with_errors_events = barcode_with_errors.get_event_encoding(aligner=self.aligner)
-                    leaf.barcode.process_events([(event.start_pos,
+                    allele_with_errors = leaf.allele.observe_with_errors(self.error_rate)
+                    allele_with_errors_events = allele_with_errors.get_event_encoding(aligner=self.aligner)
+                    leaf.allele.process_events([(event.start_pos,
                                                   event.start_pos + event.del_len,
                                                   event.insert_str)
-                                                 for event in barcode_with_errors_events.events])
-                    leaf.barcode_events = barcode_with_errors_events
-                    cell_id = (str(barcode_with_errors_events), str(leaf.cell_state))
+                                                 for event in allele_with_errors_events.events])
+                    leaf.allele_events = allele_with_errors_events
+                    cell_id = (str(allele_with_errors_events), str(leaf.cell_state))
                     if cell_id in observations:
                         observations[cell_id].abundance += 1
                     else:
                         observations[cell_id] = ObservedAlignedSeq(
-                            barcode=barcode_with_errors,
-                            barcode_events=barcode_with_errors_events,
+                            allele=allele_with_errors,
+                            allele_events=allele_with_errors_events,
                             cell_state=leaf.cell_state,
                             abundance=1,
                         )
@@ -91,8 +91,8 @@ class CLTObserver:
                 if len(node.children) == 1:
                     node.delete(prevent_nondicotomic=False, preserve_branch_length=True)
             assert sum(leaf.abundance for leaf in observations.values()) == len(clt)
-            assert set(leaf.barcode_events for leaf in clt) == \
-                   set(obs.barcode_events for obs in observations.values())
+            assert set(leaf.allele_events for leaf in clt) == \
+                   set(obs.allele_events for obs in observations.values())
             return list(observations.values()), clt
         else:
             return list(observations.values())

@@ -5,41 +5,41 @@ from numpy.random import choice
 
 from alignment import Aligner
 
-from barcode_events import BarcodeEvents, Event
+from allele_events import AlleleEvents, Event
 from constants import BARCODE_V7, NUM_BARCODE_V7_TARGETS
 
 
-class Barcode:
+class Allele:
     '''
     GESTALT target array with spacer sequences
-    v7 barcode from GESTALT paper Table S4 is unedited barcode
-    initial barcode state equal to v7 by default
+    v7 allele from GESTALT paper Table S4 is unedited allele
+    initial allele state equal to v7 by default
 
-    TODO: check that we are using the right barcode
+    TODO: check that we are using the right allele
     '''
     INDEL_TRANS = {'A':'-', 'C':'-','G':'-','T':'-','a':None,'c':None,'g':None,'t':None}
 
     def __init__(self,
-                 barcode: List[str] = BARCODE_V7,
-                 unedited_barcode: List[str] = BARCODE_V7,
+                 allele: List[str] = BARCODE_V7,
+                 unedited_allele: List[str] = BARCODE_V7,
                  cut_sites: List[int] = [6] * NUM_BARCODE_V7_TARGETS):
         """
-        @param barcode: the current state of the barcode
-        @param unedited_barcode: the original state of the barcode
+        @param allele: the current state of the allele
+        @param unedited_allele: the original state of the allele
         @param cut_sites: offset from 3' end of target for Cas9 cutting,
                         so a cut_site of 6 means that we start inserting
                         such that the inserted seq is 6 nucleotides from
                         the 3' end of the target
         """
-        # The original barcode
-        self.unedited_barcode = unedited_barcode
-        self.orig_substr_lens = [len(s) for s in unedited_barcode]
+        # The original allele
+        self.unedited_allele = unedited_allele
+        self.orig_substr_lens = [len(s) for s in unedited_allele]
         self.orig_length = sum(self.orig_substr_lens)
-        # an editable copy of the barcode (as a list for mutability)
-        self.barcode = list(barcode)
+        # an editable copy of the allele (as a list for mutability)
+        self.allele = list(allele)
         self.cut_sites = cut_sites
         # number of targets
-        self.n_targets = (len(self.barcode) - 1) // 2
+        self.n_targets = (len(self.allele) - 1) // 2
         # a list of target indices that have a DSB and need repair
         self.needs_repair = set()
         # absolute positions of cut locations
@@ -63,7 +63,7 @@ class Barcode:
         """
         # TODO: right now this code is pretty inefficient. we might want to cache which targets are active
         matches = [
-            i not in self.needs_repair and self.unedited_barcode[2 * i + 1] == self.barcode[2 * i + 1]
+            i not in self.needs_repair and self.unedited_allele[2 * i + 1] == self.allele[2 * i + 1]
             for i in range(self.n_targets)
         ]
         return np.where(matches)[0]
@@ -95,22 +95,22 @@ class Barcode:
         assert(target2 in self.needs_repair)
 
         # TODO: make this code more efficient
-        # indices into the self.barcode list (accounting for the spacers)
+        # indices into the self.allele list (accounting for the spacers)
         index1 = 1 + 2 * min(target1, target2)
         index2 = 1 + 2 * max(target1, target2)
         #  Determine which can cut
         cut_site = self.cut_sites[target1]
         # sequence left of cut
-        left = ','.join(self.barcode[:index1 + 1])[:-cut_site]
-        # barcode sections between the two cut sites, if inter-target
+        left = ','.join(self.allele[:index1 + 1])[:-cut_site]
+        # allele sections between the two cut sites, if inter-target
         if target2 == target1:
             center = ''
         else:
             center = ('-' * cut_site + ',' + ','.join(
-                self.barcode[(index1 + 1):index2]).translate(str.maketrans(self.INDEL_TRANS)) +
-                ',' + '-' * (len(self.barcode[index2]) - cut_site))
+                self.allele[(index1 + 1):index2]).translate(str.maketrans(self.INDEL_TRANS)) +
+                ',' + '-' * (len(self.allele[index2]) - cut_site))
         # sequence right of cut
-        right = self.barcode[index2][-cut_site:] + ',' +  ','.join(self.barcode[index2 + 1:])
+        right = self.allele[index2][-cut_site:] + ',' +  ','.join(self.allele[index2 + 1:])
         # left delete
         deleted = 0
         for position, letter in reversed(list(enumerate(left))):
@@ -128,7 +128,7 @@ class Barcode:
                 right = right[:position] + '-' + right[(position + 1):]
                 deleted += 1
         # put it back together
-        self.barcode = (left + insertion + center + right).split(',')
+        self.allele = (left + insertion + center + right).split(',')
         # Update needs_repair
         # Currently assumes that during inter-target indels, any cuts in the middle
         # also get repaired.
@@ -138,9 +138,9 @@ class Barcode:
         '''
         @param aligner: Aligner object
                         must have events() method
-                        None returns the observable events using the true barcode state
+                        None returns the observable events using the true allele state
         @param left_align: left-align indels
-        return the list of observable indel events in the barcode
+        return the list of observable indel events in the allele
         '''
         if aligner is None:
             # find the indels
@@ -158,17 +158,17 @@ class Barcode:
                 events.append((start, end, insertion))
         else:
             sequence = str(self).replace('-', '').upper()
-            reference = ''.join(self.unedited_barcode).upper()
+            reference = ''.join(self.unedited_allele).upper()
             events = aligner.events(sequence, reference)
         if left_align:
             raise NotImplementedError()
             # for event in events:
-            #     barcode_copy =
+            #     allele_copy =
         return events
 
     def get_event_encoding(self, aligner: Aligner = None):
         """
-        @return a BarcodeEvents version of this barcode
+        @return a AlleleEvents version of this allele
         """
         raw_events = self.get_events(aligner=aligner)
         events = []
@@ -186,16 +186,16 @@ class Barcode:
                 insert_str=evt[2],
             ))
 
-        return BarcodeEvents(events)
+        return AlleleEvents(events)
 
     def process_events(self, events: List[Tuple[int, int, str]]):
         """
-        Given a list of observed events, rerun the events and recreate the barcode
+        Given a list of observed events, rerun the events and recreate the allele
         Assumes all events are NOT overlapping!!!
         """
-        # initialize barcode to unedited states
-        self.barcode = list(self.unedited_barcode)
-        sub_str_lens = [len(sub_str) for sub_str in self.barcode]
+        # initialize allele to unedited states
+        self.allele = list(self.unedited_allele)
+        sub_str_lens = [len(sub_str) for sub_str in self.allele]
         total_len = sum(sub_str_lens)
         for evt in events:
             del_start = evt[0]
@@ -204,13 +204,13 @@ class Barcode:
 
             # special case for insertion off the 3' end
             if del_start == del_end == total_len:
-                self.barcode[-1] += insertion_str
+                self.allele[-1] += insertion_str
                 continue
 
             # Determine which substrings to start and end at
             # TODO: make this more efficient?
             idx = 0
-            for sub_str_idx, sub_str in enumerate(self.barcode):
+            for sub_str_idx, sub_str in enumerate(self.allele):
                 sub_str_len = sub_str_lens[sub_str_idx]
                 if idx + sub_str_len >= del_start and idx <= del_start:
                     substr_start = sub_str_idx
@@ -222,7 +222,7 @@ class Barcode:
 
             # Now do the actual deletions
             for sub_str_idx in range(substr_start, substr_end + 1):
-                curr_substr = self.barcode[sub_str_idx]
+                curr_substr = self.allele[sub_str_idx]
                 start_idx = substr_start_inner_idx if sub_str_idx == substr_start else 0
                 end_idx = substr_end_inner_idx if sub_str_idx == substr_end else sub_str_lens[
                     sub_str_idx]
@@ -244,12 +244,12 @@ class Barcode:
                         new_sub_str.append(substr_char)
                     if substr_char in "ACTG-":
                         non_insert_idx += 1
-                self.barcode[sub_str_idx] = "".join(new_sub_str)
+                self.allele[sub_str_idx] = "".join(new_sub_str)
 
     def observe_with_errors(self, error_rate: float):
         """
         @param error_rate: probability of each base being erroneous
-        @return copy of barcode with random errors, uniform over alternative
+        @return copy of allele with random errors, uniform over alternative
                 bases
         NOTE: to be used after any editing, since get_active_targets will not
               work as expected with base errors
@@ -257,9 +257,9 @@ class Barcode:
         assert (0 <= error_rate <= 1)
         if error_rate == 0:
             return self
-        barcode_with_errors = []
+        allele_with_errors = []
         nucs = 'acgt'
-        for substr_idx, substr in enumerate(self.barcode):
+        for substr_idx, substr in enumerate(self.allele):
             new_substr = ''
             for substr_char in substr:
                 if substr_char == '-':
@@ -270,12 +270,12 @@ class Barcode:
                              for nuc in nucs]
                     new_substr += choice(list(nucs.upper() if substr_char.isupper() else nucs),
                                          p=probs)
-            barcode_with_errors.append(new_substr)
+            allele_with_errors.append(new_substr)
 
-        return Barcode(barcode=barcode_with_errors,
-                       unedited_barcode=self.unedited_barcode,
+        return Allele(allele=allele_with_errors,
+                       unedited_allele=self.unedited_allele,
                        cut_sites=self.cut_sites)
 
 
     def __repr__(self):
-        return ''.join(self.barcode)
+        return ''.join(self.allele)

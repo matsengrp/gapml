@@ -105,7 +105,7 @@ class ApproximatorLB:
                 anc = node.up
                 transition_graph_dict, state_sum = self.get_branch_state_sum_transitions(anc, node)
                 if node.is_leaf():
-                    state_sum = StateSum.create_for_observed_allele(node.barcode_events, self.bcode_meta)
+                    state_sum = StateSum.create_for_observed_allele(node.allele_events, self.bcode_meta)
                 node.add_feature("state_sum", state_sum)
                 node.add_feature("transition_graph_dict", transition_graph_dict)
 
