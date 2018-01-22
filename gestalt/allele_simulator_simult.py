@@ -1,47 +1,57 @@
 from numpy import ndarray
+from typing import List
 import numpy as np
 from scipy.stats import expon
 from numpy.random import choice, random
-from scipy.stats import nbinom
+from scipy.stats import poisson
 
 from allele import Allele
+from indel_sets import TargetTract
 from allele_simulator import AlleleSimulator
 from barcode_metadata import BarcodeMetadata
+from bounded_poisson import BoundedPoisson
+
+from clt_likelihood_model import CLTLikelihoodModel
 
 class AlleleSimulatorSimultaneous(AlleleSimulator):
     def __init__(self,
         bcode_meta: BarcodeMetadata,
-        target_lambdas: ndarray,
-        left_long_prob: float,
-        right_long_prob: float,
-        del_probability: float,
-        insert_probability: float,
-        left_del_lambda: float,
-        right_del_lambda: float,
-        insertion_lambda: float):
+        model: CLTLikelihoodModel):
         """
         @param bcode_meta: metadata about the barcode
-        @param target_lambdas: rate parameter of each target in the allele
-        @param del_probability: the probability of making an deletion
-        @param insert_probability: the probability of making an insertion
-        @param left_del_lambda
-        @param right_del_lambda
-        @param insertion_lambda
+        @param model
         """
-        self.target_lambdas = target_lambdas
-        self.left_long_prob = left_long_prob
-        self.right_long_prob = right_long_prob
-        self.del_probability = del_probability
-        self.insert_probability = insert_probability
+        self.bcode_meta = bcode_meta
+        self.model = model
 
-        self.left_del_distribution  = self.my_nbinom(left_del_mu,  left_del_alpha)
-        self.right_del_distribution = self.my_nbinom(right_del_mu, right_del_alpha)
-        self.insertion_distribution = self.my_nbinom(insertion_mu, insertion_alpha)
+        self.left_del_distributions = self._create_bounded_poissons(
+            min_vals = self.bcode_meta.left_long_trim_min,
+            max_vals = self.bcode_meta.left_max_trim,
+            poiss_lambda = self.model.trim_poisson_params[0])
+        self.right_del_distributions = self._create_bounded_poissons(
+            min_vals = self.bcode_meta.right_long_trim_min,
+            max_vals = self.bcode_meta.right_max_trim,
+            poiss_lambda = self.model.trim_poisson_params[1])
+        self.insertion_distribution = poisson(mu=self.model.insert_poisson_param)
 
-    def _race_target_cutting(self, allele: Allele):
+    def _create_bounded_poissons(self, min_vals: List[float], max_vals: List[float], poiss_lambda: float):
+        dstns = []
+        for i in range(self.bcode_meta.n_targets):
+            long_min = min_vals[i]
+            long_short_dstns = {}
+            for is_long in [True, False]:
+                min_trim = min_vals[i] if is_long else 0
+                max_trim = max_vals[i]
+
+                dstn = BoundedPoisson(min_trim, max_trim, poiss_lambda)
+                long_short_dstns[is_long] = dstn
+            dstns.append(long_short_dstns)
+        return dstns
+
+    def _race_target_tracts(self, allele: Allele):
         """
         Race target cutting (with no regard to time limits)
-        @return race_winner:if a target cut won, then returns index of target
+        @return race_winner: target tract if event occurs
                             if no event happens (can't cut), then returns None
                 event_time: the time of the event that won
                             if no event happens, then returns None
@@ -49,12 +59,17 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         active_targets = allele.get_active_targets()
         num_active_targets = len(active_targets)
         if num_active_targets:
-            target_cut_times = [
-                expon.rvs(scale=1.0 / self.target_lambdas[i])
-                for i in active_targets
+            target_tracts = list(CLTLikelihoodModel.get_possible_target_tracts(active_targets))
+            all_hazards = []
+            for tt in target_tracts:
+                all_hazards.append(self.model.get_hazard(tt))
+
+            tt_times = [
+                expon.rvs(scale=1.0 / hz) for hz in all_hazards
             ]
-            race_winner = active_targets[np.argmin(target_cut_times)]
-            return race_winner, target_min_time
+            race_winner = target_tracts[np.argmin(tt_times)]
+            min_time = np.min(tt_times)
+            return race_winner, min_time
         else:
             # Nothing to cut and nothing to repair
             return None, None
@@ -68,17 +83,14 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         @return allele after the simulation procedure
                     does not modify the allele that got passed in :)
         """
-        assert(init_allele.n_targets == self.target_lambdas.size)
-
         allele = Allele(
             init_allele.allele,
-            init_allele.unedited_allele,
-            init_allele.cut_sites)
+            init_allele.bcode_meta)
 
         time_remain = time
         while time_remain > 0:
-            race_winner, event_time = self._race_target_cutting(allele)
-            if race_winner is None:
+            target_tract, event_time = self._race_target_tracts(allele)
+            if target_tract is None:
                 # Nothing to cut
                 # no point in simulating the allele process then
                 return allele
@@ -86,29 +98,40 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
 
             if time_remain > 0:
                 # One of the targets got cut
-                allele.cut(race_winner)
-                self._do_repair(allele)
+                allele.cut(target_tract.min_target)
+                if target_tract.min_target != target_tract.max_target:
+                    allele.cut(target_tract.max_target)
+                self._do_repair(allele, target_tract)
         return allele
 
-    def _do_repair(self, allele: Allele):
+    def _do_repair(self, allele: Allele, target_tract: TargetTract):
         """
-        Repairs allele.
-        Does focal deletion if only one cut.
-        Does inter-target deletion if 2 cuts.
+        Repairs allele per the target_tract
         """
         if len(allele.needs_repair) not in (1, 2):
             raise ValueError('allele contains {} cuts, cannot repair'.format(len(allele.needs_repair)))
-        target1 = min(allele.needs_repair)
-        target2 = max(allele.needs_repair)
+        target1 = target_tract.min_target
+        target2 = target_tract.max_target
 
-        # Serves for a zero-inflated negative binomial for deletion/insertion process
-        # Draw a separate RVs for each deletion/insertion process
-        do_insertion = random() < self.indel_probability
-        do_deletion  = random() < self.indel_probability
+        left_long = target_tract.is_left_long
+        right_long = target_tract.is_right_long
+
+        if left_long or right_long:
+            do_insertion = True
+            do_deletion = True
+        else:
+            # Serves as zero-inflation for deletion/insertion process
+            # Draw a separate RVs for each deletion/insertion process
+            do_insertion = random() > self.model.insert_zero_prob
+            do_deletion  = random() > self.model.trim_zero_prob
 
         insertion_length = self.insertion_distribution.rvs() if do_insertion else 0
-        left_del_len     = self.left_del_distribution.rvs() if do_deletion else 0
-        right_del_len    = self.right_del_distribution.rvs() if do_deletion else 0
+        left_del_len = self.left_del_distributions[target1][left_long].rvs() if do_deletion else 0
+        right_del_len = self.right_del_distributions[target2][right_long].rvs() if do_deletion else 0
+        if left_long:
+            assert(left_del_len > 0)
+        if right_long:
+            assert(right_del_len > 0)
 
         # TODO: make this more realistic. right now just random DNA inserted
         insertion = ''.join(choice(list('acgt'), insertion_length))

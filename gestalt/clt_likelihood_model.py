@@ -2,13 +2,14 @@ import time
 import numpy as np
 from typing import List, Tuple, Dict
 from numpy import ndarray
+from scipy.stats import poisson
 
 from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
 from indel_sets import IndelSet, TargetTract, AncState, SingletonWC, Singleton
-from approximator import ApproximatorLB
 from transition_matrix import TransitionMatrixWrapper
-from common import merge_target_tract_groups, get_bounded_poisson_prob
+from common import merge_target_tract_groups
+from bounded_poisson import BoundedPoisson
 
 class CLTLikelihoodModel:
     """
@@ -28,13 +29,15 @@ class CLTLikelihoodModel:
         Will randomly initialize model parameters
         """
         self.topology = topology
-        node_id = 0
-        for node in topology.traverse(self.NODE_ORDER):
-            node.add_feature("node_id", node_id)
-            if node.is_root():
-                self.root_node_id = node_id
-            node_id += 1
-        self.num_nodes = node_id
+        self.num_nodes = 0
+        if self.topology:
+            node_id = 0
+            for node in topology.traverse(self.NODE_ORDER):
+                node.add_feature("node_id", node_id)
+                if node.is_root():
+                    self.root_node_id = node_id
+                node_id += 1
+            self.num_nodes = node_id
         self.bcode_meta = bcode_meta
         self.num_targets = bcode_meta.n_targets
         self.random_init()
@@ -74,7 +77,7 @@ class CLTLikelihoodModel:
             # TODO: right now this is initialized to have one extra branch lenght that is ignored
             #       probably want to clean this up later?
             branch_lens = np.random.gamma(gamma_prior[0], gamma_prior[1], self.num_nodes),
-            target_lams = 0.5 * np.ones(self.num_targets),
+            target_lams = 0.1 * np.ones(self.num_targets),
             trim_long_probs = 0.1 * np.ones(2),
             trim_zero_prob = 0.5,
             trim_poisson_params = np.ones(2),
@@ -91,6 +94,9 @@ class CLTLikelihoodModel:
 
         TODO: maybe return a list instead of dictionary
         """
+        if self.topology is None:
+            raise ValueError("Must initialize topology first for this to work")
+
         transition_matrices = dict()
         for node in self.topology.traverse(self.NODE_ORDER):
             if not node.is_root():
@@ -112,7 +118,7 @@ class CLTLikelihoodModel:
         # Recurse through all of its children to build out the transition matrix
         for tts in ref_anc.state_sum.tts_list:
             tts_partition_info = dict()
-            tts_partition = ApproximatorLB.partition(tts, node.anc_state)
+            tts_partition = self.partition(tts, node.anc_state)
             for indel_set in indel_set_list:
                 tt_tuple = tts_partition[indel_set]
                 graph_key = (tt_tuple, indel_set)
@@ -146,7 +152,9 @@ class CLTLikelihoodModel:
         matrix_row = dict()
         start_tts = merge_target_tract_groups([
             tts_partition_info[ind_set]["start"] for ind_set in indel_set_list])
-        assert start_tts not in transition_dict.keys()
+        if start_tts in transition_dict.keys():
+            # Filled in already
+            return
         transition_dict[start_tts] = matrix_row
 
         hazard_to_likely = 0
@@ -298,8 +306,9 @@ class CLTLikelihoodModel:
         prob = 1
         for singleton in matching_sgs:
             # Calculate probability of that singleton
-            sg_prob = self._get_cond_prob_singleton(singleton)
-            prob *= sg_prob
+            del_prob = self._get_cond_prob_singleton_del(singleton)
+            insert_prob = self._get_cond_prob_singleton_insert(singleton)
+            prob *= del_prob * insert_prob
         return prob
 
     @staticmethod
@@ -337,29 +346,33 @@ class CLTLikelihoodModel:
 
         return matching_sgs
 
-    def _get_cond_prob_singleton(self, singleton: Singleton):
+    def _get_cond_prob_singleton_del(self, singleton: Singleton):
         """
-        @return the conditional probability of this singleton happening (given that the target tract occurred)
+        @return the conditional probability of the deletion for the singleton happening
+                (given that the target tract occurred)
         """
         left_trim_len = self.bcode_meta.abs_cut_sites[singleton.min_target] - singleton.start_pos
         right_trim_len = singleton.del_end - self.bcode_meta.abs_cut_sites[singleton.max_target]
         left_trim_long_min = self.bcode_meta.left_long_trim_min[singleton.min_deact_target]
         right_trim_long_min = self.bcode_meta.right_long_trim_min[singleton.max_deact_target]
-        min_left_trim = left_trim_long_min if singleton.is_left_long else 0
-        min_right_trim = right_trim_long_min if singleton.is_right_long else 0
-        max_left_trim = self.bcode_meta.left_max_trim[singleton.min_target]
-        max_right_trim = self.bcode_meta.right_max_trim[singleton.max_target]
+        if singleton.is_left_long:
+            min_left_trim = left_trim_long_min
+            max_left_trim = self.bcode_meta.left_max_trim[singleton.min_target]
+        else:
+            min_left_trim = 0
+            max_left_trim = left_trim_long_min - 1
 
-        left_prob = get_bounded_poisson_prob(
-            left_trim_len,
-            min_val = min_left_trim,
-            max_val = max_left_trim,
-            poisson_param = self.trim_poisson_params[0])
-        right_prob = get_bounded_poisson_prob(
-            right_trim_len,
-            min_val = min_right_trim,
-            max_val = max_right_trim,
-            poisson_param = self.trim_poisson_params[1])
+        if singleton.is_right_long:
+            min_right_trim = right_trim_long_min
+            max_right_trim = self.bcode_meta.right_max_trim[singleton.min_target]
+        else:
+            min_right_trim = 0
+            max_right_trim = right_trim_long_min
+
+        left_prob = BoundedPoisson(min_left_trim, max_left_trim, self.trim_poisson_params[0]).pmf(
+            left_trim_len)
+        right_prob = BoundedPoisson(min_right_trim, max_right_trim, self.trim_poisson_params[1]).pmf(
+            right_trim_len)
 
         # Check if we should add zero inflation
         if not singleton.is_left_long and not singleton.is_right_long:
@@ -369,3 +382,92 @@ class CLTLikelihoodModel:
                 return (1 - self.trim_zero_prob) * left_prob * right_prob
         else:
             return left_prob * right_prob
+
+    def _get_cond_prob_singleton_insert(self, singleton: Singleton):
+        """
+        @return the conditional probability of the insertion for this singleton happening
+                (given that the target tract occurred)
+        """
+        insert_len = singleton.insert_len
+        insert_len_prob = poisson(self.insert_poisson_param).pmf(insert_len)
+        # There are 4^insert_len insert string to choose from
+        # Assuming all insert strings are equally likely
+        insert_seq_prob = 1.0/np.power(4, insert_len)
+
+        # Check if we should add zero inflation
+        if insert_len == 0:
+            return self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob
+        else:
+            return (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob
+
+    @staticmethod
+    def get_possible_target_tracts(active_any_targs: List[int]):
+        """
+        @param active_any_targs: a list of active targets that can be cut with any trim
+        @return a set of possible target tracts
+        """
+        n_any_targs = len(active_any_targs)
+
+        # Take one step from this TT group using two step procedure
+        # 1. enumerate all possible start positions for target tract
+        # 2. enumerate all possible end positions for target tract
+
+        # List possible starts of the target tracts
+        all_starts = [[] for _ in range(n_any_targs)]
+        for i0_prime, t0_prime in enumerate(active_any_targs):
+            # No left trim overflow
+            all_starts[i0_prime].append((t0_prime, t0_prime))
+            # Determine if left trim overflow allowed
+            if i0_prime < n_any_targs - 1 and active_any_targs[i0_prime + 1] == t0_prime + 1:
+                # Add in the long left trim overflow
+                all_starts[i0_prime + 1].append((t0_prime, t0_prime + 1))
+
+        # Create possible ends of the target tracts
+        all_ends = [[] for i in range(n_any_targs)]
+        for i1_prime, t1_prime in enumerate(active_any_targs):
+            # No right trim overflow
+            all_ends[i1_prime].append((t1_prime, t1_prime))
+            # Determine if right trim overflow allowed
+            if i1_prime > 0 and active_any_targs[i1_prime - 1] == t1_prime - 1:
+                # Add in the right trim overflow
+                all_ends[i1_prime - 1].append((t1_prime - 1, t1_prime))
+
+        # Finally create all possible target tracts by combining possible start and ends
+        tt_evts = set()
+        for j, tt_starts in enumerate(all_starts):
+            for k in range(j, n_any_targs):
+                tt_ends = all_ends[k]
+                for tt_start in tt_starts:
+                    for tt_end in tt_ends:
+                        tt_evt = TargetTract(tt_start[0], tt_start[1], tt_end[0], tt_end[1])
+                        tt_evts.add(tt_evt)
+
+        return tt_evts
+
+    @staticmethod
+    def partition(tts: Tuple[IndelSet], anc_state: AncState):
+        """
+        TODO: maybe move this to some other function?
+        @return split tts according to anc_state: Dict[IndelSet, Tuple[TargetTract]]
+        """
+        parts = {indel_set : () for indel_set in anc_state.indel_set_list}
+
+        tts_idx = 0
+        n_tt = len(tts)
+        anc_state_idx = 0
+        n_anc_state = len(anc_state.indel_set_list)
+        while tts_idx < n_tt and anc_state_idx < n_anc_state:
+            cur_tt = tts[tts_idx]
+            indel_set = anc_state.indel_set_list[anc_state_idx]
+
+            if cur_tt.max_deact_target < indel_set.min_deact_target:
+                tts_idx += 1
+                continue
+            elif indel_set.max_deact_target < cur_tt.min_deact_target:
+                anc_state_idx += 1
+                continue
+
+            # Should be overlapping now
+            parts[indel_set] = parts[indel_set] + (cur_tt,)
+            tts_idx += 1
+        return parts
