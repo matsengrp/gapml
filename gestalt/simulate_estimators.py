@@ -1,6 +1,5 @@
 """
 A simulation engine to see how well cell lineage estimation performs
-Right now, only contains parsimony
 """
 
 from __future__ import division, print_function
@@ -103,6 +102,15 @@ def main():
             args.repair_insertion_lambda)
     else:
         model_params = CLTLikelihoodModel(None, bcode_meta)
+        model_params.set_vals(
+            branch_lens = None,
+            target_lams = np.array(args.target_lambdas),
+            trim_long_probs = np.array([0.05, 0.05]),
+            trim_zero_prob = args.repair_indel_probability,
+            trim_poisson_params = [args.repair_deletion_lambda, args.repair_deletion_lambda],
+            insert_zero_prob = args.repair_indel_probability,
+            insert_poisson_param = args.repair_insertion_lambda,
+            cell_type_lams = None)
         allele_simulator = AlleleSimulatorSimultaneous(
             bcode_meta,
             model_params)

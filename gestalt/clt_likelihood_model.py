@@ -108,8 +108,9 @@ class CLTLikelihoodModel:
 
     def _create_transition_matrix(self, node: CellLineageTree, ref_anc: CellLineageTree):
         """
-        Creates the transition matrix for the particular branch ending at `node`
-        @return sparse CSR matrix
+        @return the transition matrix for the particular branch ending at `node`
+                only contains the states relevant to state_sum
+                the rest of the unlikely states are aggregated together
         """
         transition_dict = dict()
         indel_set_list = node.anc_state.indel_set_list
@@ -139,15 +140,18 @@ class CLTLikelihoodModel:
             self,
             tts_partition_info: Dict[IndelSet, Dict],
             indel_set_list: List[IndelSet],
-            transition_dict):
+            transition_dict: Dict):
         """
-        Recursive function for adding transition matrix rows
-        Function will modify transition_dict
+        Recursive function for adding transition matrix rows.
+        Function will modify transition_dict.
+        The rows added will correspond to states that are reachable along the subgraphs
+        in tts_partition_info.
 
         @param tts_partition_info: indicate the subgraphs for each partition and the current node
                                 we are at for each subgraph
         @param indel_set_list: the ordered list of indel sets from the node's AncState
         @param transtion_dict: the dictionary to update with values for the transition matrix
+                                (possible key types: tuples of target tracts and the string "unlikely")
         """
         matrix_row = dict()
         start_tts = merge_target_tract_groups([
@@ -326,7 +330,7 @@ class CLTLikelihoodModel:
         n_sg = len(sg_only_anc_state)
         n_tts = len(tts)
         matching_sgs = []
-        while sg_idx < n_tts and tts_idx < n_tts:
+        while sg_idx < n_sg and tts_idx < n_tts:
             cur_tt = tts[tts_idx]
             sgwc = sg_only_anc_state[sg_idx]
             sg_tt = TargetTract(sgwc.min_deact_target, sgwc.min_target, sgwc.max_target, sgwc.max_deact_target)
