@@ -447,7 +447,6 @@ class CLTLikelihoodModel:
     @staticmethod
     def partition(tts: Tuple[IndelSet], anc_state: AncState):
         """
-        TODO: maybe move this to some other function?
         @return split tts according to anc_state: Dict[IndelSet, Tuple[TargetTract]]
         """
         parts = {indel_set : () for indel_set in anc_state.indel_set_list}
