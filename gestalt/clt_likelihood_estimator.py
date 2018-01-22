@@ -51,12 +51,45 @@ class CLTLassoEstimator(CLTEstimator):
         """
         transition_matrices = model_params.create_transition_matrices()
 
-        L = [dict() for _ in range(model_params.num_nonroot_nodes + 1)]
+        L = dict()
+        pt_matrix = dict()
         for node in model_params.topology.traverse("postorder"):
-            if not node.is_leaf():
+            if node.is_leaf():
+                node_trans_mat = transition_matrices[node.node_id]
+                L[node.node_id] = np.zeros((node_trans_mat.num_states, 1))
+                tts_key = node_trans_mat.key_dict[node.state_sum.tts_list[0]]
+                L[node.node_id][tts_key] = 1
+            else:
+                L[node.node_id] = 1
                 for child in node.children:
-                    for tts in node.state_sum.tts_set:
-                        model_params.get_prob_unmasked_trims(
-                            child.anc_state,
-                            tts)
-        raise NotImplementedError()
+                    ch_trans_mat = transition_matrices[child.node_id]
+                    tts_probs = np.zeros((ch_trans_mat.num_states, 1))
+                    for tts in child.state_sum.tts_list:
+                        child_tts_key = ch_trans_mat.key_dict[tts]
+                        trim_prob = model_params.get_prob_unmasked_trims(child.anc_state, tts)
+                        lower_lik = L[child.node_id][child_tts_key]
+                        tts_probs[child_tts_key] = lower_lik * trim_prob
+
+                    branch_len = model_params.branch_lens[child.node_id]
+                    pt_matrix[child.node_id] = np.dot(ch_trans_mat.A, np.dot(np.diag(np.exp(ch_trans_mat.D * branch_len)), ch_trans_mat.A_inv))
+
+                    # These down probs are ordered according to the child node's numbering of the TTs states
+                    ch_ordered_down_probs = np.dot(pt_matrix[child.node_id], tts_probs)
+
+                    # Reorder summands according to node's numbering of tts states
+                    if not node.is_root():
+                        node_trans_mat = transition_matrices[node.node_id]
+                        down_probs = np.zeros((node_trans_mat.num_states, 1))
+                        for tts in node.state_sum.tts_list:
+                            ch_id = ch_trans_mat.key_dict[tts]
+                            node_id = node_trans_mat.key_dict[tts]
+                            down_probs[node_id] = ch_ordered_down_probs[ch_id]
+
+                        L[node.node_id] *= down_probs
+                    else:
+                        ch_id = ch_trans_mat.key_dict[()]
+                        L[node.node_id] *= ch_ordered_down_probs[ch_id]
+
+        print("lik root", L[model_params.root_node_id])
+        1/0
+        return lik_root

@@ -25,8 +25,8 @@ class TransitionMatrixWrapper:
                 self.matrix[i, self.key_dict[to_key]] = val
 
         # Store the matrix diagonlization decomposition
-        self.diag_mat, self.right_eig_mat = np.linalg.eig(self.matrix)
-        self.right_eig_mat_inv = np.linalg.inv(self.right_eig_mat)
+        self.D, self.A = np.linalg.eig(self.matrix)
+        self.A_inv = np.linalg.inv(self.A)
 
     def __str__(self):
         return "Key list: %s \n Matrix: %s" % (self.key_list, self.matrix)
