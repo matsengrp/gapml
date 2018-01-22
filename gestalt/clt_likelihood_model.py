@@ -36,7 +36,7 @@ class CLTLikelihoodModel:
             node_id += 1
         self.num_nodes = node_id
         self.bcode_meta = bcode_meta
-        self.num_targets = bcode_meta.num_targets
+        self.num_targets = bcode_meta.n_targets
         self.random_init()
 
     def set_vals(self,

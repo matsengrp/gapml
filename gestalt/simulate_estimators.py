@@ -12,7 +12,8 @@ matplotlib.use('agg')
 from cell_state import CellState, CellTypeTree
 from cell_state_simulator import CellTypeSimulator
 from clt_simulator import CLTSimulator
-from allele_simulator import AlleleSimulator
+from allele_simulator_cut_repair import AlleleSimulatorCutRepair
+from allele_simulator_simult import AlleleSimulatorSimultaneous
 from allele import Allele
 from clt_observer import CLTObserver
 from clt_estimator import CLTParsimonyEstimator
@@ -43,8 +44,12 @@ def main():
     parser.add_argument(
         '--repair-lambdas',
         type=float,
-        default=[1, 2],
-        help='repair poisson rate')
+        default=[0.1, 0.1],
+        help="""
+        repair poisson rate, used for non-simult cut/repair.
+        first one is poisson for focal, second is poisson param for inter-target
+        ex: [1,2]
+        """)
     parser.add_argument(
         '--repair-indel-probability',
         type=float,
@@ -90,11 +95,23 @@ def main():
 
     # Instantiate all the simulators
     bcode_meta = BarcodeMetadata()
-    allele_simulator = AlleleSimulator(
-        np.array(args.target_lambdas),
-        np.array(args.repair_lambdas), args.repair_indel_probability,
-        args.repair_deletion_lambda, args.repair_deletion_lambda,
-        args.repair_insertion_lambda)
+    if args.repair_lambdas:
+        allele_simulator = AlleleSimulatorCutRepair(
+            np.array(args.target_lambdas),
+            np.array(args.repair_lambdas), args.repair_indel_probability,
+            args.repair_deletion_lambda, args.repair_deletion_lambda,
+            args.repair_insertion_lambda)
+    else:
+        allele_simulator = AlleleSimulatorSimultaneous(
+            bcode_meta,
+            np.array(args.target_lambdas),
+            0.2,
+            0.2,
+            args.repair_indel_probability,
+            args.repair_indel_probability,
+            args.repair_deletion_lambda,
+            args.repair_deletion_lambda,
+            args.repair_insertion_lambda)
     cell_type_simulator = CellTypeSimulator(cell_type_tree)
     clt_simulator = CLTSimulator(
             args.birth_lambda,
@@ -106,7 +123,7 @@ def main():
     forest = []
     for t in range(args.n_trees):
         clt = clt_simulator.simulate(
-                Allele(),
+                Allele(BARCODE_V7, bcode_meta),
                 CellState(categorical=cell_type_tree),
                 args.time)
         forest.append(clt)

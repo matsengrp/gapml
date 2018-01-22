@@ -7,7 +7,7 @@ from alignment import Aligner
 
 from allele_events import AlleleEvents, Event
 from constants import BARCODE_V7, NUM_BARCODE_V7_TARGETS
-
+from barcode_metadata import BarcodeMetadata
 
 class Allele:
     '''
@@ -20,42 +20,17 @@ class Allele:
     INDEL_TRANS = {'A':'-', 'C':'-','G':'-','T':'-','a':None,'c':None,'g':None,'t':None}
 
     def __init__(self,
-                 allele: List[str] = BARCODE_V7,
-                 unedited_allele: List[str] = BARCODE_V7,
-                 cut_sites: List[int] = [6] * NUM_BARCODE_V7_TARGETS):
+                 allele: List[str],
+                 bcode_meta: BarcodeMetadata):
         """
         @param allele: the current state of the allele
-        @param unedited_allele: the original state of the allele
-        @param cut_sites: offset from 3' end of target for Cas9 cutting,
-                        so a cut_site of 6 means that we start inserting
-                        such that the inserted seq is 6 nucleotides from
-                        the 3' end of the target
         """
-        # The original allele
-        self.unedited_allele = unedited_allele
-        self.orig_substr_lens = [len(s) for s in unedited_allele]
-        self.orig_length = sum(self.orig_substr_lens)
         # an editable copy of the allele (as a list for mutability)
         self.allele = list(allele)
-        self.cut_sites = cut_sites
-        # number of targets
-        self.n_targets = (len(self.allele) - 1) // 2
         # a list of target indices that have a DSB and need repair
         self.needs_repair = set()
-        # absolute positions of cut locations
-        self.abs_cut_sites = [
-            sum(self.orig_substr_lens[:2 * (i + 1)]) - cut_sites[i] for i in range(self.n_targets)
-        ]
-        # Range of positions for each target
-        # regarding which positions must be unedited
-        # for this target to still be active.
-        self.target_active_positions = []
-        cumsum = np.cumsum(self.orig_substr_lens)
-        for i in range(self.n_targets):
-            right = cumsum[2 * (i + 1) - 1]
-            left = right - self.orig_substr_lens[2 * (i + 1) - 1]
-            self.target_active_positions.append((left, right))
-        assert (self.n_targets == len(self.cut_sites))
+
+        self.bcode_meta = bcode_meta
 
     def get_active_targets(self):
         """
@@ -63,8 +38,8 @@ class Allele:
         """
         # TODO: right now this code is pretty inefficient. we might want to cache which targets are active
         matches = [
-            i not in self.needs_repair and self.unedited_allele[2 * i + 1] == self.allele[2 * i + 1]
-            for i in range(self.n_targets)
+            i not in self.needs_repair and self.bcode_meta.unedited_barcode[2 * i + 1] == self.allele[2 * i + 1]
+            for i in range(self.bcode_meta.n_targets)
         ]
         return np.where(matches)[0]
 
@@ -99,7 +74,7 @@ class Allele:
         index1 = 1 + 2 * min(target1, target2)
         index2 = 1 + 2 * max(target1, target2)
         #  Determine which can cut
-        cut_site = self.cut_sites[target1]
+        cut_site = self.bcode_meta.cut_sites[target1]
         # sequence left of cut
         left = ','.join(self.allele[:index1 + 1])[:-cut_site]
         # allele sections between the two cut sites, if inter-target
@@ -158,7 +133,7 @@ class Allele:
                 events.append((start, end, insertion))
         else:
             sequence = str(self).replace('-', '').upper()
-            reference = ''.join(self.unedited_allele).upper()
+            reference = ''.join(self.bcode_meta.unedited_barcode).upper()
             events = aligner.events(sequence, reference)
         if left_align:
             raise NotImplementedError()
@@ -174,7 +149,7 @@ class Allele:
         events = []
         for evt_i, evt in enumerate(raw_events):
             matching_targets = []
-            for tgt_i, (left, right) in enumerate(self.target_active_positions):
+            for tgt_i, (left, right) in enumerate(self.bcode_meta.pos_sites):
                 if evt[0] < right and (evt[1] - 1) >= left:
                     matching_targets.append(tgt_i)
 
@@ -194,7 +169,7 @@ class Allele:
         Assumes all events are NOT overlapping!!!
         """
         # initialize allele to unedited states
-        self.allele = list(self.unedited_allele)
+        self.allele = list(self.bcode_meta.unedited_barcode)
         sub_str_lens = [len(sub_str) for sub_str in self.allele]
         total_len = sum(sub_str_lens)
         for evt in events:
@@ -273,8 +248,7 @@ class Allele:
             allele_with_errors.append(new_substr)
 
         return Allele(allele=allele_with_errors,
-                       unedited_allele=self.unedited_allele,
-                       cut_sites=self.cut_sites)
+                       bcode_meta=self.bcode_meta)
 
 
     def __repr__(self):
