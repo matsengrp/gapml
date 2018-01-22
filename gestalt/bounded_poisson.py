@@ -2,6 +2,10 @@ import numpy as np
 from scipy.misc import factorial
 
 class BoundedPoisson:
+    """
+    A poisson-like distribution that has a min and max value
+    and is normalized appropriately!
+    """
     def __init__(self, min_val: int, max_val: int, poisson_param: float):
         """
         @param min_val: inclusive
@@ -26,12 +30,12 @@ class BoundedPoisson:
     @staticmethod
     def _all_pmf(min_val: int, max_val: int, poisson_param: float):
         p_vals_unstd = [
-            BoundedPoisson.get_pmf_unstd(i, min_val, max_val, poisson_param)
+            BoundedPoisson._get_pmf_unstd(i, min_val, max_val, poisson_param)
             for i in range(min_val, max_val + 1)]
         return p_vals_unstd/sum(p_vals_unstd)
 
     @staticmethod
-    def get_pmf_unstd(val: int, min_val: int, max_val: int, poisson_param: float):
+    def _get_pmf_unstd(val: int, min_val: int, max_val: int, poisson_param: float):
         """
         @return un-normalized prob of observing `val` for a bounded poisson
         """

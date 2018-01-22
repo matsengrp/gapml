@@ -14,6 +14,9 @@ from bounded_poisson import BoundedPoisson
 from clt_likelihood_model import CLTLikelihoodModel
 
 class AlleleSimulatorSimultaneous(AlleleSimulator):
+    """
+    Allele cut/repair simulator where the cut/repair are simultaneous
+    """
     def __init__(self,
         bcode_meta: BarcodeMetadata,
         model: CLTLikelihoodModel):
@@ -35,6 +38,14 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         self.insertion_distribution = poisson(mu=self.model.insert_poisson_param)
 
     def _create_bounded_poissons(self, min_vals: List[float], max_vals: List[float], poiss_lambda: float):
+        """
+        @param min_vals: the min long trim length for this target (left or right)
+        @param max_vals: the max trim length for this target (left or right)
+        @param poisson_lambda: poisson parameter for long and short trims (right now they are the same)
+
+        @return bounded poisson distributions for each target, for long and short trims
+                List[Dict[bool, BoundedPoisson]]
+        """
         dstns = []
         for i in range(self.bcode_meta.n_targets):
             long_min = min_vals[i]
@@ -50,7 +61,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
 
     def _race_target_tracts(self, allele: Allele):
         """
-        Race target cutting (with no regard to time limits)
+        Race cutting (with no regard to time limits)
         @return race_winner: target tract if event occurs
                             if no event happens (can't cut), then returns None
                 event_time: the time of the event that won
@@ -81,7 +92,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         @param time: the amount of time to simulate the allele modification process
 
         @return allele after the simulation procedure
-                    does not modify the allele that got passed in :)
+                does not modify the allele that got passed in :)
         """
         allele = Allele(
             init_allele.allele,
@@ -97,7 +108,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             time_remain = max(time_remain - event_time, 0)
 
             if time_remain > 0:
-                # One of the targets got cut
+                # Target(s) got cut
                 allele.cut(target_tract.min_target)
                 if target_tract.min_target != target_tract.max_target:
                     allele.cut(target_tract.max_target)
@@ -107,9 +118,9 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
     def _do_repair(self, allele: Allele, target_tract: TargetTract):
         """
         Repairs allele per the target_tract
+        NOTE: if this tries to delete an already-deleted position,
+              this simulation will keep the next non-deleted position
         """
-        if len(allele.needs_repair) not in (1, 2):
-            raise ValueError('allele contains {} cuts, cannot repair'.format(len(allele.needs_repair)))
         target1 = target_tract.min_target
         target2 = target_tract.max_target
 
@@ -117,6 +128,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         right_long = target_tract.is_right_long
 
         if left_long or right_long:
+            # No zero inflation if we decided to do a long left or right trim
             do_insertion = True
             do_deletion = True
         else:

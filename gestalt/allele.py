@@ -24,6 +24,7 @@ class Allele:
                  bcode_meta: BarcodeMetadata):
         """
         @param allele: the current state of the allele
+        @param bcode_meta: barcode metadata
         """
         # an editable copy of the allele (as a list for mutability)
         self.allele = list(allele)
@@ -34,14 +35,17 @@ class Allele:
 
     def get_active_targets(self):
         """
-        @return the index of the targets that can be cut, e.g. the targets that have no DSBs and are unmodified
+        @return List[int], index of the targets that can be cut, e.g. the targets where the crucial positions
+        are not modified
         """
-        # TODO: right now this code is pretty inefficient. we might want to cache which targets are active
-        matches = [
-            i not in self.needs_repair and self.bcode_meta.unedited_barcode[2 * i + 1] == self.allele[2 * i + 1]
-            for i in range(self.bcode_meta.n_targets)
-        ]
-        return np.where(matches)[0]
+        # TODO: right now this code is pretty inefficient... but only used by simulator i think?
+        events = self.get_event_encoding().events
+        inactive = self.needs_repair.copy()
+        for evt in events:
+            min_deact, max_deact = self.bcode_meta.get_min_max_deact_targets(evt)
+            inactive.update(range(min_deact, max_deact + 1))
+        matches = [i for i in range(self.bcode_meta.n_targets) if i not in inactive]
+        return matches
 
     def cut(self, target_idx):
         """
