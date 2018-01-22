@@ -6,11 +6,11 @@ from constants import BARCODE_V7, NUM_BARCODE_V7_TARGETS
 
 class BarcodeMetadata:
     def __init__(self,
-            unedited_allele: List[str] = BARCODE_V7,
+            unedited_barcode: List[str] = BARCODE_V7,
             cut_sites: List[int] = [6] * NUM_BARCODE_V7_TARGETS,
             crucial_pos_len: List[int] = [6,6]):
         """
-        @param unedited_allele: the original state of the allele
+        @param unedited_barcode: the original state of the barcode
         @param cut_sites: offset from 3' end of target for Cas9 cutting,
                         so a cut_site of 6 means that we start inserting
                         such that the inserted seq is 6 nucleotides from
@@ -19,11 +19,11 @@ class BarcodeMetadata:
                         cut site must not be disturbed for the target to
                         remain active
         """
-        # The original allele
-        self.unedited_allele = unedited_allele
-        self.orig_substr_lens = [len(s) for s in unedited_allele]
+        # The original barcode
+        self.unedited_barcode = unedited_barcode
+        self.orig_substr_lens = [len(s) for s in unedited_barcode]
         self.orig_length = sum(self.orig_substr_lens)
-        self.num_targets = (len(self.unedited_allele) - 1) // 2
+        self.num_targets = (len(self.unedited_barcode) - 1) // 2
 
         self.cut_sites = cut_sites
         # absolute positions of cut locations
