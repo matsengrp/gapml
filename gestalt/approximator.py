@@ -93,40 +93,54 @@ class ApproximatorLB:
     def __init__(self, extra_steps: int, anc_generations: int, bcode_metadata: BarcodeMetadata):
         self.extra_steps = extra_steps
         self.anc_generations = anc_generations
-        # TODO: implement the code for anc_generations > 1
-        assert anc_generations == 1
         self.bcode_meta = bcode_metadata
 
     def annotate_state_sum_transitions(self, tree: CellLineageTree):
+        """
+        Annotate each branch of the tree with the state sum.
+        Also annotates with the transition graphs between target tract representations.
+
+        The `transition_graph_dict` attribute is a dictionary:
+          key = a tuple of target tracts (corresponds to a subset of a target tract representation)
+                AND the maximum target tract that tuple can transition to
+          value = the transition graphs starting at the tuple
+        We use transition_graph_dict later to construct all the possible states in the
+        transition matrix.
+        """
         for node in tree.traverse("preorder"):
             if node.is_root():
                 node.add_feature("state_sum", StateSum([()]))
             else:
-                # TODO: make this look up self.anc_generations rather than only one
-                anc = node.up
-                transition_graph_dict, state_sum = self.get_branch_state_sum_transitions(anc, node)
+                transition_graph_dict, state_sum = self._get_branch_state_sum_transitions(node)
                 if node.is_leaf():
                     state_sum = StateSum.create_for_observed_allele(node.allele_events, self.bcode_meta)
                 node.add_feature("state_sum", state_sum)
                 node.add_feature("transition_graph_dict", transition_graph_dict)
 
-    def get_branch_state_sum_transitions(self, anc: CellLineageTree, node: CellLineageTree):
+    def _get_branch_state_sum_transitions(self, node: CellLineageTree):
+        """
+        @param node: the node we are getting the state sum for
+        @return a dictionary of transition graphs between groups of target tracts,
+                indexed by their start group of target tracts and the maximum target tract
+                AND the state sum for this node
+        """
+        anc = node.up_generations(self.anc_generations)
         if len(node.anc_state.indel_set_list) == 0:
             # If unmodified
             return dict(), anc.state_sum
 
-        # Partition the ancestral node's anc_state according to node's anc_state.
+        # Partition the anc's anc_state according to node's anc_state.
         # Used for deciding which states to add in node's StateSum since node's StateSum is
         # composed of states that cannot be < ancestor node's anc_state.
         anc_partition = CLTLikelihoodModel.partition(anc.anc_state.indel_set_list, node.anc_state)
 
-        # For each state in in the ancestral node's StateSum, find the subgraph of nearby target tract repr
+        # For each state in the parent node's StateSum, find the subgraph of nearby target tract repr
         node_state_sum = set()
         # Stores previously-explored subgraphs from a particular root node and max_indel_set
         subgraph_dict = {}
         # Stores previously-calculated partitioned state sums and max_indel_set
         sub_state_sums_dict = {}
-        for tts in anc.state_sum.tts_list:
+        for tts in node.up.state_sum.tts_list:
             # Partition each state in the ancestral node's StateSum according to node's anc_state
             tts_partition = CLTLikelihoodModel.partition(tts, node.anc_state)
             tts_sub_state_sums = []
@@ -135,7 +149,7 @@ class ApproximatorLB:
                 graph_key = (tt_tuple_start, max_indel_set)
                 if graph_key not in subgraph_dict:
                     # We have never tried walking the subgraph for this start node, so let's do it now.
-                    subgraph = self.walk_tt_group_subgraph(max_indel_set, tt_tuple_start)
+                    subgraph = self._walk_tt_group_subgraph(max_indel_set, tt_tuple_start)
                     subgraph_dict[graph_key] = subgraph
 
                     # Determine which tt_tuples will contribute to node's state sum
@@ -160,7 +174,7 @@ class ApproximatorLB:
 
         return subgraph_dict, StateSum(node_state_sum)
 
-    def walk_tt_group_subgraph(self, max_indel_set: IndelSet, tt_grp_rt: Tuple[TargetTract]):
+    def _walk_tt_group_subgraph(self, max_indel_set: IndelSet, tt_grp_rt: Tuple[TargetTract]):
         """
         Dynamic programming algo for finding subgraph of nodes that are within `self.extra_steps` of
         any node in `tt_grp_roots`.

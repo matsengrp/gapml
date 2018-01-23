@@ -10,6 +10,7 @@ import ancestral_events_finder as anc_evt_finder
 from approximator import ApproximatorLB
 
 from state_sum import StateSum
+from common import target_tract_repr_diff
 
 class CLTCalculations:
     """
@@ -47,37 +48,55 @@ class CLTLassoEstimator(CLTEstimator):
 
     def get_likelihood(self, model_params: CLTLikelihoodModel, get_grad: bool = False):
         """
+        Does the Felsenstein algo to efficiently calculate the likelihood of the tree,
+        assuming state_sum contains all the possible ancestral states (though that's not
+        actually true. it's an approximation)
+
         @return The likelihood for proposed theta, the gradient too if requested
         """
         transition_matrices = model_params.create_transition_matrices()
 
         L = dict()
         pt_matrix = dict()
+        trim_probs = dict()
         for node in model_params.topology.traverse("postorder"):
             if node.is_leaf():
                 node_trans_mat = transition_matrices[node.node_id]
                 L[node.node_id] = np.zeros((node_trans_mat.num_states, 1))
+                assert len(node.state_sum.tts_list) == 1
                 tts_key = node_trans_mat.key_dict[node.state_sum.tts_list[0]]
                 L[node.node_id][tts_key] = 1
             else:
                 L[node.node_id] = 1
                 for child in node.children:
                     ch_trans_mat = transition_matrices[child.node_id]
-                    tts_probs = np.zeros((ch_trans_mat.num_states, 1))
-                    for tts in child.state_sum.tts_list:
-                        child_tts_key = ch_trans_mat.key_dict[tts]
-                        trim_prob = model_params.get_prob_unmasked_trims(child.anc_state, tts)
-                        lower_lik = L[child.node_id][child_tts_key]
-                        tts_probs[child_tts_key] = lower_lik * trim_prob
 
+                    # Get the trim probabilities
+                    trim_probs[child.node_id] = np.ones((ch_trans_mat.num_states, ch_trans_mat.num_states))
+                    for node_tts in node.state_sum.tts_list:
+                        node_tts_key = ch_trans_mat.key_dict[node_tts]
+                        for child_tts in child.state_sum.tts_list:
+                            child_tts_key = ch_trans_mat.key_dict[child_tts]
+                            diff_target_tracts = target_tract_repr_diff(node_tts, child_tts)
+                            trim_prob = model_params.get_prob_unmasked_trims(child.anc_state, diff_target_tracts)
+                            trim_probs[child.node_id][node_tts_key, child_tts_key] = trim_prob
+
+                    # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
                     branch_len = model_params.branch_lens[child.node_id]
                     pt_matrix[child.node_id] = np.dot(ch_trans_mat.A, np.dot(np.diag(np.exp(ch_trans_mat.D * branch_len)), ch_trans_mat.A_inv))
 
+                    # Get the probability for the data descended from the child node, assuming that the node
+                    # has a particular target tract repr.
                     # These down probs are ordered according to the child node's numbering of the TTs states
-                    ch_ordered_down_probs = np.dot(pt_matrix[child.node_id], tts_probs)
+                    ch_ordered_down_probs = np.dot(
+                        np.multiply(
+                            pt_matrix[child.node_id],
+                            trim_probs[child.node_id]),
+                        L[child.node_id])
 
-                    # Reorder summands according to node's numbering of tts states
                     if not node.is_root():
+                        # Reorder summands according to node's numbering of tts states
+                        # TODO: refactor this to be in another function so I can test this guy
                         node_trans_mat = transition_matrices[node.node_id]
                         down_probs = np.zeros((node_trans_mat.num_states, 1))
                         for tts in node.state_sum.tts_list:
@@ -87,6 +106,8 @@ class CLTLassoEstimator(CLTEstimator):
 
                         L[node.node_id] *= down_probs
                     else:
+                        # For the root node, we just want the probability where the root node is unmodified
+                        # No need to reorder
                         ch_id = ch_trans_mat.key_dict[()]
                         L[node.node_id] *= ch_ordered_down_probs[ch_id]
 

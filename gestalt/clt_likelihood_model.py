@@ -100,13 +100,11 @@ class CLTLikelihoodModel:
         transition_matrices = dict()
         for node in self.topology.traverse(self.NODE_ORDER):
             if not node.is_root():
-                # TODO: this should not be node.anc if statesum used a larger number
-                ref_anc = node.up
-                trans_mat = self._create_transition_matrix(node, ref_anc)
+                trans_mat = self._create_transition_matrix(node)
                 transition_matrices[node.node_id] = trans_mat
         return transition_matrices
 
-    def _create_transition_matrix(self, node: CellLineageTree, ref_anc: CellLineageTree):
+    def _create_transition_matrix(self, node: CellLineageTree):
         """
         @return the transition matrix for the particular branch ending at `node`
                 only contains the states relevant to state_sum
@@ -115,9 +113,9 @@ class CLTLikelihoodModel:
         transition_dict = dict()
         indel_set_list = node.anc_state.indel_set_list
         # Determine the values in the transition matrix by considering all possible states
-        # starting at the ref_anc's StateSum.
+        # starting at the parent's StateSum.
         # Recurse through all of its children to build out the transition matrix
-        for tts in ref_anc.state_sum.tts_list:
+        for tts in node.up.state_sum.tts_list:
             tts_partition_info = dict()
             tts_partition = self.partition(tts, node.anc_state)
             for indel_set in indel_set_list:
