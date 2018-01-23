@@ -8,6 +8,7 @@ from cell_lineage_tree import CellLineageTree
 from clt_likelihood_model import CLTLikelihoodModel
 import ancestral_events_finder as anc_evt_finder
 from approximator import ApproximatorLB
+from transition_matrix import TransitionMatrixWrapper
 
 from state_sum import StateSum
 from common import target_tract_repr_diff
@@ -72,14 +73,11 @@ class CLTLassoEstimator(CLTEstimator):
                     ch_trans_mat = transition_matrices[child.node_id]
 
                     # Get the trim probabilities
-                    trim_probs[child.node_id] = np.ones((ch_trans_mat.num_states, ch_trans_mat.num_states))
-                    for node_tts in node.state_sum.tts_list:
-                        node_tts_key = ch_trans_mat.key_dict[node_tts]
-                        for child_tts in child.state_sum.tts_list:
-                            child_tts_key = ch_trans_mat.key_dict[child_tts]
-                            diff_target_tracts = target_tract_repr_diff(node_tts, child_tts)
-                            trim_prob = model_params.get_prob_unmasked_trims(child.anc_state, diff_target_tracts)
-                            trim_probs[child.node_id][node_tts_key, child_tts_key] = trim_prob
+                    trim_probs[child.node_id] = self._get_trim_probs(
+                            model_params,
+                            ch_trans_mat,
+                            node,
+                            child)
 
                     # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
                     branch_len = model_params.branch_lens[child.node_id]
@@ -96,13 +94,10 @@ class CLTLassoEstimator(CLTEstimator):
 
                     if not node.is_root():
                         # Reorder summands according to node's numbering of tts states
-                        # TODO: refactor this to be in another function so I can test this guy
-                        node_trans_mat = transition_matrices[node.node_id]
-                        down_probs = np.zeros((node_trans_mat.num_states, 1))
-                        for tts in node.state_sum.tts_list:
-                            ch_id = ch_trans_mat.key_dict[tts]
-                            node_id = node_trans_mat.key_dict[tts]
-                            down_probs[node_id] = ch_ordered_down_probs[ch_id]
+                        down_probs = self._reorder_likelihoods(
+                            ch_ordered_down_probs,
+                            transition_matrices[node.node_id],
+                            ch_trans_mat)
 
                         L[node.node_id] *= down_probs
                     else:
@@ -114,3 +109,39 @@ class CLTLassoEstimator(CLTEstimator):
         print("lik root", L[model_params.root_node_id])
         1/0
         return lik_root
+
+    def _get_trim_probs(self, model_params: CLTLikelihoodModel, ch_trans_mat: TransitionMatrixWrapper, node: CellLineageTree, child: CellLineageTree):
+        """
+        @param model_params: model parameter
+        @param ch_trans_mat: the transition matrix corresponding to child node (we make sure the entries in the trim prob matrix match
+                        the order in ch_trans_mat)
+        @param node: the parent node
+        @param child: the child node
+
+        @return matrix of conditional probabilities of each trim
+        """
+        trim_prob_mat = np.ones((ch_trans_mat.num_states, ch_trans_mat.num_states))
+
+        for node_tts in node.state_sum.tts_list:
+            node_tts_key = ch_trans_mat.key_dict[node_tts]
+            for child_tts in child.state_sum.tts_list:
+                child_tts_key = ch_trans_mat.key_dict[child_tts]
+                diff_target_tracts = target_tract_repr_diff(node_tts, child_tts)
+                trim_prob = model_params.get_prob_unmasked_trims(child.anc_state, diff_target_tracts)
+                trim_prob_mat[node_tts_key, child_tts_key] = trim_prob
+
+        return trim_prob_mat
+
+    def _reorder_likelihoods(self, vec_lik: ndarray, node_trans_mat: TransitionMatrixWrapper, ch_trans_mat: TransitionMatrixWrapper):
+        """
+        @param vec_lik: the thing to be re-ordered
+        @param node_trans_mat: provides the desired ordering
+        @param ch_trans_mat: provides the ordering used in vec_lik
+
+        @return the reordered version of vec_lik according to the order in node_trans_mat
+        """
+        down_probs = np.zeros((node_trans_mat.num_states, 1))
+        for i, tts in enumerate(node_trans_mat.key_list):
+            ch_id = ch_trans_mat.key_dict[tts]
+            down_probs[i] = vec_lik[ch_id]
+        return down_probs
