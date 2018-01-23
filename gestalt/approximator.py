@@ -93,8 +93,6 @@ class ApproximatorLB:
     def __init__(self, extra_steps: int, anc_generations: int, bcode_metadata: BarcodeMetadata):
         self.extra_steps = extra_steps
         self.anc_generations = anc_generations
-        # TODO: implement the code for anc_generations > 1
-        assert anc_generations == 1
         self.bcode_meta = bcode_metadata
 
     def annotate_state_sum_transitions(self, tree: CellLineageTree):
@@ -102,15 +100,14 @@ class ApproximatorLB:
             if node.is_root():
                 node.add_feature("state_sum", StateSum([()]))
             else:
-                # TODO: make this look up self.anc_generations rather than only one
-                anc = node.up
-                transition_graph_dict, state_sum = self.get_branch_state_sum_transitions(anc, node)
+                anc = node.up_generations(self.anc_generations)
+                transition_graph_dict, state_sum = self.get_branch_state_sum_transitions(node, anc)
                 if node.is_leaf():
                     state_sum = StateSum.create_for_observed_allele(node.allele_events, self.bcode_meta)
                 node.add_feature("state_sum", state_sum)
                 node.add_feature("transition_graph_dict", transition_graph_dict)
 
-    def get_branch_state_sum_transitions(self, anc: CellLineageTree, node: CellLineageTree):
+    def get_branch_state_sum_transitions(self, node: CellLineageTree, anc: CellLineageTree):
         if len(node.anc_state.indel_set_list) == 0:
             # If unmodified
             return dict(), anc.state_sum
@@ -120,13 +117,13 @@ class ApproximatorLB:
         # composed of states that cannot be < ancestor node's anc_state.
         anc_partition = CLTLikelihoodModel.partition(anc.anc_state.indel_set_list, node.anc_state)
 
-        # For each state in in the ancestral node's StateSum, find the subgraph of nearby target tract repr
+        # For each state in the parent node's StateSum, find the subgraph of nearby target tract repr
         node_state_sum = set()
         # Stores previously-explored subgraphs from a particular root node and max_indel_set
         subgraph_dict = {}
         # Stores previously-calculated partitioned state sums and max_indel_set
         sub_state_sums_dict = {}
-        for tts in anc.state_sum.tts_list:
+        for tts in node.up.state_sum.tts_list:
             # Partition each state in the ancestral node's StateSum according to node's anc_state
             tts_partition = CLTLikelihoodModel.partition(tts, node.anc_state)
             tts_sub_state_sums = []

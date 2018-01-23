@@ -252,3 +252,13 @@ class CellLineageTree(TreeNode):
         sns.pairplot(indels)
         plt.tight_layout()
         plt.savefig(file_name)
+
+    def up_generations(self, k:int):
+        """
+        @return the ancestor that is `k` generations ago.
+                ex: k = 0 means it returns itself
+        """
+        anc = self
+        for i in range(k):
+            anc = anc.up
+        return anc
