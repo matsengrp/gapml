@@ -52,7 +52,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             long_short_dstns = {}
             for is_long in [True, False]:
                 min_trim = min_vals[i] if is_long else 0
-                max_trim = max_vals[i]
+                max_trim = max_vals[i] if is_long else min_vals[i] - 1
 
                 dstn = BoundedPoisson(min_trim, max_trim, poiss_lambda)
                 long_short_dstns[is_long] = dstn

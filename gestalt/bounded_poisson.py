@@ -21,7 +21,8 @@ class BoundedPoisson:
 
     def pmf(self, k: int):
         if k > self.max_val:
-            return 0
+            # TODO: keep this here for simulations. remove later for real data
+            raise ValueError("CUT TOO MUCH! %d, max = %d" % (k, self.max_val))
         return self.all_pmf[k - self.min_val]
 
     def __str__(self):

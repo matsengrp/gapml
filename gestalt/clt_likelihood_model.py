@@ -17,8 +17,6 @@ class CLTLikelihoodModel:
     branch_lens: length of all the branches, indexed by node id at the end of the branch
     target_lams: cutting rate for each target
     cell_type_lams: rate of differentiating to a cell type
-
-    TODO: write tests!!!!
     """
     UNLIKELY = "unlikely"
     NODE_ORDER = "postorder"
@@ -154,9 +152,6 @@ class CLTLikelihoodModel:
         matrix_row = dict()
         start_tts = merge_target_tract_groups([
             tts_partition_info[ind_set]["start"] for ind_set in indel_set_list])
-        if start_tts in transition_dict.keys():
-            # Filled in already
-            return
         transition_dict[start_tts] = matrix_row
 
         hazard_to_likely = 0
@@ -185,8 +180,7 @@ class CLTLikelihoodModel:
                     raise ValueError("already exists?")
 
                 # Recurse
-                if new_tts not in transition_dict.keys():
-                    self._add_transition_dict_row(new_tts_part_info, indel_set_list, transition_dict)
+                self._add_transition_dict_row(new_tts_part_info, indel_set_list, transition_dict)
 
         # Calculate hazard to all other states (aka the "unlikely" state)
         hazard_away = self.get_hazard_away(start_tts)
@@ -354,9 +348,9 @@ class CLTLikelihoodModel:
                 (given that the target tract occurred)
         """
         left_trim_len = self.bcode_meta.abs_cut_sites[singleton.min_target] - singleton.start_pos
-        right_trim_len = singleton.del_end - self.bcode_meta.abs_cut_sites[singleton.max_target]
-        left_trim_long_min = self.bcode_meta.left_long_trim_min[singleton.min_deact_target]
-        right_trim_long_min = self.bcode_meta.right_long_trim_min[singleton.max_deact_target]
+        right_trim_len = singleton.del_end - self.bcode_meta.abs_cut_sites[singleton.max_target] + 1
+        left_trim_long_min = self.bcode_meta.left_long_trim_min[singleton.min_target]
+        right_trim_long_min = self.bcode_meta.right_long_trim_min[singleton.max_target]
         if singleton.is_left_long:
             min_left_trim = left_trim_long_min
             max_left_trim = self.bcode_meta.left_max_trim[singleton.min_target]
@@ -369,7 +363,7 @@ class CLTLikelihoodModel:
             max_right_trim = self.bcode_meta.right_max_trim[singleton.min_target]
         else:
             min_right_trim = 0
-            max_right_trim = right_trim_long_min
+            max_right_trim = right_trim_long_min - 1
 
         left_prob = BoundedPoisson(min_left_trim, max_left_trim, self.trim_poisson_params[0]).pmf(
             left_trim_len)

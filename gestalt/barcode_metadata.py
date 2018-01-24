@@ -37,7 +37,7 @@ class BarcodeMetadata:
         self.pos_sites = []
         for i in range(self.n_targets):
             cut_site = self.abs_cut_sites[i]
-            right = min(self.orig_length - 1, cut_site + crucial_pos_len[1])
+            right = min(self.orig_length - 1, cut_site + crucial_pos_len[1] - 1)
             left = max(0, cut_site - crucial_pos_len[0])
             self.pos_sites.append((left, right))
 
@@ -46,11 +46,11 @@ class BarcodeMetadata:
             self.abs_cut_sites[i] - self.pos_sites[i - 1][1] for i in range(1, self.n_targets)]
         # Min length of a long trim for target i -- right
         self.right_long_trim_min = [
-            self.pos_sites[i + 1][0] - self.abs_cut_sites[i] for i in range(self.n_targets - 1)]
+            self.pos_sites[i + 1][0] - self.abs_cut_sites[i] + 1 for i in range(self.n_targets - 1)]
 
         # Max length of any trim for target i -- left
         self.left_max_trim = [
-            self.abs_cut_sites[i] - self.abs_cut_sites[i - 1] for i in range(1, self.n_targets)]
+            self.abs_cut_sites[i] - self.abs_cut_sites[i - 1] - 1 for i in range(1, self.n_targets)]
         # TODO: right now this just copies over the max from the 1st target
         self.left_max_trim = [self.left_max_trim[0]] + self.left_max_trim
         self.left_long_trim_min = [self.left_max_trim[0]] + self.left_long_trim_min
@@ -63,12 +63,12 @@ class BarcodeMetadata:
         self.right_long_trim_min += [self.right_max_trim[-1]]
 
     def get_min_max_deact_targets(self, evt: Event):
-        if evt.min_target > 1 and evt.start_pos < self.pos_sites[evt.min_target - 1][1]:
+        if evt.min_target > 1 and evt.start_pos <= self.pos_sites[evt.min_target - 1][1]:
             min_deact_target = evt.min_target - 1
         else:
             min_deact_target = evt.min_target
 
-        if evt.max_target < self.n_targets - 1 and self.pos_sites[evt.max_target + 1][0] <= evt.del_end - 1:
+        if evt.max_target < self.n_targets - 1 and self.pos_sites[evt.max_target + 1][0] <= evt.del_end:
             max_deact_target = evt.max_target + 1
         else:
             max_deact_target = evt.max_target

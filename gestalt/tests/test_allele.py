@@ -1,6 +1,7 @@
 import unittest
 
 from allele import Allele
+from barcode_metadata import BarcodeMetadata
 from random import seed, randint, choice
 
 class AlleleTestCase(unittest.TestCase):
@@ -20,10 +21,12 @@ class AlleleTestCase(unittest.TestCase):
         self.SEP_LEN = len(self.ORIG_BARCODE[2])
         self.CUT_SITE_NUM = 3
         self.CUT_SITES = [self.CUT_SITE_NUM] * self.NUM_TARGETS
+        self.barcode_meta = BarcodeMetadata(
+                self.ORIG_BARCODE,
+                self.CUT_SITES,
+                [3,3])
         self.allele = Allele(
-            self.ORIG_BARCODE,
-            self.ORIG_BARCODE,
-            self.CUT_SITES)
+            self.ORIG_BARCODE, self.barcode_meta)
 
     def test_active_targets(self):
         active_targets = self.allele.get_active_targets()
@@ -112,8 +115,7 @@ class AlleleTestCase(unittest.TestCase):
         for evts in evts_list:
             self.allele = Allele(
                 self.ORIG_BARCODE,
-                self.ORIG_BARCODE,
-                self.CUT_SITES)
+                self.barcode_meta)
             self.allele.process_events(evts)
             evts_get = self.allele.get_events()
             self.assertTrue(evts_get == evts,
