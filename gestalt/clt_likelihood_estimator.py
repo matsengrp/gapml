@@ -1,6 +1,6 @@
 import time
 import numpy as np
-from typing import List
+from typing import List, Tuple
 from numpy import ndarray
 
 from clt_estimator import CLTEstimator
@@ -9,6 +9,7 @@ from clt_likelihood_model import CLTLikelihoodModel
 import ancestral_events_finder as anc_evt_finder
 from approximator import ApproximatorLB
 from transition_matrix import TransitionMatrixWrapper
+from indel_sets import TargetTract
 
 from state_sum import StateSum
 from common import target_tract_repr_diff
@@ -57,7 +58,8 @@ class CLTLassoEstimator(CLTEstimator):
         """
         transition_matrices = model_params.create_transition_matrices()
 
-        L = dict()
+        log_lik = 0
+        L = dict() # Stores normalized probs
         pt_matrix = dict()
         trim_probs = dict()
         for node in model_params.topology.traverse("postorder"):
@@ -94,23 +96,38 @@ class CLTLassoEstimator(CLTEstimator):
 
                     if not node.is_root():
                         # Reorder summands according to node's numbering of tts states
+                        node_trans_mat = transition_matrices[node.node_id]
                         down_probs = self._reorder_likelihoods(
                             ch_ordered_down_probs,
-                            transition_matrices[node.node_id],
+                            node.state_sum.tts_list,
+                            node_trans_mat,
                             ch_trans_mat)
 
                         L[node.node_id] *= down_probs
+                        if down_probs.max() == 0:
+                            raise ValueError("Why is everything zero?")
                     else:
                         # For the root node, we just want the probability where the root node is unmodified
                         # No need to reorder
                         ch_id = ch_trans_mat.key_dict[()]
                         L[node.node_id] *= ch_ordered_down_probs[ch_id]
 
-        print("lik root", L[model_params.root_node_id])
+                scaler = L[node.node_id].max()
+                if scaler == 0:
+                    raise ValueError("Why is everything zero?")
+                L[node.node_id] /= scaler
+                log_lik += np.sum(np.log(scaler))
+
+        log_lik += np.log(L[model_params.root_node_id])
+        print("log lik", log_lik)
         1/0
         return lik_root
 
-    def _get_trim_probs(self, model_params: CLTLikelihoodModel, ch_trans_mat: TransitionMatrixWrapper, node: CellLineageTree, child: CellLineageTree):
+    def _get_trim_probs(self,
+            model_params: CLTLikelihoodModel,
+            ch_trans_mat: TransitionMatrixWrapper,
+            node: CellLineageTree,
+            child: CellLineageTree):
         """
         @param model_params: model parameter
         @param ch_trans_mat: the transition matrix corresponding to child node (we make sure the entries in the trim prob matrix match
@@ -132,16 +149,24 @@ class CLTLassoEstimator(CLTEstimator):
 
         return trim_prob_mat
 
-    def _reorder_likelihoods(self, vec_lik: ndarray, node_trans_mat: TransitionMatrixWrapper, ch_trans_mat: TransitionMatrixWrapper):
+    def _reorder_likelihoods(self,
+            vec_lik: ndarray,
+            tts_list: List[Tuple[TargetTract]],
+            node_trans_mat: TransitionMatrixWrapper,
+            ch_trans_mat: TransitionMatrixWrapper):
         """
         @param vec_lik: the thing to be re-ordered
+        @param tts_list: list of target tract reprs to include in the vector
+                        rest can be set to zero
         @param node_trans_mat: provides the desired ordering
         @param ch_trans_mat: provides the ordering used in vec_lik
 
         @return the reordered version of vec_lik according to the order in node_trans_mat
         """
         down_probs = np.zeros((node_trans_mat.num_states, 1))
-        for i, tts in enumerate(node_trans_mat.key_list):
-            ch_id = ch_trans_mat.key_dict[tts]
-            down_probs[i] = vec_lik[ch_id]
+        for tts in tts_list:
+            ch_tts_id = ch_trans_mat.key_dict[tts]
+            node_tts_id = node_trans_mat.key_dict[tts]
+            #print("vec lik copy", vec_lik[ch_tts_id])
+            down_probs[node_tts_id] = vec_lik[ch_tts_id]
         return down_probs

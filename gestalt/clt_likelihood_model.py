@@ -354,9 +354,9 @@ class CLTLikelihoodModel:
                 (given that the target tract occurred)
         """
         left_trim_len = self.bcode_meta.abs_cut_sites[singleton.min_target] - singleton.start_pos
-        right_trim_len = singleton.del_end - self.bcode_meta.abs_cut_sites[singleton.max_target]
-        left_trim_long_min = self.bcode_meta.left_long_trim_min[singleton.min_deact_target]
-        right_trim_long_min = self.bcode_meta.right_long_trim_min[singleton.max_deact_target]
+        right_trim_len = singleton.del_end - self.bcode_meta.abs_cut_sites[singleton.max_target] + 1
+        left_trim_long_min = self.bcode_meta.left_long_trim_min[singleton.min_target]
+        right_trim_long_min = self.bcode_meta.right_long_trim_min[singleton.max_target]
         if singleton.is_left_long:
             min_left_trim = left_trim_long_min
             max_left_trim = self.bcode_meta.left_max_trim[singleton.min_target]
@@ -369,7 +369,7 @@ class CLTLikelihoodModel:
             max_right_trim = self.bcode_meta.right_max_trim[singleton.min_target]
         else:
             min_right_trim = 0
-            max_right_trim = right_trim_long_min
+            max_right_trim = right_trim_long_min - 1
 
         left_prob = BoundedPoisson(min_left_trim, max_left_trim, self.trim_poisson_params[0]).pmf(
             left_trim_len)
