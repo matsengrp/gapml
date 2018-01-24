@@ -167,6 +167,5 @@ class CLTLassoEstimator(CLTEstimator):
         for tts in tts_list:
             ch_tts_id = ch_trans_mat.key_dict[tts]
             node_tts_id = node_trans_mat.key_dict[tts]
-            #print("vec lik copy", vec_lik[ch_tts_id])
             down_probs[node_tts_id] = vec_lik[ch_tts_id]
         return down_probs

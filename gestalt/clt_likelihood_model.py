@@ -17,8 +17,6 @@ class CLTLikelihoodModel:
     branch_lens: length of all the branches, indexed by node id at the end of the branch
     target_lams: cutting rate for each target
     cell_type_lams: rate of differentiating to a cell type
-
-    TODO: write tests!!!!
     """
     UNLIKELY = "unlikely"
     NODE_ORDER = "postorder"
@@ -154,9 +152,6 @@ class CLTLikelihoodModel:
         matrix_row = dict()
         start_tts = merge_target_tract_groups([
             tts_partition_info[ind_set]["start"] for ind_set in indel_set_list])
-        if start_tts in transition_dict.keys():
-            # Filled in already
-            return
         transition_dict[start_tts] = matrix_row
 
         hazard_to_likely = 0
@@ -185,8 +180,7 @@ class CLTLikelihoodModel:
                     raise ValueError("already exists?")
 
                 # Recurse
-                if new_tts not in transition_dict.keys():
-                    self._add_transition_dict_row(new_tts_part_info, indel_set_list, transition_dict)
+                self._add_transition_dict_row(new_tts_part_info, indel_set_list, transition_dict)
 
         # Calculate hazard to all other states (aka the "unlikely" state)
         hazard_away = self.get_hazard_away(start_tts)
