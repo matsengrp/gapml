@@ -255,10 +255,12 @@ class CellLineageTree(TreeNode):
 
     def up_generations(self, k:int):
         """
-        @return the ancestor that is `k` generations ago.
+        @return the ancestor that is `k` generations ago, stops at root
                 ex: k = 0 means it returns itself
         """
         anc = self
         for i in range(k):
+            if anc.is_root():
+                break
             anc = anc.up
         return anc
