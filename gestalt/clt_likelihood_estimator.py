@@ -119,9 +119,7 @@ class CLTLassoEstimator(CLTEstimator):
                 log_lik += np.sum(np.log(scaler))
 
         log_lik += np.log(L[model_params.root_node_id])
-        print("log lik", log_lik)
-        1/0
-        return lik_root
+        return log_lik
 
     def _get_trim_probs(self,
             model_params: CLTLikelihoodModel,

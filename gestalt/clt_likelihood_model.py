@@ -299,8 +299,14 @@ class CLTLikelihoodModel:
         @return probability of the trims for the corresponding singletons in the anc_state
         """
         matching_sgs = CLTLikelihoodModel.get_matching_singletons(anc_state, tts)
+        return self._get_cond_prob_trims(matching_sgs)
+
+    def _get_cond_prob_trims(self, singletons: List[Singleton]):
+        """
+        @return product of conditional probabs of the trims associated with each singleton
+        """
         prob = 1
-        for singleton in matching_sgs:
+        for singleton in singletons:
             # Calculate probability of that singleton
             del_prob = self._get_cond_prob_singleton_del(singleton)
             insert_prob = self._get_cond_prob_singleton_insert(singleton)
