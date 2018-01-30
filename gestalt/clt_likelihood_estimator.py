@@ -26,69 +26,23 @@ class CLTLassoEstimator(CLTEstimator):
         self,
         sess: Session,
         penalty_param: float,
-        model_params: CLTLikelihoodModel,
+        model: CLTLikelihoodModel,
         approximator: ApproximatorLB):
         """
         @param penalty_param: lasso penalty parameter
-        @param model_params: initial CLT model params
+        @param model: initial CLT model params
         """
         self.sess = sess
         self.penalty_param = penalty_param
-        self.model_params = model_params
+        self.model = model
         self.approximator = approximator
 
         # Annotate with ancestral states
-        anc_evt_finder.annotate_ancestral_states(model_params.topology, model_params.bcode_meta)
-        # Construct transition boolean matrix -- via state sum approximation
-        self.approximator.annotate_state_sum_transitions(model_params.topology)
-        # Create the skeletons for the transition matrices
-        self.transition_mat_wrappers = model_params.create_transition_matrix_wrappers()
+        anc_evt_finder.annotate_ancestral_states(model.topology, model.bcode_meta)
+        # Create the skeletons for the transition matrices -- via state sum approximation
+        self.transition_mat_wrappers = self.approximator.create_transition_matrix_wrappers(model.topology)
 
-    def _initialize_transition_matrices(self, model_params: CLTLikelihoodModel):
-        """
-        @return a list of real transition matrices
-        """
-        UNLIKELY = "unlikely"
-        all_matrices = dict()
-        for node_id, matrix_wrapper in self.transition_mat_wrappers.items():
-            # Get inputs ready for tensorflow
-            hazard_list = []
-            tt_evts = []
-            start_tts_list = []
-            for start_tts, matrix_row in matrix_wrapper.matrix_dict.items():
-                start_tts_list.append(start_tts)
-                for end_tts, tt_evt in matrix_row.items():
-                    tt_evts.append(tt_evt)
-
-            # Gets hazards (by tensorflow)
-            hazard_aways = model_params.get_hazard_aways(start_tts_list)
-            hazards = model_params.get_hazards(tt_evts)
-
-            # Now fill in the matrix
-            idx = 0
-            matrix_dict = dict()
-            for i, (start_tts, matrix_row) in enumerate(matrix_wrapper.matrix_dict.items()):
-                matrix_dict[start_tts] = dict()
-                haz_to_likely = 0
-                for end_tts, tt_evt in matrix_row.items():
-                    haz = hazards[idx]
-                    matrix_dict[start_tts][end_tts] = haz
-                    haz_to_likely += haz
-                    idx += 1
-                haz_away = hazard_aways[i]
-                haz_to_unlikely = haz_away - haz_to_likely
-                matrix_dict[start_tts][UNLIKELY] = haz_to_unlikely
-                matrix_dict[start_tts][start_tts] = -haz_away
-
-
-            # Add unlikely state
-            matrix_dict[UNLIKELY] = dict()
-
-            all_matrices[node_id] = TransitionMatrix(matrix_dict)
-        return all_matrices
-
-
-    def get_likelihood(self, model_params: CLTLikelihoodModel, get_grad: bool = False):
+    def get_likelihood(self, model: CLTLikelihoodModel, get_grad: bool = False):
         """
         Does the Felsenstein algo to efficiently calculate the likelihood of the tree,
         assuming state_sum contains all the possible ancestral states (though that's not
@@ -96,13 +50,13 @@ class CLTLassoEstimator(CLTEstimator):
 
         @return The likelihood for proposed theta, the gradient too if requested
         """
-        transition_matrices = self._initialize_transition_matrices(model_params)
+        transition_matrices = model.initialize_transition_matrices(self.transition_mat_wrappers)
 
         log_lik = 0
         L = dict() # Stores normalized probs
         pt_matrix = dict()
         trim_probs = dict()
-        for node in model_params.topology.traverse("postorder"):
+        for node in model.topology.traverse("postorder"):
             if node.is_leaf():
                 node_trans_mat = transition_matrices[node.node_id]
                 L[node.node_id] = np.zeros((node_trans_mat.num_states, 1))
@@ -116,13 +70,13 @@ class CLTLassoEstimator(CLTEstimator):
 
                     # Get the trim probabilities
                     trim_probs[child.node_id] = self._get_trim_probs(
-                            model_params,
+                            model,
                             ch_trans_mat,
                             node,
                             child)
 
                     # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
-                    branch_len = model_params.branch_lens[child.node_id].eval()
+                    branch_len = model.branch_lens[child.node_id].eval()
                     pt_matrix[child.node_id] = np.dot(
                             ch_trans_mat.A,
                             np.dot(
@@ -162,16 +116,16 @@ class CLTLassoEstimator(CLTEstimator):
                 L[node.node_id] /= scaler
                 log_lik += np.sum(np.log(scaler))
 
-        log_lik += np.log(L[model_params.root_node_id])
+        log_lik += np.log(L[model.root_node_id])
         return log_lik
 
     def _get_trim_probs(self,
-            model_params: CLTLikelihoodModel,
+            model: CLTLikelihoodModel,
             ch_trans_mat: TransitionMatrixWrapper,
             node: CellLineageTree,
             child: CellLineageTree):
         """
-        @param model_params: model parameter
+        @param model: model parameter
         @param ch_trans_mat: the transition matrix corresponding to child node (we make sure the entries in the trim prob matrix match
                         the order in ch_trans_mat)
         @param node: the parent node
@@ -186,7 +140,7 @@ class CLTLassoEstimator(CLTEstimator):
             for child_tts in child.state_sum.tts_list:
                 child_tts_key = ch_trans_mat.key_dict[child_tts]
                 diff_target_tracts = target_tract_repr_diff(node_tts, child_tts)
-                trim_prob = model_params.get_prob_unmasked_trims(child.anc_state, diff_target_tracts)
+                trim_prob = model.get_prob_unmasked_trims(child.anc_state, diff_target_tracts)
                 trim_prob_mat[node_tts_key, child_tts_key] = trim_prob
 
         return trim_prob_mat

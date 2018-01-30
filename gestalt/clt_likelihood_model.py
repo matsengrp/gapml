@@ -9,7 +9,7 @@ from tensorflow import Session
 from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
 from indel_sets import IndelSet, TargetTract, AncState, SingletonWC, Singleton
-from transition_matrix import TransitionMatrixWrapper
+from transition_matrix import TransitionMatrixWrapper, TransitionMatrix
 from common import merge_target_tract_groups, not_equal_float, equal_float
 from bounded_poisson import BoundedPoisson
 
@@ -78,6 +78,9 @@ class CLTLikelihoodModel:
         self._create_hazard_away()
 
     def _create_hazard(self):
+        """
+        Helpers for creating hazard tensor and its associated gradient
+        """
         # Create the placeholders
         self.targets_ph = tf.placeholder(tf.int32, [None, 2])
         min_target = self.targets_ph[:,0]
@@ -98,6 +101,9 @@ class CLTLikelihoodModel:
             var_list=[self.target_lams, self.trim_long_probs])
 
     def _create_hazard_away(self):
+        """
+        Helpers for creating hazard-away tensor and its associated gradient
+        """
         # Create the placeholders
         self.left_trimmables_ph = tf.placeholder(tf.int32, [None, self.num_targets])
         self.right_trimmables_ph = tf.placeholder(tf.int32, [None, self.num_targets])
@@ -116,6 +122,9 @@ class CLTLikelihoodModel:
             var_list=[self.target_lams, self.trim_long_probs])
 
     def _create_hazard_list(self, trim_left: bool, trim_right: bool):
+        """
+        Helper function for creating hazard list nodes -- useful for calculating hazard away
+        """
         trim_short_left = 1 - self.trim_long_probs[0] if trim_left else 1
         trim_short_right = 1 - self.trim_long_probs[1] if trim_right else 1
 
@@ -123,103 +132,58 @@ class CLTLikelihoodModel:
 
         right_factor = equal_float(self.right_trimmables_ph, 1) * trim_short_right + equal_float(self.right_trimmables_ph, 2)
 
-        hazard_list = tf.multiply(
-            tf.multiply(self.target_lams, right_factor),
-            left_factor)
+        hazard_list = self.target_lams * left_factor * right_factor
         return hazard_list
 
-    def create_transition_matrix_wrappers(self):
+    def initialize_transition_matrices(self, transition_mat_wrappers: Dict[int, TransitionMatrixWrapper]):
         """
-        Create transition matrix for each branch
-        @return dictionary of matrices mapping node id to matrix
-
-        TODO: maybe return a list instead of dictionary
+        @return a list of real transition matrices
         """
-        if self.topology is None:
-            raise ValueError("Must initialize topology first for this to work")
+        UNLIKELY = "unlikely"
+        all_matrices = dict()
+        for node_id, matrix_wrapper in transition_mat_wrappers.items():
+            # Get inputs ready for tensorflow
+            hazard_list = []
+            tt_evts = []
+            start_tts_list = []
+            for start_tts, matrix_row in matrix_wrapper.matrix_dict.items():
+                start_tts_list.append(start_tts)
+                for end_tts, tt_evt in matrix_row.items():
+                    tt_evts.append(tt_evt)
 
-        transition_matrices = dict()
-        for node in self.topology.traverse(self.NODE_ORDER):
-            if not node.is_root():
-                trans_mat = self._create_transition_matrix(node)
-                transition_matrices[node.node_id] = trans_mat
-        return transition_matrices
+            # Gets hazards (by tensorflow)
+            hazard_aways = self.get_hazard_aways(start_tts_list)
+            hazards = self.get_hazards(tt_evts)
 
-    def _create_transition_matrix(self, node: CellLineageTree):
-        """
-        @return the transition matrix for the particular branch ending at `node`
-                only contains the states relevant to state_sum
-                the rest of the unlikely states are aggregated together
-        """
-        transition_dict = dict()
-        indel_set_list = node.anc_state.indel_set_list
-        # Determine the values in the transition matrix by considering all possible states
-        # starting at the parent's StateSum.
-        # Recurse through all of its children to build out the transition matrix
-        for tts in node.up.state_sum.tts_list:
-            tts_partition_info = dict()
-            tts_partition = self.partition(tts, node.anc_state)
-            for indel_set in indel_set_list:
-                tt_tuple = tts_partition[indel_set]
-                graph_key = (tt_tuple, indel_set)
-                # To recurse, indicate the subgraphs for each partition and the current node
-                # (target tract group) we are currently located at.
-                tts_partition_info[indel_set] = {
-                        "start": tt_tuple,
-                        "graph": node.transition_graph_dict[graph_key]}
-            self._add_transition_dict_row(tts_partition_info, indel_set_list, transition_dict)
+            # Now fill in the matrix
+            idx = 0
+            matrix_dict = dict()
+            for i, (start_tts, matrix_row) in enumerate(matrix_wrapper.matrix_dict.items()):
+                matrix_dict[start_tts] = dict()
+                # Tracks the total hazard to the likely states
+                haz_to_likely = 0
+                for end_tts, tt_evt in matrix_row.items():
+                    haz = hazards[idx]
+                    matrix_dict[start_tts][end_tts] = haz
+                    haz_to_likely += haz
+                    idx += 1
 
-        # Create sparse transition matrix given the dictionary representation
-        return TransitionMatrixWrapper(transition_dict)
+                haz_away = hazard_aways[i]
+                # Hazard to unlikely state is hazard away minus hazard to likely states
+                matrix_dict[start_tts][UNLIKELY] = haz_away - haz_to_likely
+                # Hazard of staying is negative of hazard away
+                matrix_dict[start_tts][start_tts] = -haz_away
 
-    def _add_transition_dict_row(
-            self,
-            tts_partition_info: Dict[IndelSet, Dict],
-            indel_set_list: List[IndelSet],
-            transition_dict: Dict):
-        """
-        Recursive function for adding transition matrix rows.
-        Function will modify transition_dict.
-        The rows added will correspond to states that are reachable along the subgraphs
-        in tts_partition_info.
+            # Add unlikely state
+            matrix_dict[UNLIKELY] = dict()
 
-        @param tts_partition_info: indicate the subgraphs for each partition and the current node
-                                we are at for each subgraph
-        @param indel_set_list: the ordered list of indel sets from the node's AncState
-        @param transtion_dict: the dictionary to update with values for the transition matrix
-                                (possible key types: tuples of target tracts and the string "unlikely")
-        """
-        matrix_row = dict()
-        start_tts = merge_target_tract_groups([
-            tts_partition_info[ind_set]["start"] for ind_set in indel_set_list])
-        transition_dict[start_tts] = matrix_row
-
-        # Find all possible target tract representations within one step of start_tts
-        # Do this by taking one step in one of the subgraphs
-        for indel_set, val in tts_partition_info.items():
-            subgraph = val["graph"]
-            tt_tuple_start = val["start"]
-
-            # Each child is a possibility
-            children = subgraph.get_children(tt_tuple_start)
-            for child in children:
-                new_tts_part_info = {k: v.copy() for k,v in tts_partition_info.items()}
-                new_tts_part_info[indel_set]["start"] = child.tt_group
-
-                # Create the new target tract representation
-                new_tts = merge_target_tract_groups([
-                    new_tts_part_info[ind_set]["start"] for ind_set in indel_set_list])
-
-                # Add entry to transition matrix
-                if new_tts not in matrix_row:
-                    matrix_row[new_tts] = child.tt_evt
-                else:
-                    raise ValueError("already exists?")
-
-                # Recurse
-                self._add_transition_dict_row(new_tts_part_info, indel_set_list, transition_dict)
+            all_matrices[node_id] = TransitionMatrix(matrix_dict)
+        return all_matrices
 
     def get_hazards(self, tt_evts: List[TargetTract]):
+        """
+        Propagates through the tensorflow graph to obtain hazard of each TargetTract in `tt_evts`
+        """
         if len(tt_evts) == 0:
             return []
 
@@ -234,51 +198,35 @@ class CLTLikelihoodModel:
             self.long_status_ph: long_status_inputs})
         return hazards
 
-
     def get_hazard(self, tt_evt: TargetTract):
         """
         @param tt_evt: the target tract that is getting introduced
         @return hazard of the event happening
         """
-        #hazard, hazard_grad = self.sess.run([self.hazard, self.hazard_grad], feed_dict={
-        #    self.targets_ph: [tt_evt.min_target, tt_evt.max_target],
-        #    self.long_status_ph: [tt_evt.is_left_long, tt_evt.is_right_long]})
-        hazards = self.sess.run(self.hazard, feed_dict={
-            self.targets_ph: [[tt_evt.min_target, tt_evt.max_target]],
-            self.long_status_ph: [[tt_evt.is_left_long, tt_evt.is_right_long]]})
-        return hazards[0]
-
-    def get_hazard_old(self, tt_evt: TargetTract):
-        """
-        @param tt_evt: the target tract that is getting introduced
-        @return hazard of the event happening
-        """
-        if tt_evt.min_target == tt_evt.max_target:
-            # Focal deletion
-            lambda_part = self.target_lams[tt_evt.min_target]
-        else:
-            # Inter-target deletion
-            lambda_part = self.target_lams[tt_evt.min_target] * self.target_lams[tt_evt.max_target]
-
-        left_trim_prob = self.trim_long_left if tt_evt.is_left_long else 1 - self.trim_long_left
-        right_trim_prob = self.trim_long_right if tt_evt.is_right_long else 1 - self.trim_long_probs[1]
-        return lambda_part * left_trim_prob * right_trim_prob
+        return self.get_hazards([tt_evt])[0]
 
     def _get_hazard_masks(self, tts:Tuple[TargetTract]):
         """
-        helper function for making lists of hazard rates
+        @param tts: the target tract repr that we would like to process
 
-        @param tts: the target tract representation for what allele is already existing.
-                    so it tells us which remaining targets are active.
-        @param trim_left: whether we are trimming left. if so, we take this into account for hazard rates
-        @param trim_right: whether we are trimming right. if so, we take this into account for hazard rates
+        @return two lists, one for left trims and one for right trims.
+                each list is composed of values [0,1,2] matching each target.
+                0 = no trim at that target (in that direction) can be performed
+                1 = only short trim at that target (in that dir) is allowed
+                2 = short and long trims are allowed at that target
 
-        @return a list of hazard rates associated with the active targets only!
+                We assume no long left trims are allowed at target 0 and any target T
+                where T - 1 is deactivated. No long right trims are allowed at the last
+                target and any target T where T + 1 is deactivated.
         """
         if len(tts) == 0:
+            # This is the original barcode
             left_hazard_list = [1] + [2] * (self.num_targets - 1)
             right_hazard_list = [2] * (self.num_targets - 1) + [1]
         else:
+            # This is an allele with some indel somewhere
+
+            # Process the section before the first indel
             if tts[0].min_deact_target > 1:
                 left_hazard_list = [1] + [2] * (tts[0].min_deact_target - 1)
                 right_hazard_list = [2] * (tts[0].min_deact_target - 1) + [1]
@@ -292,6 +240,7 @@ class CLTLikelihoodModel:
             left_hazard_list += [0] * (tts[0].max_deact_target - tts[0].min_deact_target + 1)
             right_hazard_list += [0] * (tts[0].max_deact_target - tts[0].min_deact_target + 1)
 
+            # Process the sections with the indels
             for i, tt in enumerate(tts[1:]):
                 if tts[i].max_deact_target + 1 < tt.min_deact_target - 1:
                     left_hazard_list += [1] + [2] * (tt.min_deact_target - tts[i].max_deact_target - 2)
@@ -303,83 +252,21 @@ class CLTLikelihoodModel:
                 left_hazard_list += [0] * (tt.max_deact_target - tt.min_deact_target + 1)
                 right_hazard_list += [0] * (tt.max_deact_target - tt.min_deact_target + 1)
 
+            # Process the section after all the indels
             if tts[-1].max_deact_target < self.num_targets - 2:
                 left_hazard_list += [1] + [2] * (self.num_targets - tts[-1].max_deact_target - 2)
                 right_hazard_list += [2] * (self.num_targets - tts[-1].max_deact_target - 2) + [1]
             elif tts[-1].max_deact_target == self.num_targets - 2:
                 left_hazard_list += [1]
                 right_hazard_list += [1]
+
         return left_hazard_list, right_hazard_list
 
-    def _get_hazard_list(self, tts:Tuple[TargetTract], trim_left: bool, trim_right: bool):
-        """
-        helper function for making lists of hazard rates
-
-        @param tts: the target tract representation for what allele is already existing.
-                    so it tells us which remaining targets are active.
-        @param trim_left: whether we are trimming left. if so, we take this into account for hazard rates
-        @param trim_right: whether we are trimming right. if so, we take this into account for hazard rates
-
-        @return a list of hazard rates associated with the active targets only!
-        """
-        trim_short_right = 1 - self.trim_long_right if trim_right else 1
-        trim_short_left = 1 - self.trim_long_left if trim_left else 1
-
-        if len(tts) == 0:
-            hazard_list = np.concatenate([
-                # Short trim left
-                [self.target_lams[0] * trim_short_left],
-                # Any trim
-                self.target_lams[1:-1],
-                # Short right trim
-                [self.target_lams[-1] * trim_short_right]])
-        else:
-            if tts[0].min_deact_target > 1:
-                hazard_list = np.concatenate([
-                    # Short trim left
-                    [self.target_lams[0] * trim_short_left],
-                    # Any trim
-                    self.target_lams[1:tts[0].min_deact_target - 1],
-                    # Short right trim
-                    [self.target_lams[tts[0].min_deact_target - 1] * trim_short_right]])
-            elif tts[0].min_deact_target == 1:
-                hazard_list = [self.target_lams[0] * trim_short_left * trim_short_right]
-            else:
-                hazard_list = []
-
-            for i, tt in enumerate(tts[1:]):
-                if tts[i].max_deact_target + 1 < tt.min_deact_target - 1:
-                    hazard_list = np.concatenate([
-                        hazard_list,
-                        # Short left trim
-                        [self.target_lams[tts[i].max_deact_target + 1] * trim_short_left],
-                        # Any trim
-                        self.target_lams[tts[i].max_deact_target + 2:tt.min_deact_target - 1],
-                        # Short right trim
-                        [self.target_lams[tt.min_deact_target - 1] * trim_short_right]])
-                elif tts[i].max_deact_target + 1 == tt.min_deact_target - 1:
-                    # Single target, short left and right
-                    hazard_list = np.concatenate([
-                        hazard_list,
-                        [self.target_lams[tts[i].max_deact_target + 1] * trim_short_left * trim_short_right]])
-
-            if tts[-1].max_deact_target < self.num_targets - 2:
-                hazard_list = np.concatenate([
-                    hazard_list,
-                    # Short left trim
-                    [self.target_lams[tts[-1].max_deact_target + 1] * trim_short_left],
-                    # Any trim
-                    self.target_lams[tts[-1].max_deact_target + 2:self.num_targets - 1],
-                    # Short trim right
-                    [self.target_lams[self.num_targets - 1] * trim_short_right]])
-            elif tts[-1].max_deact_target == self.num_targets - 2:
-                hazard_list = np.concatenate([
-                    hazard_list,
-                    # Single target, short left and right trim
-                    [self.target_lams[tts[-1].max_deact_target + 1] * trim_short_left * trim_short_right]])
-        return hazard_list
-
     def get_hazard_aways(self, tts_list: List[Tuple[TargetTract]]):
+        """
+        Run thru the tensorflow graph to obtain the hazard of going away from these
+        target tract reprs in `tts_list`
+        """
         left_trimmables = []
         right_trimmables = []
         for tts in tts_list:
@@ -395,38 +282,7 @@ class CLTLikelihoodModel:
         return hazard_aways
 
     def get_hazard_away(self, tts: Tuple[TargetTract]):
-        left_trimmables, right_trimmables = self._get_hazard_masks(tts)
-        #hazard_away, hazard_away_grad = self.sess.run(
-        #        [self.hazard_away, self.hazard_away_grad],
-        #        feed_dict = {
-        #            self.left_trimmables_ph: left_trimmables,
-        #            self.right_trimmables_ph: right_trimmables})
-        hazard_away= self.sess.run(
-                self.hazard_away,
-                feed_dict = {
-                    self.left_trimmables_ph: left_trimmables,
-                    self.right_trimmables_ph: right_trimmables})
-        return hazard_away
-
-    def get_hazard_away_old(self, tts: Tuple[TargetTract]):
-        """
-        @param tts: the current target tract representation
-        @return the hazard to transitioning away from the current state.
-        """
-        # First compute sum of hazards for all focal deletions
-        focal_hazards = self._get_hazard_list(tts, trim_left=True, trim_right=True)
-
-        # Second, compute sum of hazards of all inter-target deletions
-        # Compute the hazard of the left target
-        # Ending at target -2 (trim off rightmost target)
-        left_hazard = self._get_hazard_list(tts, trim_left=True, trim_right=False)[:-1]
-
-        # Compute the hazard of the right target
-        # Starting at target 1 (trim off leftmost target)
-        right_hazard = self._get_hazard_list(tts, trim_left=False, trim_right=True)[1:]
-
-        left_cum_hazard = np.cumsum(left_hazard)
-        return np.sum(focal_hazards) + np.dot(left_cum_hazard, right_hazard)
+        return self.get_hazard_aways([tts])
 
     def get_prob_unmasked_trims(self, anc_state: AncState, tts: Tuple[TargetTract]):
         """
@@ -580,29 +436,3 @@ class CLTLikelihoodModel:
 
         return tt_evts
 
-    @staticmethod
-    def partition(tts: Tuple[IndelSet], anc_state: AncState):
-        """
-        @return split tts according to anc_state: Dict[IndelSet, Tuple[TargetTract]]
-        """
-        parts = {indel_set : () for indel_set in anc_state.indel_set_list}
-
-        tts_idx = 0
-        n_tt = len(tts)
-        anc_state_idx = 0
-        n_anc_state = len(anc_state.indel_set_list)
-        while tts_idx < n_tt and anc_state_idx < n_anc_state:
-            cur_tt = tts[tts_idx]
-            indel_set = anc_state.indel_set_list[anc_state_idx]
-
-            if cur_tt.max_deact_target < indel_set.min_deact_target:
-                tts_idx += 1
-                continue
-            elif indel_set.max_deact_target < cur_tt.min_deact_target:
-                anc_state_idx += 1
-                continue
-
-            # Should be overlapping now
-            parts[indel_set] = parts[indel_set] + (cur_tt,)
-            tts_idx += 1
-        return parts

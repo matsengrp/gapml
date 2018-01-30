@@ -3,6 +3,11 @@ import numpy as np
 
 class TransitionMatrixWrapper:
     def __init__(self, matrix_dict: Dict):
+        """
+        This is a skeleton of a transition matrix
+        matrix_dict's key is the start target tract repr.
+        matrix_dict's value is another dictionary that maps the end target tract repr to its TargetTract event
+        """
         self.matrix_dict = matrix_dict
 
 class TransitionMatrix:
