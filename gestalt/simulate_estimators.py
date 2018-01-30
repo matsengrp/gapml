@@ -7,6 +7,8 @@ import numpy as np
 import argparse
 import matplotlib
 matplotlib.use('agg')
+import time
+import tensorflow as tf
 
 from cell_state import CellState, CellTypeTree
 from cell_state_simulator import CellTypeSimulator
@@ -21,6 +23,7 @@ from collapsed_tree import CollapsedTree
 from alignment import AlignerNW
 from barcode_metadata import BarcodeMetadata
 from approximator import ApproximatorLB
+from clt_likelihood_model_tensorflow import CLTLikelihoodModelCalculator
 
 from constants import *
 from summary_util import *
@@ -84,72 +87,79 @@ def main():
     args = parser.parse_args()
 
     np.random.seed(seed=args.seed)
+    sess = tf.Session()
+    with sess.as_default():
+        # Create a cell-type tree
+        cell_type_tree = CellTypeTree(cell_type=None, rate=0)
+        cell_type_tree.add_child(
+            CellTypeTree(cell_type=0, rate=0.05))
+        cell_type_tree.add_child(
+            CellTypeTree(cell_type=1, rate=0.05))
 
-    # Create a cell-type tree
-    cell_type_tree = CellTypeTree(cell_type=None, rate=0)
-    cell_type_tree.add_child(
-        CellTypeTree(cell_type=0, rate=0.05))
-    cell_type_tree.add_child(
-        CellTypeTree(cell_type=1, rate=0.05))
+        # Instantiate all the simulators
+        bcode_meta = BarcodeMetadata()
+        if args.repair_lambdas:
+            allele_simulator = AlleleSimulatorCutRepair(
+                np.array(args.target_lambdas),
+                np.array(args.repair_lambdas), args.repair_indel_probability,
+                args.repair_deletion_lambda, args.repair_deletion_lambda,
+                args.repair_insertion_lambda)
+        else:
+            model_params = CLTLikelihoodModel(
+                    None,
+                    bcode_meta,
+                    sess,
+                    target_lams = np.array(args.target_lambdas),
+                    trim_long_probs = np.array([0.05, 0.05]),
+                    trim_zero_prob = args.repair_indel_probability,
+                    trim_poissons = [args.repair_deletion_lambda, args.repair_deletion_lambda],
+                    insert_zero_prob = args.repair_indel_probability,
+                    insert_poisson = args.repair_insertion_lambda)
+            tf.global_variables_initializer().run()
 
-    # Instantiate all the simulators
-    bcode_meta = BarcodeMetadata()
-    if args.repair_lambdas:
-        allele_simulator = AlleleSimulatorCutRepair(
-            np.array(args.target_lambdas),
-            np.array(args.repair_lambdas), args.repair_indel_probability,
-            args.repair_deletion_lambda, args.repair_deletion_lambda,
-            args.repair_insertion_lambda)
-    else:
-        model_params = CLTLikelihoodModel(None, bcode_meta)
-        model_params.set_vals(
-            branch_lens = None,
-            target_lams = np.array(args.target_lambdas),
-            trim_long_probs = np.array([0.05, 0.05]),
-            trim_zero_prob = args.repair_indel_probability,
-            trim_poisson_params = [args.repair_deletion_lambda, args.repair_deletion_lambda],
-            insert_zero_prob = args.repair_indel_probability,
-            insert_poisson_param = args.repair_insertion_lambda,
-            cell_type_lams = None)
-        allele_simulator = AlleleSimulatorSimultaneous(
-            bcode_meta,
-            model_params)
-    cell_type_simulator = CellTypeSimulator(cell_type_tree)
-    clt_simulator = CLTSimulator(
-            args.birth_lambda,
-            args.death_lambda,
-            cell_type_simulator,
-            allele_simulator)
+            allele_simulator = AlleleSimulatorSimultaneous(
+                bcode_meta,
+                model_params)
 
-    # Simulate the trees
-    forest = []
-    for t in range(args.n_trees):
-        clt = clt_simulator.simulate(
-                Allele(BARCODE_V7, bcode_meta),
-                CellState(categorical=cell_type_tree),
-                args.time)
-        forest.append(clt)
+        cell_type_simulator = CellTypeSimulator(cell_type_tree)
+        clt_simulator = CLTSimulator(
+                args.birth_lambda,
+                args.death_lambda,
+                cell_type_simulator,
+                allele_simulator)
 
-    #savefig(forest, args.outbase)
+        # Simulate the trees
+        forest = []
+        for t in range(args.n_trees):
+            clt = clt_simulator.simulate(
+                    Allele(BARCODE_V7, bcode_meta),
+                    CellState(categorical=cell_type_tree),
+                    args.time)
+            forest.append(clt)
 
-    # Now sample the leaves and see what happens with parsimony
-    observer = CLTObserver(args.sampling_rate)
-    for clt in forest:
-        obs_leaves, pruned_clt = observer.observe_leaves(clt, seed = args.seed)
-        # Let the two methods compare just in terms of topology
-        # To do that, we need to collapse our tree.
-        # We collapse branches if the alleles are identical.
-        for node in pruned_clt.get_descendants(strategy='postorder'):
-            if str(node.up.allele) == str(node.allele):
-                node.dist = 0
-        true_tree = CollapsedTree.collapse(pruned_clt)
+        #savefig(forest, args.outbase)
 
-        # trying out with true tree!!!
-        print(pruned_clt.get_ascii(attributes=["allele_events"], show_internal=True))
-        approximator = ApproximatorLB(extra_steps = 2, anc_generations = 1, bcode_metadata = bcode_meta)
-        init_model_params = CLTLikelihoodModel(pruned_clt, bcode_meta)
-        lasso_est = CLTLassoEstimator(0, init_model_params, approximator)
-        lasso_est.get_likelihood(init_model_params)
+        # Now sample the leaves and see what happens with parsimony
+        observer = CLTObserver(args.sampling_rate)
+        for clt in forest:
+            obs_leaves, pruned_clt = observer.observe_leaves(clt, seed = args.seed)
+            print("NUM LEAVES", len(pruned_clt))
+            st_time = time.time()
+            # Let the two methods compare just in terms of topology
+            # To do that, we need to collapse our tree.
+            # We collapse branches if the alleles are identical.
+            for node in pruned_clt.get_descendants(strategy='postorder'):
+                if str(node.up.allele) == str(node.allele):
+                    node.dist = 0
+            true_tree = CollapsedTree.collapse(pruned_clt)
+
+            # trying out with true tree!!!
+            approximator = ApproximatorLB(extra_steps = 2, anc_generations = 1, bcode_metadata = bcode_meta)
+            init_model_params = CLTLikelihoodModel(pruned_clt, bcode_meta, sess)
+            tf.global_variables_initializer().run()
+            lasso_est = CLTLassoEstimator(sess, 0, init_model_params, approximator)
+            lasso_est.get_likelihood(init_model_params, get_grad=True)
+            print("TIME", time.time() - st_time)
 
 
 if __name__ == "__main__":

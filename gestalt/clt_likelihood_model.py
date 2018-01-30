@@ -1,8 +1,10 @@
 import time
 import numpy as np
+import tensorflow as tf
 from typing import List, Tuple, Dict
 from numpy import ndarray
 from scipy.stats import poisson
+from tensorflow import Session
 
 from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
@@ -20,8 +22,20 @@ class CLTLikelihoodModel:
     """
     UNLIKELY = "unlikely"
     NODE_ORDER = "postorder"
+    gamma_prior = (1,10)
 
-    def __init__(self, topology: CellLineageTree, bcode_meta: BarcodeMetadata):
+    def __init__(self,
+            topology: CellLineageTree,
+            bcode_meta: BarcodeMetadata,
+            sess: Session,
+            branch_lens: ndarray = None,
+            target_lams: ndarray = None,
+            trim_long_probs: ndarray = 0.1 * np.ones(2),
+            trim_zero_prob: float = 0.5,
+            trim_poissons: ndarray = np.ones(2),
+            insert_zero_prob: float = 0.5,
+            insert_poisson: float = 2):
+            #TODO: cell_type_lams: ndarray = None):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
         Will randomly initialize model parameters
@@ -38,52 +52,92 @@ class CLTLikelihoodModel:
             self.num_nodes = node_id
         self.bcode_meta = bcode_meta
         self.num_targets = bcode_meta.n_targets
-        self.random_init()
 
-    def set_vals(self,
-            branch_lens: ndarray,
-            target_lams: ndarray,
-            trim_long_probs: ndarray,
-            trim_zero_prob: float,
-            trim_poisson_params: ndarray,
-            insert_zero_prob: float,
-            insert_poisson_param: float,
-            cell_type_lams: ndarray):
-        """
-        Sets model parameters
+        # Save tensorflow session
+        self.sess = sess
 
-        @param trim_long_probs: [prob of long trim on left, prob of long trim on right]
-        @param trim_poisson_params: [poisson param for left trim, poisson param for right trim]
-        """
-        self.branch_lens = branch_lens
-        self.target_lams = target_lams
-        self.trim_long_probs = trim_long_probs
-        self.trim_long_left = trim_long_probs[0]
-        self.trim_long_right = trim_long_probs[1]
-        self.trim_zero_prob = trim_zero_prob
-        self.trim_poisson_params = trim_poisson_params
-        self.insert_zero_prob = insert_zero_prob
-        self.insert_poisson_param = insert_poisson_param
-        self.cell_type_lams = cell_type_lams
-        assert(self.num_targets == target_lams.size)
+        # Create all the variables
+        if branch_lens is None:
+            branch_lens = np.random.gamma(
+                    self.gamma_prior[0],
+                    self.gamma_prior[1],
+                    self.num_nodes)
+        if target_lams is None:
+            target_lams = 0.1 * np.ones(self.num_targets)
 
-    def random_init(self, gamma_prior: Tuple[float, float] = (1,10)):
-        """
-        Randomly initialize model parameters
-        """
-        self.set_vals(
-            # TODO: right now this is initialized to have one extra branch lenght that is ignored
-            #       probably want to clean this up later?
-            branch_lens = np.random.gamma(gamma_prior[0], gamma_prior[1], self.num_nodes),
-            target_lams = 0.1 * np.ones(self.num_targets),
-            trim_long_probs = 0.1 * np.ones(2),
-            trim_zero_prob = 0.5,
-            trim_poisson_params = np.ones(2),
-            insert_zero_prob = 0.5,
-            insert_poisson_param = 2,
-            # TODO: implement later
-            cell_type_lams = None,
-        )
+        self.branch_lens = tf.Variable(branch_lens)
+        self.target_lams = tf.Variable(target_lams)
+        self.trim_long_probs = tf.Variable(trim_long_probs)
+        self.trim_zero_prob = tf.Variable(trim_zero_prob)
+        self.trim_poissons = tf.Variable(trim_poissons)
+        self.insert_zero_prob = tf.Variable(insert_zero_prob)
+        self.insert_poisson = tf.Variable(insert_poisson)
+
+        self.grad_opt = tf.train.GradientDescentOptimizer(learning_rate=1)
+        self._create_hazard()
+        self._create_hazard_away()
+
+    def _create_hazard(self):
+        # Create the placeholders
+        self.targets_ph = tf.placeholder(tf.int32, [2])
+        min_target = self.targets_ph[0]
+        max_target = self.targets_ph[1]
+        self.long_status_ph = tf.placeholder(tf.bool, [2])
+        is_left_long = self.long_status_ph[0]
+        is_right_long = self.long_status_ph[1]
+
+        # Compute the hazard
+        log_lambda_part = tf.log(self.target_lams[min_target]) + tf.log(self.target_lams[max_target]) * int(min_target != max_target)
+        left_trim_prob = tf.cond(
+                is_left_long,
+                lambda: self.trim_long_probs[0],
+                lambda: 1 - self.trim_long_probs[0])
+        right_trim_prob = tf.cond(
+                is_right_long,
+                lambda: self.trim_long_probs[1],
+                lambda: 1 - self.trim_long_probs[1])
+        self.hazard = tf.exp(log_lambda_part + tf.log(left_trim_prob) + tf.log(right_trim_prob))
+
+        # Compute the gradient
+        self.hazard_grad = self.grad_opt.compute_gradients(
+            self.hazard,
+            var_list=[self.target_lams, self.trim_long_probs])
+
+    def _create_hazard_away(self):
+        # Create the placeholders
+        self.left_trimmables_ph = tf.placeholder(tf.int32, [self.num_targets])
+        self.right_trimmables_ph = tf.placeholder(tf.int32, [self.num_targets])
+
+        # Compute the hazard away
+        focal_hazards = self._create_hazard_list(True, True)
+        left_hazards = self._create_hazard_list(True, False)[:-1]
+        right_hazards = self._create_hazard_list(False, True)[1:]
+        left_cum_hazards = tf.cumsum(left_hazards)
+        self.hazard_away = tf.reduce_sum(focal_hazards) + tf.reduce_sum(
+                tf.multiply(left_cum_hazards, right_hazards))
+
+        # Compute the gradient
+        self.hazard_away_grad = self.grad_opt.compute_gradients(
+            self.hazard_away,
+            var_list=[self.target_lams, self.trim_long_probs])
+
+    def _create_hazard_list(self, trim_left: bool, trim_right: bool):
+        def equal_float(a, b):
+            return tf.cast(tf.equal(a, b), tf.float64)
+
+        trim_short_left = 1 - self.trim_long_probs[0] if trim_left else 1
+        trim_short_right = 1 - self.trim_long_probs[1] if trim_right else 1
+
+        left_factor = equal_float(self.left_trimmables_ph, 1) * trim_short_left
+        left_factor += equal_float(self.left_trimmables_ph, 2)
+
+        right_factor = equal_float(self.right_trimmables_ph, 1) * trim_short_right
+        right_factor += equal_float(self.right_trimmables_ph, 2)
+
+        hazard_list = tf.multiply(
+            tf.multiply(self.target_lams, right_factor),
+            left_factor)
+        return hazard_list
 
     def create_transition_matrices(self):
         """
@@ -195,6 +249,19 @@ class CLTLikelihoodModel:
         @param tt_evt: the target tract that is getting introduced
         @return hazard of the event happening
         """
+        #hazard, hazard_grad = self.sess.run([self.hazard, self.hazard_grad], feed_dict={
+        #    self.targets_ph: [tt_evt.min_target, tt_evt.max_target],
+        #    self.long_status_ph: [tt_evt.is_left_long, tt_evt.is_right_long]})
+        hazard= self.sess.run(self.hazard, feed_dict={
+            self.targets_ph: [tt_evt.min_target, tt_evt.max_target],
+            self.long_status_ph: [tt_evt.is_left_long, tt_evt.is_right_long]})
+        return hazard
+
+    def get_hazard_old(self, tt_evt: TargetTract):
+        """
+        @param tt_evt: the target tract that is getting introduced
+        @return hazard of the event happening
+        """
         if tt_evt.min_target == tt_evt.max_target:
             # Focal deletion
             lambda_part = self.target_lams[tt_evt.min_target]
@@ -205,6 +272,53 @@ class CLTLikelihoodModel:
         left_trim_prob = self.trim_long_left if tt_evt.is_left_long else 1 - self.trim_long_left
         right_trim_prob = self.trim_long_right if tt_evt.is_right_long else 1 - self.trim_long_probs[1]
         return lambda_part * left_trim_prob * right_trim_prob
+
+    def _get_hazard_masks(self, tts:Tuple[TargetTract]):
+        """
+        helper function for making lists of hazard rates
+
+        @param tts: the target tract representation for what allele is already existing.
+                    so it tells us which remaining targets are active.
+        @param trim_left: whether we are trimming left. if so, we take this into account for hazard rates
+        @param trim_right: whether we are trimming right. if so, we take this into account for hazard rates
+
+        @return a list of hazard rates associated with the active targets only!
+        """
+        if len(tts) == 0:
+            left_hazard_list = [1] + [2] * (self.num_targets - 1)
+            right_hazard_list = [2] * (self.num_targets - 1) + [1]
+        else:
+            if tts[0].min_deact_target > 1:
+                left_hazard_list = [1] + [2] * (tts[0].min_deact_target - 1)
+                right_hazard_list = [2] * (tts[0].min_deact_target - 1) + [1]
+            elif tts[0].min_deact_target == 1:
+                left_hazard_list = [1]
+                right_hazard_list = [1]
+            else:
+                left_hazard_list = []
+                right_hazard_list = []
+
+            left_hazard_list += [0] * (tts[0].max_deact_target - tts[0].min_deact_target + 1)
+            right_hazard_list += [0] * (tts[0].max_deact_target - tts[0].min_deact_target + 1)
+
+            for i, tt in enumerate(tts[1:]):
+                if tts[i].max_deact_target + 1 < tt.min_deact_target - 1:
+                    left_hazard_list += [1] + [2] * (tt.min_deact_target - tts[i].max_deact_target - 2)
+                    right_hazard_list += [2] * (tt.min_deact_target - tts[i].max_deact_target - 2) + [1]
+                elif tts[i].max_deact_target + 1 == tt.min_deact_target - 1:
+                    # Single target, short left and right
+                    left_hazard_list += [1]
+                    right_hazard_list += [1]
+                left_hazard_list += [0] * (tt.max_deact_target - tt.min_deact_target + 1)
+                right_hazard_list += [0] * (tt.max_deact_target - tt.min_deact_target + 1)
+
+            if tts[-1].max_deact_target < self.num_targets - 2:
+                left_hazard_list += [1] + [2] * (self.num_targets - tts[-1].max_deact_target - 2)
+                right_hazard_list += [2] * (self.num_targets - tts[-1].max_deact_target - 2) + [1]
+            elif tts[-1].max_deact_target == self.num_targets - 2:
+                left_hazard_list += [1]
+                right_hazard_list += [1]
+        return left_hazard_list, right_hazard_list
 
     def _get_hazard_list(self, tts:Tuple[TargetTract], trim_left: bool, trim_right: bool):
         """
@@ -275,6 +389,20 @@ class CLTLikelihoodModel:
         return hazard_list
 
     def get_hazard_away(self, tts: Tuple[TargetTract]):
+        left_trimmables, right_trimmables = self._get_hazard_masks(tts)
+        #hazard_away, hazard_away_grad = self.sess.run(
+        #        [self.hazard_away, self.hazard_away_grad],
+        #        feed_dict = {
+        #            self.left_trimmables_ph: left_trimmables,
+        #            self.right_trimmables_ph: right_trimmables})
+        hazard_away= self.sess.run(
+                self.hazard_away,
+                feed_dict = {
+                    self.left_trimmables_ph: left_trimmables,
+                    self.right_trimmables_ph: right_trimmables})
+        return hazard_away
+
+    def get_hazard_away_old(self, tts: Tuple[TargetTract]):
         """
         @param tts: the current target tract representation
         @return the hazard to transitioning away from the current state.

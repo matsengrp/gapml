@@ -1,5 +1,7 @@
 import time
+from tensorflow import Session
 import numpy as np
+import scipy.linalg
 from typing import List, Tuple
 from numpy import ndarray
 
@@ -14,15 +16,6 @@ from indel_sets import TargetTract
 from state_sum import StateSum
 from common import target_tract_repr_diff
 
-class CLTCalculations:
-    """
-    Stores parameters useful for likelihood/gradient calculations
-    """
-    def __init__(self, dl_dbranch_lens: ndarray, dl_dtarget_lams: ndarray, dl_dcell_type_lams: ndarray):
-        self.dl_dbranch_lens = dl_dbranch_lens
-        self.dl_dtarget_lams = dl_dtarget_lams
-        self.dl_dcell_type_lams = dl_dcell_type_lams
-
 class CLTLassoEstimator(CLTEstimator):
     """
     Likelihood estimator
@@ -31,6 +24,7 @@ class CLTLassoEstimator(CLTEstimator):
     """
     def __init__(
         self,
+        sess: Session,
         penalty_param: float,
         model_params: CLTLikelihoodModel,
         approximator: ApproximatorLB):
@@ -38,6 +32,7 @@ class CLTLassoEstimator(CLTEstimator):
         @param penalty_param: lasso penalty parameter
         @param model_params: initial CLT model params
         """
+        self.sess = sess
         self.penalty_param = penalty_param
         self.model_params = model_params
         self.approximator = approximator
@@ -83,7 +78,11 @@ class CLTLassoEstimator(CLTEstimator):
 
                     # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
                     branch_len = model_params.branch_lens[child.node_id]
-                    pt_matrix[child.node_id] = np.dot(ch_trans_mat.A, np.dot(np.diag(np.exp(ch_trans_mat.D * branch_len)), ch_trans_mat.A_inv))
+                    pt_matrix[child.node_id] = np.dot(
+                            ch_trans_mat.A,
+                            np.dot(
+                                np.diag(np.exp(ch_trans_mat.D * branch_len)),
+                                ch_trans_mat.A_inv))
 
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.
