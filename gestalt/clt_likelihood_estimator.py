@@ -10,7 +10,7 @@ from cell_lineage_tree import CellLineageTree
 from clt_likelihood_model import CLTLikelihoodModel
 import ancestral_events_finder as anc_evt_finder
 from approximator import ApproximatorLB
-from transition_matrix import TransitionMatrixWrapper
+from transition_matrix import TransitionMatrixWrapper, TransitionMatrix
 from indel_sets import TargetTract
 
 from state_sum import StateSum
@@ -41,6 +41,51 @@ class CLTLassoEstimator(CLTEstimator):
         anc_evt_finder.annotate_ancestral_states(model_params.topology, model_params.bcode_meta)
         # Construct transition boolean matrix -- via state sum approximation
         self.approximator.annotate_state_sum_transitions(model_params.topology)
+        # Create the skeletons for the transition matrices
+        self.transition_mat_wrappers = model_params.create_transition_matrix_wrappers()
+
+    def _initialize_transition_matrices(self, model_params: CLTLikelihoodModel):
+        """
+        @return a list of real transition matrices
+        """
+        UNLIKELY = "unlikely"
+        all_matrices = dict()
+        for node_id, matrix_wrapper in self.transition_mat_wrappers.items():
+            # Get inputs ready for tensorflow
+            hazard_list = []
+            tt_evts = []
+            start_tts_list = []
+            for start_tts, matrix_row in matrix_wrapper.matrix_dict.items():
+                start_tts_list.append(start_tts)
+                for end_tts, tt_evt in matrix_row.items():
+                    tt_evts.append(tt_evt)
+
+            # Gets hazards (by tensorflow)
+            hazard_aways = model_params.get_hazard_aways(start_tts_list)
+            hazards = model_params.get_hazards(tt_evts)
+
+            # Now fill in the matrix
+            idx = 0
+            matrix_dict = dict()
+            for i, (start_tts, matrix_row) in enumerate(matrix_wrapper.matrix_dict.items()):
+                matrix_dict[start_tts] = dict()
+                haz_to_likely = 0
+                for end_tts, tt_evt in matrix_row.items():
+                    haz = hazards[idx]
+                    matrix_dict[start_tts][end_tts] = haz
+                    haz_to_likely += haz
+                    idx += 1
+                haz_away = hazard_aways[i]
+                haz_to_unlikely = haz_away - haz_to_likely
+                matrix_dict[start_tts][UNLIKELY] = haz_to_unlikely
+                matrix_dict[start_tts][start_tts] = -haz_away
+
+
+            # Add unlikely state
+            matrix_dict[UNLIKELY] = dict()
+
+            all_matrices[node_id] = TransitionMatrix(matrix_dict)
+        return all_matrices
 
 
     def get_likelihood(self, model_params: CLTLikelihoodModel, get_grad: bool = False):
@@ -51,7 +96,7 @@ class CLTLassoEstimator(CLTEstimator):
 
         @return The likelihood for proposed theta, the gradient too if requested
         """
-        transition_matrices = model_params.create_transition_matrices()
+        transition_matrices = self._initialize_transition_matrices(model_params)
 
         log_lik = 0
         L = dict() # Stores normalized probs
@@ -77,7 +122,7 @@ class CLTLassoEstimator(CLTEstimator):
                             child)
 
                     # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
-                    branch_len = model_params.branch_lens[child.node_id]
+                    branch_len = model_params.branch_lens[child.node_id].eval()
                     pt_matrix[child.node_id] = np.dot(
                             ch_trans_mat.A,
                             np.dot(

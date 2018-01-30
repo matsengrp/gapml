@@ -2,6 +2,10 @@ from typing import Dict
 import numpy as np
 
 class TransitionMatrixWrapper:
+    def __init__(self, matrix_dict: Dict):
+        self.matrix_dict = matrix_dict
+
+class TransitionMatrix:
     def __init__(self, matrix_dict: Dict[str, Dict[str, float]]):
         """
         Create transition matrix given the dictionary representation.

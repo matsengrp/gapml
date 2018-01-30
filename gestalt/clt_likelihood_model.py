@@ -10,7 +10,7 @@ from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
 from indel_sets import IndelSet, TargetTract, AncState, SingletonWC, Singleton
 from transition_matrix import TransitionMatrixWrapper
-from common import merge_target_tract_groups
+from common import merge_target_tract_groups, not_equal_float, equal_float
 from bounded_poisson import BoundedPoisson
 
 class CLTLikelihoodModel:
@@ -79,23 +79,17 @@ class CLTLikelihoodModel:
 
     def _create_hazard(self):
         # Create the placeholders
-        self.targets_ph = tf.placeholder(tf.int32, [2])
-        min_target = self.targets_ph[0]
-        max_target = self.targets_ph[1]
-        self.long_status_ph = tf.placeholder(tf.bool, [2])
-        is_left_long = self.long_status_ph[0]
-        is_right_long = self.long_status_ph[1]
+        self.targets_ph = tf.placeholder(tf.int32, [None, 2])
+        min_target = self.targets_ph[:,0]
+        max_target = self.targets_ph[:,1]
+        self.long_status_ph = tf.placeholder(tf.float64, [None, 2])
+        is_left_long = self.long_status_ph[:,0]
+        is_right_long = self.long_status_ph[:,1]
 
         # Compute the hazard
-        log_lambda_part = tf.log(self.target_lams[min_target]) + tf.log(self.target_lams[max_target]) * int(min_target != max_target)
-        left_trim_prob = tf.cond(
-                is_left_long,
-                lambda: self.trim_long_probs[0],
-                lambda: 1 - self.trim_long_probs[0])
-        right_trim_prob = tf.cond(
-                is_right_long,
-                lambda: self.trim_long_probs[1],
-                lambda: 1 - self.trim_long_probs[1])
+        log_lambda_part = tf.log(tf.gather(self.target_lams, min_target)) + tf.log(tf.gather(self.target_lams, max_target)) * not_equal_float(min_target, max_target)
+        left_trim_prob = tf.multiply(is_left_long, self.trim_long_probs[0]) + tf.multiply(1 - is_left_long, 1 - self.trim_long_probs[0])
+        right_trim_prob = tf.multiply(is_right_long, self.trim_long_probs[1]) + tf.multiply(1 - is_right_long, 1 - self.trim_long_probs[1])
         self.hazard = tf.exp(log_lambda_part + tf.log(left_trim_prob) + tf.log(right_trim_prob))
 
         # Compute the gradient
@@ -105,16 +99,16 @@ class CLTLikelihoodModel:
 
     def _create_hazard_away(self):
         # Create the placeholders
-        self.left_trimmables_ph = tf.placeholder(tf.int32, [self.num_targets])
-        self.right_trimmables_ph = tf.placeholder(tf.int32, [self.num_targets])
+        self.left_trimmables_ph = tf.placeholder(tf.int32, [None, self.num_targets])
+        self.right_trimmables_ph = tf.placeholder(tf.int32, [None, self.num_targets])
 
         # Compute the hazard away
         focal_hazards = self._create_hazard_list(True, True)
-        left_hazards = self._create_hazard_list(True, False)[:-1]
-        right_hazards = self._create_hazard_list(False, True)[1:]
-        left_cum_hazards = tf.cumsum(left_hazards)
-        self.hazard_away = tf.reduce_sum(focal_hazards) + tf.reduce_sum(
-                tf.multiply(left_cum_hazards, right_hazards))
+        left_hazards = self._create_hazard_list(True, False)[:, :self.num_targets - 1]
+        right_hazards = self._create_hazard_list(False, True)[:, 1:]
+        left_cum_hazards = tf.cumsum(left_hazards, axis=1)
+        inter_target_hazards = tf.multiply(left_cum_hazards, right_hazards)
+        self.hazard_away = tf.reduce_sum(focal_hazards, axis=1) + tf.reduce_sum(inter_target_hazards, axis=1)
 
         # Compute the gradient
         self.hazard_away_grad = self.grad_opt.compute_gradients(
@@ -122,24 +116,19 @@ class CLTLikelihoodModel:
             var_list=[self.target_lams, self.trim_long_probs])
 
     def _create_hazard_list(self, trim_left: bool, trim_right: bool):
-        def equal_float(a, b):
-            return tf.cast(tf.equal(a, b), tf.float64)
-
         trim_short_left = 1 - self.trim_long_probs[0] if trim_left else 1
         trim_short_right = 1 - self.trim_long_probs[1] if trim_right else 1
 
-        left_factor = equal_float(self.left_trimmables_ph, 1) * trim_short_left
-        left_factor += equal_float(self.left_trimmables_ph, 2)
+        left_factor = equal_float(self.left_trimmables_ph, 1) * trim_short_left + equal_float(self.left_trimmables_ph, 2)
 
-        right_factor = equal_float(self.right_trimmables_ph, 1) * trim_short_right
-        right_factor += equal_float(self.right_trimmables_ph, 2)
+        right_factor = equal_float(self.right_trimmables_ph, 1) * trim_short_right + equal_float(self.right_trimmables_ph, 2)
 
         hazard_list = tf.multiply(
             tf.multiply(self.target_lams, right_factor),
             left_factor)
         return hazard_list
 
-    def create_transition_matrices(self):
+    def create_transition_matrix_wrappers(self):
         """
         Create transition matrix for each branch
         @return dictionary of matrices mapping node id to matrix
@@ -180,9 +169,6 @@ class CLTLikelihoodModel:
                         "graph": node.transition_graph_dict[graph_key]}
             self._add_transition_dict_row(tts_partition_info, indel_set_list, transition_dict)
 
-        # Add unlikely state
-        transition_dict[self.UNLIKELY] = dict()
-
         # Create sparse transition matrix given the dictionary representation
         return TransitionMatrixWrapper(transition_dict)
 
@@ -208,7 +194,6 @@ class CLTLikelihoodModel:
             tts_partition_info[ind_set]["start"] for ind_set in indel_set_list])
         transition_dict[start_tts] = matrix_row
 
-        hazard_to_likely = 0
         # Find all possible target tract representations within one step of start_tts
         # Do this by taking one step in one of the subgraphs
         for indel_set, val in tts_partition_info.items():
@@ -227,22 +212,28 @@ class CLTLikelihoodModel:
 
                 # Add entry to transition matrix
                 if new_tts not in matrix_row:
-                    hazard = self.get_hazard(child.tt_evt)
-                    matrix_row[new_tts] = hazard
-                    hazard_to_likely += hazard
+                    matrix_row[new_tts] = child.tt_evt
                 else:
                     raise ValueError("already exists?")
 
                 # Recurse
                 self._add_transition_dict_row(new_tts_part_info, indel_set_list, transition_dict)
 
-        # Calculate hazard to all other states (aka the "unlikely" state)
-        hazard_away = self.get_hazard_away(start_tts)
-        hazard_to_unlikely = hazard_away - hazard_to_likely
-        matrix_row[self.UNLIKELY] = hazard_to_unlikely
+    def get_hazards(self, tt_evts: List[TargetTract]):
+        if len(tt_evts) == 0:
+            return []
 
-        # Add hazard to staying in the same state
-        matrix_row[start_tts] = -hazard_away
+        target_inputs = []
+        long_status_inputs = []
+        for tt_evt in tt_evts:
+            target_inputs.append([tt_evt.min_target, tt_evt.max_target])
+            long_status_inputs.append([tt_evt.is_left_long, tt_evt.is_right_long])
+
+        hazards = self.sess.run(self.hazard, feed_dict={
+            self.targets_ph: target_inputs,
+            self.long_status_ph: long_status_inputs})
+        return hazards
+
 
     def get_hazard(self, tt_evt: TargetTract):
         """
@@ -252,10 +243,10 @@ class CLTLikelihoodModel:
         #hazard, hazard_grad = self.sess.run([self.hazard, self.hazard_grad], feed_dict={
         #    self.targets_ph: [tt_evt.min_target, tt_evt.max_target],
         #    self.long_status_ph: [tt_evt.is_left_long, tt_evt.is_right_long]})
-        hazard= self.sess.run(self.hazard, feed_dict={
-            self.targets_ph: [tt_evt.min_target, tt_evt.max_target],
-            self.long_status_ph: [tt_evt.is_left_long, tt_evt.is_right_long]})
-        return hazard
+        hazards = self.sess.run(self.hazard, feed_dict={
+            self.targets_ph: [[tt_evt.min_target, tt_evt.max_target]],
+            self.long_status_ph: [[tt_evt.is_left_long, tt_evt.is_right_long]]})
+        return hazards[0]
 
     def get_hazard_old(self, tt_evt: TargetTract):
         """
@@ -387,6 +378,21 @@ class CLTLikelihoodModel:
                     # Single target, short left and right trim
                     [self.target_lams[tts[-1].max_deact_target + 1] * trim_short_left * trim_short_right]])
         return hazard_list
+
+    def get_hazard_aways(self, tts_list: List[Tuple[TargetTract]]):
+        left_trimmables = []
+        right_trimmables = []
+        for tts in tts_list:
+            left_m, right_m = self._get_hazard_masks(tts)
+            left_trimmables.append(left_m)
+            right_trimmables.append(right_m)
+
+        hazard_aways = self.sess.run(
+                self.hazard_away,
+                feed_dict = {
+                    self.left_trimmables_ph: left_trimmables,
+                    self.right_trimmables_ph: right_trimmables})
+        return hazard_aways
 
     def get_hazard_away(self, tts: Tuple[TargetTract]):
         left_trimmables, right_trimmables = self._get_hazard_masks(tts)

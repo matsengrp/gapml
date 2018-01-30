@@ -3,6 +3,7 @@ import numpy as np
 import itertools
 from functools import reduce
 from typing import List, Tuple, Dict
+import tensorflow as tf
 
 from indel_sets import TargetTract
 
@@ -42,7 +43,7 @@ def target_tract_repr_diff(tts1: Tuple[TargetTract], tts2: Tuple[TargetTract]):
             continue
 
         # Now we have overlapping events
-        assert(tt1.max_target <= tt2.max_target, "%s, %s" % (tt1, tt2))
+        assert(tt1.max_target <= tt2.max_target)
         idx1 += 1
         idx2 += 1
         if tt1 != tt2:
@@ -51,3 +52,10 @@ def target_tract_repr_diff(tts1: Tuple[TargetTract], tts2: Tuple[TargetTract]):
     new_tuple += tts2[idx2:]
 
     return new_tuple
+
+
+def not_equal_float(a, b):
+    return tf.cast(tf.not_equal(a, b), tf.float64)
+
+def equal_float(a, b):
+    return tf.cast(tf.equal(a, b), tf.float64)
