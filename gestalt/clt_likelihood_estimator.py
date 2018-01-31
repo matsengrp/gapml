@@ -51,6 +51,7 @@ class CLTLassoEstimator(CLTEstimator):
         @return The likelihood for proposed theta, the gradient too if requested
         """
         transition_matrices = model.initialize_transition_matrices(self.transition_mat_wrappers)
+        # TODO: Initialize trim probs -- just like we did for transition matrices!
 
         log_lik = 0
         L = dict() # Stores normalized probs
@@ -121,7 +122,7 @@ class CLTLassoEstimator(CLTEstimator):
 
     def _get_trim_probs(self,
             model: CLTLikelihoodModel,
-            ch_trans_mat: TransitionMatrixWrapper,
+            ch_trans_mat: TransitionMatrix,
             node: CellLineageTree,
             child: CellLineageTree):
         """

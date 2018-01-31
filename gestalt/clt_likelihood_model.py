@@ -1,6 +1,8 @@
 import time
 import numpy as np
 import tensorflow as tf
+import tensorflow.contrib.distributions as tf_distributions
+
 from typing import List, Tuple, Dict
 from numpy import ndarray
 from scipy.stats import poisson
@@ -10,7 +12,8 @@ from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
 from indel_sets import IndelSet, TargetTract, AncState, SingletonWC, Singleton
 from transition_matrix import TransitionMatrixWrapper, TransitionMatrix
-from common import merge_target_tract_groups, not_equal_float, equal_float
+from common import merge_target_tract_groups
+import tf_common
 from bounded_poisson import BoundedPoisson
 
 class CLTLikelihoodModel:
@@ -32,9 +35,9 @@ class CLTLikelihoodModel:
             target_lams: ndarray = None,
             trim_long_probs: ndarray = 0.1 * np.ones(2),
             trim_zero_prob: float = 0.5,
-            trim_poissons: ndarray = np.ones(2),
+            trim_poissons: ndarray = 0.9 * np.ones(2),
             insert_zero_prob: float = 0.5,
-            insert_poisson: float = 2):
+            insert_poisson: float = 2.0):
             #TODO: cell_type_lams: ndarray = None):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
@@ -66,33 +69,46 @@ class CLTLikelihoodModel:
             target_lams = 0.1 * np.ones(self.num_targets)
 
         self.branch_lens = tf.Variable(branch_lens)
-        self.target_lams = tf.Variable(target_lams)
-        self.trim_long_probs = tf.Variable(trim_long_probs)
-        self.trim_zero_prob = tf.Variable(trim_zero_prob)
-        self.trim_poissons = tf.Variable(trim_poissons)
-        self.insert_zero_prob = tf.Variable(insert_zero_prob)
-        self.insert_poisson = tf.Variable(insert_poisson)
+        self.target_lams = tf.Variable(target_lams, dtype=tf.float32)
+        self.trim_long_probs = tf.Variable(trim_long_probs, dtype=tf.float32)
+        self.trim_zero_prob = tf.Variable(trim_zero_prob, dtype=tf.float32)
+        self.trim_poissons = tf.Variable(trim_poissons, dtype=tf.float32)
+        self.insert_zero_prob = tf.Variable(insert_zero_prob, dtype=tf.float32)
+        self.insert_poisson = tf.Variable(insert_poisson, dtype=tf.float32)
 
         self.grad_opt = tf.train.GradientDescentOptimizer(learning_rate=1)
+        self._create_placeholders()
         self._create_hazard()
         self._create_hazard_away()
+        self._create_del_probs()
+        self._create_insert_probs()
+
+    def _create_placeholders(self):
+        # placeholders for info about an indel
+        self.targets_ph = tf.placeholder(tf.int32, [None, 2])
+        self.min_target = self.targets_ph[:,0]
+        self.max_target = self.targets_ph[:,1]
+        self.long_status_ph = tf.placeholder(tf.float32, [None, 2])
+        self.is_left_long = self.long_status_ph[:,0]
+        self.is_right_long = self.long_status_ph[:,1]
+        self.positions_ph = tf.placeholder(tf.int32, [None, 3])
+        self.start_pos = self.positions_ph[:,0]
+        self.del_len = self.positions_ph[:,1]
+        self.insert_len = tf.cast(self.positions_ph[:,2], dtype=tf.float32)
+        self.del_end = self.start_pos + self.del_len
+
+        # placeholders for info about target status -- used by hazard away calculation
+        self.left_trimmables_ph = tf.placeholder(tf.int32, [None, self.num_targets])
+        self.right_trimmables_ph = tf.placeholder(tf.int32, [None, self.num_targets])
 
     def _create_hazard(self):
         """
-        Helpers for creating hazard tensor and its associated gradient
+        Helpers for creating hazard in tensorflow graph and its associated gradient
         """
-        # Create the placeholders
-        self.targets_ph = tf.placeholder(tf.int32, [None, 2])
-        min_target = self.targets_ph[:,0]
-        max_target = self.targets_ph[:,1]
-        self.long_status_ph = tf.placeholder(tf.float64, [None, 2])
-        is_left_long = self.long_status_ph[:,0]
-        is_right_long = self.long_status_ph[:,1]
-
         # Compute the hazard
-        log_lambda_part = tf.log(tf.gather(self.target_lams, min_target)) + tf.log(tf.gather(self.target_lams, max_target)) * not_equal_float(min_target, max_target)
-        left_trim_prob = tf.multiply(is_left_long, self.trim_long_probs[0]) + tf.multiply(1 - is_left_long, 1 - self.trim_long_probs[0])
-        right_trim_prob = tf.multiply(is_right_long, self.trim_long_probs[1]) + tf.multiply(1 - is_right_long, 1 - self.trim_long_probs[1])
+        log_lambda_part = tf.log(tf.gather(self.target_lams, self.min_target)) + tf.log(tf.gather(self.target_lams, self.max_target)) * tf_common.not_equal_float(self.min_target, self.max_target)
+        left_trim_prob = tf_common.ifelse(self.is_left_long, self.trim_long_probs[0], 1 - self.trim_long_probs[0])
+        right_trim_prob = tf_common.ifelse(self.is_right_long, self.trim_long_probs[1], 1 - self.trim_long_probs[1])
         self.hazard = tf.exp(log_lambda_part + tf.log(left_trim_prob) + tf.log(right_trim_prob))
 
         # Compute the gradient
@@ -102,12 +118,8 @@ class CLTLikelihoodModel:
 
     def _create_hazard_away(self):
         """
-        Helpers for creating hazard-away tensor and its associated gradient
+        Helpers for creating hazard-away in tensorflow graph and its associated gradient
         """
-        # Create the placeholders
-        self.left_trimmables_ph = tf.placeholder(tf.int32, [None, self.num_targets])
-        self.right_trimmables_ph = tf.placeholder(tf.int32, [None, self.num_targets])
-
         # Compute the hazard away
         focal_hazards = self._create_hazard_list(True, True)
         left_hazards = self._create_hazard_list(True, False)[:, :self.num_targets - 1]
@@ -128,16 +140,71 @@ class CLTLikelihoodModel:
         trim_short_left = 1 - self.trim_long_probs[0] if trim_left else 1
         trim_short_right = 1 - self.trim_long_probs[1] if trim_right else 1
 
-        left_factor = equal_float(self.left_trimmables_ph, 1) * trim_short_left + equal_float(self.left_trimmables_ph, 2)
+        left_factor = tf_common.equal_float(self.left_trimmables_ph, 1) * trim_short_left + tf_common.equal_float(self.left_trimmables_ph, 2)
 
-        right_factor = equal_float(self.right_trimmables_ph, 1) * trim_short_right + equal_float(self.right_trimmables_ph, 2)
+        right_factor = tf_common.equal_float(self.right_trimmables_ph, 1) * trim_short_right + tf_common.equal_float(self.right_trimmables_ph, 2)
 
         hazard_list = self.target_lams * left_factor * right_factor
         return hazard_list
 
+    def _create_del_probs(self):
+        # Compute conditional prob of deletion for a singleton
+        left_trim_len = tf.cast(tf.gather(self.bcode_meta.abs_cut_sites, self.min_target) - self.start_pos, tf.float32)
+        right_trim_len = tf.cast(self.del_end - tf.gather(self.bcode_meta.abs_cut_sites, self.max_target), tf.float32) + 1
+        left_trim_long_min = tf.cast(tf.gather(self.bcode_meta.left_long_trim_min, self.min_target), tf.float32)
+        right_trim_long_min = tf.cast(tf.gather(self.bcode_meta.right_long_trim_min, self.max_target), tf.float32)
+
+        min_left_trim = self.is_left_long * tf.cast(left_trim_long_min, tf.float32)
+        max_left_trim = tf_common.ifelse(
+                self.is_left_long,
+                tf.cast(tf.gather(self.bcode_meta.left_max_trim, self.min_target), tf.float32),
+                left_trim_long_min - 1)
+        min_right_trim = self.is_right_long * right_trim_long_min
+        max_right_trim = tf_common.ifelse(
+                self.is_right_long,
+                tf.cast(tf.gather(self.bcode_meta.right_max_trim, self.min_target), tf.float32),
+                right_trim_long_min - 1)
+
+        # TODO: using a uniform distribution for now
+        check_left_max = tf.cast(tf.less_equal(left_trim_len, max_left_trim), tf.float32)
+        check_left_min = tf.cast(tf.less_equal(min_left_trim, left_trim_len), tf.float32)
+        #TODO: check this range thing
+        left_prob = 1.0/(max_left_trim - min_left_trim + 1) # * check_left_max * check_left_min
+        #left_prob = tf_distributions.Normal(self.trim_poissons[0], self.trim_poissons[1]).cdf(0.5)
+        check_right_max = tf.cast(tf.less_equal(right_trim_len, max_right_trim), tf.float32)
+        check_right_min = tf.cast(tf.less_equal(min_right_trim, right_trim_len), tf.float32)
+        right_prob = 1.0/(max_right_trim - min_right_trim + 1) #* check_right_max * check_right_min
+
+        is_short_indel = tf_common.equal_float(self.is_left_long + self.is_right_long, 0)
+        is_len_zero = tf_common.equal_float(self.del_len, 0)
+        self.del_prob = tf_common.ifelse(is_short_indel,
+                tf_common.ifelse(is_len_zero,
+                    self.trim_zero_prob + (1 - self.trim_zero_prob) * left_prob * right_prob,
+                    (1 - self.trim_zero_prob) * left_prob * right_prob),
+                left_prob * right_prob)
+
+        self.del_prob_grad = self.grad_opt.compute_gradients(
+                self.del_prob,
+                var_list = [self.trim_zero_prob, self.trim_poissons])
+
+    def _create_insert_probs(self):
+        poiss_unstd = tf.exp(-self.insert_poisson) * tf.pow(self.insert_poisson, self.insert_len)
+        insert_len_prob = poiss_unstd/tf.exp(tf.lgamma(self.insert_len + 1))
+        insert_seq_prob = 1.0/tf.pow(4.0, self.insert_len)
+        is_insert_zero = tf.cast(tf.equal(self.insert_len, 0), dtype=tf.float32)
+        self.insert_prob = tf_common.ifelse(
+                is_insert_zero,
+                self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob,
+                (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob)
+
+
+
     def initialize_transition_matrices(self, transition_mat_wrappers: Dict[int, TransitionMatrixWrapper]):
         """
-        @return a list of real transition matrices
+        @param transition_mat_wrappers: the list of transition matrix wrappers, which are just skeletons for
+                                        the actual matrix
+
+        @return a list of real transition matrices based on this model's parameters
         """
         UNLIKELY = "unlikely"
         all_matrices = dict()
@@ -303,6 +370,20 @@ class CLTLikelihoodModel:
             prob *= del_prob * insert_prob
         return prob
 
+    def _get_cond_prob_singleton_del(self, singleton: Singleton):
+        del_prob = self.sess.run(self.del_prob, feed_dict={
+            self.targets_ph: [[singleton.min_target,singleton.max_target]],
+            self.long_status_ph:[[singleton.is_left_long, singleton.is_right_long]],
+            self.positions_ph: [[singleton.start_pos, singleton.del_len, singleton.insert_len]]})
+        return del_prob[0]
+
+    def _get_cond_prob_singleton_insert(self, singleton: Singleton):
+        insert_prob = self.sess.run(self.insert_prob, feed_dict={
+            self.targets_ph: [[singleton.min_target,singleton.max_target]],
+            self.long_status_ph:[[singleton.is_left_long, singleton.is_right_long]],
+            self.positions_ph: [[singleton.start_pos, singleton.del_len, singleton.insert_len]]})
+        return insert_prob[0]
+
     @staticmethod
     def get_matching_singletons(anc_state: AncState, tts: Tuple[TargetTract]):
         """
@@ -337,60 +418,6 @@ class CLTLikelihoodModel:
             tts_idx += 1
 
         return matching_sgs
-
-    def _get_cond_prob_singleton_del(self, singleton: Singleton):
-        """
-        @return the conditional probability of the deletion for the singleton happening
-                (given that the target tract occurred)
-        """
-        left_trim_len = self.bcode_meta.abs_cut_sites[singleton.min_target] - singleton.start_pos
-        right_trim_len = singleton.del_end - self.bcode_meta.abs_cut_sites[singleton.max_target] + 1
-        left_trim_long_min = self.bcode_meta.left_long_trim_min[singleton.min_target]
-        right_trim_long_min = self.bcode_meta.right_long_trim_min[singleton.max_target]
-        if singleton.is_left_long:
-            min_left_trim = left_trim_long_min
-            max_left_trim = self.bcode_meta.left_max_trim[singleton.min_target]
-        else:
-            min_left_trim = 0
-            max_left_trim = left_trim_long_min - 1
-
-        if singleton.is_right_long:
-            min_right_trim = right_trim_long_min
-            max_right_trim = self.bcode_meta.right_max_trim[singleton.min_target]
-        else:
-            min_right_trim = 0
-            max_right_trim = right_trim_long_min - 1
-
-        left_prob = BoundedPoisson(min_left_trim, max_left_trim, self.trim_poisson_params[0]).pmf(
-            left_trim_len)
-        right_prob = BoundedPoisson(min_right_trim, max_right_trim, self.trim_poisson_params[1]).pmf(
-            right_trim_len)
-
-        # Check if we should add zero inflation
-        if not singleton.is_left_long and not singleton.is_right_long:
-            if singleton.del_len == 0:
-                return self.trim_zero_prob + (1 - self.trim_zero_prob) * left_prob * right_prob
-            else:
-                return (1 - self.trim_zero_prob) * left_prob * right_prob
-        else:
-            return left_prob * right_prob
-
-    def _get_cond_prob_singleton_insert(self, singleton: Singleton):
-        """
-        @return the conditional probability of the insertion for this singleton happening
-                (given that the target tract occurred)
-        """
-        insert_len = singleton.insert_len
-        insert_len_prob = poisson(self.insert_poisson_param).pmf(insert_len)
-        # There are 4^insert_len insert string to choose from
-        # Assuming all insert strings are equally likely
-        insert_seq_prob = 1.0/np.power(4, insert_len)
-
-        # Check if we should add zero inflation
-        if insert_len == 0:
-            return self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob
-        else:
-            return (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob
 
     @staticmethod
     def get_possible_target_tracts(active_any_targs: List[int]):
@@ -435,4 +462,3 @@ class CLTLikelihoodModel:
                         tt_evts.add(tt_evt)
 
         return tt_evts
-

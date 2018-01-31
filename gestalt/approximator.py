@@ -27,10 +27,10 @@ class ApproximatorLB:
 
     def create_transition_matrix_wrappers(self, topology: CellLineageTree):
         """
-        Create transition matrix for each branch
-        @param topology: a tree, assumes this tree has the "node_id" feature
+        Create a skeleton of the transition matrix for each branch using the approximation algo
 
-        @return dictionary of matrices mapping node id to matrix
+        @param topology: a tree, assumes this tree has the "node_id" feature
+        @return dictionary mapping `node_id` to TransitionMatrixWrapper
         """
         # First determine the state sum and transition possibilities of each node
         self._annotate_state_sum_transitions(topology)
@@ -47,6 +47,8 @@ class ApproximatorLB:
         """
         Annotate each branch of the tree with the state sum.
         Also annotates with the transition graphs between target tract representations.
+
+        TODO: do not annotate the tree, instead just return a dictionary?
 
         The `state_sum` attribute is a list of target tract reprs that are in StateSum for that node.
         The `transition_graph_dict` attribute is a dictionary:
