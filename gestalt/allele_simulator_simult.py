@@ -30,12 +30,12 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         self.left_del_distributions = self._create_bounded_poissons(
             min_vals = self.bcode_meta.left_long_trim_min,
             max_vals = self.bcode_meta.left_max_trim,
-            poiss_lambda = self.model.trim_poisson_params[0])
+            poiss_lambda = self.model.trim_poissons[0].eval())
         self.right_del_distributions = self._create_bounded_poissons(
             min_vals = self.bcode_meta.right_long_trim_min,
             max_vals = self.bcode_meta.right_max_trim,
-            poiss_lambda = self.model.trim_poisson_params[1])
-        self.insertion_distribution = poisson(mu=self.model.insert_poisson_param)
+            poiss_lambda = self.model.trim_poissons[1].eval())
+        self.insertion_distribution = poisson(mu=self.model.insert_poisson.eval())
 
     def _create_bounded_poissons(self, min_vals: List[float], max_vals: List[float], poiss_lambda: float):
         """
@@ -134,8 +134,8 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         else:
             # Serves as zero-inflation for deletion/insertion process
             # Draw a separate RVs for each deletion/insertion process
-            do_insertion = random() > self.model.insert_zero_prob
-            do_deletion  = random() > self.model.trim_zero_prob
+            do_insertion = random() > self.model.insert_zero_prob.eval()
+            do_deletion  = random() > self.model.trim_zero_prob.eval()
 
         insertion_length = self.insertion_distribution.rvs() if do_insertion else 0
         left_del_len = self.left_del_distributions[target1][left_long].rvs() if do_deletion else 0

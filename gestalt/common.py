@@ -42,7 +42,7 @@ def target_tract_repr_diff(tts1: Tuple[TargetTract], tts2: Tuple[TargetTract]):
             continue
 
         # Now we have overlapping events
-        assert(tt1.max_target <= tt2.max_target, "%s, %s" % (tt1, tt2))
+        assert(tt1.max_target <= tt2.max_target)
         idx1 += 1
         idx2 += 1
         if tt1 != tt2:

@@ -1,14 +1,19 @@
 import time
 import numpy as np
+import tensorflow as tf
+import tensorflow.contrib.distributions as tf_distributions
+
 from typing import List, Tuple, Dict
 from numpy import ndarray
 from scipy.stats import poisson
+from tensorflow import Session
 
 from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
 from indel_sets import IndelSet, TargetTract, AncState, SingletonWC, Singleton
-from transition_matrix import TransitionMatrixWrapper
+from transition_matrix import TransitionMatrixWrapper, TransitionMatrix
 from common import merge_target_tract_groups
+import tf_common
 from bounded_poisson import BoundedPoisson
 
 class CLTLikelihoodModel:
@@ -20,8 +25,20 @@ class CLTLikelihoodModel:
     """
     UNLIKELY = "unlikely"
     NODE_ORDER = "postorder"
+    gamma_prior = (1,10)
 
-    def __init__(self, topology: CellLineageTree, bcode_meta: BarcodeMetadata):
+    def __init__(self,
+            topology: CellLineageTree,
+            bcode_meta: BarcodeMetadata,
+            sess: Session,
+            branch_lens: ndarray = None,
+            target_lams: ndarray = None,
+            trim_long_probs: ndarray = 0.1 * np.ones(2),
+            trim_zero_prob: float = 0.5,
+            trim_poissons: ndarray = 0.9 * np.ones(2),
+            insert_zero_prob: float = 0.5,
+            insert_poisson: float = 2.0):
+            #TODO: cell_type_lams: ndarray = None):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
         Will randomly initialize model parameters
@@ -38,261 +55,299 @@ class CLTLikelihoodModel:
             self.num_nodes = node_id
         self.bcode_meta = bcode_meta
         self.num_targets = bcode_meta.n_targets
-        self.random_init()
 
-    def set_vals(self,
-            branch_lens: ndarray,
-            target_lams: ndarray,
-            trim_long_probs: ndarray,
-            trim_zero_prob: float,
-            trim_poisson_params: ndarray,
-            insert_zero_prob: float,
-            insert_poisson_param: float,
-            cell_type_lams: ndarray):
+        # Save tensorflow session
+        self.sess = sess
+
+        # Create all the variables
+        if branch_lens is None:
+            branch_lens = np.random.gamma(
+                    self.gamma_prior[0],
+                    self.gamma_prior[1],
+                    self.num_nodes)
+        if target_lams is None:
+            target_lams = 0.1 * np.ones(self.num_targets)
+
+        self.branch_lens = tf.Variable(branch_lens)
+        self.target_lams = tf.Variable(target_lams, dtype=tf.float32)
+        self.trim_long_probs = tf.Variable(trim_long_probs, dtype=tf.float32)
+        self.trim_zero_prob = tf.Variable(trim_zero_prob, dtype=tf.float32)
+        self.trim_poissons = tf.Variable(trim_poissons, dtype=tf.float32)
+        self.insert_zero_prob = tf.Variable(insert_zero_prob, dtype=tf.float32)
+        self.insert_poisson = tf.Variable(insert_poisson, dtype=tf.float32)
+
+        self.grad_opt = tf.train.GradientDescentOptimizer(learning_rate=1)
+        self._create_placeholders()
+        self._create_hazard()
+        self._create_hazard_away()
+        self._create_del_probs()
+        self._create_insert_probs()
+
+    def _create_placeholders(self):
+        # placeholders for info about an indel
+        self.targets_ph = tf.placeholder(tf.int32, [None, 2])
+        self.min_target = self.targets_ph[:,0]
+        self.max_target = self.targets_ph[:,1]
+        self.long_status_ph = tf.placeholder(tf.float32, [None, 2])
+        self.is_left_long = self.long_status_ph[:,0]
+        self.is_right_long = self.long_status_ph[:,1]
+        self.positions_ph = tf.placeholder(tf.int32, [None, 3])
+        self.start_pos = self.positions_ph[:,0]
+        self.del_len = self.positions_ph[:,1]
+        self.insert_len = tf.cast(self.positions_ph[:,2], dtype=tf.float32)
+        self.del_end = self.start_pos + self.del_len
+
+        # placeholders for info about target status -- used by hazard away calculation
+        self.left_trimmables_ph = tf.placeholder(tf.int32, [None, self.num_targets])
+        self.right_trimmables_ph = tf.placeholder(tf.int32, [None, self.num_targets])
+
+    def _create_hazard(self):
         """
-        Sets model parameters
-
-        @param trim_long_probs: [prob of long trim on left, prob of long trim on right]
-        @param trim_poisson_params: [poisson param for left trim, poisson param for right trim]
+        Helpers for creating hazard in tensorflow graph and its associated gradient
         """
-        self.branch_lens = branch_lens
-        self.target_lams = target_lams
-        self.trim_long_probs = trim_long_probs
-        self.trim_long_left = trim_long_probs[0]
-        self.trim_long_right = trim_long_probs[1]
-        self.trim_zero_prob = trim_zero_prob
-        self.trim_poisson_params = trim_poisson_params
-        self.insert_zero_prob = insert_zero_prob
-        self.insert_poisson_param = insert_poisson_param
-        self.cell_type_lams = cell_type_lams
-        assert(self.num_targets == target_lams.size)
+        # Compute the hazard
+        log_lambda_part = tf.log(tf.gather(self.target_lams, self.min_target)) + tf.log(tf.gather(self.target_lams, self.max_target)) * tf_common.not_equal_float(self.min_target, self.max_target)
+        left_trim_prob = tf_common.ifelse(self.is_left_long, self.trim_long_probs[0], 1 - self.trim_long_probs[0])
+        right_trim_prob = tf_common.ifelse(self.is_right_long, self.trim_long_probs[1], 1 - self.trim_long_probs[1])
+        self.hazard = tf.exp(log_lambda_part + tf.log(left_trim_prob) + tf.log(right_trim_prob))
 
-    def random_init(self, gamma_prior: Tuple[float, float] = (1,10)):
+        # Compute the gradient
+        self.hazard_grad = self.grad_opt.compute_gradients(
+            self.hazard,
+            var_list=[self.target_lams, self.trim_long_probs])
+
+    def _create_hazard_away(self):
         """
-        Randomly initialize model parameters
+        Helpers for creating hazard-away in tensorflow graph and its associated gradient
         """
-        self.set_vals(
-            # TODO: right now this is initialized to have one extra branch lenght that is ignored
-            #       probably want to clean this up later?
-            branch_lens = np.random.gamma(gamma_prior[0], gamma_prior[1], self.num_nodes),
-            target_lams = 0.1 * np.ones(self.num_targets),
-            trim_long_probs = 0.1 * np.ones(2),
-            trim_zero_prob = 0.5,
-            trim_poisson_params = np.ones(2),
-            insert_zero_prob = 0.5,
-            insert_poisson_param = 2,
-            # TODO: implement later
-            cell_type_lams = None,
-        )
+        # Compute the hazard away
+        focal_hazards = self._create_hazard_list(True, True)
+        left_hazards = self._create_hazard_list(True, False)[:, :self.num_targets - 1]
+        right_hazards = self._create_hazard_list(False, True)[:, 1:]
+        left_cum_hazards = tf.cumsum(left_hazards, axis=1)
+        inter_target_hazards = tf.multiply(left_cum_hazards, right_hazards)
+        self.hazard_away = tf.reduce_sum(focal_hazards, axis=1) + tf.reduce_sum(inter_target_hazards, axis=1)
 
-    def create_transition_matrices(self):
+        # Compute the gradient
+        self.hazard_away_grad = self.grad_opt.compute_gradients(
+            self.hazard_away,
+            var_list=[self.target_lams, self.trim_long_probs])
+
+    def _create_hazard_list(self, trim_left: bool, trim_right: bool):
         """
-        Create transition matrix for each branch
-        @return dictionary of matrices mapping node id to matrix
-
-        TODO: maybe return a list instead of dictionary
+        Helper function for creating hazard list nodes -- useful for calculating hazard away
         """
-        if self.topology is None:
-            raise ValueError("Must initialize topology first for this to work")
+        trim_short_left = 1 - self.trim_long_probs[0] if trim_left else 1
+        trim_short_right = 1 - self.trim_long_probs[1] if trim_right else 1
 
-        transition_matrices = dict()
-        for node in self.topology.traverse(self.NODE_ORDER):
-            if not node.is_root():
-                trans_mat = self._create_transition_matrix(node)
-                transition_matrices[node.node_id] = trans_mat
-        return transition_matrices
+        left_factor = tf_common.equal_float(self.left_trimmables_ph, 1) * trim_short_left + tf_common.equal_float(self.left_trimmables_ph, 2)
 
-    def _create_transition_matrix(self, node: CellLineageTree):
+        right_factor = tf_common.equal_float(self.right_trimmables_ph, 1) * trim_short_right + tf_common.equal_float(self.right_trimmables_ph, 2)
+
+        hazard_list = self.target_lams * left_factor * right_factor
+        return hazard_list
+
+    def _create_del_probs(self):
+        # Compute conditional prob of deletion for a singleton
+        left_trim_len = tf.cast(tf.gather(self.bcode_meta.abs_cut_sites, self.min_target) - self.start_pos, tf.float32)
+        right_trim_len = tf.cast(self.del_end - tf.gather(self.bcode_meta.abs_cut_sites, self.max_target), tf.float32)
+        left_trim_long_min = tf.cast(tf.gather(self.bcode_meta.left_long_trim_min, self.min_target), tf.float32)
+        right_trim_long_min = tf.cast(tf.gather(self.bcode_meta.right_long_trim_min, self.max_target), tf.float32)
+
+        min_left_trim = self.is_left_long * left_trim_long_min
+        max_left_trim = tf_common.ifelse(
+                self.is_left_long,
+                tf.cast(tf.gather(self.bcode_meta.left_max_trim, self.min_target), tf.float32),
+                left_trim_long_min - 1)
+        min_right_trim = self.is_right_long * right_trim_long_min
+        max_right_trim = tf_common.ifelse(
+                self.is_right_long,
+                tf.cast(tf.gather(self.bcode_meta.right_max_trim, self.max_target), tf.float32),
+                right_trim_long_min - 1)
+
+        # TODO: using a uniform distribution for now
+        check_left_max = tf.cast(tf.less_equal(left_trim_len, max_left_trim), tf.float32)
+        check_left_min = tf.cast(tf.less_equal(min_left_trim, left_trim_len), tf.float32)
+        #TODO: check this range thing
+        left_prob = 1.0/(max_left_trim - min_left_trim + 1) * check_left_max #* check_left_min
+        #left_prob = tf_distributions.Normal(self.trim_poissons[0], self.trim_poissons[1]).cdf(0.5)
+        check_right_max = tf.cast(tf.less_equal(right_trim_len, max_right_trim), tf.float32)
+        check_right_min = tf.cast(tf.less_equal(min_right_trim, right_trim_len), tf.float32)
+        right_prob = 1.0/(max_right_trim - min_right_trim + 1) * check_right_max * check_right_min
+
+        is_short_indel = tf_common.equal_float(self.is_left_long + self.is_right_long, 0)
+        is_len_zero = tf_common.equal_float(self.del_len, 0)
+        self.del_prob = tf_common.ifelse(is_short_indel,
+                tf_common.ifelse(is_len_zero,
+                    self.trim_zero_prob + (1 - self.trim_zero_prob) * left_prob * right_prob,
+                    (1 - self.trim_zero_prob) * left_prob * right_prob),
+                left_prob * right_prob)
+
+        self.del_prob_grad = self.grad_opt.compute_gradients(
+                self.del_prob,
+                var_list = [self.trim_zero_prob, self.trim_poissons])
+
+    def _create_insert_probs(self):
+        poiss_unstd = tf.exp(-self.insert_poisson) * tf.pow(self.insert_poisson, self.insert_len)
+        insert_len_prob = poiss_unstd/tf.exp(tf.lgamma(self.insert_len + 1))
+        insert_seq_prob = 1.0/tf.pow(4.0, self.insert_len)
+        is_insert_zero = tf.cast(tf.equal(self.insert_len, 0), dtype=tf.float32)
+        self.insert_prob = tf_common.ifelse(
+                is_insert_zero,
+                self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob,
+                (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob)
+
+    def initialize_transition_matrices(self, transition_mat_wrappers: Dict[int, TransitionMatrixWrapper]):
         """
-        @return the transition matrix for the particular branch ending at `node`
-                only contains the states relevant to state_sum
-                the rest of the unlikely states are aggregated together
+        @param transition_mat_wrappers: the list of transition matrix wrappers, which are just skeletons for
+                                        the actual matrix
+
+        @return a list of real transition matrices based on this model's parameters
         """
-        transition_dict = dict()
-        indel_set_list = node.anc_state.indel_set_list
-        # Determine the values in the transition matrix by considering all possible states
-        # starting at the parent's StateSum.
-        # Recurse through all of its children to build out the transition matrix
-        for tts in node.up.state_sum.tts_list:
-            tts_partition_info = dict()
-            tts_partition = self.partition(tts, node.anc_state)
-            for indel_set in indel_set_list:
-                tt_tuple = tts_partition[indel_set]
-                graph_key = (tt_tuple, indel_set)
-                # To recurse, indicate the subgraphs for each partition and the current node
-                # (target tract group) we are currently located at.
-                tts_partition_info[indel_set] = {
-                        "start": tt_tuple,
-                        "graph": node.transition_graph_dict[graph_key]}
-            self._add_transition_dict_row(tts_partition_info, indel_set_list, transition_dict)
+        UNLIKELY = "unlikely"
+        all_matrices = dict()
+        for node_id, matrix_wrapper in transition_mat_wrappers.items():
+            # Get inputs ready for tensorflow
+            hazard_list = []
+            tt_evts = []
+            start_tts_list = []
+            for start_tts, matrix_row in matrix_wrapper.matrix_dict.items():
+                start_tts_list.append(start_tts)
+                for end_tts, tt_evt in matrix_row.items():
+                    tt_evts.append(tt_evt)
 
-        # Add unlikely state
-        transition_dict[self.UNLIKELY] = dict()
+            # Gets hazards (by tensorflow)
+            hazard_aways = self.get_hazard_aways(start_tts_list)
+            hazards = self.get_hazards(tt_evts)
 
-        # Create sparse transition matrix given the dictionary representation
-        return TransitionMatrixWrapper(transition_dict)
+            # Now fill in the matrix
+            idx = 0
+            matrix_dict = dict()
+            for i, (start_tts, matrix_row) in enumerate(matrix_wrapper.matrix_dict.items()):
+                matrix_dict[start_tts] = dict()
+                # Tracks the total hazard to the likely states
+                haz_to_likely = 0
+                for end_tts, tt_evt in matrix_row.items():
+                    haz = hazards[idx]
+                    matrix_dict[start_tts][end_tts] = haz
+                    haz_to_likely += haz
+                    idx += 1
 
-    def _add_transition_dict_row(
-            self,
-            tts_partition_info: Dict[IndelSet, Dict],
-            indel_set_list: List[IndelSet],
-            transition_dict: Dict):
+                haz_away = hazard_aways[i]
+                # Hazard to unlikely state is hazard away minus hazard to likely states
+                matrix_dict[start_tts][UNLIKELY] = haz_away - haz_to_likely
+                # Hazard of staying is negative of hazard away
+                matrix_dict[start_tts][start_tts] = -haz_away
+
+            # Add unlikely state
+            matrix_dict[UNLIKELY] = dict()
+
+            all_matrices[node_id] = TransitionMatrix(matrix_dict)
+        return all_matrices
+
+    def get_hazards(self, tt_evts: List[TargetTract]):
         """
-        Recursive function for adding transition matrix rows.
-        Function will modify transition_dict.
-        The rows added will correspond to states that are reachable along the subgraphs
-        in tts_partition_info.
-
-        @param tts_partition_info: indicate the subgraphs for each partition and the current node
-                                we are at for each subgraph
-        @param indel_set_list: the ordered list of indel sets from the node's AncState
-        @param transtion_dict: the dictionary to update with values for the transition matrix
-                                (possible key types: tuples of target tracts and the string "unlikely")
+        Propagates through the tensorflow graph to obtain hazard of each TargetTract in `tt_evts`
         """
-        matrix_row = dict()
-        start_tts = merge_target_tract_groups([
-            tts_partition_info[ind_set]["start"] for ind_set in indel_set_list])
-        transition_dict[start_tts] = matrix_row
+        if len(tt_evts) == 0:
+            return []
 
-        hazard_to_likely = 0
-        # Find all possible target tract representations within one step of start_tts
-        # Do this by taking one step in one of the subgraphs
-        for indel_set, val in tts_partition_info.items():
-            subgraph = val["graph"]
-            tt_tuple_start = val["start"]
+        target_inputs = []
+        long_status_inputs = []
+        for tt_evt in tt_evts:
+            target_inputs.append([tt_evt.min_target, tt_evt.max_target])
+            long_status_inputs.append([tt_evt.is_left_long, tt_evt.is_right_long])
 
-            # Each child is a possibility
-            children = subgraph.get_children(tt_tuple_start)
-            for child in children:
-                new_tts_part_info = {k: v.copy() for k,v in tts_partition_info.items()}
-                new_tts_part_info[indel_set]["start"] = child.tt_group
-
-                # Create the new target tract representation
-                new_tts = merge_target_tract_groups([
-                    new_tts_part_info[ind_set]["start"] for ind_set in indel_set_list])
-
-                # Add entry to transition matrix
-                if new_tts not in matrix_row:
-                    hazard = self.get_hazard(child.tt_evt)
-                    matrix_row[new_tts] = hazard
-                    hazard_to_likely += hazard
-                else:
-                    raise ValueError("already exists?")
-
-                # Recurse
-                self._add_transition_dict_row(new_tts_part_info, indel_set_list, transition_dict)
-
-        # Calculate hazard to all other states (aka the "unlikely" state)
-        hazard_away = self.get_hazard_away(start_tts)
-        hazard_to_unlikely = hazard_away - hazard_to_likely
-        matrix_row[self.UNLIKELY] = hazard_to_unlikely
-
-        # Add hazard to staying in the same state
-        matrix_row[start_tts] = -hazard_away
+        hazards = self.sess.run(self.hazard, feed_dict={
+            self.targets_ph: target_inputs,
+            self.long_status_ph: long_status_inputs})
+        return hazards
 
     def get_hazard(self, tt_evt: TargetTract):
         """
         @param tt_evt: the target tract that is getting introduced
         @return hazard of the event happening
         """
-        if tt_evt.min_target == tt_evt.max_target:
-            # Focal deletion
-            lambda_part = self.target_lams[tt_evt.min_target]
-        else:
-            # Inter-target deletion
-            lambda_part = self.target_lams[tt_evt.min_target] * self.target_lams[tt_evt.max_target]
+        return self.get_hazards([tt_evt])[0]
 
-        left_trim_prob = self.trim_long_left if tt_evt.is_left_long else 1 - self.trim_long_left
-        right_trim_prob = self.trim_long_right if tt_evt.is_right_long else 1 - self.trim_long_probs[1]
-        return lambda_part * left_trim_prob * right_trim_prob
-
-    def _get_hazard_list(self, tts:Tuple[TargetTract], trim_left: bool, trim_right: bool):
+    def _get_hazard_masks(self, tts:Tuple[TargetTract]):
         """
-        helper function for making lists of hazard rates
+        @param tts: the target tract repr that we would like to process
 
-        @param tts: the target tract representation for what allele is already existing.
-                    so it tells us which remaining targets are active.
-        @param trim_left: whether we are trimming left. if so, we take this into account for hazard rates
-        @param trim_right: whether we are trimming right. if so, we take this into account for hazard rates
+        @return two lists, one for left trims and one for right trims.
+                each list is composed of values [0,1,2] matching each target.
+                0 = no trim at that target (in that direction) can be performed
+                1 = only short trim at that target (in that dir) is allowed
+                2 = short and long trims are allowed at that target
 
-        @return a list of hazard rates associated with the active targets only!
+                We assume no long left trims are allowed at target 0 and any target T
+                where T - 1 is deactivated. No long right trims are allowed at the last
+                target and any target T where T + 1 is deactivated.
         """
-        trim_short_right = 1 - self.trim_long_right if trim_right else 1
-        trim_short_left = 1 - self.trim_long_left if trim_left else 1
-
         if len(tts) == 0:
-            hazard_list = np.concatenate([
-                # Short trim left
-                [self.target_lams[0] * trim_short_left],
-                # Any trim
-                self.target_lams[1:-1],
-                # Short right trim
-                [self.target_lams[-1] * trim_short_right]])
+            # This is the original barcode
+            left_hazard_list = [1] + [2] * (self.num_targets - 1)
+            right_hazard_list = [2] * (self.num_targets - 1) + [1]
         else:
-            if tts[0].min_deact_target > 1:
-                hazard_list = np.concatenate([
-                    # Short trim left
-                    [self.target_lams[0] * trim_short_left],
-                    # Any trim
-                    self.target_lams[1:tts[0].min_deact_target - 1],
-                    # Short right trim
-                    [self.target_lams[tts[0].min_deact_target - 1] * trim_short_right]])
-            elif tts[0].min_deact_target == 1:
-                hazard_list = [self.target_lams[0] * trim_short_left * trim_short_right]
-            else:
-                hazard_list = []
+            # This is an allele with some indel somewhere
 
+            # Process the section before the first indel
+            if tts[0].min_deact_target > 1:
+                left_hazard_list = [1] + [2] * (tts[0].min_deact_target - 1)
+                right_hazard_list = [2] * (tts[0].min_deact_target - 1) + [1]
+            elif tts[0].min_deact_target == 1:
+                left_hazard_list = [1]
+                right_hazard_list = [1]
+            else:
+                left_hazard_list = []
+                right_hazard_list = []
+
+            left_hazard_list += [0] * (tts[0].max_deact_target - tts[0].min_deact_target + 1)
+            right_hazard_list += [0] * (tts[0].max_deact_target - tts[0].min_deact_target + 1)
+
+            # Process the sections with the indels
             for i, tt in enumerate(tts[1:]):
                 if tts[i].max_deact_target + 1 < tt.min_deact_target - 1:
-                    hazard_list = np.concatenate([
-                        hazard_list,
-                        # Short left trim
-                        [self.target_lams[tts[i].max_deact_target + 1] * trim_short_left],
-                        # Any trim
-                        self.target_lams[tts[i].max_deact_target + 2:tt.min_deact_target - 1],
-                        # Short right trim
-                        [self.target_lams[tt.min_deact_target - 1] * trim_short_right]])
+                    left_hazard_list += [1] + [2] * (tt.min_deact_target - tts[i].max_deact_target - 2)
+                    right_hazard_list += [2] * (tt.min_deact_target - tts[i].max_deact_target - 2) + [1]
                 elif tts[i].max_deact_target + 1 == tt.min_deact_target - 1:
                     # Single target, short left and right
-                    hazard_list = np.concatenate([
-                        hazard_list,
-                        [self.target_lams[tts[i].max_deact_target + 1] * trim_short_left * trim_short_right]])
+                    left_hazard_list += [1]
+                    right_hazard_list += [1]
+                left_hazard_list += [0] * (tt.max_deact_target - tt.min_deact_target + 1)
+                right_hazard_list += [0] * (tt.max_deact_target - tt.min_deact_target + 1)
 
+            # Process the section after all the indels
             if tts[-1].max_deact_target < self.num_targets - 2:
-                hazard_list = np.concatenate([
-                    hazard_list,
-                    # Short left trim
-                    [self.target_lams[tts[-1].max_deact_target + 1] * trim_short_left],
-                    # Any trim
-                    self.target_lams[tts[-1].max_deact_target + 2:self.num_targets - 1],
-                    # Short trim right
-                    [self.target_lams[self.num_targets - 1] * trim_short_right]])
+                left_hazard_list += [1] + [2] * (self.num_targets - tts[-1].max_deact_target - 2)
+                right_hazard_list += [2] * (self.num_targets - tts[-1].max_deact_target - 2) + [1]
             elif tts[-1].max_deact_target == self.num_targets - 2:
-                hazard_list = np.concatenate([
-                    hazard_list,
-                    # Single target, short left and right trim
-                    [self.target_lams[tts[-1].max_deact_target + 1] * trim_short_left * trim_short_right]])
-        return hazard_list
+                left_hazard_list += [1]
+                right_hazard_list += [1]
+
+        return left_hazard_list, right_hazard_list
+
+    def get_hazard_aways(self, tts_list: List[Tuple[TargetTract]]):
+        """
+        Run thru the tensorflow graph to obtain the hazard of going away from these
+        target tract reprs in `tts_list`
+        """
+        left_trimmables = []
+        right_trimmables = []
+        for tts in tts_list:
+            left_m, right_m = self._get_hazard_masks(tts)
+            left_trimmables.append(left_m)
+            right_trimmables.append(right_m)
+
+        hazard_aways = self.sess.run(
+                self.hazard_away,
+                feed_dict = {
+                    self.left_trimmables_ph: left_trimmables,
+                    self.right_trimmables_ph: right_trimmables})
+        return hazard_aways
 
     def get_hazard_away(self, tts: Tuple[TargetTract]):
-        """
-        @param tts: the current target tract representation
-        @return the hazard to transitioning away from the current state.
-        """
-        # First compute sum of hazards for all focal deletions
-        focal_hazards = self._get_hazard_list(tts, trim_left=True, trim_right=True)
-
-        # Second, compute sum of hazards of all inter-target deletions
-        # Compute the hazard of the left target
-        # Ending at target -2 (trim off rightmost target)
-        left_hazard = self._get_hazard_list(tts, trim_left=True, trim_right=False)[:-1]
-
-        # Compute the hazard of the right target
-        # Starting at target 1 (trim off leftmost target)
-        right_hazard = self._get_hazard_list(tts, trim_left=False, trim_right=True)[1:]
-
-        left_cum_hazard = np.cumsum(left_hazard)
-        return np.sum(focal_hazards) + np.dot(left_cum_hazard, right_hazard)
+        return self.get_hazard_aways([tts])
 
     def get_prob_unmasked_trims(self, anc_state: AncState, tts: Tuple[TargetTract]):
         """
@@ -312,6 +367,20 @@ class CLTLikelihoodModel:
             insert_prob = self._get_cond_prob_singleton_insert(singleton)
             prob *= del_prob * insert_prob
         return prob
+
+    def _get_cond_prob_singleton_del(self, singleton: Singleton):
+        del_prob = self.sess.run(self.del_prob, feed_dict={
+            self.targets_ph: [[singleton.min_target,singleton.max_target]],
+            self.long_status_ph:[[singleton.is_left_long, singleton.is_right_long]],
+            self.positions_ph: [[singleton.start_pos, singleton.del_len, singleton.insert_len]]})
+        return del_prob[0]
+
+    def _get_cond_prob_singleton_insert(self, singleton: Singleton):
+        insert_prob = self.sess.run(self.insert_prob, feed_dict={
+            self.targets_ph: [[singleton.min_target,singleton.max_target]],
+            self.long_status_ph:[[singleton.is_left_long, singleton.is_right_long]],
+            self.positions_ph: [[singleton.start_pos, singleton.del_len, singleton.insert_len]]})
+        return insert_prob[0]
 
     @staticmethod
     def get_matching_singletons(anc_state: AncState, tts: Tuple[TargetTract]):
@@ -347,60 +416,6 @@ class CLTLikelihoodModel:
             tts_idx += 1
 
         return matching_sgs
-
-    def _get_cond_prob_singleton_del(self, singleton: Singleton):
-        """
-        @return the conditional probability of the deletion for the singleton happening
-                (given that the target tract occurred)
-        """
-        left_trim_len = self.bcode_meta.abs_cut_sites[singleton.min_target] - singleton.start_pos
-        right_trim_len = singleton.del_end - self.bcode_meta.abs_cut_sites[singleton.max_target] + 1
-        left_trim_long_min = self.bcode_meta.left_long_trim_min[singleton.min_target]
-        right_trim_long_min = self.bcode_meta.right_long_trim_min[singleton.max_target]
-        if singleton.is_left_long:
-            min_left_trim = left_trim_long_min
-            max_left_trim = self.bcode_meta.left_max_trim[singleton.min_target]
-        else:
-            min_left_trim = 0
-            max_left_trim = left_trim_long_min - 1
-
-        if singleton.is_right_long:
-            min_right_trim = right_trim_long_min
-            max_right_trim = self.bcode_meta.right_max_trim[singleton.min_target]
-        else:
-            min_right_trim = 0
-            max_right_trim = right_trim_long_min - 1
-
-        left_prob = BoundedPoisson(min_left_trim, max_left_trim, self.trim_poisson_params[0]).pmf(
-            left_trim_len)
-        right_prob = BoundedPoisson(min_right_trim, max_right_trim, self.trim_poisson_params[1]).pmf(
-            right_trim_len)
-
-        # Check if we should add zero inflation
-        if not singleton.is_left_long and not singleton.is_right_long:
-            if singleton.del_len == 0:
-                return self.trim_zero_prob + (1 - self.trim_zero_prob) * left_prob * right_prob
-            else:
-                return (1 - self.trim_zero_prob) * left_prob * right_prob
-        else:
-            return left_prob * right_prob
-
-    def _get_cond_prob_singleton_insert(self, singleton: Singleton):
-        """
-        @return the conditional probability of the insertion for this singleton happening
-                (given that the target tract occurred)
-        """
-        insert_len = singleton.insert_len
-        insert_len_prob = poisson(self.insert_poisson_param).pmf(insert_len)
-        # There are 4^insert_len insert string to choose from
-        # Assuming all insert strings are equally likely
-        insert_seq_prob = 1.0/np.power(4, insert_len)
-
-        # Check if we should add zero inflation
-        if insert_len == 0:
-            return self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob
-        else:
-            return (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob
 
     @staticmethod
     def get_possible_target_tracts(active_any_targs: List[int]):
@@ -445,30 +460,3 @@ class CLTLikelihoodModel:
                         tt_evts.add(tt_evt)
 
         return tt_evts
-
-    @staticmethod
-    def partition(tts: Tuple[IndelSet], anc_state: AncState):
-        """
-        @return split tts according to anc_state: Dict[IndelSet, Tuple[TargetTract]]
-        """
-        parts = {indel_set : () for indel_set in anc_state.indel_set_list}
-
-        tts_idx = 0
-        n_tt = len(tts)
-        anc_state_idx = 0
-        n_anc_state = len(anc_state.indel_set_list)
-        while tts_idx < n_tt and anc_state_idx < n_anc_state:
-            cur_tt = tts[tts_idx]
-            indel_set = anc_state.indel_set_list[anc_state_idx]
-
-            if cur_tt.max_deact_target < indel_set.min_deact_target:
-                tts_idx += 1
-                continue
-            elif indel_set.max_deact_target < cur_tt.min_deact_target:
-                anc_state_idx += 1
-                continue
-
-            # Should be overlapping now
-            parts[indel_set] = parts[indel_set] + (cur_tt,)
-            tts_idx += 1
-        return parts

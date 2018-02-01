@@ -153,8 +153,8 @@ class Allele:
         events = []
         for evt_i, evt in enumerate(raw_events):
             matching_targets = []
-            for tgt_i, (left, right) in enumerate(self.bcode_meta.pos_sites):
-                if evt[0] < right and (evt[1] - 1) >= left:
+            for tgt_i, cut_site in enumerate(self.bcode_meta.abs_cut_sites):
+                if evt[0] <= cut_site and evt[1] >= cut_site:
                     matching_targets.append(tgt_i)
 
             events.append(Event(

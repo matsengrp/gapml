@@ -1,5 +1,7 @@
 import time
+from tensorflow import Session
 import numpy as np
+import scipy.linalg
 from typing import List, Tuple
 from numpy import ndarray
 
@@ -8,20 +10,11 @@ from cell_lineage_tree import CellLineageTree
 from clt_likelihood_model import CLTLikelihoodModel
 import ancestral_events_finder as anc_evt_finder
 from approximator import ApproximatorLB
-from transition_matrix import TransitionMatrixWrapper
+from transition_matrix import TransitionMatrixWrapper, TransitionMatrix
 from indel_sets import TargetTract
 
 from state_sum import StateSum
 from common import target_tract_repr_diff
-
-class CLTCalculations:
-    """
-    Stores parameters useful for likelihood/gradient calculations
-    """
-    def __init__(self, dl_dbranch_lens: ndarray, dl_dtarget_lams: ndarray, dl_dcell_type_lams: ndarray):
-        self.dl_dbranch_lens = dl_dbranch_lens
-        self.dl_dtarget_lams = dl_dtarget_lams
-        self.dl_dcell_type_lams = dl_dcell_type_lams
 
 class CLTLassoEstimator(CLTEstimator):
     """
@@ -31,24 +24,25 @@ class CLTLassoEstimator(CLTEstimator):
     """
     def __init__(
         self,
+        sess: Session,
         penalty_param: float,
-        model_params: CLTLikelihoodModel,
+        model: CLTLikelihoodModel,
         approximator: ApproximatorLB):
         """
         @param penalty_param: lasso penalty parameter
-        @param model_params: initial CLT model params
+        @param model: initial CLT model params
         """
+        self.sess = sess
         self.penalty_param = penalty_param
-        self.model_params = model_params
+        self.model = model
         self.approximator = approximator
 
         # Annotate with ancestral states
-        anc_evt_finder.annotate_ancestral_states(model_params.topology, model_params.bcode_meta)
-        # Construct transition boolean matrix -- via state sum approximation
-        self.approximator.annotate_state_sum_transitions(model_params.topology)
+        anc_evt_finder.annotate_ancestral_states(model.topology, model.bcode_meta)
+        # Create the skeletons for the transition matrices -- via state sum approximation
+        self.transition_mat_wrappers = self.approximator.create_transition_matrix_wrappers(model.topology)
 
-
-    def get_likelihood(self, model_params: CLTLikelihoodModel, get_grad: bool = False):
+    def get_likelihood(self, model: CLTLikelihoodModel, get_grad: bool = False):
         """
         Does the Felsenstein algo to efficiently calculate the likelihood of the tree,
         assuming state_sum contains all the possible ancestral states (though that's not
@@ -56,13 +50,14 @@ class CLTLassoEstimator(CLTEstimator):
 
         @return The likelihood for proposed theta, the gradient too if requested
         """
-        transition_matrices = model_params.create_transition_matrices()
+        transition_matrices = model.initialize_transition_matrices(self.transition_mat_wrappers)
+        # TODO: Initialize trim probs -- just like we did for transition matrices!
 
         log_lik = 0
         L = dict() # Stores normalized probs
         pt_matrix = dict()
         trim_probs = dict()
-        for node in model_params.topology.traverse("postorder"):
+        for node in model.topology.traverse("postorder"):
             if node.is_leaf():
                 node_trans_mat = transition_matrices[node.node_id]
                 L[node.node_id] = np.zeros((node_trans_mat.num_states, 1))
@@ -76,14 +71,18 @@ class CLTLassoEstimator(CLTEstimator):
 
                     # Get the trim probabilities
                     trim_probs[child.node_id] = self._get_trim_probs(
-                            model_params,
+                            model,
                             ch_trans_mat,
                             node,
                             child)
 
                     # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
-                    branch_len = model_params.branch_lens[child.node_id]
-                    pt_matrix[child.node_id] = np.dot(ch_trans_mat.A, np.dot(np.diag(np.exp(ch_trans_mat.D * branch_len)), ch_trans_mat.A_inv))
+                    branch_len = model.branch_lens[child.node_id].eval()
+                    pt_matrix[child.node_id] = np.dot(
+                            ch_trans_mat.A,
+                            np.dot(
+                                np.diag(np.exp(ch_trans_mat.D * branch_len)),
+                                ch_trans_mat.A_inv))
 
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.
@@ -118,16 +117,16 @@ class CLTLassoEstimator(CLTEstimator):
                 L[node.node_id] /= scaler
                 log_lik += np.sum(np.log(scaler))
 
-        log_lik += np.log(L[model_params.root_node_id])
+        log_lik += np.log(L[model.root_node_id])
         return log_lik
 
     def _get_trim_probs(self,
-            model_params: CLTLikelihoodModel,
-            ch_trans_mat: TransitionMatrixWrapper,
+            model: CLTLikelihoodModel,
+            ch_trans_mat: TransitionMatrix,
             node: CellLineageTree,
             child: CellLineageTree):
         """
-        @param model_params: model parameter
+        @param model: model parameter
         @param ch_trans_mat: the transition matrix corresponding to child node (we make sure the entries in the trim prob matrix match
                         the order in ch_trans_mat)
         @param node: the parent node
@@ -142,7 +141,7 @@ class CLTLassoEstimator(CLTEstimator):
             for child_tts in child.state_sum.tts_list:
                 child_tts_key = ch_trans_mat.key_dict[child_tts]
                 diff_target_tracts = target_tract_repr_diff(node_tts, child_tts)
-                trim_prob = model_params.get_prob_unmasked_trims(child.anc_state, diff_target_tracts)
+                trim_prob = model.get_prob_unmasked_trims(child.anc_state, diff_target_tracts)
                 trim_prob_mat[node_tts_key, child_tts_key] = trim_prob
 
         return trim_prob_mat

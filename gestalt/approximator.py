@@ -7,79 +7,9 @@ from state_sum import StateSum
 from barcode_metadata import BarcodeMetadata
 from common import merge_target_tract_groups
 from clt_likelihood_model import CLTLikelihoodModel
+from transition_matrix import TransitionMatrixWrapper
 
-class TransitionToNode:
-    """
-    Stores information on the transition to another node in the TransitionGraph
-    """
-    def __init__(self, tt_evt: TargetTract, tt_group: Tuple[TargetTract]):
-        """
-        @param tt_evt: the target tract that was introduced
-        @param tt_group: the resulting target tract after this was introduced
-        """
-        self.tt_evt = tt_evt
-        self.tt_group = tt_group
-
-    @staticmethod
-    def create_transition_to(tt_group_orig: Tuple[TargetTract], tt_evt: TargetTract):
-        """
-        @param tt_group_orig: the original target tract group
-        @param tt_evt: the added target tract
-        @return the new Tuple[TargetTract]
-        """
-        # TODO: check that this target tract can be added?
-        if len(tt_group_orig):
-            tt_group_new = ()
-            tt_evt_added = False
-            for i, tt in enumerate(tt_group_orig):
-                if i == 0:
-                    if tt_evt.max_deact_target < tt.min_deact_target:
-                        tt_group_new += (tt_evt,)
-                        tt_evt_added = True
-
-                if tt.max_deact_target < tt_evt.min_deact_target or tt_evt.max_deact_target < tt.min_deact_target:
-                    tt_group_new += (tt,)
-
-                if not tt_evt_added and i < len(tt_group_orig) - 1:
-                    next_tt = tt_group_orig[i + 1]
-                    if next_tt.min_deact_target > tt_evt.max_deact_target:
-                        tt_group_new += (tt_evt,)
-                        tt_evt_added = True
-            if not tt_evt_added:
-                tt_group_new += (tt_evt,)
-            return TransitionToNode(tt_evt, tt_group_new)
-        else:
-            return TransitionToNode(tt_evt, (tt_evt,))
-
-class TransitionGraph:
-    """
-    The graph of how (partitions of) target tract representations can transition to each other.
-    Stores edges as a dictionary where the key is the from node and the values are the directed edges from that node.
-    """
-    def __init__(self, edges: Dict[Tuple[TargetTract], Set[TransitionToNode]] = dict()):
-        self.edges = edges
-
-    def get_children(self, node: Tuple[TargetTract]):
-        return self.edges[node]
-
-    def get_nodes(self):
-        return self.edges.keys()
-
-    def add_edge(self, from_node: Tuple[TargetTract], to_node: TransitionToNode):
-        if to_node in self.edges[from_node]:
-            raise ValueError("Edge already exists?")
-        if to_node.tt_group == from_node:
-            raise ValueError("Huh they are the same")
-        self.edges[from_node].add(to_node)
-
-    def add_node(self, node: Tuple[TargetTract]):
-        if len(self.edges) and node in self.get_nodes():
-            raise ValueError("Node already exists")
-        else:
-            self.edges[node] = set()
-
-    def __str__(self):
-        return str(self.edges)
+from approximator_transition_graph import TransitionToNode, TransitionGraph
 
 class ApproximatorLB:
     """
@@ -95,11 +25,32 @@ class ApproximatorLB:
         self.anc_generations = anc_generations
         self.bcode_meta = bcode_metadata
 
-    def annotate_state_sum_transitions(self, tree: CellLineageTree):
+    def create_transition_matrix_wrappers(self, topology: CellLineageTree):
+        """
+        Create a skeleton of the transition matrix for each branch using the approximation algo
+
+        @param topology: a tree, assumes this tree has the "node_id" feature
+        @return dictionary mapping `node_id` to TransitionMatrixWrapper
+        """
+        # First determine the state sum and transition possibilities of each node
+        self._annotate_state_sum_transitions(topology)
+
+        # Now create the TransitionMatrixWrapper for each node
+        transition_matrix_wrappers = dict()
+        for node in topology.traverse("postorder"):
+            if not node.is_root():
+                trans_mat = self._create_transition_matrix_wrapper(node)
+                transition_matrix_wrappers[node.node_id] = trans_mat
+        return transition_matrix_wrappers
+
+    def _annotate_state_sum_transitions(self, tree: CellLineageTree):
         """
         Annotate each branch of the tree with the state sum.
         Also annotates with the transition graphs between target tract representations.
 
+        TODO: do not annotate the tree, instead just return a dictionary?
+
+        The `state_sum` attribute is a list of target tract reprs that are in StateSum for that node.
         The `transition_graph_dict` attribute is a dictionary:
           key = a tuple of target tracts (corresponds to a subset of a target tract representation)
                 AND the maximum target tract that tuple can transition to
@@ -132,7 +83,7 @@ class ApproximatorLB:
         # Partition the anc's anc_state according to node's anc_state.
         # Used for deciding which states to add in node's StateSum since node's StateSum is
         # composed of states that cannot be < ancestor node's anc_state.
-        anc_partition = CLTLikelihoodModel.partition(anc.anc_state.indel_set_list, node.anc_state)
+        anc_partition = self.partition(anc.anc_state.indel_set_list, node.anc_state)
 
         # For each state in the parent node's StateSum, find the subgraph of nearby target tract repr
         node_state_sum = set()
@@ -142,7 +93,7 @@ class ApproximatorLB:
         sub_state_sums_dict = {}
         for tts in node.up.state_sum.tts_list:
             # Partition each state in the ancestral node's StateSum according to node's anc_state
-            tts_partition = CLTLikelihoodModel.partition(tts, node.anc_state)
+            tts_partition = self.partition(tts, node.anc_state)
             tts_sub_state_sums = []
             for max_indel_set in node.anc_state.indel_set_list:
                 tt_tuple_start = tts_partition[max_indel_set]
@@ -230,6 +181,77 @@ class ApproximatorLB:
 
         return tt_group_graph
 
+    def _create_transition_matrix_wrapper(self, node: CellLineageTree):
+        """
+        @return TransitionMatrixWrapper for the particular branch ending at `node`
+                only contains the states relevant to state_sum
+        """
+        transition_dict = dict()
+        indel_set_list = node.anc_state.indel_set_list
+        # Determine the values in the transition matrix by considering all possible states
+        # starting at the parent's StateSum.
+        # Recurse through all of its children to build out the transition matrix
+        for tts in node.up.state_sum.tts_list:
+            tts_partition_info = dict()
+            tts_partition = self.partition(tts, node.anc_state)
+            for indel_set in indel_set_list:
+                tt_tuple = tts_partition[indel_set]
+                graph_key = (tt_tuple, indel_set)
+                # To recurse, indicate the subgraphs for each partition and the current node
+                # (target tract group) we are currently located at.
+                tts_partition_info[indel_set] = {
+                        "start": tt_tuple,
+                        "graph": node.transition_graph_dict[graph_key]}
+            self._add_transition_dict_row(tts_partition_info, indel_set_list, transition_dict)
+
+        # Create sparse transition matrix given the dictionary representation
+        return TransitionMatrixWrapper(transition_dict)
+
+    def _add_transition_dict_row(
+            self,
+            tts_partition_info: Dict[IndelSet, Dict],
+            indel_set_list: List[IndelSet],
+            transition_dict: Dict):
+        """
+        Recursive function for adding transition matrix rows.
+        Function will modify transition_dict.
+        The rows added will correspond to states that are reachable along the subgraphs
+        in tts_partition_info.
+
+        @param tts_partition_info: indicate the subgraphs for each partition and the current node
+                                we are at for each subgraph
+        @param indel_set_list: the ordered list of indel sets from the node's AncState
+        @param transtion_dict: the dictionary corresponding to transitions
+        """
+        start_tts = merge_target_tract_groups([
+            tts_partition_info[ind_set]["start"] for ind_set in indel_set_list])
+        transition_dict[start_tts] = dict()
+
+        # Find all possible target tract representations within one step of start_tts
+        # Do this by taking one step in one of the subgraphs
+        for indel_set, val in tts_partition_info.items():
+            subgraph = val["graph"]
+            tt_tuple_start = val["start"]
+
+            # Each child is a possibility
+            children = subgraph.get_children(tt_tuple_start)
+            for child in children:
+                new_tts_part_info = {k: v.copy() for k,v in tts_partition_info.items()}
+                new_tts_part_info[indel_set]["start"] = child.tt_group
+
+                # Create the new target tract representation
+                new_tts = merge_target_tract_groups([
+                    new_tts_part_info[ind_set]["start"] for ind_set in indel_set_list])
+
+                # Add entry to transition matrix
+                if new_tts not in transition_dict[start_tts]:
+                    transition_dict[start_tts][new_tts] = child.tt_evt
+                else:
+                    raise ValueError("already exists?")
+
+                # Recurse
+                self._add_transition_dict_row(new_tts_part_info, indel_set_list, transition_dict)
+
     @staticmethod
     def get_deactivated_targets(tt_grp: Tuple[IndelSet]):
         if tt_grp:
@@ -261,3 +283,30 @@ class ApproximatorLB:
                 active_any_targs = list(range(wc.min_target, wc.max_target + 1))
 
         return active_any_targs
+
+    @staticmethod
+    def partition(tts: Tuple[IndelSet], anc_state: AncState):
+        """
+        @return split tts according to anc_state: Dict[IndelSet, Tuple[TargetTract]]
+        """
+        parts = {indel_set : () for indel_set in anc_state.indel_set_list}
+
+        tts_idx = 0
+        n_tt = len(tts)
+        anc_state_idx = 0
+        n_anc_state = len(anc_state.indel_set_list)
+        while tts_idx < n_tt and anc_state_idx < n_anc_state:
+            cur_tt = tts[tts_idx]
+            indel_set = anc_state.indel_set_list[anc_state_idx]
+
+            if cur_tt.max_deact_target < indel_set.min_deact_target:
+                tts_idx += 1
+                continue
+            elif indel_set.max_deact_target < cur_tt.min_deact_target:
+                anc_state_idx += 1
+                continue
+
+            # Should be overlapping now
+            parts[indel_set] = parts[indel_set] + (cur_tt,)
+            tts_idx += 1
+        return parts
