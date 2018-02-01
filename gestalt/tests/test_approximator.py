@@ -42,3 +42,70 @@ class ApproximatorLBTestCase(unittest.TestCase):
         indel_set = SingletonWC(30, 20, 2, 2, 4, 4, "hello")
         active_any_targs = ApproximatorLB.get_active_any_trim_targets(indel_set, tt_grp)
         self.assertEqual(active_any_targs, [3])
+
+    def test_partition(self):
+        tts = (TargetTract(8,8,8,8),)
+        anc_state = AncState([
+            Wildcard(1,4),
+            Wildcard(8,8)])
+        parts = ApproximatorLB.partition(tts, anc_state)
+        self.assertEqual(parts[Wildcard(1,4)], ())
+        self.assertEqual(parts[Wildcard(8,8)], (tts[0],))
+
+        tts = (
+            TargetTract(1,1,2,2),
+            TargetTract(3,3,3,4),
+            TargetTract(8,8,8,8))
+        anc_state = AncState([
+            Wildcard(1,4),
+            Wildcard(8,9)])
+        parts = ApproximatorLB.partition(tts, anc_state)
+        self.assertEqual(parts[Wildcard(1,4)], (tts[0], tts[1]))
+        self.assertEqual(parts[Wildcard(8,9)], (tts[2],))
+
+        tts = ()
+        anc_state = AncState([
+            Wildcard(1,4),
+            Wildcard(8,9)])
+        parts = ApproximatorLB.partition(tts, anc_state)
+        self.assertEqual(parts[Wildcard(1,4)], ())
+        self.assertEqual(parts[Wildcard(8,9)], ())
+
+    def test_transition_dict_row(self):
+        node1 = (TargetTract(3,3,3,3),)
+        node2 = (TargetTract(2,2,4,4),)
+        node3 = (TargetTract(1,1,5,5),)
+        node4 = (TargetTract(0,0,9,9),)
+        graph = TransitionGraph()
+        graph.add_node(())
+        graph.add_node(node1)
+        graph.add_node(node2)
+        graph.add_node(node3)
+        graph.add_node(node4)
+        graph.add_edge((), TransitionToNode(node1[0], node1))
+        graph.add_edge((), TransitionToNode(node2[0], node2))
+        graph.add_edge((), TransitionToNode(node3[0], node3))
+        graph.add_edge(node2, TransitionToNode(node3[0], node3))
+        graph.add_edge(node3, TransitionToNode(node4[0], node4))
+        tts_partition_info = {
+            node4: {
+                "start": (),
+                "graph": graph
+                }}
+        indel_set_list = [node4]
+        transition_dict = dict()
+        self.mdl._add_transition_dict_row(tts_partition_info, indel_set_list, transition_dict)
+        self.assertTrue(() in transition_dict[()])
+        self.assertTrue(node1 in transition_dict[()])
+        self.assertTrue(node2 in transition_dict[()])
+        self.assertTrue(node3 in transition_dict[()])
+        self.assertEqual(len(transition_dict[()].keys()), 5)
+        self.assertTrue(node3 in transition_dict[node2])
+        self.assertTrue(node2 in transition_dict[node2])
+        self.assertTrue("unlikely" in transition_dict[node2])
+        self.assertEqual(len(transition_dict[node2].keys()), 3)
+        self.assertTrue(node4 in transition_dict[node3])
+        self.assertEqual(len(transition_dict[node3].keys()), 3)
+        self.assertEqual(transition_dict[node4]["unlikely"], 0)
+        self.assertEqual(transition_dict[node4][node4], 0)
+        self.assertEqual(len(transition_dict[node4].keys()), 2)
