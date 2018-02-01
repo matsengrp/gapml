@@ -24,7 +24,6 @@ class CLTLassoEstimator(CLTEstimator):
     """
     def __init__(
         self,
-        sess: Session,
         penalty_param: float,
         model: CLTLikelihoodModel,
         approximator: ApproximatorLB):
@@ -32,7 +31,6 @@ class CLTLassoEstimator(CLTEstimator):
         @param penalty_param: lasso penalty parameter
         @param model: initial CLT model params
         """
-        self.sess = sess
         self.penalty_param = penalty_param
         self.model = model
         self.approximator = approximator

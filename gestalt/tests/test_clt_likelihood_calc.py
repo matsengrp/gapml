@@ -2,6 +2,7 @@ import unittest
 
 import numpy as np
 import scipy.linalg
+import tensorflow as tf
 
 from allele_events import AlleleEvents, Event
 from indel_sets import TargetTract, Singleton
@@ -25,16 +26,20 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         self.approximator = ApproximatorLB(extra_steps=1, anc_generations=1, bcode_metadata=self.bcode_metadata)
 
     def _create_model(self, topology, branch_len):
-        model = CLTLikelihoodModel(topology, self.bcode_metadata)
-        model.set_vals(
-            [branch_len for _ in range(model.num_nodes)],
-            target_lams = np.ones(self.num_targets),
-            trim_long_probs = 0.1 * np.ones(2),
-            trim_zero_prob = 0.5,
-            trim_poisson_params = np.ones(2),
-            insert_zero_prob = 0.5,
-            insert_poisson_param = 2,
-            cell_type_lams = None)
+        sess = tf.InteractiveSession()
+        num_nodes = len([n for n in topology.traverse("postorder")])
+        model = CLTLikelihoodModel(
+                topology,
+                self.bcode_metadata,
+                sess,
+                branch_lens = [branch_len for _ in range(num_nodes)],
+                target_lams = np.ones(self.num_targets),
+                trim_long_probs = 0.1 * np.ones(2),
+                trim_zero_prob = 0.5,
+                trim_poissons = np.ones(2),
+                insert_zero_prob = 0.5,
+                insert_poisson = 2)
+        tf.global_variables_initializer().run()
         return model
 
     def test_branch_likelihood_no_events(self):
@@ -48,7 +53,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
 
         # Calculate the hazard using the CLT estimator
         lik_calculator = CLTLassoEstimator(0, model, self.exact_approximator)
-        log_lik = lik_calculator.get_likelihood(model)
+        log_lik = lik_calculator.get_log_likelihood(model)
 
         # Manually calculate the hazard
         hazard_away = model.get_hazard_away([])
@@ -61,7 +66,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
 
         # Calculate the hazard using approximate algo -- should be same
         lik_approx_calc = CLTLassoEstimator(0, model, self.approximator)
-        log_lik_approx = lik_approx_calc.get_likelihood(model)
+        log_lik_approx = lik_approx_calc.get_log_likelihood(model)
         self.assertEqual(log_lik_approx, manual_log_prob)
 
     def test_branch_likelihood(self):
@@ -79,14 +84,16 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
 
         branch_len = 10
         model = self._create_model(topology, branch_len)
+        target_lams = model.target_lams.eval()
+        trim_long_probs = model.trim_long_probs.eval()
 
         # Calculate the hazard using the CLT estimator
         lik_calculator = CLTLassoEstimator(0, model, self.exact_approximator)
-        log_lik = lik_calculator.get_likelihood(model)
+        log_lik = lik_calculator.get_log_likelihood(model)
 
         # Manually calculate the hazard
         hazard_away = model.get_hazard_away([])
-        hazard_to_event = model.target_lams[0] * (1 - model.trim_long_left) * (1 - model.trim_long_right)
+        hazard_to_event = target_lams[0] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
         hazard_away_from_event = model.get_hazard_away([TargetTract(0,0,0,0)])
         q_mat = np.matrix([
             [-hazard_away, hazard_to_event, hazard_away - hazard_to_event],
@@ -96,7 +103,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         manual_cut_log_prob = np.log(prob_mat[0,1])
 
         # Get prob of deletion - one left, two right
-        manual_trim_probs = model._get_cond_prob_trims([Singleton(
+        manual_trim_probs = model.initialize_indel_cond_probs([Singleton(
             event.start_pos,
             event.del_len,
             event.min_target,
@@ -104,6 +111,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             event.max_target,
             event.max_target,
             event.insert_str)])
+        manual_trim_probs = list(manual_trim_probs.values())[0]
         manual_log_prob = manual_cut_log_prob + np.log(manual_trim_probs)
 
         # Check the two are equal
@@ -124,15 +132,17 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
 
         branch_len = 10
         model = self._create_model(topology, branch_len)
+        target_lams = model.target_lams.eval()
+        trim_long_probs = model.trim_long_probs.eval()
 
         # Calculate the hazard using the CLT estimator
         lik_calculator = CLTLassoEstimator(0, model, self.exact_approximator)
-        log_lik = lik_calculator.get_likelihood(model)
+        log_lik = lik_calculator.get_log_likelihood(model)
 
         # Manually calculate the hazard -- can cut the middle only or cut the whole barcode
         hazard_away = model.get_hazard_away([])
-        hazard_to_cut1 = model.target_lams[1] * (1 - model.trim_long_left) * (1 - model.trim_long_right)
-        hazard_to_cut03 = model.target_lams[0] * model.target_lams[2] * (1 - model.trim_long_left) * (1 - model.trim_long_right)
+        hazard_to_cut1 = target_lams[1] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
+        hazard_to_cut03 = target_lams[0] * target_lams[2] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
         hazard_away_from_cut1 = model.get_hazard_away([TargetTract(1,1,1,1)])
 
         q_mat = np.matrix([
@@ -144,7 +154,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         manual_cut_log_prob = np.log(prob_mat[0,2])
 
         # Get prob of deletion
-        manual_trim_probs = model._get_cond_prob_trims([Singleton(
+        manual_trim_probs = model.initialize_indel_cond_probs([Singleton(
             event.start_pos,
             event.del_len,
             event.min_target,
@@ -152,6 +162,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             event.max_target,
             event.max_target,
             event.insert_str)])
+        manual_trim_probs = list(manual_trim_probs.values())[0]
         manual_log_prob = manual_cut_log_prob + np.log(manual_trim_probs)
 
         # Check the two are equal
@@ -159,7 +170,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
 
         # Calculate the hazard using approximate algo -- should be smaller
         lik_approx_calc = CLTLassoEstimator(0, model, self.approximator)
-        log_lik_approx = lik_approx_calc.get_likelihood(model)
+        log_lik_approx = lik_approx_calc.get_log_likelihood(model)
         self.assertTrue(log_lik_approx < manual_log_prob)
 
     def test_two_branch_likelihood_big_intertarget_del(self):
@@ -180,16 +191,18 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
 
         branch_len = 10
         model = self._create_model(topology, branch_len)
+        target_lams = model.target_lams.eval()
+        trim_long_probs = model.trim_long_probs.eval()
 
         # Calculate the hazard using the CLT estimator
         lik_calculator = CLTLassoEstimator(0, model, self.exact_approximator)
-        log_lik = lik_calculator.get_likelihood(model)
+        log_lik = lik_calculator.get_log_likelihood(model)
 
         # The probability should be the same as a single branch with double the length
         # Manually calculate the hazard -- can cut the middle only or cut the whole barcode
         hazard_away = model.get_hazard_away([])
-        hazard_to_cut1 = model.target_lams[1] * (1 - model.trim_long_left) * (1 - model.trim_long_right)
-        hazard_to_cut03 = model.target_lams[0] * model.target_lams[2] * (1 - model.trim_long_left) * (1 - model.trim_long_right)
+        hazard_to_cut1 = target_lams[1] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
+        hazard_to_cut03 = target_lams[0] * target_lams[2] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
         hazard_away_from_cut1 = model.get_hazard_away([TargetTract(1,1,1,1)])
 
         q_mat = np.matrix([
@@ -201,7 +214,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         manual_cut_log_prob = np.log(prob_mat[0,2])
 
         # Get prob of deletion
-        manual_trim_probs = model._get_cond_prob_trims([Singleton(
+        manual_trim_probs = model.initialize_indel_cond_probs([Singleton(
             event.start_pos,
             event.del_len,
             event.min_target,
@@ -209,6 +222,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             event.max_target,
             event.max_target,
             event.insert_str)])
+        manual_trim_probs = list(manual_trim_probs.values())[0]
         manual_log_prob = manual_cut_log_prob + np.log(manual_trim_probs)
 
         # Check the two are equal
@@ -216,5 +230,5 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
 
         # Calculate the hazard using approximate algo -- should be smaller
         lik_approx_calc = CLTLassoEstimator(0, model, self.approximator)
-        log_lik_approx = lik_approx_calc.get_likelihood(model)
+        log_lik_approx = lik_approx_calc.get_log_likelihood(model)
         self.assertTrue(log_lik_approx < manual_log_prob)

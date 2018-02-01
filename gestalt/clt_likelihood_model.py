@@ -350,7 +350,7 @@ class CLTLikelihoodModel:
         return hazard_aways
 
     def get_hazard_away(self, tts: Tuple[TargetTract]):
-        return self.get_hazard_aways([tts])
+        return self.get_hazard_aways([tts])[0]
 
     def initialize_indel_cond_probs(self, singletons: List[Singleton]):
         """
@@ -358,6 +358,9 @@ class CLTLikelihoodModel:
 
         @return a dict mapping a singleton to its conditional probability
         """
+        if len(singletons) == 0:
+            return dict()
+
         targets = []
         long_statuses = []
         positions = []
