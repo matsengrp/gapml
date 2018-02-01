@@ -20,7 +20,6 @@ def annotate_ancestral_states(tree: CellLineageTree, bcode_meta: BarcodeMetadata
             node.add_feature("anc_state", AncState.create_for_observed_allele(node.allele_events, bcode_meta))
         elif node.is_root():
             node.add_feature("anc_state", AncState())
-            print(node.get_ascii(attributes=["anc_state"], show_internal=True))
         else:
             node_anc_state = get_possible_anc_states(node)
             node.add_feature("anc_state", node_anc_state)

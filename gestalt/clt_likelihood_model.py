@@ -82,6 +82,7 @@ class CLTLikelihoodModel:
         self._create_hazard_away()
         self._create_del_probs()
         self._create_insert_probs()
+        self._create_indel_probs()
 
     def _create_placeholders(self):
         # placeholders for info about an indel
@@ -183,10 +184,6 @@ class CLTLikelihoodModel:
                     (1 - self.trim_zero_prob) * left_prob * right_prob),
                 left_prob * right_prob)
 
-        self.del_prob_grad = self.grad_opt.compute_gradients(
-                self.del_prob,
-                var_list = [self.trim_zero_prob, self.trim_poissons])
-
     def _create_insert_probs(self):
         poiss_unstd = tf.exp(-self.insert_poisson) * tf.pow(self.insert_poisson, self.insert_len)
         insert_len_prob = poiss_unstd/tf.exp(tf.lgamma(self.insert_len + 1))
@@ -196,6 +193,12 @@ class CLTLikelihoodModel:
                 is_insert_zero,
                 self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob,
                 (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob)
+
+    def _create_indel_probs(self):
+        self.singleton_cond_prob = self.insert_prob * self.del_prob
+        self.singleton_cond_grad = self.grad_opt.compute_gradients(
+                self.singleton_cond_prob,
+                var_list = [self.trim_zero_prob, self.trim_poissons, self.insert_zero_prob, self.insert_poisson])
 
     def initialize_transition_matrices(self, transition_mat_wrappers: Dict[int, TransitionMatrixWrapper]):
         """
@@ -347,40 +350,34 @@ class CLTLikelihoodModel:
         return hazard_aways
 
     def get_hazard_away(self, tts: Tuple[TargetTract]):
-        return self.get_hazard_aways([tts])
+        return self.get_hazard_aways([tts])[0]
 
-    def get_prob_unmasked_trims(self, anc_state: AncState, tts: Tuple[TargetTract]):
+    def initialize_indel_cond_probs(self, singletons: List[Singleton]):
         """
-        @return probability of the trims for the corresponding singletons in the anc_state
-        """
-        matching_sgs = CLTLikelihoodModel.get_matching_singletons(anc_state, tts)
-        return self._get_cond_prob_trims(matching_sgs)
+        @param singletons: a list of singletons that we want the conditional probability
 
-    def _get_cond_prob_trims(self, singletons: List[Singleton]):
+        @return a dict mapping a singleton to its conditional probability
         """
-        @return product of conditional probabs of the trims associated with each singleton
-        """
-        prob = 1
-        for singleton in singletons:
-            # Calculate probability of that singleton
-            del_prob = self._get_cond_prob_singleton_del(singleton)
-            insert_prob = self._get_cond_prob_singleton_insert(singleton)
-            prob *= del_prob * insert_prob
-        return prob
+        if len(singletons) == 0:
+            return dict()
 
-    def _get_cond_prob_singleton_del(self, singleton: Singleton):
-        del_prob = self.sess.run(self.del_prob, feed_dict={
-            self.targets_ph: [[singleton.min_target,singleton.max_target]],
-            self.long_status_ph:[[singleton.is_left_long, singleton.is_right_long]],
-            self.positions_ph: [[singleton.start_pos, singleton.del_len, singleton.insert_len]]})
-        return del_prob[0]
+        targets = []
+        long_statuses = []
+        positions = []
+        for sg in singletons:
+            targets.append([sg.min_target, sg.max_target])
+            long_statuses.append([sg.is_left_long, sg.is_right_long])
+            positions.append([sg.start_pos, sg.del_len, sg.insert_len])
 
-    def _get_cond_prob_singleton_insert(self, singleton: Singleton):
-        insert_prob = self.sess.run(self.insert_prob, feed_dict={
-            self.targets_ph: [[singleton.min_target,singleton.max_target]],
-            self.long_status_ph:[[singleton.is_left_long, singleton.is_right_long]],
-            self.positions_ph: [[singleton.start_pos, singleton.del_len, singleton.insert_len]]})
-        return insert_prob[0]
+        singleton_cond_prob = self.sess.run(self.singleton_cond_prob, feed_dict={
+            self.targets_ph: targets,
+            self.long_status_ph: long_statuses,
+            self.positions_ph: positions})
+
+        singleton_prob_dict = dict()
+        for i, sg in enumerate(singletons):
+            singleton_prob_dict[sg] = singleton_cond_prob[i]
+        return singleton_prob_dict
 
     @staticmethod
     def get_matching_singletons(anc_state: AncState, tts: Tuple[TargetTract]):

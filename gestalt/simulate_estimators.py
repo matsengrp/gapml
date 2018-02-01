@@ -144,7 +144,6 @@ def main():
         for clt in forest:
             obs_leaves, pruned_clt = observer.observe_leaves(clt, seed = args.seed)
             print("NUM LEAVES", len(pruned_clt))
-            st_time = time.time()
             # Let the two methods compare just in terms of topology
             # To do that, we need to collapse our tree.
             # We collapse branches if the alleles are identical.
@@ -157,9 +156,11 @@ def main():
             approximator = ApproximatorLB(extra_steps = 2, anc_generations = 1, bcode_metadata = bcode_meta)
             init_model_params = CLTLikelihoodModel(pruned_clt, bcode_meta, sess)
             tf.global_variables_initializer().run()
-            lasso_est = CLTLassoEstimator(sess, 0, init_model_params, approximator)
-            lasso_est.get_likelihood(init_model_params, get_grad=True)
+            lasso_est = CLTLassoEstimator(0, init_model_params, approximator)
+            st_time = time.time()
+            log_lik = lasso_est.get_log_likelihood(init_model_params, get_grad=True)
             print("TIME", time.time() - st_time)
+            print("log lik", log_lik)
 
 
 if __name__ == "__main__":
