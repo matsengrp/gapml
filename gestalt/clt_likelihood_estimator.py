@@ -2,7 +2,7 @@ import time
 from tensorflow import Session
 import numpy as np
 import scipy.linalg
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 from numpy import ndarray
 
 from clt_estimator import CLTEstimator
@@ -11,7 +11,7 @@ from clt_likelihood_model import CLTLikelihoodModel
 import ancestral_events_finder as anc_evt_finder
 from approximator import ApproximatorLB
 from transition_matrix import TransitionMatrixWrapper, TransitionMatrix
-from indel_sets import TargetTract
+from indel_sets import TargetTract, Singleton
 
 from state_sum import StateSum
 from common import target_tract_repr_diff
@@ -41,8 +41,30 @@ class CLTLassoEstimator(CLTEstimator):
         anc_evt_finder.annotate_ancestral_states(model.topology, model.bcode_meta)
         # Create the skeletons for the transition matrices -- via state sum approximation
         self.transition_mat_wrappers = self.approximator.create_transition_matrix_wrappers(model.topology)
+        # Create the skeletons for calculating conditional probabilities of the trims
+        self._create_unmasked_singletons_wrappers()
 
-    def get_likelihood(self, model: CLTLikelihoodModel, get_grad: bool = False):
+    def _create_unmasked_singletons_wrappers(self):
+        """
+        Creates the set of singletons that will need their trim probabilities calculated
+        """
+        # Stores the unmasked singletons associated with likely transitions from a node to its child node
+        # Key: (node, child) and Value: singletons
+        self.node_child_singletons = dict()
+        # Stores the singletons that are unmasked along some likely transition in the tree
+        self.unmasked_singletons = set()
+        for node in self.model.topology.traverse("postorder"):
+            if not node.is_leaf():
+                for child in node.children:
+                    for node_tts in node.state_sum.tts_list:
+                        for child_tts in child.state_sum.tts_list:
+                            diff_target_tracts = target_tract_repr_diff(node_tts, child_tts)
+                            matching_sgs = CLTLikelihoodModel.get_matching_singletons(child.anc_state, diff_target_tracts)
+                            self.node_child_singletons[(node_tts, child_tts)] = matching_sgs
+                            self.unmasked_singletons.update(matching_sgs)
+        self.unmasked_singletons = list(self.unmasked_singletons)
+
+    def get_log_likelihood(self, model: CLTLikelihoodModel, get_grad: bool = False):
         """
         Does the Felsenstein algo to efficiently calculate the likelihood of the tree,
         assuming state_sum contains all the possible ancestral states (though that's not
@@ -50,8 +72,10 @@ class CLTLassoEstimator(CLTEstimator):
 
         @return The likelihood for proposed theta, the gradient too if requested
         """
+        st_time = time.time()
         transition_matrices = model.initialize_transition_matrices(self.transition_mat_wrappers)
-        # TODO: Initialize trim probs -- just like we did for transition matrices!
+        unmasked_singleton_probs = model.initialize_indel_cond_probs(self.unmasked_singletons)
+        print("tensorflow time", time.time() - st_time)
 
         log_lik = 0
         L = dict() # Stores normalized probs
@@ -71,8 +95,8 @@ class CLTLassoEstimator(CLTEstimator):
 
                     # Get the trim probabilities
                     trim_probs[child.node_id] = self._get_trim_probs(
-                            model,
                             ch_trans_mat,
+                            unmasked_singleton_probs,
                             node,
                             child)
 
@@ -121,8 +145,8 @@ class CLTLassoEstimator(CLTEstimator):
         return log_lik
 
     def _get_trim_probs(self,
-            model: CLTLikelihoodModel,
             ch_trans_mat: TransitionMatrix,
+            singleton_probs: Dict[Singleton, float],
             node: CellLineageTree,
             child: CellLineageTree):
         """
@@ -140,9 +164,9 @@ class CLTLassoEstimator(CLTEstimator):
             node_tts_key = ch_trans_mat.key_dict[node_tts]
             for child_tts in child.state_sum.tts_list:
                 child_tts_key = ch_trans_mat.key_dict[child_tts]
-                diff_target_tracts = target_tract_repr_diff(node_tts, child_tts)
-                trim_prob = model.get_prob_unmasked_trims(child.anc_state, diff_target_tracts)
-                trim_prob_mat[node_tts_key, child_tts_key] = trim_prob
+                singletons = self.node_child_singletons[(node_tts, child_tts)]
+                trim_probs = [singleton_probs[sg] for sg in singletons]
+                trim_prob_mat[node_tts_key, child_tts_key] = np.exp(np.sum(np.log(trim_probs)))
 
         return trim_prob_mat
 
