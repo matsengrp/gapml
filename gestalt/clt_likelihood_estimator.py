@@ -98,6 +98,7 @@ class CLTLassoEstimator(CLTEstimator):
                             node,
                             child)
 
+                    # TODO: I think I can move this to tensorflow too?
                     # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
                     branch_len = model.branch_lens[child.node_id].eval()
                     pt_matrix[child.node_id] = np.dot(

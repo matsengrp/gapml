@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Tuple
 import numpy as np
 
 class TransitionMatrixWrapper:
@@ -11,7 +11,9 @@ class TransitionMatrixWrapper:
         self.matrix_dict = matrix_dict
 
 class TransitionMatrix:
-    def __init__(self, matrix_dict: Dict[str, Dict[str, float]]):
+    def __init__(self,
+            matrix_dict: Dict[str, Dict[str, float]],
+            matrix_grad_dict: Dict[str, Dict[str, Tuple]] = None):
         """
         Create transition matrix given the dictionary representation.
         Assume each key in the dictionary corresponds to a possible
