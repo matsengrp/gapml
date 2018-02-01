@@ -68,13 +68,36 @@ class CLTLikelihoodModel:
         if target_lams is None:
             target_lams = 0.1 * np.ones(self.num_targets)
 
-        self.branch_lens = tf.Variable(branch_lens)
-        self.target_lams = tf.Variable(target_lams, dtype=tf.float32)
-        self.trim_long_probs = tf.Variable(trim_long_probs, dtype=tf.float32)
-        self.trim_zero_prob = tf.Variable(trim_zero_prob, dtype=tf.float32)
-        self.trim_poissons = tf.Variable(trim_poissons, dtype=tf.float32)
-        self.insert_zero_prob = tf.Variable(insert_zero_prob, dtype=tf.float32)
-        self.insert_poisson = tf.Variable(insert_poisson, dtype=tf.float32)
+        self.all_vars = tf.Variable(
+                np.concatenate([
+                    branch_lens,
+                    target_lams,
+                    trim_long_probs,
+                    [trim_zero_prob],
+                    trim_poissons,
+                    [insert_zero_prob],
+                    [insert_poisson]]),
+                dtype=tf.float32)
+
+        self.branch_lens = self.all_vars[:branch_lens.size]
+        prev_size = branch_lens.size
+        up_to_size = branch_lens.size + target_lams.size
+        self.target_lams = self.all_vars[prev_size:up_to_size]
+        prev_size = up_to_size
+        up_to_size += trim_long_probs.size
+        self.trim_long_probs = self.all_vars[prev_size: up_to_size]
+        prev_size = up_to_size
+        up_to_size += 1
+        self.trim_zero_prob = self.all_vars[prev_size: up_to_size]
+        prev_size = up_to_size
+        up_to_size += trim_poissons.size
+        self.trim_poissons =self.all_vars[prev_size: up_to_size]
+        prev_size = up_to_size
+        up_to_size += 1
+        self.insert_zero_prob =self.all_vars[prev_size: up_to_size]
+        prev_size = up_to_size
+        up_to_size += 1
+        self.insert_poisson =self.all_vars[prev_size: up_to_size]
 
         self.grad_opt = tf.train.GradientDescentOptimizer(learning_rate=1)
         self._create_placeholders()
@@ -113,9 +136,10 @@ class CLTLikelihoodModel:
         self.hazard = tf.exp(log_lambda_part + tf.log(left_trim_prob) + tf.log(right_trim_prob))
 
         # Compute the gradient
+        # TODO: This does not do the right thing!!!
         self.hazard_grad = self.grad_opt.compute_gradients(
             self.hazard,
-            var_list=[self.target_lams, self.trim_long_probs])
+            var_list=[self.all_vars])
 
     def _create_hazard_away(self):
         """
@@ -130,9 +154,10 @@ class CLTLikelihoodModel:
         self.hazard_away = tf.reduce_sum(focal_hazards, axis=1) + tf.reduce_sum(inter_target_hazards, axis=1)
 
         # Compute the gradient
+        # TODO: This does not do the right thing!!!
         self.hazard_away_grad = self.grad_opt.compute_gradients(
             self.hazard_away,
-            var_list=[self.target_lams, self.trim_long_probs])
+            var_list=[self.all_vars])
 
     def _create_hazard_list(self, trim_left: bool, trim_right: bool):
         """
@@ -198,7 +223,7 @@ class CLTLikelihoodModel:
         self.singleton_cond_prob = self.insert_prob * self.del_prob
         self.singleton_cond_grad = self.grad_opt.compute_gradients(
                 self.singleton_cond_prob,
-                var_list = [self.trim_zero_prob, self.trim_poissons, self.insert_zero_prob, self.insert_poisson])
+                var_list = [self.all_vars])
 
     def initialize_transition_matrices(self, transition_mat_wrappers: Dict[int, TransitionMatrixWrapper]):
         """
@@ -220,32 +245,44 @@ class CLTLikelihoodModel:
                     tt_evts.append(tt_evt)
 
             # Gets hazards (by tensorflow)
-            hazard_aways = self.get_hazard_aways(start_tts_list)
-            hazards = self.get_hazards(tt_evts)
+            # TODO: maybe combine them to be more efficient?
+            hazard_aways, hazard_away_grads = self.get_hazard_aways(start_tts_list)
+            hazards, hazard_grads = self.get_hazards(tt_evts)
 
             # Now fill in the matrix
             idx = 0
             matrix_dict = dict()
+            matrix_grad_dict = dict()
             for i, (start_tts, matrix_row) in enumerate(matrix_wrapper.matrix_dict.items()):
                 matrix_dict[start_tts] = dict()
+                matrix_grad_dict[start_tts] = dict()
                 # Tracks the total hazard to the likely states
                 haz_to_likely = 0
+                haz_grad_to_likely = 0
                 for end_tts, tt_evt in matrix_row.items():
                     haz = hazards[idx]
+                    haz_grad = hazard_grads[idx]
+                    print("HAZ GRAD", haz_grad)
                     matrix_dict[start_tts][end_tts] = haz
+                    matrix_grad_dict[start_tts][end_tts] = haz_grad
                     haz_to_likely += haz
+                    haz_grad_to_likely += haz_grad
                     idx += 1
 
                 haz_away = hazard_aways[i]
+                haz_away_grad = hazard_away_grads[i]
                 # Hazard to unlikely state is hazard away minus hazard to likely states
                 matrix_dict[start_tts][UNLIKELY] = haz_away - haz_to_likely
+                matrix_grad_dict[start_tts][UNLIKELY] = haz_away_grad - haz_grad_to_likely
                 # Hazard of staying is negative of hazard away
                 matrix_dict[start_tts][start_tts] = -haz_away
+                matrix_grad_dict[start_tts][start_tts] = -haz_away_grad
 
             # Add unlikely state
             matrix_dict[UNLIKELY] = dict()
+            matrix_grad_dict[UNLIKELY] = dict()
 
-            all_matrices[node_id] = TransitionMatrix(matrix_dict)
+            all_matrices[node_id] = TransitionMatrix(matrix_dict, matrix_grad_dict)
         return all_matrices
 
     def get_hazards(self, tt_evts: List[TargetTract]):
@@ -253,7 +290,7 @@ class CLTLikelihoodModel:
         Propagates through the tensorflow graph to obtain hazard of each TargetTract in `tt_evts`
         """
         if len(tt_evts) == 0:
-            return []
+            return [], []
 
         target_inputs = []
         long_status_inputs = []
@@ -261,17 +298,21 @@ class CLTLikelihoodModel:
             target_inputs.append([tt_evt.min_target, tt_evt.max_target])
             long_status_inputs.append([tt_evt.is_left_long, tt_evt.is_right_long])
 
-        hazards = self.sess.run(self.hazard, feed_dict={
-            self.targets_ph: target_inputs,
-            self.long_status_ph: long_status_inputs})
-        return hazards
+        hazards, hazard_grads = self.sess.run(
+                [self.hazard, self.hazard_grad],
+                feed_dict={
+                    self.targets_ph: target_inputs,
+                    self.long_status_ph: long_status_inputs})
+        hazard_grads = [g_tup[0] for g_tup in hazard_grads]
+        return hazards, hazard_grads
 
     def get_hazard(self, tt_evt: TargetTract):
         """
         @param tt_evt: the target tract that is getting introduced
         @return hazard of the event happening
         """
-        return self.get_hazards([tt_evt])[0]
+        hazard, _ = self.get_hazards([tt_evt])
+        return hazard[0]
 
     def _get_hazard_masks(self, tts:Tuple[TargetTract]):
         """
@@ -342,15 +383,17 @@ class CLTLikelihoodModel:
             left_trimmables.append(left_m)
             right_trimmables.append(right_m)
 
-        hazard_aways = self.sess.run(
-                self.hazard_away,
+        hazard_aways, hazard_aways_grad = self.sess.run(
+                [self.hazard_away, self.hazard_away_grad],
                 feed_dict = {
                     self.left_trimmables_ph: left_trimmables,
                     self.right_trimmables_ph: right_trimmables})
-        return hazard_aways
+        hazard_aways_grad = [g_tup[0] for g_tup in hazard_aways_grad]
+        return hazard_aways, hazard_aways_grad
 
     def get_hazard_away(self, tts: Tuple[TargetTract]):
-        return self.get_hazard_aways([tts])[0]
+        hazard_away, _ = self.get_hazard_aways([tts])
+        return hazard_away[0]
 
     def initialize_indel_cond_probs(self, singletons: List[Singleton]):
         """

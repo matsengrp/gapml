@@ -23,7 +23,6 @@ from collapsed_tree import CollapsedTree
 from alignment import AlignerNW
 from barcode_metadata import BarcodeMetadata
 from approximator import ApproximatorLB
-from clt_likelihood_model_tensorflow import CLTLikelihoodModelCalculator
 
 from constants import *
 from summary_util import *
@@ -112,7 +111,7 @@ def main():
                     target_lams = np.array(args.target_lambdas),
                     trim_long_probs = np.array([0.05, 0.05]),
                     trim_zero_prob = args.repair_indel_probability,
-                    trim_poissons = [args.repair_deletion_lambda, args.repair_deletion_lambda],
+                    trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
                     insert_zero_prob = args.repair_indel_probability,
                     insert_poisson = args.repair_insertion_lambda)
             tf.global_variables_initializer().run()

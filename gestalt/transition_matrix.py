@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Tuple
 import numpy as np
 
 class TransitionMatrixWrapper:
@@ -11,7 +11,9 @@ class TransitionMatrixWrapper:
         self.matrix_dict = matrix_dict
 
 class TransitionMatrix:
-    def __init__(self, matrix_dict: Dict[str, Dict[str, float]]):
+    def __init__(self,
+            matrix_dict: Dict[str, Dict[str, float]],
+            matrix_grad_dict: Dict[str, Dict[str, Tuple]] = None):
         """
         Create transition matrix given the dictionary representation.
         Assume each key in the dictionary corresponds to a possible
@@ -36,6 +38,19 @@ class TransitionMatrix:
         # Store the matrix diagonlization decomposition
         self.D, self.A = np.linalg.eig(self.matrix)
         self.A_inv = np.linalg.inv(self.A)
+
+        # Store the gradient of the instantaneous transition matrix too
+        if matrix_grad_dict is not None and False:
+            self.grad_matrices = []
+            key0 = self.key_list[0]
+            vals = list(matrix_grad_dict[key0].values())
+            self.num_p = vals[0].size
+            for j in range(self.num_p):
+                grad_matrix = np.zeros((self.num_states, self.num_states))
+                for i, key in enumerate(self.key_list):
+                    for to_key, val in matrix_grad_dict[key].items():
+                        grad_matrix[i, self.key_dict[to_key]] = val[j]
+                self.grad_matrices.append(grad_matrix)
 
     def __str__(self):
         return "Key list: %s \n Matrix: %s" % (self.key_list, self.matrix)
