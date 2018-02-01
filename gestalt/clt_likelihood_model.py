@@ -136,6 +136,7 @@ class CLTLikelihoodModel:
         self.hazard = tf.exp(log_lambda_part + tf.log(left_trim_prob) + tf.log(right_trim_prob))
 
         # Compute the gradient
+        # TODO: This does not do the right thing!!!
         self.hazard_grad = self.grad_opt.compute_gradients(
             self.hazard,
             var_list=[self.all_vars])
@@ -153,6 +154,7 @@ class CLTLikelihoodModel:
         self.hazard_away = tf.reduce_sum(focal_hazards, axis=1) + tf.reduce_sum(inter_target_hazards, axis=1)
 
         # Compute the gradient
+        # TODO: This does not do the right thing!!!
         self.hazard_away_grad = self.grad_opt.compute_gradients(
             self.hazard_away,
             var_list=[self.all_vars])
@@ -269,11 +271,9 @@ class CLTLikelihoodModel:
 
                 haz_away = hazard_aways[i]
                 haz_away_grad = hazard_away_grads[i]
-                print("HAZ AWA", haz_away_grad)
                 # Hazard to unlikely state is hazard away minus hazard to likely states
                 matrix_dict[start_tts][UNLIKELY] = haz_away - haz_to_likely
                 matrix_grad_dict[start_tts][UNLIKELY] = haz_away_grad - haz_grad_to_likely
-                print("matrix_grad_dict[start_tts][UNLIKELY]", matrix_grad_dict[start_tts][UNLIKELY])
                 # Hazard of staying is negative of hazard away
                 matrix_dict[start_tts][start_tts] = -haz_away
                 matrix_grad_dict[start_tts][start_tts] = -haz_away_grad
