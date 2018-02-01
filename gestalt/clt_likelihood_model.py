@@ -150,11 +150,11 @@ class CLTLikelihoodModel:
     def _create_del_probs(self):
         # Compute conditional prob of deletion for a singleton
         left_trim_len = tf.cast(tf.gather(self.bcode_meta.abs_cut_sites, self.min_target) - self.start_pos, tf.float32)
-        right_trim_len = tf.cast(self.del_end - tf.gather(self.bcode_meta.abs_cut_sites, self.max_target), tf.float32) + 1
+        right_trim_len = tf.cast(self.del_end - tf.gather(self.bcode_meta.abs_cut_sites, self.max_target), tf.float32)
         left_trim_long_min = tf.cast(tf.gather(self.bcode_meta.left_long_trim_min, self.min_target), tf.float32)
         right_trim_long_min = tf.cast(tf.gather(self.bcode_meta.right_long_trim_min, self.max_target), tf.float32)
 
-        min_left_trim = self.is_left_long * tf.cast(left_trim_long_min, tf.float32)
+        min_left_trim = self.is_left_long * left_trim_long_min
         max_left_trim = tf_common.ifelse(
                 self.is_left_long,
                 tf.cast(tf.gather(self.bcode_meta.left_max_trim, self.min_target), tf.float32),
@@ -162,18 +162,18 @@ class CLTLikelihoodModel:
         min_right_trim = self.is_right_long * right_trim_long_min
         max_right_trim = tf_common.ifelse(
                 self.is_right_long,
-                tf.cast(tf.gather(self.bcode_meta.right_max_trim, self.min_target), tf.float32),
+                tf.cast(tf.gather(self.bcode_meta.right_max_trim, self.max_target), tf.float32),
                 right_trim_long_min - 1)
 
         # TODO: using a uniform distribution for now
         check_left_max = tf.cast(tf.less_equal(left_trim_len, max_left_trim), tf.float32)
         check_left_min = tf.cast(tf.less_equal(min_left_trim, left_trim_len), tf.float32)
         #TODO: check this range thing
-        left_prob = 1.0/(max_left_trim - min_left_trim + 1) # * check_left_max * check_left_min
+        left_prob = 1.0/(max_left_trim - min_left_trim + 1) * check_left_max #* check_left_min
         #left_prob = tf_distributions.Normal(self.trim_poissons[0], self.trim_poissons[1]).cdf(0.5)
         check_right_max = tf.cast(tf.less_equal(right_trim_len, max_right_trim), tf.float32)
         check_right_min = tf.cast(tf.less_equal(min_right_trim, right_trim_len), tf.float32)
-        right_prob = 1.0/(max_right_trim - min_right_trim + 1) #* check_right_max * check_right_min
+        right_prob = 1.0/(max_right_trim - min_right_trim + 1) * check_right_max * check_right_min
 
         is_short_indel = tf_common.equal_float(self.is_left_long + self.is_right_long, 0)
         is_len_zero = tf_common.equal_float(self.del_len, 0)
@@ -196,8 +196,6 @@ class CLTLikelihoodModel:
                 is_insert_zero,
                 self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob,
                 (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob)
-
-
 
     def initialize_transition_matrices(self, transition_mat_wrappers: Dict[int, TransitionMatrixWrapper]):
         """
