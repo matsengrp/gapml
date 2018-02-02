@@ -14,7 +14,9 @@ from indel_sets import IndelSet, TargetTract, AncState, SingletonWC, Singleton
 from transition_matrix import TransitionMatrixWrapper, TransitionMatrix
 from common import merge_target_tract_groups
 import tf_common
+from constants import UNLIKELY
 from bounded_poisson import BoundedPoisson
+from test import myexpm
 
 class CLTLikelihoodModel:
     """
@@ -23,7 +25,6 @@ class CLTLikelihoodModel:
     target_lams: cutting rate for each target
     cell_type_lams: rate of differentiating to a cell type
     """
-    UNLIKELY = "unlikely"
     NODE_ORDER = "postorder"
     gamma_prior = (1,10)
 
@@ -146,9 +147,9 @@ class CLTLikelihoodModel:
         Helpers for creating hazard-away in tensorflow graph and its associated gradient
         """
         # Compute the hazard away
-        focal_hazards = self._create_hazard_list(True, True)
-        left_hazards = self._create_hazard_list(True, False)[:, :self.num_targets - 1]
-        right_hazards = self._create_hazard_list(False, True)[:, 1:]
+        focal_hazards = self._create_hazard_list(True, True, self.left_trimmables_ph, self.right_trimmables_ph)
+        left_hazards = self._create_hazard_list(True, False, self.left_trimmables_ph, self.right_trimmables_ph)[:, :self.num_targets - 1]
+        right_hazards = self._create_hazard_list(False, True, self.left_trimmables_ph, self.right_trimmables_ph)[:, 1:]
         left_cum_hazards = tf.cumsum(left_hazards, axis=1)
         inter_target_hazards = tf.multiply(left_cum_hazards, right_hazards)
         self.hazard_away = tf.reduce_sum(focal_hazards, axis=1) + tf.reduce_sum(inter_target_hazards, axis=1)
@@ -159,14 +160,14 @@ class CLTLikelihoodModel:
             self.hazard_away,
             var_list=[self.all_vars])
 
-    def _create_hazard_list(self, trim_left: bool, trim_right: bool):
+    def _create_hazard_list(self, trim_left: bool, trim_right: bool, left_trimmables, right_trimmables):
         """
         Helper function for creating hazard list nodes -- useful for calculating hazard away
         """
         trim_short_left = 1 - self.trim_long_probs[0] if trim_left else 1
         trim_short_right = 1 - self.trim_long_probs[1] if trim_right else 1
 
-        left_factor = tf_common.equal_float(self.left_trimmables_ph, 1) * trim_short_left + tf_common.equal_float(self.left_trimmables_ph, 2)
+        left_factor = tf_common.equal_float(left_trimmables, 1) * trim_short_left + tf_common.equal_float(left_trimmables, 2)
 
         right_factor = tf_common.equal_float(self.right_trimmables_ph, 1) * trim_short_right + tf_common.equal_float(self.right_trimmables_ph, 2)
 
@@ -225,6 +226,116 @@ class CLTLikelihoodModel:
                 self.singleton_cond_prob,
                 var_list = [self.all_vars])
 
+    def create_topology_log_lik(self, transition_matrix_wrappers: Dict):
+        """
+        This is total bogus -- just want to see how to create a lot of nodes
+        """
+        self.log_lik = 0
+        self.L = dict() # Stores normalized probs
+        self.pt_matrix = dict()
+        self.trim_probs = dict()
+        for node in self.topology.traverse("postorder"):
+            if node.is_leaf():
+                trans_mat_w = transition_matrix_wrappers[node.node_id]
+                self.L[node.node_id] = np.zeros((trans_mat_w.num_states, 1))
+                assert len(node.state_sum.tts_list) == 1
+                tts_key = trans_mat_w.key_dict[node.state_sum.tts_list[0]]
+                self.L[node.node_id][tts_key] = 1
+                # Convert to tensorflow usage
+                self.L[node.node_id] = tf.constant(self.L[node.node_id], dtype=tf.float32)
+            else:
+                self.L[node.node_id] = 1.0
+                for child in node.children:
+                    ch_trans_mat_w = transition_matrix_wrappers[child.node_id]
+                    trans_mat = self._init_transition_matrix(ch_trans_mat_w)
+                    # Get the trim probabilities
+                    # TODO: implement later
+                    #trim_probs[child.node_id] = self._get_trim_probs(
+                    #        ch_trans_mat,
+                    #        unmasked_singleton_probs,
+                    #        node,
+                    #        child)
+
+                    # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
+                    branch_len = self.branch_lens[child.node_id]
+                    pr_matrix, _, _, _ = myexpm(trans_mat, branch_len)
+                    self.pt_matrix[child.node_id] = pr_matrix
+
+                    # Get the probability for the data descended from the child node, assuming that the node
+                    # has a particular target tract repr.
+                    # These down probs are ordered according to the child node's numbering of the TTs states
+                    # TODO: add in trim probabilities
+                    ch_ordered_down_probs = tf.matmul(
+                            self.pt_matrix[child.node_id],
+                            self.L[child.node_id])
+
+                    if not node.is_root():
+                        # Reorder summands according to node's numbering of tts states
+                        trans_mat_w = transition_matrix_wrappers[node.node_id]
+
+                        indices = [trans_mat_w.key_dict[tts] for tts in node.state_sum.tts_list]
+                        vals = [ch_ordered_down_probs[ch_trans_mat_w.key_dict[tts]] for tts in node.state_sum.tts_list]
+                        down_probs = tf.sparse_to_dense(
+                                indices,
+                                [trans_mat_w.num_states,1],
+                                vals)
+
+                        self.L[node.node_id] *= down_probs
+                    else:
+                        # For the root node, we just want the probability where the root node is unmodified
+                        # No need to reorder
+                        ch_id = ch_trans_mat_w.key_dict[()]
+                        self.L[node.node_id] *= ch_ordered_down_probs[ch_id]
+
+        self.log_lik = tf.log(self.L[self.root_node_id])
+
+    def _init_transition_matrix(self, matrix_wrapper: TransitionMatrixWrapper):
+        unlikely_key = matrix_wrapper.num_states
+
+        # Get inputs ready for tensorflow
+        hazard_list = []
+        tt_evts = []
+        start_tts_list = []
+        for start_tts, matrix_row in matrix_wrapper.matrix_dict.items():
+            start_tts_list.append(start_tts)
+            for end_tts, tt_evt in matrix_row.items():
+                tt_evts.append(tt_evt)
+
+        # Gets hazards (by tensorflow)
+        hazard_away_nodes = self._create_hazard_away_nodes(start_tts_list)
+        hazard_nodes = self._create_hazard_nodes(tt_evts)
+
+        # Now fill in the matrix
+        idx = 0
+        matrix_coo = []
+        matrix_vals = []
+        for i, (start_tts, matrix_row) in enumerate(matrix_wrapper.matrix_dict.items()):
+            start_key = matrix_wrapper.key_dict[start_tts]
+            # Tracks the total hazard to the likely states
+            haz_to_likely = 0
+            for end_tts, tt_evt in matrix_row.items():
+                haz = hazard_nodes[idx]
+                end_key = matrix_wrapper.key_dict[end_tts]
+                matrix_coo.append([start_key, end_key])
+                matrix_vals.append(haz)
+                haz_to_likely += haz
+                idx += 1
+
+            haz_away = hazard_away_nodes[i]
+            # Hazard to unlikely state is hazard away minus hazard to likely states
+            matrix_coo.append([start_key,unlikely_key])
+            matrix_vals.append(haz_away - haz_to_likely)
+            # Hazard of staying is negative of hazard away
+            matrix_coo.append([start_key,unlikely_key])
+            matrix_vals.append(-haz_away)
+
+        matrix_vals = tf.stack(matrix_vals, axis=0)
+        q_matrix = tf.sparse_to_dense(
+                sparse_indices=matrix_coo,
+                output_shape=[matrix_wrapper.num_states + 1, matrix_wrapper.num_states + 1],
+                sparse_values=matrix_vals)
+        return q_matrix
+
     def initialize_transition_matrices(self, transition_mat_wrappers: Dict[int, TransitionMatrixWrapper]):
         """
         @param transition_mat_wrappers: the list of transition matrix wrappers, which are just skeletons for
@@ -232,7 +343,6 @@ class CLTLikelihoodModel:
 
         @return a list of real transition matrices based on this model's parameters
         """
-        UNLIKELY = "unlikely"
         all_matrices = dict()
         for node_id, matrix_wrapper in transition_mat_wrappers.items():
             # Get inputs ready for tensorflow
@@ -370,6 +480,34 @@ class CLTLikelihoodModel:
                 right_hazard_list += [1]
 
         return left_hazard_list, right_hazard_list
+
+    def _create_hazard_nodes(self, tt_evts: List[TargetTract]):
+        target_inputs = []
+        long_status_inputs = []
+        for tt_evt in tt_evts:
+            target_inputs.append([tt_evt.min_target, tt_evt.max_target])
+            long_status_inputs.append([tt_evt.is_left_long, tt_evt.is_right_long])
+
+        # TODO: actually do something
+
+
+    def _create_hazard_away_nodes(self, tts_list: List[Tuple[TargetTract]]):
+        left_trimmables = []
+        right_trimmables = []
+        for tts in tts_list:
+            left_m, right_m = self._get_hazard_masks(tts)
+            left_trimmables.append(left_m)
+            right_trimmables.append(right_m)
+
+        # Compute the hazard away
+        focal_hazards = self._create_hazard_list(True, True, left_trimmables, right_trimmables)
+        left_hazards = self._create_hazard_list(True, False, left_trimmables, right_trimmables)[:, :self.num_targets - 1]
+        right_hazards = self._create_hazard_list(False, True, left_trimmables, right_trimmables)[:, 1:]
+        left_cum_hazards = tf.cumsum(left_hazards, axis=1)
+        inter_target_hazards = tf.multiply(left_cum_hazards, right_hazards)
+        hazard_away = tf.reduce_sum(focal_hazards, axis=1) + tf.reduce_sum(inter_target_hazards, axis=1)
+        return hazard_away
+
 
     def get_hazard_aways(self, tts_list: List[Tuple[TargetTract]]):
         """

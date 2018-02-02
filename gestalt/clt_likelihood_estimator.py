@@ -39,6 +39,11 @@ class CLTLassoEstimator(CLTEstimator):
         anc_evt_finder.annotate_ancestral_states(model.topology, model.bcode_meta)
         # Create the skeletons for the transition matrices -- via state sum approximation
         self.transition_mat_wrappers = self.approximator.create_transition_matrix_wrappers(model.topology)
+
+        self.model.create_topology_log_lik(self.transition_mat_wrappers)
+        1/0
+
+
         # Create the skeletons for calculating conditional probabilities of the trims
         self._create_unmasked_singletons_wrappers()
 

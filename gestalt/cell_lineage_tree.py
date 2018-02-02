@@ -1,7 +1,7 @@
 import re
 import scipy
 import pandas as pd
-from ete3 import TreeNode, NodeStyle, SeqMotifFace, TreeStyle, TextFace, RectFace
+from ete3 import TreeNode #, NodeStyle, SeqMotifFace, TreeStyle, TextFace, RectFace
 import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
