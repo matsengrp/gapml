@@ -85,3 +85,7 @@ class LikelihoodModelTestCase(unittest.TestCase):
             TargetTract(0,0,0,0),
             TargetTract(0,0,5,5),
             TargetTract(5,5,5,5)]))
+
+    def test_create_transition_matrix(self):
+        # TODO: make test....
+        self.assertEqual(0,1)

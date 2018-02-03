@@ -10,6 +10,16 @@ class TransitionMatrixWrapper:
         """
         self.matrix_dict = matrix_dict
 
+        # Number each key
+        self.key_list = []
+        self.key_dict = dict()
+        i = 0
+        for key in matrix_dict.keys():
+            self.key_list.append(key)
+            self.key_dict[key] = i
+            i += 1
+        self.num_likely_states = i
+
 class TransitionMatrix:
     def __init__(self,
             matrix_dict: Dict[str, Dict[str, float]],

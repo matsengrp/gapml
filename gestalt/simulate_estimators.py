@@ -156,11 +156,6 @@ def main():
             init_model_params = CLTLikelihoodModel(pruned_clt, bcode_meta, sess)
             tf.global_variables_initializer().run()
             lasso_est = CLTLassoEstimator(0, init_model_params, approximator)
-            st_time = time.time()
-            log_lik = lasso_est.get_log_likelihood(init_model_params, get_grad=True)
-            print("TIME", time.time() - st_time)
-            print("log lik", log_lik)
-
 
 if __name__ == "__main__":
     main()

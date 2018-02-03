@@ -7,6 +7,7 @@ from state_sum import StateSum
 from barcode_metadata import BarcodeMetadata
 from common import merge_target_tract_groups
 from clt_likelihood_model import CLTLikelihoodModel
+from constants import UNLIKELY
 from transition_matrix import TransitionMatrixWrapper
 
 from approximator_transition_graph import TransitionToNode, TransitionGraph
