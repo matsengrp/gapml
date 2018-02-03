@@ -16,7 +16,6 @@ from common import merge_target_tract_groups
 import tf_common
 from constants import UNLIKELY
 from bounded_poisson import BoundedPoisson
-from test import myexpm
 
 class CLTLikelihoodModel:
     """
@@ -169,7 +168,7 @@ class CLTLikelihoodModel:
 
         left_factor = tf_common.equal_float(left_trimmables, 1) * trim_short_left + tf_common.equal_float(left_trimmables, 2)
 
-        right_factor = tf_common.equal_float(self.right_trimmables_ph, 1) * trim_short_right + tf_common.equal_float(self.right_trimmables_ph, 2)
+        right_factor = tf_common.equal_float(right_trimmables, 1) * trim_short_right + tf_common.equal_float(right_trimmables, 2)
 
         hazard_list = self.target_lams * left_factor * right_factor
         return hazard_list
@@ -226,10 +225,15 @@ class CLTLikelihoodModel:
                 self.singleton_cond_prob,
                 var_list = [self.all_vars])
 
+    def get_log_lik(self):
+        #lik, log_lik, log_lik_grad = self.sess.run([self.L[self.root_node_id], self.log_lik, self.log_lik_grad])
+        lik, log_lik= self.sess.run([self.L[self.root_node_id], self.log_lik])
+        return lik, log_lik#, log_lik_grad
+
     def create_topology_log_lik(self, transition_matrix_wrappers: Dict):
         """
-        This is total bogus -- just want to see how to create a lot of nodes
         """
+        # TODO: check all the calculations... and clean up notation
         self.log_lik = 0
         self.L = dict() # Stores normalized probs
         self.pt_matrix = dict()
@@ -237,7 +241,7 @@ class CLTLikelihoodModel:
         for node in self.topology.traverse("postorder"):
             if node.is_leaf():
                 trans_mat_w = transition_matrix_wrappers[node.node_id]
-                self.L[node.node_id] = np.zeros((trans_mat_w.num_states, 1))
+                self.L[node.node_id] = np.zeros((trans_mat_w.num_likely_states + 1, 1))
                 assert len(node.state_sum.tts_list) == 1
                 tts_key = trans_mat_w.key_dict[node.state_sum.tts_list[0]]
                 self.L[node.node_id][tts_key] = 1
@@ -258,7 +262,7 @@ class CLTLikelihoodModel:
 
                     # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
                     branch_len = self.branch_lens[child.node_id]
-                    pr_matrix, _, _, _ = myexpm(trans_mat, branch_len)
+                    pr_matrix, _, _, _ = tf_common.myexpm(trans_mat, branch_len)
                     self.pt_matrix[child.node_id] = pr_matrix
 
                     # Get the probability for the data descended from the child node, assuming that the node
@@ -271,14 +275,21 @@ class CLTLikelihoodModel:
 
                     if not node.is_root():
                         # Reorder summands according to node's numbering of tts states
+                        # TODO: i think i dropped the unlikely state -- is that a problem?
                         trans_mat_w = transition_matrix_wrappers[node.node_id]
 
-                        indices = [trans_mat_w.key_dict[tts] for tts in node.state_sum.tts_list]
-                        vals = [ch_ordered_down_probs[ch_trans_mat_w.key_dict[tts]] for tts in node.state_sum.tts_list]
+                        index_vals = [
+                            [trans_mat_w.key_dict[tts], ch_ordered_down_probs[ch_trans_mat_w.key_dict[tts]]]
+                            for tts in node.state_sum.tts_list]
+                        sorted_index_vals = sorted(
+                                index_vals,
+                                key= lambda tup: tup[0])
+                        indices = [[tup[0], 0] for tup in sorted_index_vals]
+                        vals = tf.reshape(tf.stack([tup[1] for tup in sorted_index_vals]), [len(indices)])
                         down_probs = tf.sparse_to_dense(
-                                indices,
-                                [trans_mat_w.num_states,1],
-                                vals)
+                                sparse_indices=indices,
+                                output_shape=[trans_mat_w.num_likely_states + 1, 1],
+                                sparse_values=vals)
 
                         self.L[node.node_id] *= down_probs
                     else:
@@ -288,9 +299,12 @@ class CLTLikelihoodModel:
                         self.L[node.node_id] *= ch_ordered_down_probs[ch_id]
 
         self.log_lik = tf.log(self.L[self.root_node_id])
+        self.log_lik_grad = self.grad_opt.compute_gradients(
+            self.log_lik,
+            var_list=[self.all_vars])
 
     def _init_transition_matrix(self, matrix_wrapper: TransitionMatrixWrapper):
-        unlikely_key = matrix_wrapper.num_states
+        unlikely_key = matrix_wrapper.num_likely_states
 
         # Get inputs ready for tensorflow
         hazard_list = []
@@ -307,32 +321,34 @@ class CLTLikelihoodModel:
 
         # Now fill in the matrix
         idx = 0
-        matrix_coo = []
-        matrix_vals = []
+        index_vals = []
         for i, (start_tts, matrix_row) in enumerate(matrix_wrapper.matrix_dict.items()):
             start_key = matrix_wrapper.key_dict[start_tts]
+            haz_away = hazard_away_nodes[i]
+
+
+            # Hazard of staying is negative of hazard away
+            index_vals.append([start_key, start_key, -haz_away])
+
             # Tracks the total hazard to the likely states
             haz_to_likely = 0
             for end_tts, tt_evt in matrix_row.items():
                 haz = hazard_nodes[idx]
                 end_key = matrix_wrapper.key_dict[end_tts]
-                matrix_coo.append([start_key, end_key])
-                matrix_vals.append(haz)
+                index_vals.append([start_key, end_key, haz])
                 haz_to_likely += haz
                 idx += 1
 
-            haz_away = hazard_away_nodes[i]
             # Hazard to unlikely state is hazard away minus hazard to likely states
-            matrix_coo.append([start_key,unlikely_key])
-            matrix_vals.append(haz_away - haz_to_likely)
-            # Hazard of staying is negative of hazard away
-            matrix_coo.append([start_key,unlikely_key])
-            matrix_vals.append(-haz_away)
+            index_vals.append([start_key, unlikely_key, haz_away - haz_to_likely])
 
+        sorted_index_vals = sorted(index_vals, key=lambda tup: (tup[0], tup[1]))
+        matrix_coo = [[tup[0], tup[1]] for tup in sorted_index_vals]
+        matrix_vals = [tup[2] for tup in sorted_index_vals]
         matrix_vals = tf.stack(matrix_vals, axis=0)
         q_matrix = tf.sparse_to_dense(
                 sparse_indices=matrix_coo,
-                output_shape=[matrix_wrapper.num_states + 1, matrix_wrapper.num_states + 1],
+                output_shape=[matrix_wrapper.num_likely_states + 1, matrix_wrapper.num_likely_states + 1],
                 sparse_values=matrix_vals)
         return q_matrix
 
@@ -372,7 +388,6 @@ class CLTLikelihoodModel:
                 for end_tts, tt_evt in matrix_row.items():
                     haz = hazards[idx]
                     haz_grad = hazard_grads[idx]
-                    print("HAZ GRAD", haz_grad)
                     matrix_dict[start_tts][end_tts] = haz
                     matrix_grad_dict[start_tts][end_tts] = haz_grad
                     haz_to_likely += haz
@@ -482,14 +497,17 @@ class CLTLikelihoodModel:
         return left_hazard_list, right_hazard_list
 
     def _create_hazard_nodes(self, tt_evts: List[TargetTract]):
-        target_inputs = []
-        long_status_inputs = []
-        for tt_evt in tt_evts:
-            target_inputs.append([tt_evt.min_target, tt_evt.max_target])
-            long_status_inputs.append([tt_evt.is_left_long, tt_evt.is_right_long])
+        min_targets = tf.constant([tt_evt.min_target for tt_evt in tt_evts], dtype=tf.int32)
+        max_targets = tf.constant([tt_evt.max_target for tt_evt in tt_evts], dtype=tf.int32)
+        long_left_statuses = tf.constant([tt_evt.is_left_long for tt_evt in tt_evts], dtype=tf.float32)
+        long_right_statuses = tf.constant([tt_evt.is_right_long for tt_evt in tt_evts], dtype=tf.float32)
 
-        # TODO: actually do something
-
+        # Compute the hazard
+        log_lambda_part = tf.log(tf.gather(self.target_lams, min_targets)) + tf.log(tf.gather(self.target_lams, max_targets)) * tf_common.not_equal_float(min_targets, max_targets)
+        left_trim_prob = tf_common.ifelse(long_left_statuses, self.trim_long_probs[0], 1 - self.trim_long_probs[0])
+        right_trim_prob = tf_common.ifelse(long_right_statuses, self.trim_long_probs[1], 1 - self.trim_long_probs[1])
+        hazard_nodes = tf.exp(log_lambda_part + tf.log(left_trim_prob) + tf.log(right_trim_prob))
+        return hazard_nodes
 
     def _create_hazard_away_nodes(self, tts_list: List[Tuple[TargetTract]]):
         left_trimmables = []
@@ -505,8 +523,8 @@ class CLTLikelihoodModel:
         right_hazards = self._create_hazard_list(False, True, left_trimmables, right_trimmables)[:, 1:]
         left_cum_hazards = tf.cumsum(left_hazards, axis=1)
         inter_target_hazards = tf.multiply(left_cum_hazards, right_hazards)
-        hazard_away = tf.reduce_sum(focal_hazards, axis=1) + tf.reduce_sum(inter_target_hazards, axis=1)
-        return hazard_away
+        hazard_away_nodes = tf.reduce_sum(focal_hazards, axis=1) + tf.reduce_sum(inter_target_hazards, axis=1)
+        return hazard_away_nodes
 
 
     def get_hazard_aways(self, tts_list: List[Tuple[TargetTract]]):

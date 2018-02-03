@@ -41,11 +41,16 @@ class CLTLassoEstimator(CLTEstimator):
         self.transition_mat_wrappers = self.approximator.create_transition_matrix_wrappers(model.topology)
 
         self.model.create_topology_log_lik(self.transition_mat_wrappers)
+
+        st_time = time.time()
+        #lik, log_lik, log_lik_grad = self.model.get_log_lik()
+        lik, log_lik= self.model.get_log_lik()
+        print("LOG LIK?", log_lik, "no log", lik)
+        print("tim", time.time() - st_time)
         1/0
 
-
         # Create the skeletons for calculating conditional probabilities of the trims
-        self._create_unmasked_singletons_wrappers()
+        #self._create_unmasked_singletons_wrappers()
 
     def _create_unmasked_singletons_wrappers(self):
         """

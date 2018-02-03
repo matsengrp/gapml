@@ -18,7 +18,7 @@ class TransitionMatrixWrapper:
             self.key_list.append(key)
             self.key_dict[key] = i
             i += 1
-        self.num_states = i
+        self.num_likely_states = i
 
 class TransitionMatrix:
     def __init__(self,
