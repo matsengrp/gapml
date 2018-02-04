@@ -26,7 +26,7 @@ class CLTLikelihoodModel:
     cell_type_lams: rate of differentiating to a cell type
     """
     NODE_ORDER = "postorder"
-    gamma_prior = (1,10)
+    gamma_prior = (1,0.1)
 
     def __init__(self,
             topology: CellLineageTree,
