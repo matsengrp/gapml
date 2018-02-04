@@ -9,6 +9,7 @@ from common import merge_target_tract_groups
 from clt_likelihood_model import CLTLikelihoodModel
 from constants import UNLIKELY
 from transition_matrix import TransitionMatrixWrapper
+import ancestral_events_finder as anc_evt_finder
 
 from approximator_transition_graph import TransitionToNode, TransitionGraph
 
@@ -26,19 +27,22 @@ class ApproximatorLB:
         self.anc_generations = anc_generations
         self.bcode_meta = bcode_metadata
 
-    def create_transition_matrix_wrappers(self, topology: CellLineageTree):
+    def create_transition_matrix_wrappers(self, model: CLTLikelihoodModel):
         """
         Create a skeleton of the transition matrix for each branch using the approximation algo
 
         @param topology: a tree, assumes this tree has the "node_id" feature
         @return dictionary mapping `node_id` to TransitionMatrixWrapper
         """
+        # Annotate with ancestral states
+        anc_evt_finder.annotate_ancestral_states(model.topology, model.bcode_meta)
+
         # First determine the state sum and transition possibilities of each node
-        self._annotate_state_sum_transitions(topology)
+        self._annotate_state_sum_transitions(model.topology)
 
         # Now create the TransitionMatrixWrapper for each node
         transition_matrix_wrappers = dict()
-        for node in topology.traverse("postorder"):
+        for node in model.topology.traverse("postorder"):
             if not node.is_root():
                 trans_mat = self._create_transition_matrix_wrapper(node)
                 transition_matrix_wrappers[node.node_id] = trans_mat

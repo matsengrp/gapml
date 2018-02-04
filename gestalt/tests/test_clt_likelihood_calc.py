@@ -4,13 +4,14 @@ import numpy as np
 import scipy.linalg
 import tensorflow as tf
 
+import ancestral_events_finder as anc_evt_finder
 from allele_events import AlleleEvents, Event
 from indel_sets import TargetTract, Singleton
 from clt_likelihood_model import CLTLikelihoodModel
-from clt_likelihood_estimator import CLTLassoEstimator
 from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
 from approximator import ApproximatorLB
+import tf_common
 
 class LikelihoodCalculationTestCase(unittest.TestCase):
     def setUp(self):
@@ -32,7 +33,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
                 topology,
                 self.bcode_metadata,
                 sess,
-                branch_lens = [branch_len for _ in range(num_nodes)],
+                branch_lens = np.array([branch_len for _ in range(num_nodes)]),
                 target_lams = np.ones(self.num_targets),
                 trim_long_probs = 0.1 * np.ones(2),
                 trim_zero_prob = 0.5,
@@ -48,25 +49,28 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         child = CellLineageTree(allele_events=AlleleEvents([], num_targets=self.num_targets))
         topology.add_child(child)
 
-        branch_len = 10
+        branch_len = 0.1
         model = self._create_model(topology, branch_len)
 
-        # Calculate the hazard using the CLT estimator
-        lik_calculator = CLTLassoEstimator(0, model, self.exact_approximator)
-        log_lik = lik_calculator.get_log_likelihood(model)
+        t_mats = self.exact_approximator.create_transition_matrix_wrappers(model)
+        model.create_topology_log_lik(t_mats)
+        log_lik = model.get_log_lik()
 
         # Manually calculate the hazard
-        hazard_away = model.get_hazard_away([])
+        hazard_away_nodes = model._create_hazard_away_nodes([()])
+        hazard_aways = model.sess.run(hazard_away_nodes)
+        hazard_away = hazard_aways[0]
         q_mat = np.matrix([[-hazard_away, hazard_away], [0, 0]])
-        prob_mat = scipy.linalg.expm(q_mat * branch_len)
+        prob_mat = tf_common._custom_expm(q_mat, branch_len)[0]
         manual_log_prob = np.log(prob_mat[0,0])
 
         # Check the two are equal
         self.assertEqual(log_lik, manual_log_prob)
 
         # Calculate the hazard using approximate algo -- should be same
-        lik_approx_calc = CLTLassoEstimator(0, model, self.approximator)
-        log_lik_approx = lik_approx_calc.get_log_likelihood(model)
+        t_mats = self.approximator.create_transition_matrix_wrappers(model)
+        model.create_topology_log_lik(t_mats)
+        log_lik_approx = model.get_log_lik()
         self.assertEqual(log_lik_approx, manual_log_prob)
 
     def test_branch_likelihood(self):
@@ -87,23 +91,25 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         target_lams = model.target_lams.eval()
         trim_long_probs = model.trim_long_probs.eval()
 
-        # Calculate the hazard using the CLT estimator
-        lik_calculator = CLTLassoEstimator(0, model, self.exact_approximator)
-        log_lik = lik_calculator.get_log_likelihood(model)
+        t_mats = self.exact_approximator.create_transition_matrix_wrappers(model)
+        model.create_topology_log_lik(t_mats)
+        log_lik = model.get_log_lik()
 
         # Manually calculate the hazard
-        hazard_away = model.get_hazard_away([])
+        hazard_away_nodes = model._create_hazard_away_nodes([(), (TargetTract(0,0,0,0),)])
+        hazard_aways = model.sess.run(hazard_away_nodes)
+        hazard_away = hazard_aways[0]
+        hazard_away_from_event = hazard_aways[1]
         hazard_to_event = target_lams[0] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
-        hazard_away_from_event = model.get_hazard_away([TargetTract(0,0,0,0)])
         q_mat = np.matrix([
             [-hazard_away, hazard_to_event, hazard_away - hazard_to_event],
             [0, -hazard_away_from_event, hazard_away_from_event],
             [0, 0, 0]])
-        prob_mat = scipy.linalg.expm(q_mat * branch_len)
+        prob_mat = tf_common._custom_expm(q_mat, branch_len)[0]
         manual_cut_log_prob = np.log(prob_mat[0,1])
 
         # Get prob of deletion - one left, two right
-        manual_trim_probs = model.initialize_indel_cond_probs([Singleton(
+        manual_trim_prob_node = model._create_indel_probs([Singleton(
             event.start_pos,
             event.del_len,
             event.min_target,
@@ -111,11 +117,12 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             event.max_target,
             event.max_target,
             event.insert_str)])
-        manual_trim_probs = list(manual_trim_probs.values())[0]
+        indel_probs = model.sess.run(manual_trim_prob_node)
+        manual_trim_probs = indel_probs[0]
         manual_log_prob = manual_cut_log_prob + np.log(manual_trim_probs)
 
         # Check the two are equal
-        self.assertTrue(np.isclose(log_lik[0], manual_log_prob))
+        self.assertTrue(np.isclose(log_lik, manual_log_prob))
 
     def test_branch_likelihood_big_intertarget_del(self):
         # Create one branch
@@ -135,9 +142,9 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         target_lams = model.target_lams.eval()
         trim_long_probs = model.trim_long_probs.eval()
 
-        # Calculate the hazard using the CLT estimator
-        lik_calculator = CLTLassoEstimator(0, model, self.exact_approximator)
-        log_lik = lik_calculator.get_log_likelihood(model)
+        t_mats = self.exact_approximator.create_transition_matrix_wrappers(model)
+        model.create_topology_log_lik(t_mats)
+        log_lik = model.get_log_lik()
 
         # Manually calculate the hazard -- can cut the middle only or cut the whole barcode
         hazard_away = model.get_hazard_away([])
@@ -150,11 +157,11 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             [0, -hazard_away_from_cut1, hazard_to_cut03, hazard_away - hazard_to_cut03],
             [0, 0, 0, 0],
             [0, 0, 0, 0]])
-        prob_mat = scipy.linalg.expm(q_mat * branch_len)
+        prob_mat = tf_common._custom_expm(q_mat, branch_len)[0]
         manual_cut_log_prob = np.log(prob_mat[0,2])
 
         # Get prob of deletion
-        manual_trim_probs = model.initialize_indel_cond_probs([Singleton(
+        manual_trim_prob_node = model._create_indel_probs([Singleton(
             event.start_pos,
             event.del_len,
             event.min_target,
@@ -162,15 +169,16 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             event.max_target,
             event.max_target,
             event.insert_str)])
-        manual_trim_probs = list(manual_trim_probs.values())[0]
+        manual_trim_probs = model.sess.run(manual_trim_prob_node)[0]
         manual_log_prob = manual_cut_log_prob + np.log(manual_trim_probs)
 
         # Check the two are equal
         self.assertTrue(np.isclose(log_lik[0], manual_log_prob))
 
         # Calculate the hazard using approximate algo -- should be smaller
-        lik_approx_calc = CLTLassoEstimator(0, model, self.approximator)
-        log_lik_approx = lik_approx_calc.get_log_likelihood(model)
+        t_mats = self.approximator.create_transition_matrix_wrappers(model)
+        model.create_topology_log_lik(t_mats)
+        log_lik_approx = model.get_log_lik()
         self.assertTrue(log_lik_approx < manual_log_prob)
 
     def test_two_branch_likelihood_big_intertarget_del(self):
@@ -194,9 +202,9 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         target_lams = model.target_lams.eval()
         trim_long_probs = model.trim_long_probs.eval()
 
-        # Calculate the hazard using the CLT estimator
-        lik_calculator = CLTLassoEstimator(0, model, self.exact_approximator)
-        log_lik = lik_calculator.get_log_likelihood(model)
+        t_mats = self.exact_approximator.create_transition_matrix_wrappers(model)
+        model.create_topology_log_lik(t_mats)
+        log_lik = model.get_log_lik()
 
         # The probability should be the same as a single branch with double the length
         # Manually calculate the hazard -- can cut the middle only or cut the whole barcode
@@ -210,11 +218,11 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             [0, -hazard_away_from_cut1, hazard_to_cut03, hazard_away - hazard_to_cut03],
             [0, 0, 0, 0],
             [0, 0, 0, 0]])
-        prob_mat = scipy.linalg.expm(q_mat * branch_len * 2)
+        prob_mat = tf_common._custom_expm(q_mat, branch_len * 2)[0]
         manual_cut_log_prob = np.log(prob_mat[0,2])
 
         # Get prob of deletion
-        manual_trim_probs = model.initialize_indel_cond_probs([Singleton(
+        manual_trim_prob_node = model._create_indel_probs([Singleton(
             event.start_pos,
             event.del_len,
             event.min_target,
@@ -222,13 +230,14 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             event.max_target,
             event.max_target,
             event.insert_str)])
-        manual_trim_probs = list(manual_trim_probs.values())[0]
+        manual_trim_probs = model.sess.run(manual_trim_prob_node)[0]
         manual_log_prob = manual_cut_log_prob + np.log(manual_trim_probs)
 
         # Check the two are equal
         self.assertTrue(np.isclose(log_lik[0], manual_log_prob))
 
         # Calculate the hazard using approximate algo -- should be smaller
-        lik_approx_calc = CLTLassoEstimator(0, model, self.approximator)
-        log_lik_approx = lik_approx_calc.get_log_likelihood(model)
+        t_mats = self.approximator.create_transition_matrix_wrappers(model)
+        model.create_topology_log_lik(t_mats)
+        log_lik_approx = model.get_log_lik()
         self.assertTrue(log_lik_approx < manual_log_prob)

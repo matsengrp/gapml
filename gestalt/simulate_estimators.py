@@ -9,6 +9,7 @@ import matplotlib
 matplotlib.use('agg')
 import time
 import tensorflow as tf
+from tensorflow.python import debug as tf_debug
 
 from cell_state import CellState, CellTypeTree
 from cell_state_simulator import CellTypeSimulator
@@ -80,13 +81,14 @@ def main():
         default=0.5,
         help='proportion cells sampled/alleles successfully sequenced')
     parser.add_argument(
-        '--n-trees', type=int, default=1, help='number of trees in forest')
+        '--debug', action='store_true', help='debug tensorflow')
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--align', action='store_true')
     args = parser.parse_args()
 
     np.random.seed(seed=args.seed)
     sess = tf.Session()
+
     with sess.as_default():
         # Create a cell-type tree
         cell_type_tree = CellTypeTree(cell_type=None, rate=0)
@@ -127,35 +129,35 @@ def main():
                 cell_type_simulator,
                 allele_simulator)
 
-        # Simulate the trees
-        forest = []
-        for t in range(args.n_trees):
-            clt = clt_simulator.simulate(
-                    Allele(BARCODE_V7, bcode_meta),
-                    CellState(categorical=cell_type_tree),
-                    args.time)
-            forest.append(clt)
-
-        #savefig(forest, args.outbase)
+        # Simulate the tree
+        clt = clt_simulator.simulate(
+                Allele(BARCODE_V7, bcode_meta),
+                CellState(categorical=cell_type_tree),
+                args.time)
 
         # Now sample the leaves and see what happens with parsimony
         observer = CLTObserver(args.sampling_rate)
-        for clt in forest:
-            obs_leaves, pruned_clt = observer.observe_leaves(clt, seed = args.seed)
-            print("NUM LEAVES", len(pruned_clt))
-            # Let the two methods compare just in terms of topology
-            # To do that, we need to collapse our tree.
-            # We collapse branches if the alleles are identical.
-            for node in pruned_clt.get_descendants(strategy='postorder'):
-                if str(node.up.allele) == str(node.allele):
-                    node.dist = 0
-            true_tree = CollapsedTree.collapse(pruned_clt)
+        obs_leaves, pruned_clt = observer.observe_leaves(clt, seed = args.seed)
+        print("NUM LEAVES", len(pruned_clt))
+        # Let the two methods compare just in terms of topology
+        # To do that, we need to collapse our tree.
+        # We collapse branches if the alleles are identical.
+        for node in pruned_clt.get_descendants(strategy='postorder'):
+            if str(node.up.allele) == str(node.allele):
+                node.dist = 0
+        true_tree = CollapsedTree.collapse(pruned_clt)
 
-            # trying out with true tree!!!
-            approximator = ApproximatorLB(extra_steps = 2, anc_generations = 1, bcode_metadata = bcode_meta)
-            init_model_params = CLTLikelihoodModel(pruned_clt, bcode_meta, sess)
-            tf.global_variables_initializer().run()
-            lasso_est = CLTLassoEstimator(0, init_model_params, approximator)
+        # trying out with true tree!!!
+        approximator = ApproximatorLB(extra_steps = 2, anc_generations = 1, bcode_metadata = bcode_meta)
+
+    sess = tf.Session()
+    if args.debug:
+        sess = tf_debug.LocalCLIDebugWrapperSession(sess)
+
+    with sess.as_default():
+        init_model_params = CLTLikelihoodModel(pruned_clt, bcode_meta, sess)
+        tf.global_variables_initializer().run()
+        lasso_est = CLTLassoEstimator(0, init_model_params, approximator)
 
 if __name__ == "__main__":
     main()

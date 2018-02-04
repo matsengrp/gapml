@@ -8,7 +8,6 @@ from numpy import ndarray
 from clt_estimator import CLTEstimator
 from cell_lineage_tree import CellLineageTree
 from clt_likelihood_model import CLTLikelihoodModel
-import ancestral_events_finder as anc_evt_finder
 from approximator import ApproximatorLB
 from transition_matrix import TransitionMatrixWrapper, TransitionMatrix
 from indel_sets import TargetTract, Singleton
@@ -35,15 +34,14 @@ class CLTLassoEstimator(CLTEstimator):
         self.model = model
         self.approximator = approximator
 
-        # Annotate with ancestral states
-        anc_evt_finder.annotate_ancestral_states(model.topology, model.bcode_meta)
         # Create the skeletons for the transition matrices -- via state sum approximation
-        self.transition_mat_wrappers = self.approximator.create_transition_matrix_wrappers(model.topology)
+        self.transition_mat_wrappers = self.approximator.create_transition_matrix_wrappers(model)
 
         self.model.create_topology_log_lik(self.transition_mat_wrappers)
 
         st_time = time.time()
-        #lik, log_lik, log_lik_grad = self.model.get_log_lik()
-        lik, log_lik= self.model.get_log_lik()
-        print("LOG LIK?", log_lik, "no log", lik)
+        log_lik, log_lik_grad = self.model.get_log_lik()
+        #log_lik = self.model.get_log_lik()
+        print("LOG LIK?", log_lik)
+        print("LOG LIK GRAD", log_lik_grad)
         print("tim", time.time() - st_time)
