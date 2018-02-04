@@ -73,9 +73,43 @@ def _expm_grad(op, grad0, grad1, grad2, grad3):
             (This will be assuming that only the first output of expm is used
             and the rest is not used to calculate the final value.)
 
-    TODO: implement the real gradient
+    TODO: implement a faster version
+    TODO: do some checks on this gradient
     """
-    return op.outputs[1] * grad0 * op.outputs[2], tf.constant(3)
+    A = op.outputs[1]
+    A_inv = op.outputs[2]
+    D = op.outputs[3]
+    Q = op.inputs[0]
+    t = op.inputs[1]
+    Q_len = Q.shape[0]
+
+    D_vec = tf.reshape(D, (Q_len, 1))
+    expDt = tf.exp(D * t)
+    expDt_vec = tf.reshape(expDt, (Q_len, 1))
+    t_factor = tf.divide(expDt_vec - tf.transpose(expDt_vec), D_vec - tf.transpose(D_vec))
+    t_factor = tf.matrix_set_diag(t_factor, t * expDt)
+    dL_dQ = []
+    for i in range(Q_len):
+        dL_dQi = []
+        for j in range(Q_len):
+            A_invi = tf.reshape(A_inv[:,i], (Q_len, 1))
+            A_j = tf.reshape(A[j,:], (1, Q_len))
+            G = tf.matmul(A_invi, A_j)
+            V = tf.multiply(G, t_factor)
+            dP_dQij = tf.matmul(A, tf.matmul(V, A_inv))
+            dL_dQi.append(
+                    tf.reduce_sum(tf.multiply(grad0, dP_dQij)))
+
+        dL_dQ.append(tf.parallel_stack(dL_dQi))
+
+    dL_dQ = tf.parallel_stack(dL_dQ)
+
+    dP_dt = tf.matmul(A, tf.matmul(
+                tf.diag(D * expDt),
+                A_inv))
+    dL_dt = tf.reduce_sum(tf.multiply(grad0, dP_dt))
+
+    return dL_dQ, dL_dt
 
 def myexpm(Q, t, name=None):
     """
