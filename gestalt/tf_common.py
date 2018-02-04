@@ -73,6 +73,7 @@ def _expm_grad(op, grad0, grad1, grad2, grad3):
             (This will be assuming that only the first output of expm is used
             and the rest is not used to calculate the final value.)
 
+    Gradient calculations based on Kalbfleisch (1985)
     TODO: implement a faster version
     TODO: do some checks on this gradient
     """
