@@ -155,7 +155,20 @@ def main():
         sess = tf_debug.LocalCLIDebugWrapperSession(sess)
 
     with sess.as_default():
-        init_model_params = CLTLikelihoodModel(pruned_clt, bcode_meta, sess)
+        branch_lens = []
+        for node in pruned_clt.traverse("postorder"):
+            branch_lens.append(node.dist + 0.1)
+        print("blen", branch_lens)
+
+        init_model_params = CLTLikelihoodModel(
+                pruned_clt, bcode_meta, sess,
+                branch_lens = np.array(branch_lens),
+                target_lams = np.array(args.target_lambdas),
+                trim_long_probs = np.array([0.05, 0.05]),
+                trim_zero_prob = args.repair_indel_probability,
+                trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
+                insert_zero_prob = args.repair_indel_probability,
+                insert_poisson = args.repair_insertion_lambda)
         tf.global_variables_initializer().run()
         lasso_est = CLTLassoEstimator(0, init_model_params, approximator)
 

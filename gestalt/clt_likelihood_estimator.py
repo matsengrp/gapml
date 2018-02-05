@@ -37,11 +37,11 @@ class CLTLassoEstimator(CLTEstimator):
         # Create the skeletons for the transition matrices -- via state sum approximation
         self.transition_mat_wrappers = self.approximator.create_transition_matrix_wrappers(model)
 
-        self.model.create_topology_log_lik(self.transition_mat_wrappers)
+        #self.model.create_topology_log_lik(self.transition_mat_wrappers)
+        self.model.check_grad(self.transition_mat_wrappers)
 
-        st_time = time.time()
-        log_lik, log_lik_grad = self.model.get_log_lik()
-        #log_lik = self.model.get_log_lik()
-        print("LOG LIK?", log_lik)
-        print("LOG LIK GRAD", log_lik_grad)
-        print("tim", time.time() - st_time)
+        #st_time = time.time()
+        #log_lik, log_lik_grad = self.model.get_log_lik()
+        #print("LOG LIK?", log_lik)
+        #print("LOG LIK GRAD", log_lik_grad)
+        #print("tim", time.time() - st_time)

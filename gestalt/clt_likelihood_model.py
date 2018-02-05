@@ -26,7 +26,7 @@ class CLTLikelihoodModel:
     cell_type_lams: rate of differentiating to a cell type
     """
     NODE_ORDER = "postorder"
-    gamma_prior = (1,0.1)
+    gamma_prior = (1,0.2)
 
     def __init__(self,
             topology: CellLineageTree,
@@ -34,11 +34,11 @@ class CLTLikelihoodModel:
             sess: Session,
             branch_lens: ndarray = None,
             target_lams: ndarray = None,
-            trim_long_probs: ndarray = 0.1 * np.ones(2),
+            trim_long_probs: ndarray = 0.05 * np.ones(2),
             trim_zero_prob: float = 0.5,
-            trim_poissons: ndarray = 0.9 * np.ones(2),
+            trim_poissons: ndarray = 2.5 * np.ones(2),
             insert_zero_prob: float = 0.5,
-            insert_poisson: float = 2.0):
+            insert_poisson: float = 0.2):
             #TODO: cell_type_lams: ndarray = None):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
@@ -68,17 +68,38 @@ class CLTLikelihoodModel:
                     self.num_nodes)
         if target_lams is None:
             target_lams = 0.1 * np.ones(self.num_targets)
+        self._create_parameters(
+                branch_lens,
+                target_lams,
+                trim_long_probs,
+                [trim_zero_prob],
+                trim_poissons,
+                [insert_zero_prob],
+                [insert_poisson])
 
+        self.grad_opt = tf.train.GradientDescentOptimizer(learning_rate=1)
+        self._create_hazard_node_for_simulation()
+
+    def _create_parameters(self,
+            branch_lens: ndarray,
+            target_lams: ndarray,
+            trim_long_probs: ndarray,
+            trim_zero_prob: float,
+            trim_poissons: ndarray,
+            insert_zero_prob: float,
+            insert_poisson: float):
         self.all_vars = tf.Variable(
                 np.concatenate([
                     branch_lens,
                     target_lams,
                     trim_long_probs,
-                    [trim_zero_prob],
+                    trim_zero_prob,
                     trim_poissons,
-                    [insert_zero_prob],
-                    [insert_poisson]]),
+                    insert_zero_prob,
+                    insert_poisson]),
                 dtype=tf.float32)
+        self.all_vars_ph = tf.placeholder(tf.float32, shape=self.all_vars.shape)
+        self.assign_all_vars = self.all_vars.assign(self.all_vars_ph)
 
         self.branch_lens = self.all_vars[:branch_lens.size]
         prev_size = branch_lens.size
@@ -92,16 +113,13 @@ class CLTLikelihoodModel:
         self.trim_zero_prob = self.all_vars[prev_size: up_to_size]
         prev_size = up_to_size
         up_to_size += trim_poissons.size
-        self.trim_poissons =self.all_vars[prev_size: up_to_size]
+        self.trim_poissons = self.all_vars[prev_size: up_to_size]
         prev_size = up_to_size
         up_to_size += 1
-        self.insert_zero_prob =self.all_vars[prev_size: up_to_size]
+        self.insert_zero_prob = self.all_vars[prev_size: up_to_size]
         prev_size = up_to_size
         up_to_size += 1
-        self.insert_poisson =self.all_vars[prev_size: up_to_size]
-
-        self.grad_opt = tf.train.GradientDescentOptimizer(learning_rate=1)
-        self._create_hazard_node_for_simulation()
+        self.insert_poisson = self.all_vars[prev_size: up_to_size]
 
     def _create_hazard_node_for_simulation(self):
         """
@@ -202,10 +220,12 @@ class CLTLikelihoodModel:
                 (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob)
         return insert_prob
 
-    def get_log_lik(self):
-        log_lik, log_lik_grad = self.sess.run([self.log_lik, self.log_lik_grad])
-        #log_lik = self.sess.run(self.log_lik)
-        return log_lik, log_lik_grad
+    def get_log_lik(self, get_grad=False):
+        if get_grad:
+            log_lik, grad = self.sess.run([self.log_lik, self.log_lik_grad])
+            return log_lik, grad[0][0]
+        else:
+            return self.sess.run(self.log_lik), None
 
     def _create_indel_probs(self, singletons: List[Singleton]):
         """
@@ -616,3 +636,18 @@ class CLTLikelihoodModel:
                 name="top.down_probs")
         return down_probs
 
+    def check_grad(self, transition_matrices, epsilon=0.00000001):
+        orig_params = self.sess.run(self.all_vars)
+        self.create_topology_log_lik(transition_matrices)
+        log_lik, grad = self.get_log_lik(get_grad=True)
+        print("log lik", log_lik)
+        print("all grad", grad)
+        for i in range(len(orig_params)):
+            new_params = np.copy(orig_params)
+            new_params[i] += epsilon
+            self.sess.run(self.assign_all_vars, feed_dict={self.all_vars_ph: new_params})
+
+            log_lik_eps, _ = self.get_log_lik()
+            log_lik_approx = (log_lik_eps - log_lik)/epsilon
+            print("LOG LIK APPROX", log_lik_approx)
+            print("GRAD", grad[i])
