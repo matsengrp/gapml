@@ -97,8 +97,8 @@ class CLTLikelihoodModel:
                     trim_poissons,
                     insert_zero_prob,
                     insert_poisson]),
-                dtype=tf.float32)
-        self.all_vars_ph = tf.placeholder(tf.float32, shape=self.all_vars.shape)
+                dtype=tf.float64)
+        self.all_vars_ph = tf.placeholder(tf.float64, shape=self.all_vars.shape)
         self.assign_all_vars = self.all_vars.assign(self.all_vars_ph)
 
         self.branch_lens = self.all_vars[:branch_lens.size]
@@ -126,7 +126,7 @@ class CLTLikelihoodModel:
         creates nodes just for calculating the hazard when simulating stuff
         """
         self.targets_ph = tf.placeholder(tf.int32, [None, 2])
-        self.long_status_ph = tf.placeholder(tf.float32, [None, 2])
+        self.long_status_ph = tf.placeholder(tf.float64, [None, 2])
 
         self.hazard = self._create_hazard(
                 self.targets_ph[:,0],
@@ -163,9 +163,9 @@ class CLTLikelihoodModel:
         min_targets = [sg.min_target for sg in singletons]
         max_targets = [sg.max_target for sg in singletons]
         is_left_longs = tf.constant(
-                [sg.is_left_long for sg in singletons], dtype=tf.float32)
+                [sg.is_left_long for sg in singletons], dtype=tf.float64)
         is_right_longs = tf.constant(
-                [sg.is_right_long for sg in singletons], dtype=tf.float32)
+                [sg.is_right_long for sg in singletons], dtype=tf.float64)
         start_posns = tf.constant(
                 [sg.start_pos for sg in singletons])
         del_ends = tf.constant(
@@ -173,29 +173,29 @@ class CLTLikelihoodModel:
         del_len = del_ends - start_posns
 
         # Compute conditional prob of deletion for a singleton
-        left_trim_len = tf.cast(tf.gather(self.bcode_meta.abs_cut_sites, min_targets) - start_posns, tf.float32)
-        right_trim_len = tf.cast(del_ends - tf.gather(self.bcode_meta.abs_cut_sites, max_targets), tf.float32)
-        left_trim_long_min = tf.cast(tf.gather(self.bcode_meta.left_long_trim_min, min_targets), tf.float32)
-        right_trim_long_min = tf.cast(tf.gather(self.bcode_meta.right_long_trim_min, max_targets), tf.float32)
+        left_trim_len = tf.cast(tf.gather(self.bcode_meta.abs_cut_sites, min_targets) - start_posns, tf.float64)
+        right_trim_len = tf.cast(del_ends - tf.gather(self.bcode_meta.abs_cut_sites, max_targets), tf.float64)
+        left_trim_long_min = tf.cast(tf.gather(self.bcode_meta.left_long_trim_min, min_targets), tf.float64)
+        right_trim_long_min = tf.cast(tf.gather(self.bcode_meta.right_long_trim_min, max_targets), tf.float64)
 
         min_left_trim = is_left_longs * left_trim_long_min
         max_left_trim = tf_common.ifelse(
                 is_left_longs,
-                tf.cast(tf.gather(self.bcode_meta.left_max_trim, min_targets), tf.float32),
+                tf.cast(tf.gather(self.bcode_meta.left_max_trim, min_targets), tf.float64),
                 left_trim_long_min - 1)
         min_right_trim = is_right_longs * right_trim_long_min
         max_right_trim = tf_common.ifelse(
                 is_right_longs,
-                tf.cast(tf.gather(self.bcode_meta.right_max_trim, max_targets), tf.float32),
+                tf.cast(tf.gather(self.bcode_meta.right_max_trim, max_targets), tf.float64),
                 right_trim_long_min - 1)
 
         # TODO: using a uniform distribution for now
-        check_left_max = tf.cast(tf.less_equal(left_trim_len, max_left_trim), tf.float32)
-        check_left_min = tf.cast(tf.less_equal(min_left_trim, left_trim_len), tf.float32)
+        check_left_max = tf.cast(tf.less_equal(left_trim_len, max_left_trim), tf.float64)
+        check_left_min = tf.cast(tf.less_equal(min_left_trim, left_trim_len), tf.float64)
         #TODO: check this range thing
-        left_prob = 1.0/(max_left_trim - min_left_trim + 1) * check_left_max #* check_left_min
-        check_right_max = tf.cast(tf.less_equal(right_trim_len, max_right_trim), tf.float32)
-        check_right_min = tf.cast(tf.less_equal(min_right_trim, right_trim_len), tf.float32)
+        left_prob = 1.0/(max_left_trim - min_left_trim + 1) * check_left_max * check_left_min
+        check_right_max = tf.cast(tf.less_equal(right_trim_len, max_right_trim), tf.float64)
+        check_right_min = tf.cast(tf.less_equal(min_right_trim, right_trim_len), tf.float64)
         right_prob = 1.0/(max_right_trim - min_right_trim + 1) * check_right_max * check_right_min
 
         is_short_indel = tf_common.equal_float(is_left_longs + is_right_longs, 0)
@@ -209,11 +209,11 @@ class CLTLikelihoodModel:
 
     def _create_insert_probs(self, singletons: List[Singleton]):
         insert_lens = tf.constant(
-                [sg.insert_len for sg in singletons], dtype=tf.float32)
+                [sg.insert_len for sg in singletons], dtype=tf.float64)
         poiss_unstd = tf.exp(-self.insert_poisson) * tf.pow(self.insert_poisson, insert_lens)
         insert_len_prob = poiss_unstd/tf.exp(tf.lgamma(insert_lens + 1))
-        insert_seq_prob = 1.0/tf.pow(4.0, insert_lens)
-        is_insert_zero = tf.cast(tf.equal(insert_lens, 0), dtype=tf.float32)
+        insert_seq_prob = 1.0/tf.pow(tf.constant(4.0, dtype=tf.float64), insert_lens)
+        is_insert_zero = tf.cast(tf.equal(insert_lens, 0), dtype=tf.float64)
         insert_prob = tf_common.ifelse(
                 is_insert_zero,
                 self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob,
@@ -263,9 +263,9 @@ class CLTLikelihoodModel:
                 tts_key = trans_mat_w.key_dict[node.state_sum.tts_list[0]]
                 self.L[node.node_id][tts_key] = 1
                 # Convert to tensorflow usage
-                self.L[node.node_id] = tf.constant(self.L[node.node_id], dtype=tf.float32)
+                self.L[node.node_id] = tf.constant(self.L[node.node_id], dtype=tf.float64)
             else:
-                self.L[node.node_id] = 1.0
+                self.L[node.node_id] = tf.constant(1.0, dtype=tf.float64)
                 for child in node.children:
                     ch_trans_mat_w = transition_matrix_wrappers[child.node_id]
                     trans_mat = self._create_transition_matrix(ch_trans_mat_w)
@@ -310,7 +310,7 @@ class CLTLikelihoodModel:
                 if scaler == 0:
                     raise ValueError("Why is everything zero?")
                 self.L[node.node_id] /= scaler
-                self.log_lik += tf.log(scaler)
+                self.log_lik -= tf.log(scaler)
 
         self.log_lik += tf.log(self.L[self.root_node_id])
         self.log_lik_grad = self.grad_opt.compute_gradients(
@@ -404,7 +404,7 @@ class CLTLikelihoodModel:
                 default_value = 1,
                 name="top.trim_probs")
         else:
-            return tf.ones(output_shape)
+            return tf.ones(output_shape, dtype=tf.float64)
 
     def get_hazard(self, tt_evt: TargetTract):
         """
@@ -481,8 +481,8 @@ class CLTLikelihoodModel:
         """
         min_targets = tf.constant([tt_evt.min_target for tt_evt in tt_evts], dtype=tf.int32)
         max_targets = tf.constant([tt_evt.max_target for tt_evt in tt_evts], dtype=tf.int32)
-        long_left_statuses = tf.constant([tt_evt.is_left_long for tt_evt in tt_evts], dtype=tf.float32)
-        long_right_statuses = tf.constant([tt_evt.is_right_long for tt_evt in tt_evts], dtype=tf.float32)
+        long_left_statuses = tf.constant([tt_evt.is_left_long for tt_evt in tt_evts], dtype=tf.float64)
+        long_right_statuses = tf.constant([tt_evt.is_right_long for tt_evt in tt_evts], dtype=tf.float64)
 
         # Compute the hazard
         hazard_nodes = self._create_hazard(min_targets, max_targets, long_left_statuses, long_right_statuses)
@@ -636,7 +636,7 @@ class CLTLikelihoodModel:
                 name="top.down_probs")
         return down_probs
 
-    def check_grad(self, transition_matrices, epsilon=0.00000001):
+    def check_grad(self, transition_matrices, epsilon=1e-10):
         orig_params = self.sess.run(self.all_vars)
         self.create_topology_log_lik(transition_matrices)
         log_lik, grad = self.get_log_lik(get_grad=True)
@@ -649,5 +649,5 @@ class CLTLikelihoodModel:
 
             log_lik_eps, _ = self.get_log_lik()
             log_lik_approx = (log_lik_eps - log_lik)/epsilon
-            print("LOG LIK APPROX", log_lik_approx)
+            print("LOG LIK GRAD APPROX", log_lik_approx)
             print("GRAD", grad[i])

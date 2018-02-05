@@ -30,10 +30,10 @@ def sparse_to_dense(
     return tf.sparse_to_dense(sparse_indices, output_shape, sparse_vals, default_value = default_value, name=name)
 
 def not_equal_float(a, b):
-    return tf.cast(tf.not_equal(a, b), tf.float32)
+    return tf.cast(tf.not_equal(a, b), tf.float64)
 
 def equal_float(a, b):
-    return tf.cast(tf.equal(a, b), tf.float32)
+    return tf.cast(tf.equal(a, b), tf.float64)
 
 def ifelse(bool_tensor, a, b):
     return bool_tensor * a + (1 - bool_tensor) * b
@@ -122,7 +122,7 @@ def myexpm(Q, t, name=None):
     with tf.name_scope(name, "Myexpm", [Q, t]) as name:
         expm_wrapped_func = py_func(_custom_expm,
                         [Q, t],
-                        [tf.float32, tf.float32, tf.float32, tf.float32],
+                        [tf.float64, tf.float64, tf.float64, tf.float64],
                         name=name,
                         grad=_expm_grad)
         return expm_wrapped_func
