@@ -630,7 +630,7 @@ class CLTLikelihoodModel:
         @return the reordered version of vec_lik according to the order in node_trans_mat
         """
         index_vals = [
-            [[trans_mat_w.key_dict[tts], 0], ch_ordered_down_probs[ch_trans_mat_w.key_dict[tts]]]
+            [[trans_mat_w.key_dict[tts], 0], ch_ordered_down_probs[ch_trans_mat_w.key_dict[tts]][0]]
             for tts in tts_list]
         down_probs = tf_common.scatter_nd(
                 index_vals,
