@@ -254,6 +254,7 @@ class CLTLikelihoodModel:
         # Store the tensorflow objects that calculate the prob of a node being in each state given the leaves
         self.L = dict()
         self.pt_matrix = dict()
+        self.trans_mats = dict()
         self.trim_probs = dict()
         for node in self.topology.traverse("postorder"):
             if node.is_leaf():
@@ -267,8 +268,9 @@ class CLTLikelihoodModel:
             else:
                 self.L[node.node_id] = tf.constant(1.0, dtype=tf.float64)
                 for child in node.children:
+                    print("I HAVE CHILDREN?")
                     ch_trans_mat_w = transition_matrix_wrappers[child.node_id]
-                    trans_mat = self._create_transition_matrix(ch_trans_mat_w)
+                    self.trans_mats[child.node_id] = self._create_transition_matrix(ch_trans_mat_w)
                     # Get the trim probabilities
                     self.trim_probs[child.node_id] = self._create_trim_prob_matrix(
                             ch_trans_mat_w,
@@ -279,7 +281,7 @@ class CLTLikelihoodModel:
 
                     # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
                     branch_len = self.branch_lens[child.node_id]
-                    pr_matrix, _, _, _ = tf_common.myexpm(trans_mat, branch_len)
+                    pr_matrix, _, _, _ = tf_common.myexpm(self.trans_mats[child.node_id], branch_len)
                     self.pt_matrix[child.node_id] = pr_matrix
 
                     # Get the probability for the data descended from the child node, assuming that the node
@@ -358,7 +360,7 @@ class CLTLikelihoodModel:
             # Hazard to unlikely state is hazard away minus hazard to likely states
             index_vals.append([[start_key, unlikely_key], haz_away - haz_to_likely])
 
-        q_matrix = tf_common.sparse_to_dense(
+        q_matrix = tf_common.scatter_nd(
                 index_vals,
                 output_shape=[matrix_wrapper.num_likely_states + 1, matrix_wrapper.num_likely_states + 1],
                 name="top.q_matrix")
@@ -398,7 +400,7 @@ class CLTLikelihoodModel:
 
         output_shape = [ch_trans_mat_w.num_likely_states + 1, ch_trans_mat_w.num_likely_states + 1]
         if index_vals:
-            return tf_common.sparse_to_dense(
+            return tf_common.scatter_nd(
                 index_vals,
                 output_shape,
                 default_value = 1,
@@ -630,7 +632,7 @@ class CLTLikelihoodModel:
         index_vals = [
             [[trans_mat_w.key_dict[tts], 0], ch_ordered_down_probs[ch_trans_mat_w.key_dict[tts]]]
             for tts in tts_list]
-        down_probs = tf_common.sparse_to_dense(
+        down_probs = tf_common.scatter_nd(
                 index_vals,
                 output_shape=[trans_mat_w.num_likely_states + 1, 1],
                 name="top.down_probs")

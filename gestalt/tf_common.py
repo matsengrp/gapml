@@ -8,26 +8,26 @@ import numpy as np
 Tensorflow helper functions
 """
 
-def sparse_to_dense(
+def scatter_nd(
         index_vals,
         output_shape,
         default_value = 0,
         name=None):
     """
-    A custom version of sparse_to_dense
+    A custom version of scatter_nd
 
     @param index_vals: List of [[index0, index1, ..., index_last] val], unordered
-    @param output_shape: same as sparse_to_dense
+    @param output_shape: same as scatter_nd
     @param name: name of tensor
     """
-    #TODO: Maybe can be more efficient using gather instead?
-    sorted_index_vals = sorted(index_vals)
-    sparse_indices = [tup[0] for tup in sorted_index_vals]
-    sparse_vals = [tup[1] for tup in sorted_index_vals]
-    sparse_vals = tf.reshape(
-            tf.stack(sparse_vals, axis=0),
-            [len(sparse_indices)])
-    return tf.sparse_to_dense(sparse_indices, output_shape, sparse_vals, default_value = default_value, name=name)
+    sparse_indices = [tup[0] for tup in index_vals]
+    sparse_vals = [tup[1] - default_value for tup in index_vals]
+
+    new_sparse_mat = tf.scatter_nd(
+        sparse_indices,
+        sparse_vals,
+        output_shape) + default_value
+    return new_sparse_mat
 
 def not_equal_float(a, b):
     return tf.cast(tf.not_equal(a, b), tf.float64)
