@@ -90,21 +90,19 @@ class CLTLikelihoodModel:
             insert_poisson: float):
         self.all_vars = tf.Variable(
                 np.concatenate([
-                    branch_lens,
                     target_lams,
                     trim_long_probs,
                     trim_zero_prob,
                     trim_poissons,
                     insert_zero_prob,
-                    insert_poisson]),
+                    insert_poisson,
+                    branch_lens]),
                 dtype=tf.float64)
         self.all_vars_ph = tf.placeholder(tf.float64, shape=self.all_vars.shape)
         self.assign_all_vars = self.all_vars.assign(self.all_vars_ph)
 
-        self.branch_lens = self.all_vars[:branch_lens.size]
-        prev_size = branch_lens.size
-        up_to_size = branch_lens.size + target_lams.size
-        self.target_lams = self.all_vars[prev_size:up_to_size]
+        up_to_size = target_lams.size
+        self.target_lams = self.all_vars[:up_to_size]
         prev_size = up_to_size
         up_to_size += trim_long_probs.size
         self.trim_long_probs = self.all_vars[prev_size: up_to_size]
@@ -120,6 +118,7 @@ class CLTLikelihoodModel:
         prev_size = up_to_size
         up_to_size += 1
         self.insert_poisson = self.all_vars[prev_size: up_to_size]
+        self.branch_lens = self.all_vars[-branch_lens.size:]
 
     def _create_hazard_node_for_simulation(self):
         """
@@ -159,7 +158,13 @@ class CLTLikelihoodModel:
         hazard_list = self.target_lams * left_factor * right_factor
         return hazard_list
 
-    def _create_del_probs(self, singletons: List[Singleton]):
+    def _create_log_del_probs(self, singletons: List[Singleton]):
+        """
+        Creates tensorflow nodes that calculate the log conditional probability of the deletions found in
+        each of the singletons
+
+        @return List[tensorflow nodes] for each singleton in `singletons`
+        """
         min_targets = [sg.min_target for sg in singletons]
         max_targets = [sg.max_target for sg in singletons]
         is_left_longs = tf.constant(
@@ -167,47 +172,52 @@ class CLTLikelihoodModel:
         is_right_longs = tf.constant(
                 [sg.is_right_long for sg in singletons], dtype=tf.float64)
         start_posns = tf.constant(
-                [sg.start_pos for sg in singletons])
+                [sg.start_pos for sg in singletons], dtype=tf.float64)
         del_ends = tf.constant(
-                [sg.del_end for sg in singletons])
+                [sg.del_end for sg in singletons], dtype=tf.float64)
         del_len = del_ends - start_posns
 
         # Compute conditional prob of deletion for a singleton
-        left_trim_len = tf.cast(tf.gather(self.bcode_meta.abs_cut_sites, min_targets) - start_posns, tf.float64)
-        right_trim_len = tf.cast(del_ends - tf.gather(self.bcode_meta.abs_cut_sites, max_targets), tf.float64)
-        left_trim_long_min = tf.cast(tf.gather(self.bcode_meta.left_long_trim_min, min_targets), tf.float64)
-        right_trim_long_min = tf.cast(tf.gather(self.bcode_meta.right_long_trim_min, max_targets), tf.float64)
+        min_target_sites = tf.constant([self.bcode_meta.abs_cut_sites[mt] for mt in min_targets], dtype=tf.float64)
+        max_target_sites = tf.constant([self.bcode_meta.abs_cut_sites[mt] for mt in max_targets], dtype=tf.float64)
+        left_trim_len = min_target_sites - start_posns
+        right_trim_len = del_ends - max_target_sites
+
+        left_trim_long_min = tf.constant([self.bcode_meta.left_long_trim_min[mt] for mt in max_targets], dtype=tf.float64)
+        right_trim_long_min = tf.constant([self.bcode_meta.right_long_trim_min[mt] for mt in max_targets], dtype=tf.float64)
+        left_trim_long_max = tf.constant([self.bcode_meta.left_max_trim[mt] for mt in max_targets], dtype=tf.float64)
+        right_trim_long_max = tf.constant([self.bcode_meta.right_max_trim[mt] for mt in max_targets], dtype=tf.float64)
 
         min_left_trim = is_left_longs * left_trim_long_min
-        max_left_trim = tf_common.ifelse(
-                is_left_longs,
-                tf.cast(tf.gather(self.bcode_meta.left_max_trim, min_targets), tf.float64),
-                left_trim_long_min - 1)
+        max_left_trim = tf_common.ifelse(is_left_longs, left_trim_long_max, left_trim_long_min - 1)
         min_right_trim = is_right_longs * right_trim_long_min
-        max_right_trim = tf_common.ifelse(
-                is_right_longs,
-                tf.cast(tf.gather(self.bcode_meta.right_max_trim, max_targets), tf.float64),
-                right_trim_long_min - 1)
+        max_right_trim = tf_common.ifelse(is_right_longs, right_trim_long_max, right_trim_long_min - 1)
 
         # TODO: using a uniform distribution for now
         check_left_max = tf.cast(tf.less_equal(left_trim_len, max_left_trim), tf.float64)
         check_left_min = tf.cast(tf.less_equal(min_left_trim, left_trim_len), tf.float64)
-        #TODO: check this range thing
-        left_prob = 1.0/(max_left_trim - min_left_trim + 1) * check_left_max * check_left_min
+        left_prob = 1.0/(max_left_trim - min_left_trim + 1.0) * check_left_max * check_left_min
         check_right_max = tf.cast(tf.less_equal(right_trim_len, max_right_trim), tf.float64)
         check_right_min = tf.cast(tf.less_equal(min_right_trim, right_trim_len), tf.float64)
-        right_prob = 1.0/(max_right_trim - min_right_trim + 1) * check_right_max * check_right_min
+        right_prob = 1.0/(max_right_trim - min_right_trim + 1.0) * check_right_max * check_right_min
 
+        lr_prob = left_prob * right_prob
         is_short_indel = tf_common.equal_float(is_left_longs + is_right_longs, 0)
         is_len_zero = tf_common.equal_float(del_len, 0)
         del_prob = tf_common.ifelse(is_short_indel,
                 tf_common.ifelse(is_len_zero,
-                    self.trim_zero_prob + (1 - self.trim_zero_prob) * left_prob * right_prob,
-                    (1 - self.trim_zero_prob) * left_prob * right_prob),
-                left_prob * right_prob)
-        return del_prob
+                    self.trim_zero_prob + (1.0 - self.trim_zero_prob) * lr_prob,
+                    (1.0 - self.trim_zero_prob) * lr_prob),
+                lr_prob)
+        return tf.log(del_prob)
 
-    def _create_insert_probs(self, singletons: List[Singleton]):
+    def _create_log_insert_probs(self, singletons: List[Singleton]):
+        """
+        Creates tensorflow nodes that calculate the log conditional probability of the insertions found in
+        each of the singletons
+
+        @return List[tensorflow nodes] for each singleton in `singletons`
+        """
         insert_lens = tf.constant(
                 [sg.insert_len for sg in singletons], dtype=tf.float64)
         poiss_unstd = tf.exp(-self.insert_poisson) * tf.pow(self.insert_poisson, insert_lens)
@@ -218,16 +228,9 @@ class CLTLikelihoodModel:
                 is_insert_zero,
                 self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob,
                 (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob)
-        return insert_prob
+        return tf.log(insert_prob)
 
-    def get_log_lik(self, get_grad=False):
-        if get_grad:
-            log_lik, grad = self.sess.run([self.log_lik, self.log_lik_grad])
-            return log_lik, grad[0][0]
-        else:
-            return self.sess.run(self.log_lik), None
-
-    def _create_indel_probs(self, singletons: List[Singleton]):
+    def _create_log_indel_probs(self, singletons: List[Singleton]):
         """
         Create tensorflow objects for the cond prob of indels
 
@@ -236,10 +239,20 @@ class CLTLikelihoodModel:
         if not singletons:
             return []
         else:
-            insert_probs = self._create_insert_probs(singletons)
-            del_probs = self._create_del_probs(singletons)
-            indel_probs = insert_probs * del_probs
-            return indel_probs
+            log_insert_probs = self._create_log_insert_probs(singletons)
+            log_del_probs = self._create_log_del_probs(singletons)
+            log_indel_probs = log_del_probs + log_insert_probs
+            return log_indel_probs
+
+    def get_log_lik(self, get_grad=False):
+        """
+        @return the log likelihood and the gradient, if requested
+        """
+        if get_grad:
+            log_lik, grad = self.sess.run([self.log_lik, self.log_lik_grad])
+            return log_lik, grad[0][0]
+        else:
+            return self.sess.run(self.log_lik), None
 
     def create_topology_log_lik(self, transition_matrix_wrappers: Dict):
         """
@@ -249,7 +262,7 @@ class CLTLikelihoodModel:
 
         singletons = CLTLikelihoodModel._get_unmasked_indels(self.topology)
         singleton_index_dict = {sg: int(i) for i, sg in enumerate(singletons)}
-        singleton_cond_prob = self._create_indel_probs(singletons)
+        singleton_log_cond_prob = self._create_log_indel_probs(singletons)
 
         # Store the tensorflow objects that calculate the prob of a node being in each state given the leaves
         self.L = dict()
@@ -268,13 +281,12 @@ class CLTLikelihoodModel:
             else:
                 self.L[node.node_id] = tf.constant(1.0, dtype=tf.float64)
                 for child in node.children:
-                    print("I HAVE CHILDREN?")
                     ch_trans_mat_w = transition_matrix_wrappers[child.node_id]
                     self.trans_mats[child.node_id] = self._create_transition_matrix(ch_trans_mat_w)
                     # Get the trim probabilities
                     self.trim_probs[child.node_id] = self._create_trim_prob_matrix(
                             ch_trans_mat_w,
-                            singleton_cond_prob,
+                            singleton_log_cond_prob,
                             singleton_index_dict,
                             node,
                             child)
@@ -368,14 +380,16 @@ class CLTLikelihoodModel:
 
     def _create_trim_prob_matrix(self,
             ch_trans_mat_w: TransitionMatrixWrapper,
-            singleton_cond_prob, # Tensorflow array
+            singleton_log_cond_prob, # Tensorflow array
             singleton_index_dict: Dict[int, Singleton],
             node: CellLineageTree,
             child: CellLineageTree):
         """
-        @param model: model parameter
-        @param ch_trans_mat: the transition matrix corresponding to child node (we make sure the entries in the trim prob matrix match
-                        the order in ch_trans_mat)
+        @param ch_trans_mat_w: the transition matrix wrapper corresponding to child node
+                                (we make sure the entries in the trim prob matrix match
+                                the order in ch_trans_mat)
+        @param singleton_log_cond_prob: List[tensorflow array] with the log conditional prob of singletons
+        @param singleton_index_dict: dictionary mapping the list index to the singleton
         @param node: the parent node
         @param child: the child node
 
@@ -392,19 +406,18 @@ class CLTLikelihoodModel:
                 singletons = CLTLikelihoodModel.get_matching_singletons(child.anc_state, diff_target_tracts)
 
                 if singletons:
-                    trim_probs = tf.gather(
-                            params = singleton_cond_prob,
+                    log_trim_probs = tf.gather(
+                            params = singleton_log_cond_prob,
                             indices = [singleton_index_dict[sg] for sg in singletons])
-                    val = tf.reduce_prod(trim_probs)
-                    index_vals.append([[node_tts_key, child_tts_key], val])
+                    log_val = tf.reduce_sum(log_trim_probs)
+                    index_vals.append([[node_tts_key, child_tts_key], log_val])
 
         output_shape = [ch_trans_mat_w.num_likely_states + 1, ch_trans_mat_w.num_likely_states + 1]
         if index_vals:
-            return tf_common.scatter_nd(
+            return tf.exp(tf_common.scatter_nd(
                 index_vals,
                 output_shape,
-                default_value = 1,
-                name="top.trim_probs")
+                name="top.trim_probs"))
         else:
             return tf.ones(output_shape, dtype=tf.float64)
 
@@ -651,5 +664,5 @@ class CLTLikelihoodModel:
 
             log_lik_eps, _ = self.get_log_lik()
             log_lik_approx = (log_lik_eps - log_lik)/epsilon
-            print("LOG LIK GRAD APPROX", log_lik_approx)
-            print("GRAD", grad[i])
+            print("index", i, " -- LOG LIK GRAD APPROX", log_lik_approx)
+            print("index", i, " --                GRAD ", grad[i])

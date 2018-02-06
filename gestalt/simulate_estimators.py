@@ -41,7 +41,7 @@ def main():
         '--target-lambdas',
         type=float,
         nargs='+',
-        default=[0.1 for _ in range(10)],
+        default=[0.2] * 10,
         help='target cut rates')
     parser.add_argument(
         '--repair-lambdas',
@@ -55,8 +55,8 @@ def main():
     parser.add_argument(
         '--repair-indel-probability',
         type=float,
-        default=0.5,
-        help='probability of deletion/insertion during repair')
+        default=0.1,
+        help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
         '--repair-deletion-lambda',
         type=float,
@@ -100,6 +100,7 @@ def main():
         # Instantiate all the simulators
         bcode_meta = BarcodeMetadata()
         if args.repair_lambdas:
+            # old stuff... probably delete?
             allele_simulator = AlleleSimulatorCutRepair(
                 np.array(args.target_lambdas),
                 np.array(args.repair_lambdas), args.repair_indel_probability,
