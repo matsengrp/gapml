@@ -54,7 +54,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
 
         t_mats = self.exact_approximator.create_transition_matrix_wrappers(model)
         model.create_topology_log_lik(t_mats)
-        log_lik = model.get_log_lik()
+        log_lik, _ = model.get_log_lik()
 
         # Manually calculate the hazard
         hazard_away_nodes = model._create_hazard_away_nodes([()])
@@ -70,7 +70,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         # Calculate the hazard using approximate algo -- should be same
         t_mats = self.approximator.create_transition_matrix_wrappers(model)
         model.create_topology_log_lik(t_mats)
-        log_lik_approx = model.get_log_lik()
+        log_lik_approx, _ = model.get_log_lik()
         self.assertEqual(log_lik_approx, manual_log_prob)
 
     def test_branch_likelihood(self):
@@ -93,7 +93,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
 
         t_mats = self.exact_approximator.create_transition_matrix_wrappers(model)
         model.create_topology_log_lik(t_mats)
-        log_lik = model.get_log_lik()
+        log_lik, _ = model.get_log_lik()
 
         # Manually calculate the hazard
         hazard_away_nodes = model._create_hazard_away_nodes([(), (TargetTract(0,0,0,0),)])
@@ -109,7 +109,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         manual_cut_log_prob = np.log(prob_mat[0,1])
 
         # Get prob of deletion - one left, two right
-        manual_trim_prob_node = model._create_indel_probs([Singleton(
+        manual_trim_log_prob_node = model._create_log_indel_probs([Singleton(
             event.start_pos,
             event.del_len,
             event.min_target,
@@ -117,8 +117,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             event.max_target,
             event.max_target,
             event.insert_str)])
-        indel_probs = model.sess.run(manual_trim_prob_node)
-        manual_trim_probs = indel_probs[0]
+        manual_trim_probs = np.exp(model.sess.run(manual_trim_log_prob_node)[0])
         manual_log_prob = manual_cut_log_prob + np.log(manual_trim_probs)
 
         # Check the two are equal
@@ -144,7 +143,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
 
         t_mats = self.exact_approximator.create_transition_matrix_wrappers(model)
         model.create_topology_log_lik(t_mats)
-        log_lik = model.get_log_lik()
+        log_lik, _ = model.get_log_lik()
 
         # Manually calculate the hazard -- can cut the middle only or cut the whole barcode
         hazard_away = model.get_hazard_away([])
@@ -161,7 +160,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         manual_cut_log_prob = np.log(prob_mat[0,2])
 
         # Get prob of deletion
-        manual_trim_prob_node = model._create_indel_probs([Singleton(
+        manual_trim_log_prob_node = model._create_log_indel_probs([Singleton(
             event.start_pos,
             event.del_len,
             event.min_target,
@@ -169,7 +168,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             event.max_target,
             event.max_target,
             event.insert_str)])
-        manual_trim_probs = model.sess.run(manual_trim_prob_node)[0]
+        manual_trim_probs = np.exp(model.sess.run(manual_trim_log_prob_node)[0])
         manual_log_prob = manual_cut_log_prob + np.log(manual_trim_probs)
 
         # Check the two are equal
@@ -178,7 +177,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         # Calculate the hazard using approximate algo -- should be smaller
         t_mats = self.approximator.create_transition_matrix_wrappers(model)
         model.create_topology_log_lik(t_mats)
-        log_lik_approx = model.get_log_lik()
+        log_lik_approx, _ = model.get_log_lik()
         self.assertTrue(log_lik_approx < manual_log_prob)
 
     def test_two_branch_likelihood_big_intertarget_del(self):
@@ -204,7 +203,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
 
         t_mats = self.exact_approximator.create_transition_matrix_wrappers(model)
         model.create_topology_log_lik(t_mats)
-        log_lik = model.get_log_lik()
+        log_lik, _ = model.get_log_lik()
 
         # The probability should be the same as a single branch with double the length
         # Manually calculate the hazard -- can cut the middle only or cut the whole barcode
@@ -222,7 +221,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         manual_cut_log_prob = np.log(prob_mat[0,2])
 
         # Get prob of deletion
-        manual_trim_prob_node = model._create_indel_probs([Singleton(
+        manual_trim_log_prob_node = model._create_log_indel_probs([Singleton(
             event.start_pos,
             event.del_len,
             event.min_target,
@@ -230,7 +229,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             event.max_target,
             event.max_target,
             event.insert_str)])
-        manual_trim_probs = model.sess.run(manual_trim_prob_node)[0]
+        manual_trim_probs = np.exp(model.sess.run(manual_trim_log_prob_node)[0])
         manual_log_prob = manual_cut_log_prob + np.log(manual_trim_probs)
 
         # Check the two are equal
@@ -239,5 +238,5 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         # Calculate the hazard using approximate algo -- should be smaller
         t_mats = self.approximator.create_transition_matrix_wrappers(model)
         model.create_topology_log_lik(t_mats)
-        log_lik_approx = model.get_log_lik()
+        log_lik_approx, _ = model.get_log_lik()
         self.assertTrue(log_lik_approx < manual_log_prob)

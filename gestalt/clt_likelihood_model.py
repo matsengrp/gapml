@@ -332,7 +332,7 @@ class CLTLikelihoodModel:
                 if scaler == 0:
                     raise ValueError("Why is everything zero?")
                 self.L[node.node_id] /= scaler
-                self.log_lik -= tf.log(scaler)
+                self.log_lik += tf.log(scaler)
 
         self.log_lik += tf.log(self.L[self.root_node_id])
         self.log_lik_grad = self.grad_opt.compute_gradients(
