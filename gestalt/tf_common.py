@@ -84,11 +84,13 @@ def _expm_grad(op, grad0, grad1, grad2, grad3):
     t = op.inputs[1]
     Q_len = Q.shape[0]
 
-    D_vec = tf.reshape(D, (Q_len, 1))
-    expDt = tf.exp(D * t)
+    D_vec = tf.reshape(D, (Q_len, 1), name="D_vec")
+    expDt = tf.exp(D * t, name="expDt")
     expDt_vec = tf.reshape(expDt, (Q_len, 1))
-    t_factor = tf.divide(expDt_vec - tf.transpose(expDt_vec), D_vec - tf.transpose(D_vec))
-    t_factor = tf.matrix_set_diag(t_factor, t * expDt)
+    DD_diff = tf.subtract(D_vec, tf.transpose(D_vec), name="DD_diff_raw")
+    DD_diff = tf.matrix_set_diag(DD_diff, tf.ones(Q_len, dtype=tf.float64), name="DD_diff_set_diag")
+    t_factor = tf.divide(expDt_vec - tf.transpose(expDt_vec), DD_diff, name="t_factor_raw")
+    t_factor = tf.matrix_set_diag(t_factor, t * expDt, name="t_factor_filled")
     dL_dQ = []
     for i in range(Q_len):
         dL_dQi = []

@@ -41,7 +41,7 @@ def main():
         '--target-lambdas',
         type=float,
         nargs='+',
-        default=[0.2] * 10,
+        default=[0.1] * 10,
         help='target cut rates')
     parser.add_argument(
         '--repair-lambdas',
@@ -67,7 +67,7 @@ def main():
     parser.add_argument(
         '--repair-insertion-lambda',
         type=float,
-        default=0.2,
+        default=1,
         help='poisson parameter for distribution of insertion in cut site(s)')
     parser.add_argument(
         '--birth-lambda', type=float, default=1.25, help='birth rate')
@@ -85,10 +85,13 @@ def main():
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--align', action='store_true')
     args = parser.parse_args()
-
     np.random.seed(seed=args.seed)
-    sess = tf.Session()
 
+    # initialize the target lambdas with some perturbation to ensure we don't have eigenvalues that are exactly equal
+    args.target_lambdas = np.array(args.target_lambdas) + np.random.randn(len(args.target_lambdas)) * 0.1
+    print("args.target_lambdas", args.target_lambdas)
+
+    sess = tf.Session()
     with sess.as_default():
         # Create a cell-type tree
         cell_type_tree = CellTypeTree(cell_type=None, rate=0)
@@ -149,7 +152,7 @@ def main():
         true_tree = CollapsedTree.collapse(pruned_clt)
 
         # trying out with true tree!!!
-        approximator = ApproximatorLB(extra_steps = 2, anc_generations = 1, bcode_metadata = bcode_meta)
+        approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
 
     sess = tf.Session()
     if args.debug:
@@ -159,7 +162,7 @@ def main():
         branch_lens = []
         for node in pruned_clt.traverse("postorder"):
             branch_lens.append(node.dist + 0.1)
-        print("blen", branch_lens)
+        print("blen", len(branch_lens), branch_lens)
         print(pruned_clt.get_ascii(attributes=["anc_state"], show_internal=True))
 
         init_model_params = CLTLikelihoodModel(

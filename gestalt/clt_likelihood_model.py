@@ -249,7 +249,13 @@ class CLTLikelihoodModel:
         @return the log likelihood and the gradient, if requested
         """
         if get_grad:
-            log_lik, grad = self.sess.run([self.log_lik, self.log_lik_grad])
+            log_lik, grad, D_vals = self.sess.run([self.log_lik, self.log_lik_grad, list(self.D.values())])
+            # Quick check that all the diagonal matrix from the eigendecomp were unique
+            print(D_vals)
+            for d in D_vals:
+                d_size = d.size
+                uniq_d = np.unique(d)
+                assert(uniq_d.size == d_size)
             return log_lik, grad[0][0]
         else:
             return self.sess.run(self.log_lik), None
@@ -266,6 +272,7 @@ class CLTLikelihoodModel:
 
         # Store the tensorflow objects that calculate the prob of a node being in each state given the leaves
         self.L = dict()
+        self.D = dict()
         self.pt_matrix = dict()
         self.trans_mats = dict()
         self.trim_probs = dict()
@@ -293,7 +300,8 @@ class CLTLikelihoodModel:
 
                     # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
                     branch_len = self.branch_lens[child.node_id]
-                    pr_matrix, _, _, _ = tf_common.myexpm(self.trans_mats[child.node_id], branch_len)
+                    pr_matrix, _, _, D = tf_common.myexpm(self.trans_mats[child.node_id], branch_len)
+                    self.D[child.node_id] = D
                     self.pt_matrix[child.node_id] = pr_matrix
 
                     # Get the probability for the data descended from the child node, assuming that the node
