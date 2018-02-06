@@ -159,6 +159,7 @@ def main():
         for node in pruned_clt.traverse("postorder"):
             branch_lens.append(node.dist + 0.1)
         print("blen", branch_lens)
+        print(pruned_clt.get_ascii(attributes=["anc_state"], show_internal=True))
 
         init_model_params = CLTLikelihoodModel(
                 pruned_clt, bcode_meta, sess,
