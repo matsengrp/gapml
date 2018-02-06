@@ -251,7 +251,6 @@ class CLTLikelihoodModel:
         if get_grad:
             log_lik, grad, D_vals = self.sess.run([self.log_lik, self.log_lik_grad, list(self.D.values())])
             # Quick check that all the diagonal matrix from the eigendecomp were unique
-            print(D_vals)
             for d in D_vals:
                 d_size = d.size
                 uniq_d = np.unique(d)
