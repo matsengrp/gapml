@@ -14,7 +14,7 @@ from indel_sets import IndelSet, TargetTract, AncState, SingletonWC, Singleton
 from transition_matrix import TransitionMatrixWrapper, TransitionMatrix
 from common import merge_target_tract_groups
 import tf_common
-from common import target_tract_repr_diff
+from common import target_tract_repr_diff, inv_sigmoid
 from constants import UNLIKELY
 from bounded_poisson import BoundedPoisson
 
@@ -77,7 +77,7 @@ class CLTLikelihoodModel:
                 [insert_zero_prob],
                 [insert_poisson])
 
-        self.grad_opt = tf.train.GradientDescentOptimizer(learning_rate=1)
+        self.grad_opt = tf.train.GradientDescentOptimizer(learning_rate=0.001)
         self._create_hazard_node_for_simulation()
 
     def _create_parameters(self,
@@ -91,10 +91,10 @@ class CLTLikelihoodModel:
         self.all_vars = tf.Variable(
                 np.concatenate([
                     target_lams,
-                    trim_long_probs,
-                    trim_zero_prob,
+                    inv_sigmoid(trim_long_probs),
+                    inv_sigmoid(trim_zero_prob),
                     trim_poissons,
-                    insert_zero_prob,
+                    inv_sigmoid(insert_zero_prob),
                     insert_poisson,
                     branch_lens]),
                 dtype=tf.float64)
@@ -105,20 +105,23 @@ class CLTLikelihoodModel:
         self.target_lams = self.all_vars[:up_to_size]
         prev_size = up_to_size
         up_to_size += trim_long_probs.size
-        self.trim_long_probs = self.all_vars[prev_size: up_to_size]
+        self.trim_long_probs = tf.sigmoid(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
         up_to_size += 1
-        self.trim_zero_prob = self.all_vars[prev_size: up_to_size]
+        self.trim_zero_prob = tf.sigmoid(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
         up_to_size += trim_poissons.size
         self.trim_poissons = self.all_vars[prev_size: up_to_size]
         prev_size = up_to_size
         up_to_size += 1
-        self.insert_zero_prob = self.all_vars[prev_size: up_to_size]
+        self.insert_zero_prob = tf.sigmoid(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
         up_to_size += 1
         self.insert_poisson = self.all_vars[prev_size: up_to_size]
         self.branch_lens = self.all_vars[-branch_lens.size:]
+
+    def get_vars(self):
+        return self.sess.run([self.target_lams, self.trim_long_probs, self.trim_zero_prob, self.trim_poissons, self.insert_zero_prob, self.insert_poisson, self.branch_lens])
 
     def _create_hazard_node_for_simulation(self):
         """

@@ -51,3 +51,9 @@ def target_tract_repr_diff(tts1: Tuple[TargetTract], tts2: Tuple[TargetTract]):
     new_tuple += tts2[idx2:]
 
     return new_tuple
+
+def inv_sigmoid(prob: float):
+    """
+    @return x for prob = 1/(1 + exp(-x))
+    """
+    return -np.log(np.divide(1.0, prob) - 1.0)
