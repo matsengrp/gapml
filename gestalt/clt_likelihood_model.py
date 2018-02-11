@@ -247,12 +247,24 @@ class CLTLikelihoodModel:
             log_indel_probs = log_del_probs + log_insert_probs
             return log_indel_probs
 
-    def get_log_lik(self, get_grad=False):
+    def get_log_lik(self, get_grad=False, do_logging=False):
         """
         @return the log likelihood and the gradient, if requested
         """
-        if get_grad:
-            log_lik, grad, D_vals = self.sess.run([self.log_lik, self.log_lik_grad, list(self.D.values())])
+        if get_grad and not do_logging:
+            log_lik, grad = self.sess.run(
+                    [self.log_lik, self.log_lik_grad])
+            return log_lik, grad[0][0]
+        elif get_grad and do_logging:
+            run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+            run_metadata = tf.RunMetadata()
+            log_lik, grad, D_vals = self.sess.run(
+                    [self.log_lik, self.log_lik_grad, list(self.D.values())],
+                    options=run_options,
+                    run_metadata=run_metadata)
+
+            self.profile_writer.add_run_metadata(run_metadata, "hello?")
+
             # Quick check that all the diagonal matrix from the eigendecomp were unique
             for d in D_vals:
                 d_size = d.size
@@ -676,3 +688,9 @@ class CLTLikelihoodModel:
             log_lik_approx = (log_lik_eps - log_lik)/epsilon
             print("index", i, " -- LOG LIK GRAD APPROX", log_lik_approx)
             print("index", i, " --                GRAD ", grad[i])
+
+    def create_logger(self):
+        self.profile_writer = tf.summary.FileWriter("_output", self.sess.graph)
+
+    def close_logger(self):
+        self.profile_writer.close()

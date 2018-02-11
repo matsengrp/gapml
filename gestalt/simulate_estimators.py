@@ -74,7 +74,7 @@ def main():
     parser.add_argument(
         '--death-lambda', type=float, default=0.01, help='death rate')
     parser.add_argument(
-        '--time', type=float, default=2, help='how much time to simulate')
+        '--time', type=float, default=1.2, help='how much time to simulate')
     parser.add_argument(
         '--sampling-rate',
         type=float,
@@ -173,7 +173,6 @@ def main():
                 trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
                 insert_zero_prob = args.repair_indel_probability,
                 insert_poisson = args.repair_insertion_lambda)
-        tf.global_variables_initializer().run()
         lasso_est = CLTLassoEstimator(0, init_model_params, approximator)
 
 if __name__ == "__main__":
