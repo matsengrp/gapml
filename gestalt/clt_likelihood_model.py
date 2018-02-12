@@ -342,8 +342,6 @@ class CLTLikelihoodModel:
         """
         Create a tensorflow graph of the likelihood calculation
         """
-        self.log_lik = 0
-
         hazard_evt_dict, hazard_evts = self._create_hazard_dict(transition_matrix_wrappers.values())
         hazard_away_dict, hazard_aways = self._create_hazard_away_dict(transition_matrix_wrappers.values())
 
@@ -357,6 +355,8 @@ class CLTLikelihoodModel:
         self.pt_matrix = dict()
         self.trans_mats = dict()
         self.trim_probs = dict()
+        # Store all the scaling terms addressing numerical underflow
+        scaling_terms = []
         for node in self.topology.traverse("postorder"):
             if node.is_leaf():
                 trans_mat_w = transition_matrix_wrappers[node.node_id]
@@ -391,35 +391,41 @@ class CLTLikelihoodModel:
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.
                     # These down probs are ordered according to the child node's numbering of the TTs states
-                    ch_ordered_down_probs = tf.matmul(
-                            tf.multiply(self.pt_matrix[child.node_id], self.trim_probs[child.node_id]),
-                            self.L[child.node_id])
+                    with tf.name_scope("recurse%d" % node.node_id):
+                        ch_ordered_down_probs = tf.matmul(
+                                tf.multiply(self.pt_matrix[child.node_id], self.trim_probs[child.node_id]),
+                                self.L[child.node_id])
 
-                    if not node.is_root():
-                        # Reorder summands according to node's numbering of tts states
-                        trans_mat_w = transition_matrix_wrappers[node.node_id]
+                    with tf.name_scope("rearrange%d" % node.node_id):
+                        if not node.is_root():
+                            # Reorder summands according to node's numbering of tts states
+                            trans_mat_w = transition_matrix_wrappers[node.node_id]
 
-                        down_probs = CLTLikelihoodModel._reorder_likelihoods(
-                                ch_ordered_down_probs,
-                                node.state_sum.tts_list,
-                                trans_mat_w,
-                                ch_trans_mat_w)
+                            down_probs = CLTLikelihoodModel._reorder_likelihoods(
+                                    ch_ordered_down_probs,
+                                    node.state_sum.tts_list,
+                                    trans_mat_w,
+                                    ch_trans_mat_w)
 
-                        self.L[node.node_id] *= down_probs
-                    else:
-                        # For the root node, we just want the probability where the root node is unmodified
-                        # No need to reorder
-                        ch_id = ch_trans_mat_w.key_dict[()]
-                        self.L[node.node_id] *= ch_ordered_down_probs[ch_id]
+                            self.L[node.node_id] = tf.multiply(self.L[node.node_id], down_probs)
+                        else:
+                            # For the root node, we just want the probability where the root node is unmodified
+                            # No need to reorder
+                            ch_id = ch_trans_mat_w.key_dict[()]
+                            self.L[node.node_id] = tf.multiply(self.L[node.node_id], ch_ordered_down_probs[ch_id])
 
-                scaler = tf.reduce_sum(self.L[node.node_id])
-                if scaler == 0:
-                    raise ValueError("Why is everything zero?")
-                self.L[node.node_id] /= scaler
-                self.log_lik += tf.log(scaler)
+                # Handle numerical underflow
+                scaling_term = tf.reduce_sum(self.L[node.node_id], name="scaling_term")
+                self.L[node.node_id] = tf.div(self.L[node.node_id], scaling_term, name="sub_log_lik")
+                scaling_terms.append(scaling_term)
 
         with tf.name_scope("log_lik"):
-            self.log_lik = tf.add(self.log_lik, tf.log(self.L[self.root_node_id]), name="final_log_lik")
+            # Account for the scaling terms we used for handling numerical underflow
+            scaling_terms = tf.stack(scaling_terms)
+            self.log_lik = tf.add(
+                tf.reduce_sum(tf.log(scaling_terms), name="add_normalizer"),
+                tf.log(self.L[self.root_node_id]),
+                name="final_log_lik")
             self.log_lik_grad = self.grad_opt.compute_gradients(
                 self.log_lik,
                 var_list=[self.all_vars])
