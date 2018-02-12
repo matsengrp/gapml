@@ -88,7 +88,7 @@ def main():
     np.random.seed(seed=args.seed)
 
     # initialize the target lambdas with some perturbation to ensure we don't have eigenvalues that are exactly equal
-    args.target_lambdas = np.array(args.target_lambdas) + np.random.randn(len(args.target_lambdas)) * 0.1
+    args.target_lambdas = np.array(args.target_lambdas) + np.random.uniform(size=len(args.target_lambdas)) * 0.1
     print("args.target_lambdas", args.target_lambdas)
 
     sess = tf.Session()

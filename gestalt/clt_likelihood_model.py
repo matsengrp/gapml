@@ -1,6 +1,7 @@
 import time
 import numpy as np
 import tensorflow as tf
+from tensorflow import Tensor
 import tensorflow.contrib.distributions as tf_distributions
 
 from typing import List, Tuple, Dict
@@ -136,9 +137,17 @@ class CLTLikelihoodModel:
                 self.long_status_ph[:,0],
                 self.long_status_ph[:,1])
 
-    def _create_hazard(self, min_target, max_target, long_left_statuses, long_right_statuses):
+    def _create_hazard(self,
+            min_target: List[int],
+            max_target: List[int],
+            long_left_statuses: List[bool],
+            long_right_statuses: List[bool]):
         """
         Helpers for creating hazard in tensorflow graph and its associated gradient
+        The arguments should all have the same length.
+        The i-th elem in each argument corresponds to the target tract that was introduced.
+
+        @return tensorflow tensor with the i-th value corresponding to the i-th target tract in the arguments
         """
         # Compute the hazard
         log_lambda_part = tf.log(tf.gather(self.target_lams, min_target)) + tf.log(tf.gather(self.target_lams, max_target)) * tf_common.not_equal_float(min_target, max_target)
@@ -147,15 +156,22 @@ class CLTLikelihoodModel:
         hazard = tf.exp(log_lambda_part + tf.log(left_trim_prob) + tf.log(right_trim_prob), name="hazard")
         return hazard
 
-    def _create_hazard_list(self, trim_left: bool, trim_right: bool, left_trimmables, right_trimmables):
+    def _create_hazard_list(self,
+            trim_left: bool,
+            trim_right: bool,
+            left_trimmables: List[List[int]],
+            right_trimmables: List[List[int]]):
         """
         Helper function for creating hazard list nodes -- useful for calculating hazard away
+        The list-type arguments should all have the same length.
+        The i-th elem in each argument corresponds to the same target tract repr.
+
+        @return tensorflow tensor with the i-th value corresponding to the i-th target tract repr in the arguments
         """
         trim_short_left = 1 - self.trim_long_probs[0] if trim_left else 1
         trim_short_right = 1 - self.trim_long_probs[1] if trim_right else 1
 
         left_factor = tf_common.equal_float(left_trimmables, 1) * trim_short_left + tf_common.equal_float(left_trimmables, 2)
-
         right_factor = tf_common.equal_float(right_trimmables, 1) * trim_short_right + tf_common.equal_float(right_trimmables, 2)
 
         hazard_list = self.target_lams * left_factor * right_factor
@@ -237,7 +253,7 @@ class CLTLikelihoodModel:
         """
         Create tensorflow objects for the cond prob of indels
 
-        @return a tensorflow object with indel probs for each singleton
+        @return list of tensorflow tensors with indel probs for each singleton
         """
         if not singletons:
             return []
@@ -246,6 +262,44 @@ class CLTLikelihoodModel:
             log_del_probs = self._create_log_del_probs(singletons)
             log_indel_probs = log_del_probs + log_insert_probs
             return log_indel_probs
+
+    def _create_hazard_dict(self, transition_matrix_wrappers: List[TransitionMatrixWrapper]):
+        """
+        @param transition_matrix_wrappers: iterable with transition matrix wrappers
+
+        @return Dict mapping the target tract introduced to its tensorflow tensor
+                a tensorflow tensor with the calculations for the hazard of introducing the target tracts
+        """
+        tt_evts = set()
+        for trans_mat_wrapper in transition_matrix_wrappers:
+            # Get inputs ready for tensorflow
+            for start_tts, matrix_row in trans_mat_wrapper.matrix_dict.items():
+                tt_evts.update(matrix_row.values())
+
+        # Gets hazards (by tensorflow)
+        tt_evts = list(tt_evts)
+        hazard_evt_dict = {tt_evt: int(i) for i, tt_evt in enumerate(tt_evts)}
+        hazard_nodes = self._create_hazard_nodes(tt_evts)
+        return hazard_evt_dict, hazard_nodes
+
+    def _create_hazard_away_dict(self, transition_matrix_wrappers: List[TransitionMatrixWrapper]):
+        """
+        @param transition_matrix_wrappers: iterable with transition matrix wrappers
+
+        @return Dict mapping the tuple of start target tract repr to a hazard away node
+                a tensorflow tensor with the calculations for the hazard away
+        """
+        tts_starts = set()
+        for trans_mat_wrapper in transition_matrix_wrappers.values():
+            # Get inputs ready for tensorflow
+            for start_tts, matrix_row in trans_mat_wrapper.matrix_dict.items():
+                tts_starts.add(start_tts)
+
+        # Gets hazards (by tensorflow)
+        tts_starts = list(tts_starts)
+        hazard_away_dict = {tts: int(i) for i, tts in enumerate(tts_starts)}
+        hazard_away_nodes = self._create_hazard_away_nodes(tts_starts)
+        return hazard_away_dict, hazard_away_nodes
 
     def get_log_lik(self, get_grad=False, do_logging=False):
         """
@@ -271,6 +325,16 @@ class CLTLikelihoodModel:
                 uniq_d = np.unique(d)
                 assert(uniq_d.size == d_size)
             return log_lik, grad[0][0]
+        elif not get_grad and do_logging:
+            run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+            run_metadata = tf.RunMetadata()
+            log_lik = self.sess.run(
+                    self.log_lik,
+                    options=run_options,
+                    run_metadata=run_metadata)
+
+            self.profile_writer.add_run_metadata(run_metadata, "hello?")
+            return log_lik, None
         else:
             return self.sess.run(self.log_lik), None
 
@@ -279,6 +343,9 @@ class CLTLikelihoodModel:
         Create a tensorflow graph of the likelihood calculation
         """
         self.log_lik = 0
+
+        hazard_evt_dict, hazard_evts = self._create_hazard_dict(transition_matrix_wrappers)
+        hazard_away_dict, hazard_aways = self._create_hazard_away_dict(transition_matrix_wrappers)
 
         singletons = CLTLikelihoodModel._get_unmasked_indels(self.topology)
         singleton_index_dict = {sg: int(i) for i, sg in enumerate(singletons)}
@@ -303,18 +370,21 @@ class CLTLikelihoodModel:
                 self.L[node.node_id] = tf.constant(1.0, dtype=tf.float64)
                 for child in node.children:
                     ch_trans_mat_w = transition_matrix_wrappers[child.node_id]
-                    self.trans_mats[child.node_id] = self._create_transition_matrix(ch_trans_mat_w)
+                    with tf.name_scope("Transition_matrix%d" % node.node_id):
+                        self.trans_mats[child.node_id] = self._create_transition_matrix(ch_trans_mat_w, hazard_evt_dict, hazard_evts, hazard_away_dict, hazard_aways)
                     # Get the trim probabilities
-                    self.trim_probs[child.node_id] = self._create_trim_prob_matrix(
-                            ch_trans_mat_w,
-                            singleton_log_cond_prob,
-                            singleton_index_dict,
-                            node,
-                            child)
+                    with tf.name_scope("trim_matrix%d" % node.node_id):
+                        self.trim_probs[child.node_id] = self._create_trim_prob_matrix(
+                                ch_trans_mat_w,
+                                singleton_log_cond_prob,
+                                singleton_index_dict,
+                                node,
+                                child)
 
                     # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
                     branch_len = self.branch_lens[child.node_id]
-                    pr_matrix, _, _, D = tf_common.myexpm(self.trans_mats[child.node_id], branch_len)
+                    with tf.name_scope("expm_ops%d" % node.node_id):
+                        pr_matrix, _, _, D = tf_common.myexpm(self.trans_mats[child.node_id], branch_len)
                     self.D[child.node_id] = D
                     self.pt_matrix[child.node_id] = pr_matrix
 
@@ -348,36 +418,30 @@ class CLTLikelihoodModel:
                 self.L[node.node_id] /= scaler
                 self.log_lik += tf.log(scaler)
 
-        self.log_lik += tf.log(self.L[self.root_node_id])
-        self.log_lik_grad = self.grad_opt.compute_gradients(
-            self.log_lik,
-            var_list=[self.all_vars])
+        with tf.name_scope("log_lik"):
+            self.log_lik = tf.add(self.log_lik, tf.log(self.L[self.root_node_id]), name="final_log_lik")
+            self.log_lik_grad = self.grad_opt.compute_gradients(
+                self.log_lik,
+                var_list=[self.all_vars])
 
-    def _create_transition_matrix(self, matrix_wrapper: TransitionMatrixWrapper):
+    def _create_transition_matrix(self,
+            matrix_wrapper: TransitionMatrixWrapper,
+            hazard_evt_dict: Dict[Tuple[TargetTract], int],
+            hazard_evts: Tensor,
+            hazard_away_dict: Dict[Tuple[TargetTract], int],
+            hazard_aways: Tensor):
         """
         Uses tensorflow to create the instantaneous transition matrix
         """
+        print("NUM UNLIKELY", matrix_wrapper.num_likely_states)
         unlikely_key = matrix_wrapper.num_likely_states
-
-        # Get inputs ready for tensorflow
-        hazard_list = []
-        tt_evts = []
-        start_tts_list = []
-        for start_tts, matrix_row in matrix_wrapper.matrix_dict.items():
-            start_tts_list.append(start_tts)
-            for end_tts, tt_evt in matrix_row.items():
-                tt_evts.append(tt_evt)
-
-        # Gets hazards (by tensorflow)
-        hazard_away_nodes = self._create_hazard_away_nodes(start_tts_list)
-        hazard_nodes = self._create_hazard_nodes(tt_evts)
 
         # Now fill in the matrix -- match tensorflow object with indices of instant transition matrix
         idx = 0
         index_vals = []
-        for i, (start_tts, matrix_row) in enumerate(matrix_wrapper.matrix_dict.items()):
+        for start_tts, matrix_row in matrix_wrapper.matrix_dict.items():
             start_key = matrix_wrapper.key_dict[start_tts]
-            haz_away = hazard_away_nodes[i]
+            haz_away = hazard_aways[hazard_away_dict[start_tts]]
 
             # Hazard of staying is negative of hazard away
             index_vals.append([[start_key, start_key], -haz_away])
@@ -385,7 +449,7 @@ class CLTLikelihoodModel:
             # Tracks the total hazard to the likely states
             haz_to_likely = 0
             for end_tts, tt_evt in matrix_row.items():
-                haz = hazard_nodes[idx]
+                haz = hazard_evts[hazard_evt_dict[tt_evt]]
                 end_key = matrix_wrapper.key_dict[end_tts]
                 index_vals.append([[start_key, end_key], haz])
                 haz_to_likely += haz
@@ -402,7 +466,7 @@ class CLTLikelihoodModel:
 
     def _create_trim_prob_matrix(self,
             ch_trans_mat_w: TransitionMatrixWrapper,
-            singleton_log_cond_prob, # Tensorflow array
+            singleton_log_cond_prob: Tensor,
             singleton_index_dict: Dict[int, Singleton],
             node: CellLineageTree,
             child: CellLineageTree):
