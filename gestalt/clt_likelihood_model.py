@@ -263,7 +263,7 @@ class CLTLikelihoodModel:
             log_indel_probs = log_del_probs + log_insert_probs
             return log_indel_probs
 
-    def _create_hazard_dict(self, transition_matrix_wrappers: List[TransitionMatrixWrapper]):
+    def _create_hazard_dict(self, trans_mat_wrappers: List[TransitionMatrixWrapper]):
         """
         @param transition_matrix_wrappers: iterable with transition matrix wrappers
 
@@ -271,7 +271,7 @@ class CLTLikelihoodModel:
                 a tensorflow tensor with the calculations for the hazard of introducing the target tracts
         """
         tt_evts = set()
-        for trans_mat_wrapper in transition_matrix_wrappers:
+        for trans_mat_wrapper in trans_mat_wrappers:
             # Get inputs ready for tensorflow
             for start_tts, matrix_row in trans_mat_wrapper.matrix_dict.items():
                 tt_evts.update(matrix_row.values())
@@ -282,7 +282,7 @@ class CLTLikelihoodModel:
         hazard_nodes = self._create_hazard_nodes(tt_evts)
         return hazard_evt_dict, hazard_nodes
 
-    def _create_hazard_away_dict(self, transition_matrix_wrappers: List[TransitionMatrixWrapper]):
+    def _create_hazard_away_dict(self, trans_mat_wrappers: List[TransitionMatrixWrapper]):
         """
         @param transition_matrix_wrappers: iterable with transition matrix wrappers
 
@@ -290,7 +290,7 @@ class CLTLikelihoodModel:
                 a tensorflow tensor with the calculations for the hazard away
         """
         tts_starts = set()
-        for trans_mat_wrapper in transition_matrix_wrappers.values():
+        for trans_mat_wrapper in trans_mat_wrappers:
             # Get inputs ready for tensorflow
             for start_tts, matrix_row in trans_mat_wrapper.matrix_dict.items():
                 tts_starts.add(start_tts)
@@ -344,8 +344,8 @@ class CLTLikelihoodModel:
         """
         self.log_lik = 0
 
-        hazard_evt_dict, hazard_evts = self._create_hazard_dict(transition_matrix_wrappers)
-        hazard_away_dict, hazard_aways = self._create_hazard_away_dict(transition_matrix_wrappers)
+        hazard_evt_dict, hazard_evts = self._create_hazard_dict(transition_matrix_wrappers.values())
+        hazard_away_dict, hazard_aways = self._create_hazard_away_dict(transition_matrix_wrappers.values())
 
         singletons = CLTLikelihoodModel._get_unmasked_indels(self.topology)
         singleton_index_dict = {sg: int(i) for i, sg in enumerate(singletons)}
