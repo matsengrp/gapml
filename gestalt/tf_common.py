@@ -74,8 +74,6 @@ def _expm_grad(op, grad0, grad1, grad2, grad3):
             and the rest is not used to calculate the final value.)
 
     Gradient calculations based on Kalbfleisch (1985)
-    TODO: implement a faster version
-    TODO: do some checks on this gradient
     """
     A = op.outputs[1]
     A_inv = op.outputs[2]
@@ -91,28 +89,42 @@ def _expm_grad(op, grad0, grad1, grad2, grad3):
     DD_diff = tf.matrix_set_diag(DD_diff, tf.ones(Q_len, dtype=tf.float64), name="DD_diff_set_diag")
     t_factor = tf.divide(expDt_vec - tf.transpose(expDt_vec), DD_diff, name="t_factor_raw")
     t_factor = tf.matrix_set_diag(t_factor, t * expDt, name="t_factor_filled")
-    dL_dQ = []
-    for i in range(Q_len):
-        dL_dQi = []
-        for j in range(Q_len):
-            A_invi = tf.reshape(A_inv[:,i], (Q_len, 1))
-            A_j = tf.reshape(A[j,:], (1, Q_len))
-            G = tf.matmul(A_invi, A_j)
-            V = tf.multiply(G, t_factor)
-            dP_dQij = tf.matmul(A, tf.matmul(V, A_inv))
-            dL_dQi.append(
-                    tf.reduce_sum(tf.multiply(grad0, dP_dQij)))
 
-        dL_dQ.append(tf.parallel_stack(dL_dQi))
+    A_inv_col = tf.reshape(tf.transpose(A_inv), (-1, 1))
+    A_row = tf.reshape(A, (1, -1))
+    Gs = tf.matmul(A_inv_col, A_row)
+    Ts = tf.tile(t_factor, multiples=[Q_len, Q_len])
+    Vs = tf.multiply(Gs, Ts)
 
-    dL_dQ = tf.parallel_stack(dL_dQ)
+    # Derivation
+    # dL_dQij = dotproduct(dL/dP, dP/dQij)
+    #         = trace(dL/dP dP/dQij.T)
+    #         = trace(dL/dP Ainv.T Vij.T A.T)
+    #         = trace(A.T dL/dP Ainv.T Vij.T)
+    #         = dotproduct(A.T dL/dP Ainv.T, Vij)
+    sandwicher = tf.matmul(
+            A,
+            tf.matmul(grad0, A_inv, transpose_b=True),
+            transpose_a=True)
+    tiled_sandwicher = tf.tile(sandwicher, multiples=[Q_len, Q_len])
+    sw_Vs = tf.cast(tf.multiply(tiled_sandwicher, Vs), tf.float32)
+    sw_Vs = tf.expand_dims(tf.expand_dims(sw_Vs, 0), -1)
+    # Calculate the dotproduct using convolutional operators
+    # TODO: unfortunately the conv operator in tensorflow requires float32 instead of 64.
+    #       We're going to lose some precision in the tradeoff for using someone else's code.
+    #       In the future, we can consider implementing this entirely on our own.
+    avg_filter = tf.expand_dims(tf.expand_dims(
+            tf.ones(shape=[Q_len, Q_len], dtype=tf.float32),
+            -1), -1)
+    avged = tf.nn.conv2d(sw_Vs, avg_filter, strides=[1, Q_len, Q_len, 1], padding="SAME")
+    dL_dQ = avged[0, :, :, 0]
 
     dP_dt = tf.matmul(A, tf.matmul(
                 tf.diag(D * expDt),
                 A_inv))
     dL_dt = tf.reduce_sum(tf.multiply(grad0, dP_dt))
 
-    return dL_dQ, dL_dt
+    return tf.cast(dL_dQ, tf.float64), dL_dt
 
 def myexpm(Q, t, name=None):
     """
