@@ -355,7 +355,8 @@ class CLTLikelihoodModel:
         self.pt_matrix = dict()
         self.trans_mats = dict()
         self.trim_probs = dict()
-        self.normalizers = []
+        # Store all the scaling terms addressing numerical underflow
+        scaling_terms = []
         for node in self.topology.traverse("postorder"):
             if node.is_leaf():
                 trans_mat_w = transition_matrix_wrappers[node.node_id]
@@ -413,14 +414,16 @@ class CLTLikelihoodModel:
                             ch_id = ch_trans_mat_w.key_dict[()]
                             self.L[node.node_id] = tf.multiply(self.L[node.node_id], ch_ordered_down_probs[ch_id])
 
-                normalizer = tf.reduce_sum(self.L[node.node_id], name="normalizer")
-                self.L[node.node_id] = tf.div(self.L[node.node_id], normalizer, name="sub_log_lik")
-                self.normalizers.append(normalizer)
+                # Handle numerical underflow
+                scaling_term = tf.reduce_sum(self.L[node.node_id], name="scaling_term")
+                self.L[node.node_id] = tf.div(self.L[node.node_id], scaling_term, name="sub_log_lik")
+                scaling_terms.append(scaling_term)
 
         with tf.name_scope("log_lik"):
-            self.normalizers = tf.stack(self.normalizers)
+            # Account for the scaling terms we used for handling numerical underflow
+            scaling_terms = tf.stack(scaling_terms)
             self.log_lik = tf.add(
-                tf.reduce_sum(tf.log(self.normalizers), name="add_normalizer"),
+                tf.reduce_sum(tf.log(scaling_terms), name="add_normalizer"),
                 tf.log(self.L[self.root_node_id]),
                 name="final_log_lik")
             self.log_lik_grad = self.grad_opt.compute_gradients(
