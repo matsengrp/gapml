@@ -44,6 +44,8 @@ class CLTLassoEstimator(CLTEstimator):
         st_time = time.time()
         log_lik, log_lik_grad = self.model.get_log_lik(get_grad=True, do_logging=True)
         print("tim", time.time() - st_time)
+        print("Log lik", log_lik)
+        print("log lik grad", log_lik_grad)
 
         #self.model.check_grad(self.transition_mat_wrappers)
 

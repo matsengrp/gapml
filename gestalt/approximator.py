@@ -1,7 +1,7 @@
 from typing import Tuple, List, Set, Dict
 import itertools
 
-from indel_sets import TargetTract, AncState, IndelSet, SingletonWC
+from indel_sets import TargetTract, AncState, IndelSet, SingletonWC, TargetTractRepr
 from cell_lineage_tree import CellLineageTree
 from state_sum import StateSum
 from barcode_metadata import BarcodeMetadata
@@ -65,7 +65,7 @@ class ApproximatorLB:
         """
         for node in tree.traverse("preorder"):
             if node.is_root():
-                node.add_feature("state_sum", StateSum([()]))
+                node.add_feature("state_sum", StateSum([TargetTractRepr()]))
             else:
                 transition_graph_dict, state_sum = self._get_branch_state_sum_transitions(node)
                 if node.is_leaf():

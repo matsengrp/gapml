@@ -4,7 +4,7 @@ import itertools
 from functools import reduce
 from typing import List, Tuple, Dict
 
-from indel_sets import TargetTract
+from indel_sets import TargetTract, TargetTractRepr
 
 from constants import COLORS
 
@@ -20,7 +20,8 @@ def merge_target_tract_groups(tt_groups: List[Tuple[TargetTract]]):
     """
     @return flattened version of a list of tuples of target tract
     """
-    return reduce(lambda x,y: x + y, tt_groups, ())
+    tts_raw = reduce(lambda x,y: x + y, tt_groups, ())
+    return TargetTractRepr(*tts_raw)
 
 def target_tract_repr_diff(tts1: Tuple[TargetTract], tts2: Tuple[TargetTract]):
     """
@@ -42,7 +43,6 @@ def target_tract_repr_diff(tts1: Tuple[TargetTract], tts2: Tuple[TargetTract]):
             continue
 
         # Now we have overlapping events
-        assert(tt1.max_target <= tt2.max_target)
         idx1 += 1
         idx2 += 1
         if tt1 != tt2:
