@@ -11,11 +11,10 @@ from tensorflow import Session
 
 from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
-from indel_sets import IndelSet, TargetTract, AncState, SingletonWC, Singleton
+from indel_sets import IndelSet, TargetTract, AncState, SingletonWC, Singleton, TargetTractRepr
 from transition_matrix import TransitionMatrixWrapper, TransitionMatrix
-from common import merge_target_tract_groups
 import tf_common
-from common import target_tract_repr_diff, inv_sigmoid
+from common import inv_sigmoid
 from constants import UNLIKELY
 from bounded_poisson import BoundedPoisson
 
@@ -312,18 +311,24 @@ class CLTLikelihoodModel:
         elif get_grad and do_logging:
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
-            log_lik, grad, D_vals = self.sess.run(
-                    [self.log_lik, self.log_lik_grad, list(self.D.values())],
+            dkey_list = list(self.D.keys())
+            D_vals = [self.D[k] for k in dkey_list]
+            trans_mats_vals = [self.trans_mats[k] for k in dkey_list]
+            log_lik, grad, Ds, q_mats = self.sess.run(
+                    [self.log_lik, self.log_lik_grad, D_vals, trans_mats_vals],
                     options=run_options,
                     run_metadata=run_metadata)
 
             self.profile_writer.add_run_metadata(run_metadata, "hello?")
 
             # Quick check that all the diagonal matrix from the eigendecomp were unique
-            for d in D_vals:
+            for d, q in zip(Ds, q_mats):
                 d_size = d.size
                 uniq_d = np.unique(d)
-                assert(uniq_d.size == d_size)
+                if uniq_d.size != d_size:
+                    print("Uhoh. D matrix does not have unique eigenvalues. %d vs %d" % (uniq_d.size, d_size))
+                    print("Q mat", q)
+                    print(np.linalg.eig(q))
             return log_lik, grad[0][0]
         elif not get_grad and do_logging:
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
@@ -432,9 +437,9 @@ class CLTLikelihoodModel:
 
     def _create_transition_matrix(self,
             matrix_wrapper: TransitionMatrixWrapper,
-            hazard_evt_dict: Dict[Tuple[TargetTract], int],
+            hazard_evt_dict: Dict[TargetTractRepr, int],
             hazard_evts: Tensor,
-            hazard_away_dict: Dict[Tuple[TargetTract], int],
+            hazard_away_dict: Dict[TargetTractRepr, int],
             hazard_aways: Tensor):
         """
         Uses tensorflow to create the instantaneous transition matrix
@@ -493,8 +498,7 @@ class CLTLikelihoodModel:
             node_tts_key = ch_trans_mat_w.key_dict[node_tts]
             for child_tts in child.state_sum.tts_list:
                 child_tts_key = ch_trans_mat_w.key_dict[child_tts]
-
-                diff_target_tracts = target_tract_repr_diff(node_tts, child_tts)
+                diff_target_tracts = node_tts.diff(child_tts)
                 singletons = CLTLikelihoodModel.get_matching_singletons(child.anc_state, diff_target_tracts)
 
                 if singletons:
@@ -525,7 +529,7 @@ class CLTLikelihoodModel:
                     self.long_status_ph: [[tt_evt.is_left_long, tt_evt.is_right_long]]})
         return hazards[0]
 
-    def _get_hazard_masks(self, tts:Tuple[TargetTract]):
+    def _get_hazard_masks(self, tts:TargetTractRepr):
         """
         @param tts: the target tract repr that we would like to process
 
@@ -595,11 +599,11 @@ class CLTLikelihoodModel:
         hazard_nodes = self._create_hazard(min_targets, max_targets, long_left_statuses, long_right_statuses)
         return hazard_nodes
 
-    def get_hazard_away(self, tts: Tuple[TargetTract]):
+    def get_hazard_away(self, tts: TargetTractRepr):
         haz_away = self._create_hazard_away_nodes([tts])
         return self.sess.run(haz_away)[0]
 
-    def _create_hazard_away_nodes(self, tts_list: List[Tuple[TargetTract]]):
+    def _create_hazard_away_nodes(self, tts_list: List[TargetTractRepr]):
         """
         @return tensorfow array of the hazard away from each target tract repr in `tts_list`
         """
@@ -623,7 +627,7 @@ class CLTLikelihoodModel:
         return hazard_away_nodes
 
     @staticmethod
-    def get_matching_singletons(anc_state: AncState, tts: Tuple[TargetTract]):
+    def get_matching_singletons(anc_state: AncState, tts: TargetTractRepr):
         """
         @return the list of singletons in `anc_state` that match any target tract in `tts`
         """
@@ -714,7 +718,7 @@ class CLTLikelihoodModel:
                 for child in node.children:
                     for node_tts in node.state_sum.tts_list:
                         for child_tts in child.state_sum.tts_list:
-                            diff_target_tracts = target_tract_repr_diff(node_tts, child_tts)
+                            diff_target_tracts = node_tts.diff(child_tts)
                             matching_sgs = CLTLikelihoodModel.get_matching_singletons(child.anc_state, diff_target_tracts)
                             singletons.update(matching_sgs)
         return singletons
@@ -722,7 +726,7 @@ class CLTLikelihoodModel:
     @staticmethod
     def _reorder_likelihoods(
             ch_ordered_down_probs,
-            tts_list:List[Tuple[TargetTract]],
+            tts_list:List[TargetTractRepr],
             trans_mat_w: TransitionMatrixWrapper,
             ch_trans_mat_w: TransitionMatrixWrapper):
         """

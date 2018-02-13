@@ -1,5 +1,5 @@
-from typing import List
-from typing import Dict
+from typing import List, Dict, Tuple
+from functools import reduce
 
 from allele_events import AlleleEvents
 from barcode_metadata import BarcodeMetadata
@@ -294,3 +294,75 @@ class AncState:
                 idx2 += 1
 
         return AncState(intersect_list)
+
+class TargetTractRepr(tuple):
+    def __new__(cls, *args):
+        return tuple.__new__(cls, args)
+
+    def __getnewargs__(self):
+        return self
+
+    def lesseq(self, tts2):
+        """
+        @param tts2: TargetTractRepr
+
+        @return self <= tts2
+        """
+        idx2 = 0
+        n2 = len(tts2)
+        for tt1 in self:
+            while idx2 < n2:
+                tt2 = tts2[idx2]
+                if tt1 == tt2:
+                    idx2 += 1
+                    break
+                elif tt1.min_deact_target > tt2.min_target and tt1.max_deact_target < tt2.max_target:
+                    # If tt1 < tt2
+                    idx2 += 1
+                    break
+                elif tt2.max_deact_target < tt1.min_deact_target:
+                    idx2 += 1
+                else:
+                    return False
+        return True
+
+    def diff(self, tts2):
+        """
+        @param tts2: TargetTractRepr
+
+        @return tts2 - self if self <= tts2, otherwise returns empty tuple
+        """
+        if not self.lesseq(tts2):
+            return ()
+
+        idx1 = 0
+        idx2 = 0
+        n1 = len(self)
+        n2 = len(tts2)
+        new_tuple = ()
+        while idx1 < n1 and idx2 < n2:
+            tt1 = self[idx1]
+            tt2 = tts2[idx2]
+
+            if tt2.max_target < tt1.min_target:
+                new_tuple += (tt2,)
+                idx2 += 1
+                continue
+
+            # Now we have overlapping events
+            idx1 += 1
+            idx2 += 1
+            if tt1 != tt2:
+                new_tuple += (tt2,)
+
+        new_tuple += tts2[idx2:]
+
+        return new_tuple
+
+    @staticmethod
+    def merge(tt_groups: List[Tuple[TargetTract]]):
+        """
+        @return flattened version of a list of tuples of target tract
+        """
+        tts_raw = reduce(lambda x,y: x + y, tt_groups, ())
+        return TargetTractRepr(*tts_raw)
