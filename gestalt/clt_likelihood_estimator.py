@@ -14,7 +14,6 @@ from transition_matrix import TransitionMatrixWrapper, TransitionMatrix
 from indel_sets import TargetTract, Singleton
 
 from state_sum import StateSum
-from common import target_tract_repr_diff
 
 class CLTLassoEstimator(CLTEstimator):
     """

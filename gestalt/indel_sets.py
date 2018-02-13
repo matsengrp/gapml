@@ -1,5 +1,5 @@
-from typing import List
-from typing import Dict
+from typing import List, Dict, Tuple
+from functools import reduce
 
 from allele_events import AlleleEvents
 from barcode_metadata import BarcodeMetadata
@@ -358,3 +358,11 @@ class TargetTractRepr(tuple):
         new_tuple += tts2[idx2:]
 
         return new_tuple
+
+    @staticmethod
+    def merge(tt_groups: List[Tuple[TargetTract]]):
+        """
+        @return flattened version of a list of tuples of target tract
+        """
+        tts_raw = reduce(lambda x,y: x + y, tt_groups, ())
+        return TargetTractRepr(*tts_raw)

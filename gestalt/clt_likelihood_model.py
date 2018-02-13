@@ -13,9 +13,8 @@ from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
 from indel_sets import IndelSet, TargetTract, AncState, SingletonWC, Singleton, TargetTractRepr
 from transition_matrix import TransitionMatrixWrapper, TransitionMatrix
-from common import merge_target_tract_groups
 import tf_common
-from common import target_tract_repr_diff, inv_sigmoid
+from common import inv_sigmoid
 from constants import UNLIKELY
 from bounded_poisson import BoundedPoisson
 
@@ -719,7 +718,7 @@ class CLTLikelihoodModel:
                 for child in node.children:
                     for node_tts in node.state_sum.tts_list:
                         for child_tts in child.state_sum.tts_list:
-                            diff_target_tracts = target_tract_repr_diff(node_tts, child_tts)
+                            diff_target_tracts = node_tts.diff(child_tts)
                             matching_sgs = CLTLikelihoodModel.get_matching_singletons(child.anc_state, diff_target_tracts)
                             singletons.update(matching_sgs)
         return singletons

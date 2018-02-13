@@ -5,7 +5,6 @@ from indel_sets import TargetTract, AncState, IndelSet, SingletonWC, TargetTract
 from cell_lineage_tree import CellLineageTree
 from state_sum import StateSum
 from barcode_metadata import BarcodeMetadata
-from common import merge_target_tract_groups
 from clt_likelihood_model import CLTLikelihoodModel
 from constants import UNLIKELY
 from transition_matrix import TransitionMatrixWrapper
@@ -125,7 +124,7 @@ class ApproximatorLB:
             # Finally take the "product" of these sub_state_sums to form state sum
             product_state_sums = itertools.product(*tts_sub_state_sums)
             node_state_sum.update([
-                merge_target_tract_groups(tup_tt_groups) for tup_tt_groups in product_state_sums
+                TargetTractRepr.merge(tup_tt_groups) for tup_tt_groups in product_state_sums
             ])
 
         return subgraph_dict, StateSum(node_state_sum)
@@ -228,7 +227,7 @@ class ApproximatorLB:
         @param indel_set_list: the ordered list of indel sets from the node's AncState
         @param transtion_dict: the dictionary corresponding to transitions
         """
-        start_tts = merge_target_tract_groups([
+        start_tts = TargetTractRepr.merge([
             tts_partition_info[ind_set]["start"] for ind_set in indel_set_list])
         transition_dict[start_tts] = dict()
 
@@ -245,7 +244,7 @@ class ApproximatorLB:
                 new_tts_part_info[indel_set]["start"] = child.tt_group
 
                 # Create the new target tract representation
-                new_tts = merge_target_tract_groups([
+                new_tts = TargetTractRepr.merge([
                     new_tts_part_info[ind_set]["start"] for ind_set in indel_set_list])
 
                 # Add entry to transition matrix
