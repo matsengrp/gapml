@@ -33,7 +33,6 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         my_sum, my_grads = self.sess.run([p_mat_sum, p_mat_sum_grads])
         Q_grad = my_grads[0][0]
         t_grad = my_grads[1][0]
-        print("QQQ", Q_grad)
         # Check gradient with respect to Q
         for i in range(2):
             for j in range(2):
@@ -42,8 +41,6 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
                 self.sess.run(Q_assign, feed_dict={Q_ph: Q_new_val})
                 my_sum_eps = self.sess.run(p_mat_sum)
                 approx_grad = (my_sum_eps - my_sum)/eps
-                print("approx grad", approx_grad)
-                print("qqq", Q_grad[i,j])
                 self.assertTrue(np.isclose(approx_grad,  Q_grad[i,j]))
 
         # Check gradient with respect to t
