@@ -5,11 +5,11 @@ from barcode_metadata import BarcodeMetadata
 from allele_events import AlleleEvents
 
 class StateSum:
-    def __init__(self, tts_list: List[TractRepr]):
-        self.tts_list = list(tts_list)
+    def __init__(self, tract_repr_list: List[TractRepr]):
+        self.tract_repr_list = list(tract_repr_list)
 
     def __str__(self):
-        return " OR ".join([str(tts) for tts in self.tts_list])
+        return " OR ".join([str(tract_repr) for tract_repr in self.tract_repr_list])
 
     @staticmethod
     def create_for_observed_allele(allele: AlleleEvents, bcode_meta: BarcodeMetadata):

@@ -6,7 +6,6 @@ from cell_lineage_tree import CellLineageTree
 from state_sum import StateSum
 from barcode_metadata import BarcodeMetadata
 from clt_likelihood_model import CLTLikelihoodModel
-from constants import UNLIKELY
 from transition_matrix import TransitionMatrixWrapper
 import ancestral_events_finder as anc_evt_finder
 
@@ -95,63 +94,63 @@ class ApproximatorLB:
         subgraph_dict = {}
         # Stores previously-calculated partitioned state sums and max_indel_set
         sub_state_sums_dict = {}
-        for tts in node.up.state_sum.tts_list:
+        for tract_repr in node.up.state_sum.tract_repr_list:
             # Partition each state in the ancestral node's StateSum according to node's anc_state
-            tts_partition = self.partition(tts, node.anc_state)
-            tts_sub_state_sums = []
+            tract_repr_partition = self.partition(tract_repr, node.anc_state)
+            tract_repr_sub_state_sums = []
             for max_indel_set in node.anc_state.indel_set_list:
-                tt_tuple_start = tts_partition[max_indel_set]
-                graph_key = (tt_tuple_start, max_indel_set)
+                tract_tuple_start = tract_repr_partition[max_indel_set]
+                graph_key = (tract_tuple_start, max_indel_set)
                 if graph_key not in subgraph_dict:
                     # We have never tried walking the subgraph for this start node, so let's do it now.
-                    subgraph = self._walk_tt_group_subgraph(max_indel_set, tt_tuple_start)
+                    subgraph = self._walk_tract_group_subgraph(max_indel_set, tract_tuple_start)
                     subgraph_dict[graph_key] = subgraph
 
-                    # Determine which tt_tuples will contribute to node's state sum
-                    # This means we want the tt_tuples that are not in anc's anc_state
+                    # Determine which tract_tuples will contribute to node's state sum
+                    # This means we want the tract_tuples that are not in anc's anc_state
                     # To do this, it suffices to check which targets have been disabled
                     anc_indel_set_tuple = anc_partition[max_indel_set]
                     anc_deact_targs = ApproximatorLB.get_deactivated_targets(anc_indel_set_tuple)
                     sub_state_sum = set()
-                    for tt_tuple in subgraph.get_nodes():
-                        deact_targs = ApproximatorLB.get_deactivated_targets(tt_tuple)
+                    for tract_tuple in subgraph.get_nodes():
+                        deact_targs = ApproximatorLB.get_deactivated_targets(tract_tuple)
                         if deact_targs >= anc_deact_targs:
-                            sub_state_sum.add(tt_tuple)
+                            sub_state_sum.add(tract_tuple)
                     sub_state_sums_dict[graph_key] = sub_state_sum
 
-                tts_sub_state_sums.append(sub_state_sums_dict[graph_key])
+                tract_repr_sub_state_sums.append(sub_state_sums_dict[graph_key])
 
             # Finally take the "product" of these sub_state_sums to form state sum
-            product_state_sums = itertools.product(*tts_sub_state_sums)
+            product_state_sums = itertools.product(*tract_repr_sub_state_sums)
             node_state_sum.update([
-                TractRepr.merge(tup_tt_groups) for tup_tt_groups in product_state_sums
+                TractRepr.merge(tup_tract_groups) for tup_tract_groups in product_state_sums
             ])
 
         return subgraph_dict, StateSum(node_state_sum)
 
-    def _walk_tt_group_subgraph(self, max_indel_set: IndelSet, tt_grp_rt: Tuple[Tract]):
+    def _walk_tract_group_subgraph(self, max_indel_set: IndelSet, tract_grp_rt: Tuple[Tract]):
         """
         Dynamic programming algo for finding subgraph of nodes that are within `self.extra_steps` of
-        any node in `tt_grp_roots`.
+        any node in `tract_grp_roots`.
 
         @param max_indel_set: specifies the maximum you can cut
-        @param tt_grp_roots: create the subgraph starting at these nodes
+        @param tract_grp_roots: create the subgraph starting at these nodes
         """
-        tt_group_graph = TransitionGraph(dict())
+        tract_group_graph = TransitionGraph(dict())
 
         # Tracks which TT groups are within i steps
-        tt_group_steps = [set() for i in range(self.extra_steps + 1)]
+        tract_group_steps = [set() for i in range(self.extra_steps + 1)]
         # Tracks which TT groups have been visited already
-        visited_tt_groups = set()
+        visited_tract_groups = set()
 
-        def update_with_state(i: int, new_tt_grp: Tuple[TargetTract]):
-            if new_tt_grp not in visited_tt_groups:
-                visited_tt_groups.add(new_tt_grp)
-                tt_group_steps[i].add(new_tt_grp)
-                tt_group_graph.add_node(new_tt_grp)
+        def update_with_state(i: int, new_tract_grp: Tuple[TargetTract]):
+            if new_tract_grp not in visited_tract_groups:
+                visited_tract_groups.add(new_tract_grp)
+                tract_group_steps[i].add(new_tract_grp)
+                tract_group_graph.add_node(new_tract_grp)
 
         # Add the zero-step node
-        update_with_state(0, tt_grp_rt)
+        update_with_state(0, tract_grp_rt)
 
         # Create the singleton TT -- this singleton can be reached in one step
         singleton = max_indel_set.get_singleton()
@@ -166,26 +165,24 @@ class ApproximatorLB:
         for i in range(1, 1 + self.extra_steps):
             # Now consider all the elements that are i - 1 steps away from the root
             # Find things that are one more step away
-            for tt_grp_start in tt_group_steps[i - 1]:
+            for tract_grp_start in tract_group_steps[i - 1]:
                 # Find available actions
-                active_any_targs = ApproximatorLB.get_active_any_trim_targets(max_indel_set, tt_grp_start)
+                active_any_targs = ApproximatorLB.get_active_any_trim_targets(max_indel_set, tract_grp_start)
                 # Get possible deact tract events
                 deact_targs_evts_list = CLTLikelihoodModel.get_possible_deact_targets_evts(active_any_targs)
                 # Add possible deact tract events to the graph
                 for deact_targs_evts in deact_targs_evts_list:
-                    to_node = TransitionToNode.create_transition_to(tt_grp_start, deact_targs_evts)
-                    update_with_state(i, to_node.tt_group)
-                    print("tttttt", tt_grp_start)
-                    print("asdfasdf", to_node)
-                    tt_group_graph.add_edge(tt_grp_start, to_node)
+                    to_node = TransitionToNode.create_transition_to(tract_grp_start, deact_targs_evts)
+                    update_with_state(i, to_node.tract_group)
+                    tract_group_graph.add_edge(tract_grp_start, to_node)
 
                 # Finally add in the singleton as a possible move
-                if singleton is not None and (singleton_tt,) != tt_grp_start:
+                if singleton is not None and (singleton_tt,) != tract_grp_start:
                     to_node = TransitionToNode(singleton_tt, (singleton_tt, ))
-                    update_with_state(i, to_node.tt_group)
-                    tt_group_graph.add_edge(tt_grp_start, to_node)
+                    update_with_state(i, to_node.tract_group)
+                    tract_group_graph.add_edge(tract_grp_start, to_node)
 
-        return tt_group_graph
+        return tract_group_graph
 
     def _create_transition_matrix_wrapper(self, node: CellLineageTree):
         """
@@ -197,77 +194,77 @@ class ApproximatorLB:
         # Determine the values in the transition matrix by considering all possible states
         # starting at the parent's StateSum.
         # Recurse through all of its children to build out the transition matrix
-        for tts in node.up.state_sum.tts_list:
-            tts_partition_info = dict()
-            tts_partition = self.partition(tts, node.anc_state)
+        for tract_repr in node.up.state_sum.tract_repr_list:
+            tract_repr_partition_info = dict()
+            tract_repr_partition = self.partition(tract_repr, node.anc_state)
             for indel_set in indel_set_list:
-                tt_tuple = tts_partition[indel_set]
-                graph_key = (tt_tuple, indel_set)
+                tract_tuple = tract_repr_partition[indel_set]
+                graph_key = (tract_tuple, indel_set)
                 # To recurse, indicate the subgraphs for each partition and the current node
                 # (target tract group) we are currently located at.
-                tts_partition_info[indel_set] = {
-                        "start": tt_tuple,
+                tract_repr_partition_info[indel_set] = {
+                        "start": tract_tuple,
                         "graph": node.transition_graph_dict[graph_key]}
-            self._add_transition_dict_row(tts_partition_info, indel_set_list, transition_dict)
+            self._add_transition_dict_row(tract_repr_partition_info, indel_set_list, transition_dict)
 
         # Create sparse transition matrix given the dictionary representation
         return TransitionMatrixWrapper(transition_dict)
 
     def _add_transition_dict_row(
             self,
-            tts_partition_info: Dict[IndelSet, Dict],
+            tract_repr_partition_info: Dict[IndelSet, Dict],
             indel_set_list: List[IndelSet],
             transition_dict: Dict):
         """
         Recursive function for adding transition matrix rows.
         Function will modify transition_dict.
         The rows added will correspond to states that are reachable along the subgraphs
-        in tts_partition_info.
+        in tract_repr_partition_info.
 
-        @param tts_partition_info: indicate the subgraphs for each partition and the current node
+        @param tract_repr_partition_info: indicate the subgraphs for each partition and the current node
                                 we are at for each subgraph
         @param indel_set_list: the ordered list of indel sets from the node's AncState
         @param transtion_dict: the dictionary corresponding to transitions
         """
-        start_tts = TractRepr.merge([
-            tts_partition_info[ind_set]["start"] for ind_set in indel_set_list])
-        transition_dict[start_tts] = dict()
+        start_tract_repr = TractRepr.merge([
+            tract_repr_partition_info[ind_set]["start"] for ind_set in indel_set_list])
+        transition_dict[start_tract_repr] = dict()
 
-        # Find all possible target tract representations within one step of start_tts
+        # Find all possible target tract representations within one step of start_tract_repr
         # Do this by taking one step in one of the subgraphs
-        for indel_set, val in tts_partition_info.items():
+        for indel_set, val in tract_repr_partition_info.items():
             subgraph = val["graph"]
-            tt_tuple_start = val["start"]
+            tract_tuple_start = val["start"]
 
             # Each child is a possibility
-            children = subgraph.get_children(tt_tuple_start)
+            children = subgraph.get_children(tract_tuple_start)
             for child in children:
-                new_tts_part_info = {k: v.copy() for k,v in tts_partition_info.items()}
-                new_tts_part_info[indel_set]["start"] = child.tt_group
+                new_tract_repr_part_info = {k: v.copy() for k,v in tract_repr_partition_info.items()}
+                new_tract_repr_part_info[indel_set]["start"] = child.tract_group
 
                 # Create the new target tract representation
-                new_tts = TractRepr.merge([
-                    new_tts_part_info[ind_set]["start"] for ind_set in indel_set_list])
+                new_tract_repr = TractRepr.merge([
+                    new_tract_repr_part_info[ind_set]["start"] for ind_set in indel_set_list])
 
                 # Add entry to transition matrix
-                if new_tts not in transition_dict[start_tts]:
-                    transition_dict[start_tts][new_tts] = child.tt_evt
+                if new_tract_repr not in transition_dict[start_tract_repr]:
+                    transition_dict[start_tract_repr][new_tract_repr] = child.deact_evt
 
                 # Recurse
-                self._add_transition_dict_row(new_tts_part_info, indel_set_list, transition_dict)
+                self._add_transition_dict_row(new_tract_repr_part_info, indel_set_list, transition_dict)
 
     @staticmethod
-    def get_deactivated_targets(tt_grp: Tuple[IndelSet]):
-        if tt_grp:
-            deactivated = list(range(tt_grp[0].min_deact_target, tt_grp[0].max_deact_target + 1))
-            for tt in tt_grp[1:]:
-                deactivated += list(range(tt.min_deact_target, tt.max_deact_target + 1))
+    def get_deactivated_targets(tract_grp: Tuple[IndelSet]):
+        if tract_grp:
+            deactivated = list(range(tract_grp[0].min_deact_target, tract_grp[0].max_deact_target + 1))
+            for tract in tract_grp[1:]:
+                deactivated += list(range(tract.min_deact_target, tract.max_deact_target + 1))
             return set(deactivated)
         else:
             return set()
 
     @staticmethod
-    def get_active_any_trim_targets(indel_set: IndelSet, tt_grp: Tuple[TargetTract]):
+    def get_active_any_trim_targets(indel_set: IndelSet, tract_grp: Tuple[Tract]):
         """
         @return
             list of active targets that can be cut in any manner
@@ -277,40 +274,40 @@ class ApproximatorLB:
         # Stores which targets can be cut in any manner
         active_any_targs = []
         if wc:
-            if tt_grp:
-                tt = tt_grp[0]
-                active_any_targs = list(range(wc.min_target, tt.min_deact_target))
-                for i, tt in enumerate(tt_grp[1:]):
-                    active_any_targs += list(range(tt_grp[i].max_deact_target + 1, tt.min_deact_target))
-                active_any_targs += list(range(tt.max_deact_target + 1, wc.max_target + 1))
+            if tract_grp:
+                tract = tract_grp[0]
+                active_any_targs = list(range(wc.min_target, tract.min_deact_target))
+                for i, tract in enumerate(tract_grp[1:]):
+                    active_any_targs += list(range(tract_grp[i].max_deact_target + 1, tract.min_deact_target))
+                active_any_targs += list(range(tract.max_deact_target + 1, wc.max_target + 1))
             else:
                 active_any_targs = list(range(wc.min_target, wc.max_target + 1))
 
         return active_any_targs
 
     @staticmethod
-    def partition(tts: Tuple[IndelSet], anc_state: AncState):
+    def partition(tract_repr: Tuple[IndelSet], anc_state: AncState):
         """
-        @return split tts according to anc_state: Dict[IndelSet, Tuple[TargetTract]]
+        @return split tract_repr according to anc_state: Dict[IndelSet, Tuple[TargetTract]]
         """
         parts = {indel_set : () for indel_set in anc_state.indel_set_list}
 
-        tts_idx = 0
-        n_tt = len(tts)
+        tract_repr_idx = 0
+        n_tract = len(tract_repr)
         anc_state_idx = 0
         n_anc_state = len(anc_state.indel_set_list)
-        while tts_idx < n_tt and anc_state_idx < n_anc_state:
-            cur_tt = tts[tts_idx]
+        while tract_repr_idx < n_tract and anc_state_idx < n_anc_state:
+            cur_tract = tract_repr[tract_repr_idx]
             indel_set = anc_state.indel_set_list[anc_state_idx]
 
-            if cur_tt.max_deact_target < indel_set.min_deact_target:
-                tts_idx += 1
+            if cur_tract.max_deact_target < indel_set.min_deact_target:
+                tract_repr_idx += 1
                 continue
-            elif indel_set.max_deact_target < cur_tt.min_deact_target:
+            elif indel_set.max_deact_target < cur_tract.min_deact_target:
                 anc_state_idx += 1
                 continue
 
             # Should be overlapping now
-            parts[indel_set] = parts[indel_set] + (cur_tt,)
-            tts_idx += 1
+            parts[indel_set] = parts[indel_set] + (cur_tract,)
+            tract_repr_idx += 1
         return parts

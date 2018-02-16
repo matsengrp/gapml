@@ -12,10 +12,9 @@ from tensorflow import Session
 from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
 from indel_sets import IndelSet, TargetTract, AncState, SingletonWC, Singleton, TractRepr, DeactTract, DeactTargetsEvt, Tract
-from transition_matrix import TransitionMatrixWrapper, TransitionMatrix
+from transition_matrix import TransitionMatrixWrapper
 import tf_common
 from common import inv_sigmoid
-from constants import UNLIKELY
 from bounded_poisson import BoundedPoisson
 
 class CLTLikelihoodModel:
@@ -166,8 +165,9 @@ class CLTLikelihoodModel:
         The arguments should all have the same length.
         The i-th elem in each argument corresponds to the target tract that was introduced.
 
-        @return tensorflow tensor with the i-th value corresponding to the i-th target tract in the arguments
+        @return tensorflow tensor with the i-th value corresponding to the i-th deactivation targets event in the arguments
         """
+        #TODO: check the math here!
         # all four targets are different
         is_four_diff = tf_common.not_equal_float(t3, t2)
         left_lambda = (tf.gather(self.target_lams, t0) * self.trim_short_probs[0]
@@ -334,25 +334,24 @@ class CLTLikelihoodModel:
 
         @return Dict mapping the target tract introduced to its tensorflow tensor
                 a tensorflow tensor with the calculations for the hazard of introducing the target tracts
+                a tensorflow tensor with the calculations for the hazard of introducing the deact tracts
         """
-        tt_evts = set()
+        deact_evts = set()
         for trans_mat_wrapper in trans_mat_wrappers:
             # Get inputs ready for tensorflow
-            for start_tts, matrix_row in trans_mat_wrapper.matrix_dict.items():
-                tt_evts.update(matrix_row.values())
+            for start_tracts, matrix_row in trans_mat_wrapper.matrix_dict.items():
+                deact_evts.update(matrix_row.values())
 
         # Gets hazards (by tensorflow)
-        target_tracts = list([tt_evt for tt_evt in tt_evts if tt_evt.is_target_tract])
-        print("target tracts", target_tracts)
-        deact_tracts = list([tt_evt for tt_evt in tt_evts if not tt_evt.is_target_tract])
-        print("deact_tracts", deact_tracts)
+        target_tracts = [deact_evt for deact_evt in deact_evts if deact_evt.is_target_tract]
+        deact_tracts = [deact_evt for deact_evt in deact_evts if not deact_evt.is_target_tract]
 
-        hazard_target_tracts = self._create_hazard_nodes(target_tracts)
+        hazard_target_tracts = self._create_hazard_target_tract_nodes(target_tracts)
         hazard_deact_tracts = self._create_hazard_deact_tract_nodes(deact_tracts)
 
         hazard_dict = {}
-        for i, tt_evt in enumerate(target_tracts):
-            hazard_dict[tt_evt] = hazard_target_tracts[i]
+        for i, deact_evt in enumerate(target_tracts):
+            hazard_dict[deact_evt] = hazard_target_tracts[i]
         for i, deact_tract in enumerate(deact_tracts):
             hazard_dict[deact_tract] = hazard_deact_tracts[i]
 
@@ -365,19 +364,21 @@ class CLTLikelihoodModel:
         @return Dict mapping the tuple of start target tract repr to a hazard away node
                 a tensorflow tensor with the calculations for the hazard away
         """
-        tts_starts = set()
+        tract_repr_starts = set()
         for trans_mat_wrapper in trans_mat_wrappers:
             # Get inputs ready for tensorflow
-            for start_tts, matrix_row in trans_mat_wrapper.matrix_dict.items():
-                tts_starts.add(start_tts)
+            for start_tract_repr, matrix_row in trans_mat_wrapper.matrix_dict.items():
+                tract_repr_starts.add(start_tract_repr)
 
         # Gets hazards (by tensorflow)
-        tts_starts = list(tts_starts)
-        hazard_away_dict = {tts: int(i) for i, tts in enumerate(tts_starts)}
-        hazard_away_nodes = self._create_hazard_away_nodes(tts_starts)
+        tract_repr_starts = list(tract_repr_starts)
+        hazard_away_nodes = self._create_hazard_away_nodes(tract_repr_starts)
+        hazard_away_dict = {
+                tract_repr: hazard_away_nodes[i]
+                for i, tract_repr in enumerate(tract_repr_starts)}
         return hazard_away_dict, hazard_away_nodes
 
-    def get_log_lik(self, get_grad=False, do_logging=False):
+    def get_log_lik(self, get_grad: bool=False, do_logging: bool=False):
         """
         @return the log likelihood and the gradient, if requested
         """
@@ -385,18 +386,31 @@ class CLTLikelihoodModel:
             log_lik, grad = self.sess.run(
                     [self.log_lik, self.log_lik_grad])
             return log_lik, grad[0][0]
-        elif get_grad and do_logging:
+        elif do_logging:
+            # For tensorflow logging
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
+
+            # For my own checks on the d matrix and q matrix
             dkey_list = list(self.D.keys())
             D_vals = [self.D[k] for k in dkey_list]
             trans_mats_vals = [self.trans_mats[k] for k in dkey_list]
-            log_lik, grad, Ds, q_mats = self.sess.run(
-                    [self.log_lik, self.log_lik_grad, D_vals, trans_mats_vals],
-                    options=run_options,
-                    run_metadata=run_metadata)
 
-            self.profile_writer.add_run_metadata(run_metadata, "hello?")
+            if get_grad:
+                log_lik, grad, Ds, q_mats = self.sess.run(
+                        [self.log_lik, self.log_lik_grad, D_vals, trans_mats_vals],
+                        options=run_options,
+                        run_metadata=run_metadata)
+                grad = grad[0][0]
+            else:
+                log_lik, Ds, q_mats = self.sess.run(
+                        [self.log_lik, D_vals, trans_mats_vals],
+                        options=run_options,
+                        run_metadata=run_metadata)
+                grad = None
+
+            # Profile computation time in tensorflow
+            self.profile_writer.add_run_metadata(run_metadata, "get_log_lik")
 
             # Quick check that all the diagonal matrix from the eigendecomp were unique
             for d, q in zip(Ds, q_mats):
@@ -406,27 +420,8 @@ class CLTLikelihoodModel:
                     print("Uhoh. D matrix does not have unique eigenvalues. %d vs %d" % (uniq_d.size, d_size))
                     print("Q mat", np.sort(np.diag(q)))
                     print(np.sort(np.linalg.eig(q)[0]))
-            return log_lik, grad[0][0]
-        elif not get_grad and do_logging:
-            run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-            run_metadata = tf.RunMetadata()
-            log_lik, Ds, q_mats = self.sess.run(
-                    [self.log_lik, D_vals, trans_mats_vals],
-                    options=run_options,
-                    run_metadata=run_metadata)
 
-            self.profile_writer.add_run_metadata(run_metadata, "hello?")
-
-            # Quick check that all the diagonal matrix from the eigendecomp were unique
-            for d, q in zip(Ds, q_mats):
-                d_size = d.size
-                uniq_d = np.unique(d)
-                if uniq_d.size != d_size:
-                    print("Uhoh. D matrix does not have unique eigenvalues. %d vs %d" % (uniq_d.size, d_size))
-                    print("Q mat", np.diag(q))
-                    print("Q mat", np.sort(np.diag(q)))
-                    print(np.sort(np.linalg.eig(q)[0]))
-            return log_lik, None
+            return log_lik, grad
         else:
             return self.sess.run(self.log_lik), None
 
@@ -434,10 +429,14 @@ class CLTLikelihoodModel:
         """
         Create a tensorflow graph of the likelihood calculation
         """
+        # Get the hazards for making the instantaneous transition matrix
+        # Doing it all at once to speed up computation
         hazard_dict, hazard_target_tracts, hazard_deact_tracts = self._create_hazard_dict(
                 transition_matrix_wrappers.values())
         hazard_away_dict, hazard_aways = self._create_hazard_away_dict(transition_matrix_wrappers.values())
 
+        # Get all the conditional probabilities of the trims
+        # Doing it all at once to speed up computation
         singletons = CLTLikelihoodModel._get_unmasked_indels(self.topology)
         singleton_index_dict = {sg: int(i) for i, sg in enumerate(singletons)}
         singleton_log_cond_prob = self._create_log_indel_probs(singletons)
@@ -454,24 +453,20 @@ class CLTLikelihoodModel:
             if node.is_leaf():
                 trans_mat_w = transition_matrix_wrappers[node.node_id]
                 self.L[node.node_id] = np.zeros((trans_mat_w.num_likely_states + 1, 1))
-                assert len(node.state_sum.tts_list) == 1
-                tts_key = trans_mat_w.key_dict[node.state_sum.tts_list[0]]
-                self.L[node.node_id][tts_key] = 1
+                assert len(node.state_sum.tract_repr_list) == 1
+                tract_repr_key = trans_mat_w.key_dict[node.state_sum.tract_repr_list[0]]
+                self.L[node.node_id][tract_repr_key] = 1
                 # Convert to tensorflow usage
                 self.L[node.node_id] = tf.constant(self.L[node.node_id], dtype=tf.float64)
             else:
                 self.L[node.node_id] = tf.constant(1.0, dtype=tf.float64)
                 for child in node.children:
                     ch_trans_mat_w = transition_matrix_wrappers[child.node_id]
-                    print("---")
-                    for k in ch_trans_mat_w.key_list:
-                        print(k, [i.__class__ for i in k])
                     with tf.name_scope("Transition_matrix%d" % node.node_id):
                         self.trans_mats[child.node_id] = self._create_transition_matrix(
                                 ch_trans_mat_w,
-                                hazard_dict, hazard_target_tracts, hazard_deact_tracts,
-                                hazard_away_dict,
-                                hazard_aways)
+                                hazard_dict,
+                                hazard_away_dict)
                     # Get the trim probabilities
                     with tf.name_scope("trim_matrix%d" % node.node_id):
                         self.trim_probs[child.node_id] = self._create_trim_prob_matrix(
@@ -498,12 +493,12 @@ class CLTLikelihoodModel:
 
                     with tf.name_scope("rearrange%d" % node.node_id):
                         if not node.is_root():
-                            # Reorder summands according to node's numbering of tts states
+                            # Reorder summands according to node's numbering of tract_repr states
                             trans_mat_w = transition_matrix_wrappers[node.node_id]
 
                             down_probs = CLTLikelihoodModel._reorder_likelihoods(
                                     ch_ordered_down_probs,
-                                    node.state_sum.tts_list,
+                                    node.state_sum.tract_repr_list,
                                     trans_mat_w,
                                     ch_trans_mat_w)
 
@@ -533,10 +528,7 @@ class CLTLikelihoodModel:
     def _create_transition_matrix(self,
             matrix_wrapper: TransitionMatrixWrapper,
             hazard_dict: Dict[Tract, Tensor],
-            hazard_tt: Tensor,
-            hazard_dt: Tensor,
-            hazard_away_dict: Dict[TractRepr, int],
-            hazard_aways: Tensor):
+            hazard_away_dict: Dict[TractRepr, int]):
         """
         Uses tensorflow to create the instantaneous transition matrix
         """
@@ -546,18 +538,18 @@ class CLTLikelihoodModel:
         # Now fill in the matrix -- match tensorflow object with indices of instant transition matrix
         idx = 0
         index_vals = []
-        for start_tts, matrix_row in matrix_wrapper.matrix_dict.items():
-            start_key = matrix_wrapper.key_dict[start_tts]
-            haz_away = hazard_aways[hazard_away_dict[start_tts]]
+        for start_tract_repr, matrix_row in matrix_wrapper.matrix_dict.items():
+            start_key = matrix_wrapper.key_dict[start_tract_repr]
+            haz_away = hazard_away_dict[start_tract_repr]
 
             # Hazard of staying is negative of hazard away
             index_vals.append([[start_key, start_key], -haz_away])
 
             # Tracks the total hazard to the likely states
             haz_to_likely = 0
-            for end_tts, tt_evt in matrix_row.items():
+            for end_tract_repr, tt_evt in matrix_row.items():
                 haz = hazard_dict[tt_evt]
-                end_key = matrix_wrapper.key_dict[end_tts]
+                end_key = matrix_wrapper.key_dict[end_tract_repr]
                 index_vals.append([[start_key, end_key], haz])
                 haz_to_likely += haz
                 idx += 1
@@ -590,11 +582,11 @@ class CLTLikelihoodModel:
         """
         index_vals = []
 
-        for node_tts in node.state_sum.tts_list:
-            node_tts_key = ch_trans_mat_w.key_dict[node_tts]
-            for child_tts in child.state_sum.tts_list:
-                child_tts_key = ch_trans_mat_w.key_dict[child_tts]
-                diff_target_tracts = node_tts.diff(child_tts)
+        for node_tract_repr in node.state_sum.tract_repr_list:
+            node_tract_repr_key = ch_trans_mat_w.key_dict[node_tract_repr]
+            for child_tract_repr in child.state_sum.tract_repr_list:
+                child_tract_repr_key = ch_trans_mat_w.key_dict[child_tract_repr]
+                diff_target_tracts = node_tract_repr.diff(child_tract_repr)
                 singletons = CLTLikelihoodModel.get_matching_singletons(child.anc_state, diff_target_tracts)
 
                 if singletons:
@@ -602,7 +594,7 @@ class CLTLikelihoodModel:
                             params = singleton_log_cond_prob,
                             indices = [singleton_index_dict[sg] for sg in singletons])
                     log_val = tf.reduce_sum(log_trim_probs)
-                    index_vals.append([[node_tts_key, child_tts_key], log_val])
+                    index_vals.append([[node_tract_repr_key, child_tract_repr_key], log_val])
 
         output_shape = [ch_trans_mat_w.num_likely_states + 1, ch_trans_mat_w.num_likely_states + 1]
         if index_vals:
@@ -625,9 +617,9 @@ class CLTLikelihoodModel:
                     self.long_status_ph: [[tt_evt.is_left_long, tt_evt.is_right_long]]})
         return hazards[0]
 
-    def _get_hazard_masks(self, tts:TractRepr):
+    def _get_hazard_masks(self, tract_repr: TractRepr):
         """
-        @param tts: the target tract repr that we would like to process
+        @param tract_repr: the target tract repr that we would like to process
 
         @return two lists, one for left trims and one for right trims.
                 each list is composed of values [0,1,2] matching each target.
@@ -639,7 +631,7 @@ class CLTLikelihoodModel:
                 where T - 1 is deactivated. No long right trims are allowed at the last
                 target and any target T where T + 1 is deactivated.
         """
-        if len(tts) == 0:
+        if len(tract_repr) == 0:
             # This is the original barcode
             left_hazard_list = [1] + [2] * (self.num_targets - 1)
             right_hazard_list = [2] * (self.num_targets - 1) + [1]
@@ -647,42 +639,44 @@ class CLTLikelihoodModel:
             # This is an allele with some indel somewhere
 
             # Process the section before the first indel
-            if tts[0].min_deact_target > 1:
-                left_hazard_list = [1] + [2] * (tts[0].min_deact_target - 1)
-                right_hazard_list = [2] * (tts[0].min_deact_target - 1) + [1]
-            elif tts[0].min_deact_target == 1:
+            if tract_repr[0].min_deact_target > 1:
+                left_hazard_list = [1] + [2] * (tract_repr[0].min_deact_target - 1)
+                right_hazard_list = [2] * (tract_repr[0].min_deact_target - 1) + [1]
+            elif tract_repr[0].min_deact_target == 1:
                 left_hazard_list = [1]
                 right_hazard_list = [1]
             else:
                 left_hazard_list = []
                 right_hazard_list = []
 
-            left_hazard_list += [0] * (tts[0].max_deact_target - tts[0].min_deact_target + 1)
-            right_hazard_list += [0] * (tts[0].max_deact_target - tts[0].min_deact_target + 1)
+            left_hazard_list += [0] * (tract_repr[0].max_deact_target - tract_repr[0].min_deact_target + 1)
+            right_hazard_list += [0] * (tract_repr[0].max_deact_target - tract_repr[0].min_deact_target + 1)
 
             # Process the sections with the indels
-            for i, tt in enumerate(tts[1:]):
-                if tts[i].max_deact_target + 1 < tt.min_deact_target - 1:
-                    left_hazard_list += [1] + [2] * (tt.min_deact_target - tts[i].max_deact_target - 2)
-                    right_hazard_list += [2] * (tt.min_deact_target - tts[i].max_deact_target - 2) + [1]
-                elif tts[i].max_deact_target + 1 == tt.min_deact_target - 1:
+            for i, tract in enumerate(tract_repr[1:]):
+                if tract_repr[i].max_deact_target + 1 < tract.min_deact_target - 1:
+                    left_hazard_list += [1] + [2] * (tract.min_deact_target - tract_repr[i].max_deact_target - 2)
+                    right_hazard_list += [2] * (tract.min_deact_target - tract_repr[i].max_deact_target - 2) + [1]
+                elif tract_repr[i].max_deact_target + 1 == tract.min_deact_target - 1:
                     # Single target, short left and right
                     left_hazard_list += [1]
                     right_hazard_list += [1]
-                left_hazard_list += [0] * (tt.max_deact_target - tt.min_deact_target + 1)
-                right_hazard_list += [0] * (tt.max_deact_target - tt.min_deact_target + 1)
+                left_hazard_list += [0] * (tract.max_deact_target - tract.min_deact_target + 1)
+                right_hazard_list += [0] * (tract.max_deact_target - tract.min_deact_target + 1)
 
             # Process the section after all the indels
-            if tts[-1].max_deact_target < self.num_targets - 2:
-                left_hazard_list += [1] + [2] * (self.num_targets - tts[-1].max_deact_target - 2)
-                right_hazard_list += [2] * (self.num_targets - tts[-1].max_deact_target - 2) + [1]
-            elif tts[-1].max_deact_target == self.num_targets - 2:
+            if tract_repr[-1].max_deact_target < self.num_targets - 2:
+                left_hazard_list += [1] + [2] * (self.num_targets - tract_repr[-1].max_deact_target - 2)
+                right_hazard_list += [2] * (self.num_targets - tract_repr[-1].max_deact_target - 2) + [1]
+            elif tract_repr[-1].max_deact_target == self.num_targets - 2:
                 left_hazard_list += [1]
                 right_hazard_list += [1]
 
+        assert(len(left_hazard_list) == self.num_targets)
+        assert(len(right_hazard_list) == self.num_targets)
         return left_hazard_list, right_hazard_list
 
-    def _create_hazard_nodes(self, tt_evts: List[TargetTract]):
+    def _create_hazard_target_tract_nodes(self, tt_evts: List[TargetTract]):
         """
         @return tensorfow array of the hazard of introducing each target tract in `tt_evts`
         """
@@ -695,31 +689,40 @@ class CLTLikelihoodModel:
         hazard_nodes = self._create_hazard(min_targets, max_targets, long_left_statuses, long_right_statuses)
         return hazard_nodes
 
-    def _create_hazard_deact_tract_nodes(self, tt_evts: List[TargetTract]):
+    def _create_hazard_deact_tract_nodes(self, deact_targs_evts: List[DeactTargetsEvt]):
         """
-        @return tensorfow array of the hazard of introducing each target tract in `tt_evts`
+        @return tensorfow array of the hazard of introducing each target tract in `deact_targs_evts`
         """
-        t0 = tf.constant([tt_evt[0] for tt_evt in tt_evts], dtype=tf.int32)
-        t1 = tf.constant([tt_evt[1] if len(tt_evt) >= 2 else tt_evt[-1] for tt_evt in tt_evts], dtype=tf.int32)
-        t2 = tf.constant([tt_evt[2] if len(tt_evt) >= 3 else tt_evt[-1] for tt_evt in tt_evts], dtype=tf.int32)
-        t3 = tf.constant([tt_evt[3] if len(tt_evt) == 4 else tt_evt[-1] for tt_evt in tt_evts], dtype=tf.int32)
+        t0 = tf.constant([deact_targs_evt[0] for deact_targs_evt in deact_targs_evts], dtype=tf.int32)
+        t1 = tf.constant([
+            deact_targs_evt[1] if len(deact_targs_evt) >= 2 else deact_targs_evt[-1]
+            for deact_targs_evt in deact_targs_evts],
+            dtype=tf.int32)
+        t2 = tf.constant([
+            deact_targs_evt[2] if len(deact_targs_evt) >= 3 else deact_targs_evt[-1]
+            for deact_targs_evt in deact_targs_evts],
+            dtype=tf.int32)
+        t3 = tf.constant([
+            deact_targs_evt[3] if len(deact_targs_evt) == 4 else deact_targs_evt[-1]
+            for deact_targs_evt in deact_targs_evts],
+            dtype=tf.int32)
 
         # Compute the hazard
         hazard_nodes = self._create_hazard_deact(t0, t1, t2, t3)
         return hazard_nodes
 
-    def get_hazard_away(self, tts: TractRepr):
-        haz_away = self._create_hazard_away_nodes([tts])
+    def get_hazard_away(self, tract_repr: TractRepr):
+        haz_away = self._create_hazard_away_nodes([tract_repr])
         return self.sess.run(haz_away)[0]
 
-    def _create_hazard_away_nodes(self, tts_list: List[TractRepr]):
+    def _create_hazard_away_nodes(self, tract_repr_list: List[TractRepr]):
         """
-        @return tensorfow array of the hazard away from each target tract repr in `tts_list`
+        @return tensorfow array of the hazard away from each target tract repr in `tract_repr_list`
         """
         left_trimmables = []
         right_trimmables = []
-        for tts in tts_list:
-            left_m, right_m = self._get_hazard_masks(tts)
+        for tract_repr in tract_repr_list:
+            left_m, right_m = self._get_hazard_masks(tract_repr)
             left_trimmables.append(left_m)
             right_trimmables.append(right_m)
 
@@ -736,9 +739,9 @@ class CLTLikelihoodModel:
         return hazard_away_nodes
 
     @staticmethod
-    def get_matching_singletons(anc_state: AncState, tts: TractRepr):
+    def get_matching_singletons(anc_state: AncState, tract_repr: TractRepr):
         """
-        @return the list of singletons in `anc_state` that match any target tract in `tts`
+        @return the list of singletons in `anc_state` that match any target tract in `tract_repr`
         """
         # Get only the singletons
         sg_only_anc_state = [
@@ -746,27 +749,27 @@ class CLTLikelihoodModel:
 
         # Now figure out which ones match
         sg_idx = 0
-        tts_idx = 0
+        tract_repr_idx = 0
         n_sg = len(sg_only_anc_state)
-        n_tts = len(tts)
+        n_tract_repr = len(tract_repr)
         matching_sgs = []
-        while sg_idx < n_sg and tts_idx < n_tts:
-            cur_tt = tts[tts_idx]
+        while sg_idx < n_sg and tract_repr_idx < n_tract_repr:
+            cur_tract = tract_repr[tract_repr_idx]
             sgwc = sg_only_anc_state[sg_idx]
             sg_tt = TargetTract(sgwc.min_deact_target, sgwc.min_target, sgwc.max_target, sgwc.max_deact_target)
 
-            if cur_tt.max_deact_target < sg_tt.min_deact_target:
-                tts_idx += 1
+            if cur_tract.max_deact_target < sg_tt.min_deact_target:
+                tract_repr_idx += 1
                 continue
-            elif sg_tt.max_deact_target < cur_tt.min_deact_target:
+            elif sg_tt.max_deact_target < cur_tract.min_deact_target:
                 sg_idx += 1
                 continue
 
             # Overlapping now
-            if sg_tt == cur_tt:
+            if sg_tt == cur_tract:
                matching_sgs.append(sgwc.get_singleton())
             sg_idx += 1
-            tts_idx += 1
+            tract_repr_idx += 1
 
         return matching_sgs
 
@@ -777,14 +780,15 @@ class CLTLikelihoodModel:
         @return a set of possible target tracts
         """
         # create all possible deact tracts by combining possible start and ends
-        deact_tract_evts = set()
-        # TODO: make this more efficient. it's just a hack right now
+        deact_evts = set()
+        # TODO: make this more efficient. it's just borrowoing all the stuff from the other
+        #       function right now
         target_tract_evts = CLTLikelihoodModel.get_possible_target_tracts(active_any_targs)
         for tt in target_tract_evts:
             deactivated_targs = list(set(tt))
-            deact_tract_evts.add(DeactTargetsEvt(*deactivated_targs))
+            deact_evts.add(DeactTargetsEvt(*deactivated_targs))
 
-        return deact_tract_evts
+        return deact_evts
 
     @staticmethod
     def get_possible_target_tracts(active_any_targs: List[int]):
@@ -829,6 +833,7 @@ class CLTLikelihoodModel:
                         tt_evts.add(tt_evt)
 
         return tt_evts
+
     def _get_unmasked_indels(topology: CellLineageTree):
         """
         Determine the set of singletons we need to calculate the indel prob for
@@ -839,31 +844,34 @@ class CLTLikelihoodModel:
         for node in topology.traverse("postorder"):
             if not node.is_leaf():
                 for child in node.children:
-                    for node_tts in node.state_sum.tts_list:
-                        for child_tts in child.state_sum.tts_list:
-                            diff_target_tracts = node_tts.diff(child_tts)
-                            matching_sgs = CLTLikelihoodModel.get_matching_singletons(child.anc_state, diff_target_tracts)
+                    for node_tract_repr in node.state_sum.tract_repr_list:
+                        for child_tract_repr in child.state_sum.tract_repr_list:
+                            diff_target_tracts = node_tract_repr.diff(child_tract_repr)
+                            matching_sgs = CLTLikelihoodModel.get_matching_singletons(
+                                    child.anc_state,
+                                    diff_target_tracts)
                             singletons.update(matching_sgs)
         return singletons
 
     @staticmethod
     def _reorder_likelihoods(
             ch_ordered_down_probs,
-            tts_list:List[TractRepr],
+            tract_repr_list:List[TractRepr],
             trans_mat_w: TransitionMatrixWrapper,
             ch_trans_mat_w: TransitionMatrixWrapper):
         """
         @param ch_ordered_down_probs: the Tensorflow array to be re-ordered
-        @param tts_list: list of target tract reprs to include in the vector
+        @param tract_repr_list: list of target tract reprs to include in the vector
                         rest can be set to zero
         @param node_trans_mat: provides the desired ordering
         @param ch_trans_mat: provides the ordering used in vec_lik
 
         @return the reordered version of vec_lik according to the order in node_trans_mat
         """
-        index_vals = [
-            [[trans_mat_w.key_dict[tts], 0], ch_ordered_down_probs[ch_trans_mat_w.key_dict[tts]][0]]
-            for tts in tts_list]
+        index_vals = [[
+                [trans_mat_w.key_dict[tract_repr], 0],
+                ch_ordered_down_probs[ch_trans_mat_w.key_dict[tract_repr]][0]]
+            for tract_repr in tract_repr_list]
         down_probs = tf_common.scatter_nd(
                 index_vals,
                 output_shape=[trans_mat_w.num_likely_states + 1, 1],

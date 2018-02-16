@@ -111,7 +111,9 @@ class LikelihoodModelTestCase(unittest.TestCase):
             key_list[2]: {},
             key_list[3]: {}
         }, key_list)
-        q_mat_node = self.mdl._create_transition_matrix(mat_wrap)
+        hazard_dict, _, _ = self.mdl._create_hazard_dict([mat_wrap])
+        hazard_away_dict, _ = self.mdl._create_hazard_away_dict([mat_wrap])
+        q_mat_node = self.mdl._create_transition_matrix(mat_wrap, hazard_dict, hazard_away_dict)
         transition_matrix = self.sess.run(q_mat_node)
 
         hazard_away_node = self.mdl._create_hazard_away_nodes(key_list)
