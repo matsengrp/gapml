@@ -26,15 +26,16 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         # Actually do an approximation
         self.approximator = ApproximatorLB(extra_steps=1, anc_generations=1, bcode_metadata=self.bcode_metadata)
 
-    def _create_model(self, topology, branch_len):
+    def _create_model(self, topology, bcode_metadata, branch_len):
         sess = tf.InteractiveSession()
         num_nodes = len([n for n in topology.traverse("postorder")])
         model = CLTLikelihoodModel(
                 topology,
-                self.bcode_metadata,
+                bcode_metadata,
                 sess,
                 branch_lens = np.array([branch_len for _ in range(num_nodes)]),
-                target_lams = np.ones(self.num_targets),
+                target_lams = np.ones(bcode_metadata.n_targets) + np.random.uniform(
+                    size=bcode_metadata.n_targets) * 0.1,
                 trim_long_probs = 0.1 * np.ones(2),
                 trim_zero_prob = 0.5,
                 trim_poissons = np.ones(2),
@@ -50,7 +51,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         topology.add_child(child)
 
         branch_len = 0.1
-        model = self._create_model(topology, branch_len)
+        model = self._create_model(topology, self.bcode_metadata, branch_len)
 
         t_mats = self.exact_approximator.create_transition_matrix_wrappers(model)
         model.create_topology_log_lik(t_mats)
@@ -87,7 +88,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         topology.add_child(child)
 
         branch_len = 10
-        model = self._create_model(topology, branch_len)
+        model = self._create_model(topology, self.bcode_metadata, branch_len)
         target_lams = model.target_lams.eval()
         trim_long_probs = model.trim_long_probs.eval()
 
@@ -137,7 +138,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         topology.add_child(child)
 
         branch_len = 10
-        model = self._create_model(topology, branch_len)
+        model = self._create_model(topology, self.bcode_metadata, branch_len)
         target_lams = model.target_lams.eval()
         trim_long_probs = model.trim_long_probs.eval()
 
@@ -197,7 +198,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         child1.add_child(child2)
 
         branch_len = 10
-        model = self._create_model(topology, branch_len)
+        model = self._create_model(topology, self.bcode_metadata, branch_len)
         target_lams = model.target_lams.eval()
         trim_long_probs = model.trim_long_probs.eval()
 
@@ -240,3 +241,50 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         model.create_topology_log_lik(t_mats)
         log_lik_approx, _ = model.get_log_lik()
         self.assertTrue(log_lik_approx < manual_log_prob)
+
+    def test_three_branch_likelihood(self):
+        bcode_metadata = BarcodeMetadata()
+        num_targets = bcode_metadata.n_targets
+
+        # Don't self.approximate -- exact calculation
+        exact_approximator = ApproximatorLB(extra_steps=10, anc_generations=5, bcode_metadata=bcode_metadata)
+        # Actually do an approximation
+        approximator = ApproximatorLB(extra_steps=1, anc_generations=1, bcode_metadata=bcode_metadata)
+
+        # Create three branches: Root -- child1 -- child2 -- child3
+        topology = CellLineageTree()
+        event1 = Event(
+                start_pos = 6,
+                del_len = 23,
+                min_target = 0,
+                max_target = 0,
+                insert_str = "ATC")
+        event2 = Event(
+                start_pos = 23 + 20,
+                del_len = 20 + 23 * 2,
+                min_target = 1,
+                max_target = 3,
+                insert_str = "")
+        child1 = CellLineageTree(
+                allele_events=AlleleEvents([], num_targets=num_targets))
+        child2 = CellLineageTree(
+                allele_events=AlleleEvents([], num_targets=num_targets))
+        child3 = CellLineageTree(
+                allele_events=AlleleEvents([event1, event2], num_targets=num_targets))
+        topology.add_child(child1)
+        child1.add_child(child2)
+        child2.add_child(child3)
+
+        branch_len = 0.5
+        model = self._create_model(topology, bcode_metadata, branch_len)
+
+        t_mats = exact_approximator.create_transition_matrix_wrappers(model)
+        model.create_topology_log_lik(t_mats)
+        log_lik, _ = model.get_log_lik()
+
+        # Calculate the hazard using approximate algo -- should be smaller
+        t_mats = approximator.create_transition_matrix_wrappers(model)
+        model.create_topology_log_lik(t_mats)
+        log_lik_approx, _ = model.get_log_lik()
+
+        print("log lik approx", log_lik_approx)
