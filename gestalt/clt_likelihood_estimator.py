@@ -10,10 +10,6 @@ from clt_estimator import CLTEstimator
 from cell_lineage_tree import CellLineageTree
 from clt_likelihood_model import CLTLikelihoodModel
 from approximator import ApproximatorLB
-from transition_matrix import TransitionMatrixWrapper, TransitionMatrix
-from indel_sets import TargetTract, Singleton
-
-from state_sum import StateSum
 
 class CLTLassoEstimator(CLTEstimator):
     """

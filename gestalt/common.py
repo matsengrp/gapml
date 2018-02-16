@@ -3,8 +3,6 @@ import numpy as np
 import itertools
 from typing import List, Tuple, Dict
 
-from indel_sets import TargetTract, TargetTractRepr
-
 from constants import COLORS
 
 def get_color(cell_type):
