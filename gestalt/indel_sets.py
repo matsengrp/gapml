@@ -197,7 +197,12 @@ class Singleton(IndelSet):
                 self.max_target,
                 self.max_deact_target)
 
-class TargetTract(IndelSet):
+class Tract(IndelSet):
+    def __new__(cls):
+        # Don't call this by itself
+        raise NotImplementedError()
+
+class TargetTract(Tract):
     def __new__(cls,
             min_deact_targ: int,
             min_targ: int,
@@ -231,6 +236,56 @@ class TargetTract(IndelSet):
     @property
     def is_right_long(self):
         return self.max_deact_target != self.max_target
+    
+    @property
+    def is_target_tract(self):
+        return True
+
+    @property
+    def is_deact_tract(self):
+        return False
+
+class DeactTract(Tract):
+    def __new__(cls, min_deact_target, max_deact_target):
+        return tuple.__new__(cls, (min_deact_target, max_deact_target))
+
+    def __getnewargs__(self):
+        return self
+
+    @property
+    def min_deact_target(self):
+        return self[0]
+
+    @property
+    def max_deact_target(self):
+        return self[-1]
+
+    @property
+    def is_target_tract(self):
+        return False
+
+    @property
+    def is_deact_tract(self):
+        return True
+
+class DeactTargetsEvt(Tract):
+    def __new__(cls, *deact_targs):
+        return tuple.__new__(cls, deact_targs)
+
+    def __getnewargs__(self):
+        return self
+
+    @property
+    def min_deact_target(self):
+        return self[0]
+
+    @property
+    def max_deact_target(self):
+        return self[-1]
+
+    @property
+    def is_target_tract(self):
+        return False
 
 class AncState:
     def __init__(self, indel_set_list: List[IndelSet] = []):
@@ -295,7 +350,7 @@ class AncState:
 
         return AncState(intersect_list)
 
-class TargetTractRepr(tuple):
+class TractRepr(tuple):
     def __new__(cls, *args):
         return tuple.__new__(cls, args)
 
@@ -316,7 +371,7 @@ class TargetTractRepr(tuple):
                 if tt1 == tt2:
                     idx2 += 1
                     break
-                elif tt1.min_deact_target > tt2.min_target and tt1.max_deact_target < tt2.max_target:
+                elif tt1.min_deact_target > tt2.min_deact_target and tt1.max_deact_target < tt2.max_deact_target:
                     # If tt1 < tt2
                     idx2 += 1
                     break
@@ -344,7 +399,7 @@ class TargetTractRepr(tuple):
             tt1 = self[idx1]
             tt2 = tts2[idx2]
 
-            if tt2.max_target < tt1.min_target:
+            if tt2.max_deact_target < tt1.min_deact_target:
                 new_tuple += (tt2,)
                 idx2 += 1
                 continue
@@ -365,4 +420,4 @@ class TargetTractRepr(tuple):
         @return flattened version of a list of tuples of target tract
         """
         tts_raw = reduce(lambda x,y: x + y, tt_groups, ())
-        return TargetTractRepr(*tts_raw)
+        return TractRepr(*tts_raw)

@@ -1,11 +1,11 @@
 from typing import List, Tuple, Set
 
-from indel_sets import TargetTract, AncState, TargetTractRepr
+from indel_sets import TargetTract, AncState, TractRepr
 from barcode_metadata import BarcodeMetadata
 from allele_events import AlleleEvents
 
 class StateSum:
-    def __init__(self, tts_list: List[TargetTractRepr]):
+    def __init__(self, tts_list: List[TractRepr]):
         self.tts_list = list(tts_list)
 
     def __str__(self):
@@ -24,4 +24,4 @@ class StateSum:
                     evt.min_target,
                     evt.max_target,
                     max_deact_target), )
-        return StateSum([TargetTractRepr(*tts)])
+        return StateSum([TractRepr(*tts)])

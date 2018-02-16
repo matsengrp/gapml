@@ -1,7 +1,7 @@
 from typing import Tuple, List, Set, Dict
 import itertools
 
-from indel_sets import TargetTract, AncState, IndelSet, SingletonWC, TargetTractRepr
+from indel_sets import TargetTract, AncState, IndelSet, SingletonWC, TractRepr, Tract
 from cell_lineage_tree import CellLineageTree
 from state_sum import StateSum
 from barcode_metadata import BarcodeMetadata
@@ -64,7 +64,7 @@ class ApproximatorLB:
         """
         for node in tree.traverse("preorder"):
             if node.is_root():
-                node.add_feature("state_sum", StateSum([TargetTractRepr()]))
+                node.add_feature("state_sum", StateSum([TractRepr()]))
             else:
                 transition_graph_dict, state_sum = self._get_branch_state_sum_transitions(node)
                 if node.is_leaf():
@@ -124,12 +124,12 @@ class ApproximatorLB:
             # Finally take the "product" of these sub_state_sums to form state sum
             product_state_sums = itertools.product(*tts_sub_state_sums)
             node_state_sum.update([
-                TargetTractRepr.merge(tup_tt_groups) for tup_tt_groups in product_state_sums
+                TractRepr.merge(tup_tt_groups) for tup_tt_groups in product_state_sums
             ])
 
         return subgraph_dict, StateSum(node_state_sum)
 
-    def _walk_tt_group_subgraph(self, max_indel_set: IndelSet, tt_grp_rt: Tuple[TargetTract]):
+    def _walk_tt_group_subgraph(self, max_indel_set: IndelSet, tt_grp_rt: Tuple[Tract]):
         """
         Dynamic programming algo for finding subgraph of nodes that are within `self.extra_steps` of
         any node in `tt_grp_roots`.
@@ -169,12 +169,14 @@ class ApproximatorLB:
             for tt_grp_start in tt_group_steps[i - 1]:
                 # Find available actions
                 active_any_targs = ApproximatorLB.get_active_any_trim_targets(max_indel_set, tt_grp_start)
-                # Get possible target tract events
-                tt_evts = CLTLikelihoodModel.get_possible_target_tracts(active_any_targs)
-                # Add possible target tract events to the graph
-                for tt_evt in tt_evts:
-                    to_node = TransitionToNode.create_transition_to(tt_grp_start, tt_evt)
+                # Get possible deact tract events
+                deact_targs_evts_list = CLTLikelihoodModel.get_possible_deact_targets_evts(active_any_targs)
+                # Add possible deact tract events to the graph
+                for deact_targs_evts in deact_targs_evts_list:
+                    to_node = TransitionToNode.create_transition_to(tt_grp_start, deact_targs_evts)
                     update_with_state(i, to_node.tt_group)
+                    print("tttttt", tt_grp_start)
+                    print("asdfasdf", to_node)
                     tt_group_graph.add_edge(tt_grp_start, to_node)
 
                 # Finally add in the singleton as a possible move
@@ -227,7 +229,7 @@ class ApproximatorLB:
         @param indel_set_list: the ordered list of indel sets from the node's AncState
         @param transtion_dict: the dictionary corresponding to transitions
         """
-        start_tts = TargetTractRepr.merge([
+        start_tts = TractRepr.merge([
             tts_partition_info[ind_set]["start"] for ind_set in indel_set_list])
         transition_dict[start_tts] = dict()
 
@@ -244,14 +246,12 @@ class ApproximatorLB:
                 new_tts_part_info[indel_set]["start"] = child.tt_group
 
                 # Create the new target tract representation
-                new_tts = TargetTractRepr.merge([
+                new_tts = TractRepr.merge([
                     new_tts_part_info[ind_set]["start"] for ind_set in indel_set_list])
 
                 # Add entry to transition matrix
                 if new_tts not in transition_dict[start_tts]:
                     transition_dict[start_tts][new_tts] = child.tt_evt
-                else:
-                    raise ValueError("already exists?")
 
                 # Recurse
                 self._add_transition_dict_row(new_tts_part_info, indel_set_list, transition_dict)

@@ -1,6 +1,6 @@
 from typing import Tuple, List, Set, Dict
 
-from indel_sets import TargetTract
+from indel_sets import TargetTract, Tract, DeactTract, DeactTargetsEvt
 
 class TransitionToNode:
     """
@@ -14,21 +14,27 @@ class TransitionToNode:
         self.tt_evt = tt_evt
         self.tt_group = tt_group
 
+    def __str__(self):
+        return "%s, %s" % (self.tt_evt, self.tt_group)
+
     @staticmethod
-    def create_transition_to(tt_group_orig: Tuple[TargetTract], tt_evt: TargetTract):
+    def create_transition_to(tt_group_orig: Tuple[Tract], tt_evt: Tract):
         """
         @param tt_group_orig: the original target tract group
         @param tt_evt: the added target tract
-        @return the new Tuple[TargetTract]
+        @return the new Tuple[Tract]
         """
         # TODO: check that this target tract can be added?
+        tt_result = tt_evt if tt_evt.__class__ == TargetTract else DeactTract(
+                tt_evt.min_deact_target, tt_evt.max_deact_target)
+
         if len(tt_group_orig):
             tt_group_new = ()
             tt_evt_added = False
             for i, tt in enumerate(tt_group_orig):
                 if i == 0:
                     if tt_evt.max_deact_target < tt.min_deact_target:
-                        tt_group_new += (tt_evt,)
+                        tt_group_new += (tt_result,)
                         tt_evt_added = True
 
                 if tt.max_deact_target < tt_evt.min_deact_target or tt_evt.max_deact_target < tt.min_deact_target:
@@ -37,13 +43,42 @@ class TransitionToNode:
                 if not tt_evt_added and i < len(tt_group_orig) - 1:
                     next_tt = tt_group_orig[i + 1]
                     if next_tt.min_deact_target > tt_evt.max_deact_target:
-                        tt_group_new += (tt_evt,)
+                        tt_group_new += (tt_result,)
                         tt_evt_added = True
             if not tt_evt_added:
-                tt_group_new += (tt_evt,)
-            return TransitionToNode(tt_evt, tt_group_new)
+                tt_group_new += (tt_result,)
+
+            # TODO: factorize the code and make a test for this
+            # Now merge adjacent deact tracts
+            tract_group_merged = ()
+            curr_deact_tract = None
+            for tract in tt_group_new:
+                if tract.is_target_tract:
+                    if curr_deact_tract:
+                        tract_group_merged += (curr_deact_tract, )
+                        curr_deact_tract = None
+
+                    tract_group_merged += (tract,)
+                else:
+                    if curr_deact_tract is None:
+                        curr_deact_tract = tract
+                    elif tract.min_deact_target == curr_deact_tract.max_deact_target + 1:
+                        curr_deact_tract = DeactTract(
+                                curr_deact_tract.min_deact_target,
+                                tract.max_deact_target)
+                    else:
+                        tract_group_merged += (curr_deact_tract, )
+                        curr_deact_tract = tract
+
+            # If there is a lingering deact tract to add to the list...
+            if curr_deact_tract:
+                tract_group_merged += (curr_deact_tract, )
+
+            print("tract_group_merged", tract_group_merged)
+
+            return TransitionToNode(tt_evt, tract_group_merged)
         else:
-            return TransitionToNode(tt_evt, (tt_evt,))
+            return TransitionToNode(tt_evt, (tt_result,))
 
 class TransitionGraph:
     """
