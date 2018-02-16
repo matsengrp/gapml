@@ -785,7 +785,7 @@ class CLTLikelihoodModel:
         #       function right now
         target_tract_evts = CLTLikelihoodModel.get_possible_target_tracts(active_any_targs)
         for tt in target_tract_evts:
-            deactivated_targs = list(set(tt))
+            deactivated_targs = sorted(set(tt))
             deact_evts.add(DeactTargetsEvt(*deactivated_targs))
 
         return deact_evts

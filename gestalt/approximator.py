@@ -169,10 +169,10 @@ class ApproximatorLB:
                 # Find available actions
                 active_any_targs = ApproximatorLB.get_active_any_trim_targets(max_indel_set, tract_grp_start)
                 # Get possible deact tract events
-                deact_targs_evts_list = CLTLikelihoodModel.get_possible_deact_targets_evts(active_any_targs)
+                deact_targs_evt_list = CLTLikelihoodModel.get_possible_deact_targets_evts(active_any_targs)
                 # Add possible deact tract events to the graph
-                for deact_targs_evts in deact_targs_evts_list:
-                    to_node = TransitionToNode.create_transition_to(tract_grp_start, deact_targs_evts)
+                for deact_targs_evt in deact_targs_evt_list:
+                    to_node = TransitionToNode.create_transition_to(tract_grp_start, deact_targs_evt)
                     update_with_state(i, to_node.tract_group)
                     tract_group_graph.add_edge(tract_grp_start, to_node)
 
