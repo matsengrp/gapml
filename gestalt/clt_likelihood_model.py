@@ -101,6 +101,7 @@ class CLTLikelihoodModel:
         self.all_vars_ph = tf.placeholder(tf.float64, shape=self.all_vars.shape)
         self.assign_all_vars = self.all_vars.assign(self.all_vars_ph)
 
+        # For easy access to these model parameters
         up_to_size = target_lams.size
         self.target_lams = self.all_vars[:up_to_size]
         prev_size = up_to_size
@@ -120,6 +121,11 @@ class CLTLikelihoodModel:
         up_to_size += 1
         self.insert_poisson = self.all_vars[prev_size: up_to_size]
         self.branch_lens = self.all_vars[-branch_lens.size:]
+
+        # Create my poisson distributions
+        self.poiss_left = tf.contrib.distributions.Poisson(self.trim_poissons[0])
+        self.poiss_right = tf.contrib.distributions.Poisson(self.trim_poissons[1])
+        self.poiss_insert = tf.contrib.distributions.Poisson(self.insert_poisson)
 
     def get_vars(self):
         return self.sess.run([self.target_lams, self.trim_long_probs, self.trim_zero_prob, self.trim_poissons, self.insert_zero_prob, self.insert_poisson, self.branch_lens])
@@ -281,10 +287,16 @@ class CLTLikelihoodModel:
         # TODO: using a uniform distribution for now
         check_left_max = tf.cast(tf.less_equal(left_trim_len, max_left_trim), tf.float64)
         check_left_min = tf.cast(tf.less_equal(min_left_trim, left_trim_len), tf.float64)
-        left_prob = 1.0/(max_left_trim - min_left_trim + 1.0) * check_left_max * check_left_min
+        left_prob = check_left_max * check_left_min * tf_common.ifelse(
+                tf_common.equal_float(left_trim_len, 0),
+                self.poiss_left.prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_left.cdf(max_left_trim),
+                self.poiss_left.prob(left_trim_len))
         check_right_max = tf.cast(tf.less_equal(right_trim_len, max_right_trim), tf.float64)
         check_right_min = tf.cast(tf.less_equal(min_right_trim, right_trim_len), tf.float64)
-        right_prob = 1.0/(max_right_trim - min_right_trim + 1.0) * check_right_max * check_right_min
+        right_prob = check_right_max * check_right_min * tf_common.ifelse(
+                tf_common.equal_float(right_trim_len, 0),
+                self.poiss_right.prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_right.cdf(max_right_trim),
+                self.poiss_right.prob(right_trim_len))
 
         lr_prob = left_prob * right_prob
         is_short_indel = tf_common.equal_float(is_left_longs + is_right_longs, 0)
@@ -305,8 +317,8 @@ class CLTLikelihoodModel:
         """
         insert_lens = tf.constant(
                 [sg.insert_len for sg in singletons], dtype=tf.float64)
-        poiss_unstd = tf.exp(-self.insert_poisson) * tf.pow(self.insert_poisson, insert_lens)
-        insert_len_prob = poiss_unstd/tf.exp(tf.lgamma(insert_lens + 1))
+        insert_len_prob = self.poiss_insert.prob(insert_lens)
+        # Equal prob of all same length sequences
         insert_seq_prob = 1.0/tf.pow(tf.constant(4.0, dtype=tf.float64), insert_lens)
         is_insert_zero = tf.cast(tf.equal(insert_lens, 0), dtype=tf.float64)
         insert_prob = tf_common.ifelse(
