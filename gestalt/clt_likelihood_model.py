@@ -15,6 +15,7 @@ from indel_sets import IndelSet, TargetTract, AncState, SingletonWC, Singleton, 
 from transition_matrix import TransitionMatrixWrapper
 import tf_common
 from common import inv_sigmoid
+from constants import PERTURB_ZERO
 from bounded_poisson import BoundedPoisson
 
 class CLTLikelihoodModel:
@@ -544,6 +545,12 @@ class CLTLikelihoodModel:
 
             # Hazard of staying is negative of hazard away
             index_vals.append([[start_key, start_key], -haz_away])
+
+            if start_tract_repr == (TargetTract(0, 0, self.num_targets - 1, self.num_targets - 1),):
+                # This is an annoying case where we have two zero eigenvalues...
+                index_vals.append([[unlikely_key, unlikely_key], -PERTURB_ZERO])
+                index_vals.append([[unlikely_key, start_key], PERTURB_ZERO])
+                continue
 
             # Tracks the total hazard to the likely states
             haz_to_likely = 0
