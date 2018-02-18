@@ -18,3 +18,4 @@ COLORS = ["cyan", "green", "orange"]
 MIX_CFG_FILE = "mix.cfg"
 
 UNLIKELY = "unlikely"
+PERTURB_ZERO = 1e-10
