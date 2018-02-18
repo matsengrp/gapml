@@ -545,6 +545,13 @@ class CLTLikelihoodModel:
             # Hazard of staying is negative of hazard away
             index_vals.append([[start_key, start_key], -haz_away])
 
+            if start_tract_repr == (TargetTract(0, 0, self.num_targets - 1, self.num_targets - 1),):
+                # This is an annoying case where we have two zero eigenvalues...
+                eps = 1e-10
+                index_vals.append([[unlikely_key, unlikely_key], -eps])
+                index_vals.append([[unlikely_key, start_key], eps])
+                continue
+
             # Tracks the total hazard to the likely states
             haz_to_likely = 0
             for end_tract_repr, tt_evt in matrix_row.items():

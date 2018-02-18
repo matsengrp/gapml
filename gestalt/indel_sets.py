@@ -475,3 +475,12 @@ def merge_tracts(tract_group_orig: Tuple[Tract], tract_result: Tract):
         tract_tuple_merged += (curr_deact_tract, )
     
     return tract_tuple_merged
+
+def get_deactivated_targets(tract_grp: Tuple[IndelSet]):
+    if tract_grp:
+        deactivated = list(range(tract_grp[0].min_deact_target, tract_grp[0].max_deact_target + 1))
+        for tract in tract_grp[1:]:
+            deactivated += list(range(tract.min_deact_target, tract.max_deact_target + 1))
+        return set(deactivated)
+    else:
+        return set()

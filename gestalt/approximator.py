@@ -2,6 +2,7 @@ from typing import Tuple, List, Set, Dict
 import itertools
 
 from indel_sets import TargetTract, AncState, IndelSet, SingletonWC, TractRepr, Tract
+from indel_sets import get_deactivated_targets
 from cell_lineage_tree import CellLineageTree
 from state_sum import StateSum
 from barcode_metadata import BarcodeMetadata
@@ -110,10 +111,10 @@ class ApproximatorLB:
                     # This means we want the tract_tuples that are not in anc's anc_state
                     # To do this, it suffices to check which targets have been disabled
                     anc_indel_set_tuple = anc_partition[max_indel_set]
-                    anc_deact_targs = ApproximatorLB.get_deactivated_targets(anc_indel_set_tuple)
+                    anc_deact_targs = get_deactivated_targets(anc_indel_set_tuple)
                     sub_state_sum = set()
                     for tract_tuple in subgraph.get_nodes():
-                        deact_targs = ApproximatorLB.get_deactivated_targets(tract_tuple)
+                        deact_targs = get_deactivated_targets(tract_tuple)
                         if deact_targs >= anc_deact_targs:
                             sub_state_sum.add(tract_tuple)
                     sub_state_sums_dict[graph_key] = sub_state_sum
@@ -252,16 +253,6 @@ class ApproximatorLB:
 
                 # Recurse
                 self._add_transition_dict_row(new_tract_repr_part_info, indel_set_list, transition_dict)
-
-    @staticmethod
-    def get_deactivated_targets(tract_grp: Tuple[IndelSet]):
-        if tract_grp:
-            deactivated = list(range(tract_grp[0].min_deact_target, tract_grp[0].max_deact_target + 1))
-            for tract in tract_grp[1:]:
-                deactivated += list(range(tract.min_deact_target, tract.max_deact_target + 1))
-            return set(deactivated)
-        else:
-            return set()
 
     @staticmethod
     def get_active_any_trim_targets(indel_set: IndelSet, tract_grp: Tuple[Tract]):
