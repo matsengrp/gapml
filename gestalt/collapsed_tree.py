@@ -31,8 +31,10 @@ class CollapsedTree:
                             leaf.remove_sister(sister)
                             did_something = True
                 for leaf in tree:
-                    if len(leaf.get_sisters()) == 0:
+                    if len(leaf.get_sisters()) == 0 and not leaf.is_root():
                         leaf.dist = np.mean(leaf.dists)
+                        add_dist = leaf.up.dist
+                        leaf.dists = [d + add_dist for d in leaf.dists]
                         leaf.up.delete(prevent_nondicotomic=False,
                                        preserve_branch_length=True)
 

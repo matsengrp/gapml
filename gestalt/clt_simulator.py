@@ -9,6 +9,7 @@ from allele import Allele
 from allele_events import AlleleEvents
 from allele_simulator import AlleleSimulator
 
+from common import sigmoid
 
 class CLTSimulator:
     """
@@ -34,7 +35,7 @@ class CLTSimulator:
         self.cell_state_simulator = cell_state_simulator
         self.allele_simulator = allele_simulator
 
-    def simulate(self, root_allele: Allele, root_cell_state: CellState, time: float):
+    def simulate(self, root_allele: Allele, root_cell_state: CellState, time: float, max_nodes: int = 10):
         """
         Generates a CLT based on the model
 
@@ -45,6 +46,8 @@ class CLTSimulator:
             cell_state=root_cell_state,
             dist=0)
 
+        self.curr_nodes = 1
+        self.max_nodes = max_nodes
         self._simulate_tree(tree, time)
 
         # Need to label the leaves (alive cells only) so that we
@@ -55,14 +58,15 @@ class CLTSimulator:
 
         return tree
 
-    def _run_race(self):
+    def _run_race(self, time:float):
         """
         Run the race to determine branch length and event at end of branch
         Does not take into account the maximum observation time!
         @return race_winner: True means cell division happens, False means cell doesn't (hence dies)
                 branch_length: time til the next event
         """
-        t_birth = expon.rvs(scale=self.birth_scale)
+        # Birth rate very high initially?
+        t_birth = expon.rvs(scale=self.birth_scale * sigmoid(-2 + time))
         t_death = expon.rvs(scale=self.death_scale)
         division_happens = t_birth < t_death
         branch_length = np.min([t_birth, t_death])
@@ -76,11 +80,17 @@ class CLTSimulator:
         @param tree: the root node to create a tree from
         @param time: the max amount of time to simulate from this node
         """
+        self.curr_nodes += 1
+        if self.curr_nodes > self.max_nodes:
+            print("too many nodes")
+            return
+
         if time == 0:
+            print("time out")
             return
 
         # Determine branch length and event at end of branch
-        division_happens, branch_length = self._run_race()
+        division_happens, branch_length = self._run_race(time)
         obs_branch_length = min(branch_length, time)
         remain_time = time - obs_branch_length
 
