@@ -38,7 +38,8 @@ class CLTLikelihoodModel:
             trim_zero_prob: float = 0.5,
             trim_poissons: ndarray = 2.5 * np.ones(2),
             insert_zero_prob: float = 0.5,
-            insert_poisson: float = 0.2):
+            insert_poisson: float = 0.2,
+            double_cut_weight: float = 0.01):
             #TODO: cell_type_lams: ndarray = None):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
@@ -56,6 +57,7 @@ class CLTLikelihoodModel:
             self.num_nodes = node_id
         self.bcode_meta = bcode_meta
         self.num_targets = bcode_meta.n_targets
+        self.double_cut_weight = double_cut_weight
 
         # Save tensorflow session
         self.sess = sess
@@ -162,7 +164,8 @@ class CLTLikelihoodModel:
         @return tensorflow tensor with the i-th value corresponding to the i-th target tract in the arguments
         """
         # Compute the hazard
-        log_lambda_part = tf.log(tf.gather(self.target_lams, min_target)) + tf.log(tf.gather(self.target_lams, max_target)) * tf_common.not_equal_float(min_target, max_target)
+        # Adding a weight for double cuts for now
+        log_lambda_part = tf.log(tf.gather(self.target_lams, min_target)) + tf.log(tf.gather(self.target_lams, max_target) * self.double_cut_weight) * tf_common.not_equal_float(min_target, max_target)
         left_trim_prob = tf_common.ifelse(long_left_statuses, self.trim_long_probs[0], 1 - self.trim_long_probs[0])
         right_trim_prob = tf_common.ifelse(long_right_statuses, self.trim_long_probs[1], 1 - self.trim_long_probs[1])
         hazard = tf.exp(log_lambda_part + tf.log(left_trim_prob) + tf.log(right_trim_prob), name="hazard")

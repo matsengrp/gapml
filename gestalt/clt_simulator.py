@@ -15,7 +15,7 @@ class CLTSimulator:
     def simulate(self, root_allele: Allele, root_cell_state: CellState, time: float, max_nodes: int = 10):
         raise NotImplementedError()
 
-class CLTSimulatorBifurcating:
+class CLTSimulatorBifurcating(CLTSimulator):
     """
     Class for simulating cell lineage trees.
     Subclass this to play around with different generative models.

@@ -14,7 +14,7 @@ from scipy.stats import pearsonr
 
 from cell_state import CellState, CellTypeTree
 from cell_state_simulator import CellTypeSimulator
-from clt_simulator import CLTSimulator
+from clt_simulator import CLTSimulatorBifurcating
 from clt_simulator_simple import CLTSimulatorSimple
 from allele_simulator_simult import AlleleSimulatorSimultaneous
 from allele import Allele
@@ -126,7 +126,7 @@ def main():
 
         cell_type_simulator = CellTypeSimulator(cell_type_tree)
         if not args.debug:
-            clt_simulator = CLTSimulator(
+            clt_simulator = CLTSimulatorBifurcating(
                     args.birth_lambda,
                     args.death_lambda,
                     cell_type_simulator,
