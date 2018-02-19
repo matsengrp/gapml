@@ -640,7 +640,7 @@ class CLTLikelihoodModel:
         else:
             return tf.ones(output_shape, dtype=tf.float64)
 
-    def get_hazard(self, tt_evt: TargetTract):
+    def get_hazards(self, tt_evts: List[TargetTract]):
         """
         @param tt_evt: the target tract that is getting introduced
         @return hazard of the event happening
@@ -648,9 +648,18 @@ class CLTLikelihoodModel:
         hazards = self.sess.run(
                 self.hazard,
                 feed_dict={
-                    self.targets_ph: [[tt_evt.min_target, tt_evt.max_target]],
-                    self.long_status_ph: [[tt_evt.is_left_long, tt_evt.is_right_long]]})
-        return hazards[0]
+                    self.targets_ph: [
+                        [tt_evt.min_target, tt_evt.max_target] for tt_evt in tt_evts],
+                    self.long_status_ph: [
+                        [tt_evt.is_left_long, tt_evt.is_right_long] for tt_evt in tt_evts]})
+        return hazards
+
+    def get_hazard(self, tt_evt: TargetTract):
+        """
+        @param tt_evt: the target tract that is getting introduced
+        @return hazard of the event happening
+        """
+        return self.get_hazards([tt_evt])[0]
 
     def _get_hazard_masks(self, tract_repr: TractRepr):
         """

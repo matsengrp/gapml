@@ -86,14 +86,14 @@ def main():
             type=float,
             default=0.1,
             help="ridge parameter on the branch lengths")
-    parser.add_argument('--max-iters', type=int, default=100)
+    parser.add_argument('--max-iters', type=int, default=300)
     parser.add_argument('--align', action='store_true')
     args = parser.parse_args()
     args.num_targets = len(args.target_lambdas)
     np.random.seed(seed=args.seed)
 
     # initialize the target lambdas with some perturbation to ensure we don't have eigenvalues that are exactly equal
-    args.target_lambdas = np.array(args.target_lambdas) + np.random.uniform(size=args.num_targets) * 0.01
+    args.target_lambdas = np.array(args.target_lambdas) + np.random.uniform(size=args.num_targets) * 0.08
     print("args.target_lambdas", args.target_lambdas)
 
     sess = tf.Session()
@@ -182,9 +182,9 @@ def main():
         print(args.repair_indel_probability)
         print(args.repair_insertion_lambda)
         print(branch_lens)
-        print(pearsonr(branch_lens[:-1], fitted_vars[-1][:-1]))
+        print("pears bran", pearsonr(branch_lens[:-1], fitted_vars[-1][:-1]))
         print("ignore branch index (root)", my_model.root_node_id)
-        print(pearsonr(args.target_lambdas, fitted_vars[0]))
+        print("pears targ", pearsonr(args.target_lambdas, fitted_vars[0]))
 
 if __name__ == "__main__":
     main()

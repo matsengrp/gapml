@@ -71,13 +71,8 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         num_active_targets = len(active_targets)
         if num_active_targets:
             target_tracts = list(CLTLikelihoodModel.get_possible_target_tracts(active_targets))
-            all_hazards = []
-            for tt in target_tracts:
-                all_hazards.append(self.model.get_hazard(tt))
-
-            tt_times = [
-                expon.rvs(scale=1.0 / hz) for hz in all_hazards
-            ]
+            all_hazards = self.model.get_hazards(target_tracts)
+            tt_times = [expon.rvs(scale=1.0 / hz) for hz in all_hazards]
             race_winner = target_tracts[np.argmin(tt_times)]
             min_time = np.min(tt_times)
             return race_winner, min_time
