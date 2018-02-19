@@ -79,14 +79,14 @@ def main():
     parser.add_argument(
         '--debug', action='store_true', help='debug tensorflow')
     parser.add_argument('--seed', type=int, default=0)
-    parser.add_argument('--lasso-param', type=float, default=0)
+    parser.add_argument('--pen-param', type=float, default=0.1)
     parser.add_argument('--max-iters', type=int, default=100)
     parser.add_argument('--align', action='store_true')
     args = parser.parse_args()
     np.random.seed(seed=args.seed)
 
     # initialize the target lambdas with some perturbation to ensure we don't have eigenvalues that are exactly equal
-    args.target_lambdas = np.array(args.target_lambdas)
+    args.target_lambdas = np.array(args.target_lambdas) + np.random.uniform(size=len(args.target_lambdas)) * 0.01
     print("args.target_lambdas", args.target_lambdas)
 
     sess = tf.Session()
@@ -157,8 +157,8 @@ def main():
                 trim_poissons = np.ones(2),
                 insert_zero_prob = 0.02,
                 insert_poisson = 1.0)
-        lasso_est = CLTLassoEstimator(my_model, approximator)
-        lasso_est.fit(args.lasso_param, args.max_iters)
+        estimator = CLTPenalizedEstimator(my_model, approximator)
+        estimator.fit(args.pen_param, args.max_iters)
         print("---- TRUTH -----")
         print(args.target_lambdas)
         print(args.repair_long_probability)

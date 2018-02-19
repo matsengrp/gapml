@@ -11,7 +11,7 @@ from cell_lineage_tree import CellLineageTree
 from clt_likelihood_model import CLTLikelihoodModel
 from approximator import ApproximatorLB
 
-class CLTLassoEstimator(CLTEstimator):
+class CLTPenalizedEstimator(CLTEstimator):
     """
     Likelihood estimator
 
@@ -45,9 +45,13 @@ class CLTLassoEstimator(CLTEstimator):
     def fit(self, penalty_param, max_iters):
         # Run a gradient descent and see what happens
         for i in range(max_iters):
-            _, log_lik = self.model.sess.run(
-                    [self.model.train_op, self.model.log_lik])
-            print("log lik", log_lik)
+            _, log_lik, pen_log_lik = self.model.sess.run(
+                    [self.model.train_op, self.model.log_lik, self.model.pen_log_lik],
+                    feed_dict={
+                        self.model.pen_param_ph: penalty_param
+                    })
+            print("neg pen log lik", pen_log_lik)
+            print("   log lik", log_lik)
             #print("log lik grad", log_lik_grad)
 
         for v in self.model.get_vars():

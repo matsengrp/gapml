@@ -76,8 +76,11 @@ class CLTLikelihoodModel:
                 trim_poissons,
                 [insert_zero_prob],
                 [insert_poisson])
+        self.pen_param_ph = tf.placeholder(tf.float64)
 
         self._create_hazard_node_for_simulation()
+
+        self.grad_opt = tf.train.AdamOptimizer(learning_rate=0.01)
 
     def _create_parameters(self,
             branch_lens: ndarray,
@@ -537,13 +540,16 @@ class CLTLikelihoodModel:
                 tf.reduce_sum(tf.log(scaling_terms), name="add_normalizer"),
                 tf.log(self.L[self.root_node_id]),
                 name="final_log_lik")
+            self.pen_log_lik = tf.add(
+                    -self.log_lik,
+                    self.pen_param_ph * tf.reduce_sum(tf.pow(self.branch_lens, 2)),
+                    name="final_pen_log_lik")
 
-            self.grad_opt = tf.train.AdamOptimizer(learning_rate=0.01)
             self.log_lik_grad = self.grad_opt.compute_gradients(
-                self.log_lik,
+                self.pen_log_lik,
                 var_list=[self.all_vars])
 
-            self.train_op = self.grad_opt.minimize(-self.log_lik, var_list=self.all_vars)
+            self.train_op = self.grad_opt.minimize(self.pen_log_lik, var_list=self.all_vars)
 
     def _create_transition_matrix(self,
             matrix_wrapper: TransitionMatrixWrapper,
