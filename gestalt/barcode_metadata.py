@@ -7,7 +7,7 @@ from constants import BARCODE_V7, NUM_BARCODE_V7_TARGETS
 class BarcodeMetadata:
     def __init__(self,
             unedited_barcode: List[str] = BARCODE_V7,
-            cut_sites: List[int] = [6] * NUM_BARCODE_V7_TARGETS,
+            cut_site: int = 6,
             crucial_pos_len: List[int] = [6,6]):
         """
         @param unedited_barcode: the original state of the barcode
@@ -25,10 +25,11 @@ class BarcodeMetadata:
         self.orig_length = sum(self.orig_substr_lens)
         self.n_targets = (len(self.unedited_barcode) - 1) // 2
 
-        self.cut_sites = cut_sites
+        self.cut_sites = [cut_site] * self.n_targets
         # absolute positions of cut locations
         self.abs_cut_sites = [
-            sum(self.orig_substr_lens[:2 * (i + 1)]) - cut_sites[i] for i in range(self.n_targets)
+            sum(self.orig_substr_lens[:2 * (i + 1)]) - self.cut_sites[i]
+            for i in range(self.n_targets)
         ]
 
         # Range of positions for each target
@@ -43,7 +44,8 @@ class BarcodeMetadata:
 
         # Min length of a long trim for target i -- left
         self.left_long_trim_min = [
-            self.abs_cut_sites[i] - self.pos_sites[i - 1][1] for i in range(1, self.n_targets)]
+            self.abs_cut_sites[i] - self.pos_sites[i - 1][1]
+            for i in range(1, self.n_targets)]
         # Min length of a long trim for target i -- right
         self.right_long_trim_min = [
             self.pos_sites[i + 1][0] - self.abs_cut_sites[i] + 1 for i in range(self.n_targets - 1)]
@@ -74,3 +76,14 @@ class BarcodeMetadata:
             max_deact_target = evt.max_target
 
         return min_deact_target, max_deact_target
+
+    @staticmethod
+    def create_fake_barcode(num_targets: int):
+        start_end_spacer = BARCODE_V7[0]
+        target_seq = BARCODE_V7[1]
+        btw_target_spacer = BARCODE_V7[2]
+        bcode = (start_end_spacer, target_seq)
+        for i in range(num_targets - 1):
+            bcode += (btw_target_spacer, target_seq)
+        bcode += (start_end_spacer,)
+        return bcode

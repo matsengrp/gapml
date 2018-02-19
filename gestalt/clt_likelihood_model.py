@@ -150,10 +150,10 @@ class CLTLikelihoodModel:
                 self.long_status_ph[:,1])
 
     def _create_hazard(self,
-            min_target: List[int],
-            max_target: List[int],
-            long_left_statuses: List[bool],
-            long_right_statuses: List[bool]):
+            min_target: Tensor,
+            max_target: Tensor,
+            long_left_statuses: Tensor,
+            long_right_statuses: Tensor):
         """
         Helpers for creating hazard in tensorflow graph and its associated gradient
         The arguments should all have the same length.
@@ -545,7 +545,7 @@ class CLTLikelihoodModel:
                     self.pen_param_ph * tf.reduce_sum(tf.pow(self.branch_lens, 2)),
                     name="final_pen_log_lik")
 
-            self.log_lik_grad = self.grad_opt.compute_gradients(
+            self.pen_log_lik_grad = self.grad_opt.compute_gradients(
                 self.pen_log_lik,
                 var_list=[self.all_vars])
 

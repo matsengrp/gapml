@@ -13,6 +13,9 @@ def get_color(cell_type):
 def product_list(iterables, repeat):
     return [list(b) for b in itertools.product(iterables, repeat=repeat)]
 
+def sigmoid(x: float):
+    return 1.0/(1.0 + np.exp(-x))
+
 def inv_sigmoid(prob: float):
     """
     @return x for prob = 1/(1 + exp(-x))
