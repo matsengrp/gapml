@@ -77,7 +77,6 @@ class CLTLikelihoodModel:
                 [insert_zero_prob],
                 [insert_poisson])
 
-        self.grad_opt = tf.train.GradientDescentOptimizer(learning_rate=0.001)
         self._create_hazard_node_for_simulation()
 
     def _create_parameters(self,
@@ -90,20 +89,20 @@ class CLTLikelihoodModel:
             insert_poisson: float):
         self.all_vars = tf.Variable(
                 np.concatenate([
-                    target_lams,
+                    np.log(target_lams),
                     inv_sigmoid(trim_long_probs),
                     inv_sigmoid(trim_zero_prob),
-                    trim_poissons,
+                    np.log(trim_poissons),
                     inv_sigmoid(insert_zero_prob),
-                    insert_poisson,
-                    branch_lens]),
+                    np.log(insert_poisson),
+                    np.log(branch_lens[1:])]),
                 dtype=tf.float64)
         self.all_vars_ph = tf.placeholder(tf.float64, shape=self.all_vars.shape)
         self.assign_all_vars = self.all_vars.assign(self.all_vars_ph)
 
         # For easy access to these model parameters
         up_to_size = target_lams.size
-        self.target_lams = self.all_vars[:up_to_size]
+        self.target_lams = tf.exp(self.all_vars[:up_to_size])
         prev_size = up_to_size
         up_to_size += trim_long_probs.size
         self.trim_long_probs = tf.sigmoid(self.all_vars[prev_size: up_to_size])
@@ -113,14 +112,18 @@ class CLTLikelihoodModel:
         self.trim_zero_prob = tf.sigmoid(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
         up_to_size += trim_poissons.size
-        self.trim_poissons = self.all_vars[prev_size: up_to_size]
+        self.trim_poissons = tf.exp(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
         up_to_size += 1
         self.insert_zero_prob = tf.sigmoid(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
         up_to_size += 1
-        self.insert_poisson = self.all_vars[prev_size: up_to_size]
-        self.branch_lens = self.all_vars[-branch_lens.size:]
+        self.insert_poisson = tf.exp(self.all_vars[prev_size: up_to_size])
+        if len(branch_lens):
+            self.branch_lens = tf.concat([
+                    tf.constant([branch_lens[0]], dtype=tf.float64),
+                    tf.exp(self.all_vars[-(branch_lens.size - 1):])],
+                    axis=0)
 
         # Create my poisson distributions
         self.poiss_left = tf.contrib.distributions.Poisson(self.trim_poissons[0])
@@ -462,7 +465,7 @@ class CLTLikelihoodModel:
         self.trim_probs = dict()
         # Store all the scaling terms addressing numerical underflow
         scaling_terms = []
-        for node in self.topology.traverse("postorder"):
+        for node in self.topology.traverse(self.NODE_ORDER):
             if node.is_leaf():
                 trans_mat_w = transition_matrix_wrappers[node.node_id]
                 self.L[node.node_id] = np.zeros((trans_mat_w.num_likely_states + 1, 1))
@@ -534,9 +537,13 @@ class CLTLikelihoodModel:
                 tf.reduce_sum(tf.log(scaling_terms), name="add_normalizer"),
                 tf.log(self.L[self.root_node_id]),
                 name="final_log_lik")
+
+            self.grad_opt = tf.train.AdamOptimizer(learning_rate=0.01)
             self.log_lik_grad = self.grad_opt.compute_gradients(
                 self.log_lik,
                 var_list=[self.all_vars])
+
+            self.train_op = self.grad_opt.minimize(-self.log_lik, var_list=self.all_vars)
 
     def _create_transition_matrix(self,
             matrix_wrapper: TransitionMatrixWrapper,
@@ -853,6 +860,7 @@ class CLTLikelihoodModel:
 
         return tt_evts
 
+    @staticmethod
     def _get_unmasked_indels(topology: CellLineageTree):
         """
         Determine the set of singletons we need to calculate the indel prob for

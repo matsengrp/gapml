@@ -19,14 +19,12 @@ class CLTLassoEstimator(CLTEstimator):
     """
     def __init__(
         self,
-        penalty_param: float,
         model: CLTLikelihoodModel,
         approximator: ApproximatorLB):
         """
         @param penalty_param: lasso penalty parameter
         @param model: initial CLT model params
         """
-        self.penalty_param = penalty_param
         self.model = model
         self.approximator = approximator
 
@@ -34,21 +32,29 @@ class CLTLassoEstimator(CLTEstimator):
         self.transition_mat_wrappers = self.approximator.create_transition_matrix_wrappers(model)
 
         self.model.create_topology_log_lik(self.transition_mat_wrappers)
-        self.model.create_logger()
+
         tf.global_variables_initializer().run()
-        st_time = time.time()
-        log_lik, log_lik_grad = self.model.get_log_lik(get_grad=True, do_logging=True)
-        print("tim", time.time() - st_time)
-        print("Log lik", log_lik)
-        print("log lik grad", log_lik_grad)
+        #st_time = time.time()
+        #log_lik, log_lik_grad = self.model.get_log_lik(get_grad=True, do_logging=True)
+        #print("tim", time.time() - st_time)
+        #print("Log lik", log_lik)
+        #print("log lik grad", log_lik_grad)
 
         #self.model.check_grad(self.transition_mat_wrappers)
 
-        # Run a stupid gradient descent and see what happens
-        #train_op = model.grad_opt.minimize(-model.log_lik, var_list=self.model.all_vars)
-        #for i in range(100):
-        #    _, log_lik = model.sess.run([train_op, model.log_lik])
-        #    print("train", log_lik)
-        #print(self.model.get_vars())
-        self.model.close_logger()
+    def fit(self, penalty_param, max_iters):
+        # Run a gradient descent and see what happens
+        for i in range(max_iters):
+            _, log_lik = self.model.sess.run(
+                    [self.model.train_op, self.model.log_lik])
+            print("log lik", log_lik)
+            #print("log lik grad", log_lik_grad)
 
+        for v in self.model.get_vars():
+            print(v)
+
+    def create_logger(self):
+        self.model.create_logger()
+
+    def close_logger(self):
+        self.model.close_logger()

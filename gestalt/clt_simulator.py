@@ -59,14 +59,14 @@ class CLTSimulator:
         """
         Run the race to determine branch length and event at end of branch
         Does not take into account the maximum observation time!
-        @return race_winner: 0 means birth, 1 means death
+        @return race_winner: True means cell division happens, False means cell doesn't (hence dies)
                 branch_length: time til the next event
         """
         t_birth = expon.rvs(scale=self.birth_scale)
         t_death = expon.rvs(scale=self.death_scale)
-        race_winner = np.argmin([t_birth, t_death])
+        division_happens = t_birth < t_death
         branch_length = np.min([t_birth, t_death])
-        return race_winner, branch_length
+        return division_happens, branch_length
 
 
     def _simulate_tree(self, tree: CellLineageTree, time: float):
@@ -80,7 +80,7 @@ class CLTSimulator:
             return
 
         # Determine branch length and event at end of branch
-        race_winner, branch_length = self._run_race()
+        division_happens, branch_length = self._run_race()
         obs_branch_length = min(branch_length, time)
         remain_time = time - obs_branch_length
 
@@ -103,7 +103,7 @@ class CLTSimulator:
                 obs_branch_length,
                 branch_end_cell_state,
                 branch_end_allele)
-        elif race_winner == 0:
+        elif division_happens:
             # Cell division
             self._process_cell_birth(
                 tree,

@@ -40,7 +40,8 @@ class CLTObserver:
 
     def observe_leaves(self,
                        cell_lineage_tree: CellLineageTree,
-                       give_pruned_clt: bool = True, seed: int = None):
+                       give_pruned_clt: bool = True,
+                       seed: int = None):
         """
         Samples leaves from the cell lineage tree, of those that are not dead
 
@@ -90,6 +91,7 @@ class CLTObserver:
                 parent = node.up
                 if len(node.children) == 1:
                     node.delete(prevent_nondicotomic=False, preserve_branch_length=True)
+
             assert sum(leaf.abundance for leaf in observations.values()) == len(clt)
             assert set(leaf.allele_events for leaf in clt) == \
                    set(obs.allele_events for obs in observations.values())

@@ -14,7 +14,6 @@ from tensorflow.python import debug as tf_debug
 from cell_state import CellState, CellTypeTree
 from cell_state_simulator import CellTypeSimulator
 from clt_simulator import CLTSimulator
-from allele_simulator_cut_repair import AlleleSimulatorCutRepair
 from allele_simulator_simult import AlleleSimulatorSimultaneous
 from allele import Allele
 from clt_observer import CLTObserver
@@ -40,18 +39,15 @@ def main():
     parser.add_argument(
         '--target-lambdas',
         type=float,
-        nargs='+',
+        nargs=10,
         default=[0.1] * 10,
         help='target cut rates')
     parser.add_argument(
-        '--repair-lambdas',
+        '--repair-long-probability',
         type=float,
-        default=None,
-        help="""
-        repair poisson rate, used for non-simult cut/repair.
-        first one is poisson for focal, second is poisson param for inter-target
-        ex: [1,2]
-        """)
+        nargs=2,
+        default=[0.05] * 2,
+        help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
         '--repair-indel-probability',
         type=float,
@@ -83,12 +79,14 @@ def main():
     parser.add_argument(
         '--debug', action='store_true', help='debug tensorflow')
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--lasso-param', type=float, default=0)
+    parser.add_argument('--max-iters', type=int, default=100)
     parser.add_argument('--align', action='store_true')
     args = parser.parse_args()
     np.random.seed(seed=args.seed)
 
     # initialize the target lambdas with some perturbation to ensure we don't have eigenvalues that are exactly equal
-    args.target_lambdas = np.array(args.target_lambdas) + np.random.uniform(size=len(args.target_lambdas)) * 0.1
+    args.target_lambdas = np.array(args.target_lambdas)
     print("args.target_lambdas", args.target_lambdas)
 
     sess = tf.Session()
@@ -102,29 +100,21 @@ def main():
 
         # Instantiate all the simulators
         bcode_meta = BarcodeMetadata()
-        if args.repair_lambdas:
-            # old stuff... probably delete?
-            allele_simulator = AlleleSimulatorCutRepair(
-                np.array(args.target_lambdas),
-                np.array(args.repair_lambdas), args.repair_indel_probability,
-                args.repair_deletion_lambda, args.repair_deletion_lambda,
-                args.repair_insertion_lambda)
-        else:
-            model_params = CLTLikelihoodModel(
-                    None,
-                    bcode_meta,
-                    sess,
-                    target_lams = np.array(args.target_lambdas),
-                    trim_long_probs = np.array([0.05, 0.05]),
-                    trim_zero_prob = args.repair_indel_probability,
-                    trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
-                    insert_zero_prob = args.repair_indel_probability,
-                    insert_poisson = args.repair_insertion_lambda)
-            tf.global_variables_initializer().run()
-
-            allele_simulator = AlleleSimulatorSimultaneous(
+        model_params = CLTLikelihoodModel(
+                None,
                 bcode_meta,
-                model_params)
+                sess,
+                target_lams = np.array(args.target_lambdas),
+                trim_long_probs = np.array(args.repair_long_probability),
+                trim_zero_prob = args.repair_indel_probability,
+                trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
+                insert_zero_prob = args.repair_indel_probability,
+                insert_poisson = args.repair_insertion_lambda)
+        tf.global_variables_initializer().run()
+
+        allele_simulator = AlleleSimulatorSimultaneous(
+            bcode_meta,
+            model_params)
 
         cell_type_simulator = CellTypeSimulator(cell_type_tree)
         clt_simulator = CLTSimulator(
@@ -145,35 +135,39 @@ def main():
         print("NUM LEAVES", len(pruned_clt))
         # Let the two methods compare just in terms of topology
         # To do that, we need to collapse our tree.
-        # We collapse branches if the alleles are identical.
-        for node in pruned_clt.get_descendants(strategy='postorder'):
-            if str(node.up.allele) == str(node.allele):
-                node.dist = 0
-        true_tree = CollapsedTree.collapse(pruned_clt)
+        true_tree = CollapsedTree.collapse(pruned_clt, deduplicate_sisters=True)
 
         # trying out with true tree!!!
         approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
 
-    sess = tf.Session()
-    if args.debug:
-        sess = tf_debug.LocalCLIDebugWrapperSession(sess)
-
-    with sess.as_default():
         branch_lens = []
-        for node in pruned_clt.traverse("postorder"):
-            branch_lens.append(node.dist + 0.1)
-        print(pruned_clt.get_ascii(attributes=["allele_events"], show_internal=True))
+        for node in true_tree.traverse(model_params.NODE_ORDER):
+            branch_lens.append(node.dist)
+        print(true_tree.get_ascii(attributes=["allele_events"], show_internal=True))
 
-        init_model_params = CLTLikelihoodModel(
-                pruned_clt, bcode_meta, sess,
-                branch_lens = np.array(branch_lens),
-                target_lams = np.array(args.target_lambdas),
-                trim_long_probs = np.array([0.05, 0.05]),
-                trim_zero_prob = args.repair_indel_probability,
-                trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
-                insert_zero_prob = args.repair_indel_probability,
-                insert_poisson = args.repair_insertion_lambda)
-        lasso_est = CLTLassoEstimator(0, init_model_params, approximator)
+        my_model = CLTLikelihoodModel(
+                true_tree,
+                bcode_meta,
+                sess,
+                # Fix the first branch length to get the scaling correct?
+                branch_lens = np.concatenate([[branch_lens[0]], np.ones(len(branch_lens) - 1) * 0.5]),
+                target_lams = np.ones(len(args.target_lambdas)) * 0.1 + np.random.uniform(size=len(args.target_lambdas)) * 0.1,
+                trim_long_probs = np.ones(2) * 0.01,
+                trim_zero_prob = 0.02,
+                trim_poissons = np.ones(2),
+                insert_zero_prob = 0.02,
+                insert_poisson = 1.0)
+        lasso_est = CLTLassoEstimator(my_model, approximator)
+        lasso_est.fit(args.lasso_param, args.max_iters)
+        print("---- TRUTH -----")
+        print(args.target_lambdas)
+        print(args.repair_long_probability)
+        print(args.repair_indel_probability)
+        print([args.repair_deletion_lambda, args.repair_deletion_lambda])
+        print(args.repair_indel_probability)
+        print(args.repair_insertion_lambda)
+        print(branch_lens)
+        print("ignore branch index (root)", my_model.root_node_id)
 
 if __name__ == "__main__":
     main()

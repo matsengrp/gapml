@@ -17,9 +17,9 @@ class BoundedPoisson:
         self.poisson_dist = poisson(poisson_param)
 
     def rvs(self, size=None):
-        poiss_rv = self.min_val + self.poisson_dist.rvs(size=size)
-        mask = poiss_rv <= self.max_val
-        return np.multiply(poiss_rv, mask)
+        poiss_raw = self.poisson_dist.rvs(size=size)
+        poiss_bounded  = poiss_raw * (poiss_raw <= self.max_val)
+        return self.min_val + poiss_bounded
 
     def pmf(self, k: int):
         if k > self.max_val:
