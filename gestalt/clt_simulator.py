@@ -12,6 +12,10 @@ from allele_simulator import AlleleSimulator
 from common import sigmoid
 
 class CLTSimulator:
+    def simulate(self, root_allele: Allele, root_cell_state: CellState, time: float, max_nodes: int = 10):
+        raise NotImplementedError()
+
+class CLTSimulatorBifurcating:
     """
     Class for simulating cell lineage trees.
     Subclass this to play around with different generative models.

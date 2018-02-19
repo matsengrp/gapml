@@ -131,22 +131,15 @@ def main():
                     args.death_lambda,
                     cell_type_simulator,
                     allele_simulator)
-
-            # Simulate the tree
-            clt = clt_simulator.simulate(
-                    Allele(barcode_orig, bcode_meta),
-                    CellState(categorical=cell_type_tree),
-                    args.time,
-                    max_nodes=100)
         else:
             clt_simulator = CLTSimulatorSimple(
                     cell_type_simulator,
                     allele_simulator)
-            clt = clt_simulator.simulate(
-                    Allele(barcode_orig, bcode_meta),
-                    CellState(categorical=cell_type_tree),
-                    args.time,
-                    max_nodes=30)
+        clt = clt_simulator.simulate(
+                Allele(barcode_orig, bcode_meta),
+                CellState(categorical=cell_type_tree),
+                args.time,
+                max_nodes=30)
 
         # Now sample the leaves and see what happens with parsimony
         observer = CLTObserver(args.sampling_rate)

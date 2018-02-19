@@ -1,17 +1,14 @@
-import copy
-from scipy.stats import expon
 import numpy as np
 
 from cell_lineage_tree import CellLineageTree
 from cell_state import CellTypeTree, CellState
 from cell_state_simulator import CellStateSimulator
 from allele import Allele
-from allele_events import AlleleEvents
 from allele_simulator import AlleleSimulator
-
+from clt_simulator import CLTSimulator
 from common import sigmoid
 
-class CLTSimulatorSimple:
+class CLTSimulatorSimple(CLTSimulator):
     """
     Class for simulating cell lineage trees.
     Used for testing things.
