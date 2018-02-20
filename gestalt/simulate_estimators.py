@@ -88,6 +88,7 @@ def main():
             help="ridge parameter on the branch lengths")
     parser.add_argument('--max-iters', type=int, default=300)
     parser.add_argument('--align', action='store_true')
+    parser.add_argument('--use-parsimony', action='store_true', help="use mix (CS parsimony) to estimate tree topologies")
     args = parser.parse_args()
     args.num_targets = len(args.target_lambdas)
     np.random.seed(seed=args.seed)
@@ -131,49 +132,55 @@ def main():
                     args.death_lambda,
                     cell_type_simulator,
                     allele_simulator)
+            max_nodes = 300
         else:
             clt_simulator = CLTSimulatorSimple(
                     cell_type_simulator,
                     allele_simulator)
+            max_nodes = 30
         clt = clt_simulator.simulate(
                 Allele(barcode_orig, bcode_meta),
                 CellState(categorical=cell_type_tree),
                 args.time,
-                max_nodes=30)
+                max_nodes=max_nodes)
 
-        # Now sample the leaves and see what happens with parsimony
+        # Now sample the leaves
         observer = CLTObserver(args.sampling_rate)
         obs_leaves, pruned_clt = observer.observe_leaves(clt, seed = args.seed)
-        # Let the two methods compare just in terms of topology
-        # To do that, we need to collapse our tree.
-        true_tree = CollapsedTree.collapse(pruned_clt, deduplicate_sisters=True)
+        print(pruned_clt.get_ascii(attributes=["allele_events"], show_internal=True))
 
-        # trying out with true tree!!!
-        approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
-
-        branch_lens = []
+        # Process the true tree
+        true_tree = CollapsedTree.collapse(pruned_clt, deduplicate_sisters=True, deduplicate_parent_child=True)
+        true_branch_lens = []
         for node in true_tree.traverse(model_params.NODE_ORDER):
-            branch_lens.append(node.dist)
-        print("NUM collapsed LEAVES", len(true_tree))
+            true_branch_lens.append(node.dist)
+        print("True tree topology, num leaves", len(true_tree))
         print(true_tree.get_ascii(attributes=["allele_events"], show_internal=True))
 
-        my_model = CLTLikelihoodModel(
-                true_tree,
-                bcode_meta,
-                sess,
-                # Fix the first branch length to get the scaling correct?
-                branch_lens = np.concatenate([[branch_lens[0]], np.ones(len(branch_lens) - 1) * 0.5]),
-                # initialize the target lambdas with some perturbation to ensure we
-                # don't have eigenvalues that are exactly equal
-                target_lams = np.ones(len(args.target_lambdas)) * 0.1 + np.random.uniform(size=len(args.target_lambdas)) * 0.1,
-                trim_long_probs = np.ones(2) * 0.01,
-                trim_zero_prob = 0.02,
-                trim_poissons = np.ones(2),
-                insert_zero_prob = 0.02,
-                insert_poisson = 1.0)
-        estimator = CLTPenalizedEstimator(my_model, approximator)
-        estimator.fit(args.pen_param, args.max_iters)
-        fitted_vars = my_model.get_vars()
+        # Get the parsimony-estimated topologies
+        parsimony_estimator = CLTParsimonyEstimator(barcode_orig, bcode_meta)
+        parsimony_trees = parsimony_estimator.estimate(obs_leaves) if args.use_parsimony else []
+        if args.use_parsimony:
+            print("Total parsimony trees", len(parsimony_trees))
+
+        # Instantiate approximator used by our penalized MLE
+        approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
+        def fit_pen_likelihood(tree):
+            res_model = CLTLikelihoodModel(
+                    tree,
+                    bcode_meta,
+                    sess)
+            estimator = CLTPenalizedEstimator(res_model, approximator)
+            pen_log_lik = estimator.fit(args.pen_param, args.max_iters)
+            return pen_log_lik, res_model
+
+        for tree in parsimony_trees[:10]:
+            pen_log_lik, res_model = fit_pen_likelihood(tree)
+            print("Mix topology score", pen_log_lik)
+            print(tree.get_ascii(attributes=["allele_events"], show_internal=True))
+        pen_log_lik, oracle_model = fit_pen_likelihood(true_tree)
+        print("True tree score", pen_log_lik)
+
         print("---- TRUTH -----")
         print(args.target_lambdas)
         print(args.repair_long_probability)
@@ -181,10 +188,12 @@ def main():
         print([args.repair_deletion_lambda, args.repair_deletion_lambda])
         print(args.repair_indel_probability)
         print(args.repair_insertion_lambda)
-        print(branch_lens)
-        print("pears bran", pearsonr(branch_lens[:-1], fitted_vars[-1][:-1]))
-        print("ignore branch index (root)", my_model.root_node_id)
-        print("pears targ", pearsonr(args.target_lambdas, fitted_vars[0]))
+        print(true_branch_lens)
+
+        fitted_vars = oracle_model.get_vars()
+        print("pearson branch", pearsonr(true_branch_lens[:-1], fitted_vars[-1][:-1]))
+        print("ignore branch index (root)", oracle_model.root_node_id)
+        print("pearson target", pearsonr(args.target_lambdas, fitted_vars[0]))
 
 if __name__ == "__main__":
     main()
