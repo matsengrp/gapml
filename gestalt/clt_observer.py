@@ -6,6 +6,7 @@ from allele_events import AlleleEvents
 from cell_state import CellState
 from cell_lineage_tree import CellLineageTree
 from alignment import Aligner
+from collapsed_tree import CollapsedTree
 
 class ObservedAlignedSeq:
     def __init__(self,
@@ -54,50 +55,54 @@ class CLTObserver:
         """
         np.random.seed(seed)
         clt = cell_lineage_tree.copy()
-        observations = {}
+
         # Stores only leaf names!
         observed_leaves = set()
+        # First sample the leaves
         for leaf in clt:
             if not leaf.dead:
                 is_sampled = np.random.binomial(1, self.sampling_rate)
                 if is_sampled:
                     observed_leaves.add(leaf.name)
-                    allele_with_errors = leaf.allele.observe_with_errors(self.error_rate)
-                    allele_with_errors_events = allele_with_errors.get_event_encoding(aligner=self.aligner)
-                    leaf.allele.process_events([(event.start_pos,
-                                                  event.start_pos + event.del_len,
-                                                  event.insert_str)
-                                                 for event in allele_with_errors_events.events])
-                    leaf.allele_events = allele_with_errors_events
-                    # ignore cell state for now!
-                    # TODO: add back cell state later
-                    cell_id = (str(allele_with_errors_events), ) #str(leaf.cell_state))
-                    if cell_id in observations:
-                        observations[cell_id].abundance += 1
-                    else:
-                        observations[cell_id] = ObservedAlignedSeq(
-                            allele=allele_with_errors,
-                            allele_events=allele_with_errors_events,
-                            cell_state=leaf.cell_state,
-                            abundance=1,
-                        )
+
+        # Now prune the tree -- custom pruning (cause ete was doing weird things...)
+        # TODO: maybe make this faster
+        for node in clt.iter_descendants():
+            if sum((node2.name in observed_leaves) for node2 in node.traverse()) == 0:
+                node.detach()
+        # Collapse the tree
+        clt = CollapsedTree.collapse(clt, deduplicate=True)
+
+        observations = {}
+        # Now gather the observed leaves, calculating abundance
+        for leaf in clt:
+            allele_with_errors = leaf.allele.observe_with_errors(self.error_rate)
+            allele_with_errors_events = allele_with_errors.get_event_encoding(aligner=self.aligner)
+            leaf.allele.process_events([(event.start_pos,
+                                          event.start_pos + event.del_len,
+                                          event.insert_str)
+                                         for event in allele_with_errors_events.events])
+            leaf.allele_events = allele_with_errors_events
+            # ignore cell state for now!
+            # TODO: add back cell state later
+            if len(allele_with_errors_events.events) == 0:
+                continue
+            cell_id = (str(allele_with_errors_events), ) #str(leaf.cell_state))
+            if cell_id in observations:
+                observations[cell_id].abundance += 1
+            else:
+                observations[cell_id] = ObservedAlignedSeq(
+                    allele=allele_with_errors,
+                    allele_events=allele_with_errors_events,
+                    cell_state=leaf.cell_state,
+                    abundance=1,
+                )
+                print(allele_with_errors_events)
 
         if len(observations) == 0:
             raise RuntimeError('all lineages extinct, nothing to observe')
 
         if give_pruned_clt:
-            for node in clt.iter_descendants():
-                if sum((node2.name in observed_leaves) for node2 in node.traverse()) == 0:
-                    node.detach()
-            # remove remaining unifurcations
-            for node in clt.iter_descendants():
-                parent = node.up
-                if len(node.children) == 1:
-                    node.delete(prevent_nondicotomic=False, preserve_branch_length=True)
-
-            assert sum(leaf.abundance for leaf in observations.values()) == len(clt)
-            assert set(leaf.allele_events for leaf in clt) == \
-                   set(obs.allele_events for obs in observations.values())
             return list(observations.values()), clt
         else:
             return list(observations.values())

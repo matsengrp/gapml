@@ -86,7 +86,7 @@ def main():
             type=float,
             default=0,
             help="ridge parameter on the branch lengths")
-    parser.add_argument('--max-iters', type=int, default=500)
+    parser.add_argument('--max-iters', type=int, default=1000)
     parser.add_argument('--align', action='store_true')
     parser.add_argument('--use-parsimony', action='store_true', help="use mix (CS parsimony) to estimate tree topologies")
     args = parser.parse_args()
@@ -144,17 +144,14 @@ def main():
                 args.time,
                 max_nodes=max_nodes)
 
-        # Now sample the leaves
+        # Now sample the leaves and create the true topology
         observer = CLTObserver(args.sampling_rate)
-        obs_leaves, pruned_clt = observer.observe_leaves(clt, seed = args.seed)
-        #print("Pruned CLT, num leaves")
-        #print(pruned_clt.get_ascii(attributes=["allele_events"], show_internal=True))
+        obs_leaves, true_tree = observer.observe_leaves(clt, seed = args.seed)
+        print("True tree topology, num leaves", len(true_tree))
+        print(true_tree.get_ascii(attributes=["allele_events"], show_internal=True))
         print("Number of uniq obs alleles", len(obs_leaves))
 
         # Create a true tree
-        true_tree = CollapsedTree.collapse(pruned_clt, deduplicate=True)
-        print("True tree topology, num leaves", len(true_tree))
-        print(true_tree.get_ascii(attributes=["allele_events"], show_internal=True))
         true_branch_lens = []
         for node in true_tree.traverse(model_params.NODE_ORDER):
             true_branch_lens.append(node.dist)
@@ -177,16 +174,27 @@ def main():
             return pen_log_lik, res_model
 
         # Fit parsimony trees
-        for tree in parsimony_trees[:2]:
-            pen_log_lik, res_model = fit_pen_likelihood(tree)
-            print("Mix topology score", pen_log_lik)
-            print(tree.get_ascii(attributes=["allele_events"], show_internal=True))
+        rf_dist_trees = {}
+        for tree in parsimony_trees:
+            rf_dist = true_tree.robinson_foulds(tree, attr_t1="allele_events", attr_t2="allele_events")[0]
+            print("rf dist", rf_dist)
+            if rf_dist not in rf_dist_trees:
+                rf_dist_trees[rf_dist] = [tree]
+            else:
+                rf_dist_trees[rf_dist].append(tree)
+
+        for rf_dist, pars_trees in rf_dist_trees.items():
+            for tree in pars_trees[:2]:
+                pen_log_lik, res_model = fit_pen_likelihood(tree)
+                print("Mix pen log lik", pen_log_lik, "RF", rf_dist)
 
         # Fit oracle tree
         pen_log_lik, oracle_model = fit_pen_likelihood(true_tree)
         print("True tree score", pen_log_lik)
 
         print("---- TRUTH -----")
+        for v in oracle_model.get_vars():
+            print(v)
         print(args.target_lambdas)
         print(args.repair_long_probability)
         print(args.repair_indel_probability)
@@ -196,9 +204,9 @@ def main():
         print(true_branch_lens)
 
         fitted_vars = oracle_model.get_vars()
-        print("pearson branch", pearsonr(true_branch_lens[:-1], fitted_vars[-1][:-1]))
+        print("pearson branch (to oracle)", pearsonr(true_branch_lens[:-1], fitted_vars[-1][:-1]))
         print("ignore branch index (root)", oracle_model.root_node_id)
-        print("pearson target", pearsonr(args.target_lambdas, fitted_vars[0]))
+        print("pearson target (to oracle)", pearsonr(args.target_lambdas, fitted_vars[0]))
 
 if __name__ == "__main__":
     main()

@@ -565,7 +565,7 @@ class CLTLikelihoodModel:
         """
         Uses tensorflow to create the instantaneous transition matrix
         """
-        print("NUM UNLIKELY", matrix_wrapper.num_likely_states)
+        #print("NUM UNLIKELY", matrix_wrapper.num_likely_states)
         unlikely_key = matrix_wrapper.num_likely_states
 
         # Now fill in the matrix -- match tensorflow object with indices of instant transition matrix

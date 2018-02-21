@@ -94,6 +94,14 @@ class AlleleEvents:
             disturbed_targets.update(list(range(evt.min_target, evt.max_target + 1)))
         return disturbed_targets
 
+    def __lt__(self, other):
+        # Needed for robinson fould calculation for some reason
+        return str(self) < str(other)
+
+    def __le__(self, other):
+        # Needed for robinson fould calculation for some reason
+        return str(self) <= str(other)
+
     def __eq__(self, other):
         return self.events == other.events
 
