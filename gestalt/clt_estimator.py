@@ -111,7 +111,7 @@ class CLTParsimonyEstimator(CLTEstimator):
             observations)
         write_seqs_to_phy(processed_seqs, event_dict, "infile",
                           "test.abundance", encode_hidden=encode_hidden)
-        cmd = ["rm -f outfile outtree && % < mix.cfg" % self.mix_path]
+        cmd = ["rm -f outfile outtree && %s < mix.cfg" % self.mix_path]
         res = subprocess.call(cmd, shell=True)
         assert (res == 0)
         # Parse the outfile -- these are still regular Tree, not CellLineageTrees
