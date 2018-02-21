@@ -26,7 +26,8 @@ class CollapsedTree:
                 did_something = False
                 for leaf in tree:
                     if leaf.allele_events.events == leaf.up.allele_events.events:
-                        leaf.delete(prevent_nondicotomic=False, preserve_branch_length=True)
+                        # There is no branch length to preserve since this is a leaf...
+                        leaf.delete(prevent_nondicotomic=False, preserve_branch_length=False)
                         did_something = True
 
             for node in tree.get_descendants(strategy="postorder"):
