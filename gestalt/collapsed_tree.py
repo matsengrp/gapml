@@ -25,7 +25,7 @@ class CollapsedTree:
             while did_something:
                 did_something = False
                 for leaf in tree:
-                    if leaf.allele_events.events == leaf.up.allele_events.events:
+                    if not leaf.is_root() and leaf.allele_events.events == leaf.up.allele_events.events:
                         # There is no branch length to preserve since this is a leaf...
                         leaf.delete(prevent_nondicotomic=False, preserve_branch_length=False)
                         did_something = True

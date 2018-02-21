@@ -97,20 +97,25 @@ class CLTLikelihoodModel:
             insert_poisson: float):
         self.all_vars = tf.Variable(
                 np.concatenate([
-                    np.log(target_lams),
+                    # Fix the first target value -- not for optimization
+                    np.log(target_lams[1:]),
                     inv_sigmoid(trim_long_probs),
                     inv_sigmoid(trim_zero_prob),
                     np.log(trim_poissons),
                     inv_sigmoid(insert_zero_prob),
                     np.log(insert_poisson),
-                    np.log(branch_lens[1:])]),
+                    np.log(branch_lens)]),
                 dtype=tf.float64)
         self.all_vars_ph = tf.placeholder(tf.float64, shape=self.all_vars.shape)
         self.assign_all_vars = self.all_vars.assign(self.all_vars_ph)
 
         # For easy access to these model parameters
-        up_to_size = target_lams.size
-        self.target_lams = tf.exp(self.all_vars[:up_to_size])
+        up_to_size = target_lams.size - 1
+        # First target lambda is fixed. The rest can vary. Addresses scaling issues.
+        self.target_lams = tf.concat([
+                    tf.constant([target_lams[0]], dtype=tf.float64),
+                    tf.exp(self.all_vars[:up_to_size])],
+                    axis=0)
         prev_size = up_to_size
         up_to_size += trim_long_probs.size
         self.trim_long_probs = tf.sigmoid(self.all_vars[prev_size: up_to_size])
@@ -127,11 +132,7 @@ class CLTLikelihoodModel:
         prev_size = up_to_size
         up_to_size += 1
         self.insert_poisson = tf.exp(self.all_vars[prev_size: up_to_size])
-        if len(branch_lens):
-            self.branch_lens = tf.concat([
-                    tf.constant([branch_lens[0]], dtype=tf.float64),
-                    tf.exp(self.all_vars[-(branch_lens.size - 1):])],
-                    axis=0)
+        self.branch_lens = tf.exp(self.all_vars[-branch_lens.size:])
 
         # Create my poisson distributions
         self.poiss_left = tf.contrib.distributions.Poisson(self.trim_poissons[0])

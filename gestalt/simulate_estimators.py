@@ -171,9 +171,7 @@ def main():
             res_model = CLTLikelihoodModel(
                     tree,
                     bcode_meta,
-                    sess,
-                    #target_lams = np.array(args.target_lambdas))
-                    branch_lens = np.array(true_branch_lens))
+                    sess)
             estimator = CLTPenalizedEstimator(res_model, approximator)
             pen_log_lik = estimator.fit(args.pen_param, args.max_iters)
             return pen_log_lik, res_model
