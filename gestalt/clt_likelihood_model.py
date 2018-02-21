@@ -39,7 +39,7 @@ class CLTLikelihoodModel:
             trim_poissons: ndarray = 2.5 * np.ones(2),
             insert_zero_prob: float = 0.5,
             insert_poisson: float = 0.2,
-            double_cut_weight: float = 0.01):
+            double_cut_weight: float = 0.0001):
             #TODO: cell_type_lams: ndarray = None):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
@@ -69,7 +69,10 @@ class CLTLikelihoodModel:
                     self.gamma_prior[1],
                     self.num_nodes)
         if target_lams is None:
-            target_lams = 0.1 * np.ones(self.num_targets)
+            # initialize the target lambdas with some perturbation to ensure we
+            # don't have eigenvalues that are exactly equal
+            target_lams = 0.1 * np.ones(self.num_targets) + np.random.uniform(size=self.num_targets) * 0.1
+
         self._create_parameters(
                 branch_lens,
                 target_lams,
@@ -544,15 +547,15 @@ class CLTLikelihoodModel:
                 tf.log(self.L[self.root_node_id]),
                 name="final_log_lik")
             self.pen_log_lik = tf.add(
-                    -self.log_lik,
-                    self.pen_param_ph * tf.reduce_sum(tf.pow(self.branch_lens, 2)),
+                    self.log_lik,
+                    -self.pen_param_ph * tf.reduce_sum(tf.pow(self.branch_lens, 2)),
                     name="final_pen_log_lik")
 
             self.pen_log_lik_grad = self.grad_opt.compute_gradients(
                 self.pen_log_lik,
                 var_list=[self.all_vars])
 
-            self.train_op = self.grad_opt.minimize(self.pen_log_lik, var_list=self.all_vars)
+            self.train_op = self.grad_opt.minimize(-self.pen_log_lik, var_list=self.all_vars)
 
     def _create_transition_matrix(self,
             matrix_wrapper: TransitionMatrixWrapper,

@@ -55,6 +55,7 @@ class CLTObserver:
         np.random.seed(seed)
         clt = cell_lineage_tree.copy()
         observations = {}
+        # Stores only leaf names!
         observed_leaves = set()
         for leaf in clt:
             if not leaf.dead:
@@ -68,7 +69,9 @@ class CLTObserver:
                                                   event.insert_str)
                                                  for event in allele_with_errors_events.events])
                     leaf.allele_events = allele_with_errors_events
-                    cell_id = (str(allele_with_errors_events), str(leaf.cell_state))
+                    # ignore cell state for now!
+                    # TODO: add back cell state later
+                    cell_id = (str(allele_with_errors_events), ) #str(leaf.cell_state))
                     if cell_id in observations:
                         observations[cell_id].abundance += 1
                     else:

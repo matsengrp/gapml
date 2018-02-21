@@ -11,6 +11,7 @@ from collapsed_tree import CollapsedTree
 from cell_lineage_tree import CellLineageTree
 from allele import Allele
 from cell_state import CellState
+from barcode_metadata import BarcodeMetadata
 
 from constants import MIX_CFG_FILE
 
@@ -24,6 +25,10 @@ class CLTEstimator:
 
 
 class CLTParsimonyEstimator(CLTEstimator):
+    def __init__(self, orig_barcode: List[str], bcode_meta: BarcodeMetadata):
+        self.orig_barcode = orig_barcode
+        self.bcode_meta = bcode_meta
+
     def _process_observations(self, observations: List[ObservedAlignedSeq]):
         """
         Prepares the observations to be sent to phylip
@@ -63,7 +68,7 @@ class CLTParsimonyEstimator(CLTEstimator):
                 if allele_char == "1"
             ]
             events = [event_list[idx] for idx in child_event_ids]
-            child_allele = Allele()
+            child_allele = Allele(self.orig_barcode, self.bcode_meta)
             child_allele.process_events([(event.start_pos,
                                          event.start_pos + event.del_len,
                                          event.insert_str) for event in events])
@@ -86,7 +91,9 @@ class CLTParsimonyEstimator(CLTEstimator):
         Make a regular TreeNode to a Cell lineage tree
         """
         # TODO: update cell state maybe in the future?
-        clt = CellLineageTree(Allele(), cell_state=None)
+        clt = CellLineageTree(
+                Allele(self.orig_barcode, self.bcode_meta),
+                cell_state=None)
         self._do_convert(clt, tree, event_list, processed_obs, processed_abund)
         return clt
 
@@ -119,14 +126,18 @@ class CLTParsimonyEstimator(CLTEstimator):
         #       to see if there is an equiv tree.
         uniq_trees = []
         for t in trees:
-            collapsed_est_tree = CollapsedTree.collapse(t, deduplicate_sisters=False)
-            # that should have only collapsed internal nodes because the taxa
-            # should be unique
-            assert len(collapsed_est_tree) == len(t)
-            if len(uniq_trees) == 0 or min(collapsed_est_tree.robinson_foulds(uniq_t,
-                                                                              unrooted_trees=True)[0]
-                                           for uniq_t in uniq_trees) > 0:
+            collapsed_est_tree = CollapsedTree.collapse(t, collapse_zero_lens=True)
+            if len(uniq_trees) == 0:
                 uniq_trees.append(collapsed_est_tree)
+            else:
+                # We are going to use the unrooted tree assuming that the collapsed tree output
+                # does not have multifurcating branches...
+                dists = [
+                    collapsed_est_tree.robinson_foulds(uniq_t, unrooted_trees=True)[0]
+                    for uniq_t in uniq_trees]
+                if min(dists) > 0:
+                    uniq_trees.append(collapsed_est_tree)
+                    continue
 
         # print('trees post-collapse: {}'.format(len(uniq_trees)))
 
