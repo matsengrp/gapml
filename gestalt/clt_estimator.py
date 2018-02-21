@@ -13,7 +13,7 @@ from allele import Allele
 from cell_state import CellState
 from barcode_metadata import BarcodeMetadata
 
-from constants import MIX_CFG_FILE
+from constants import MIX_CFG_FILE, MIX_PATH
 
 
 class CLTEstimator:
@@ -25,9 +25,10 @@ class CLTEstimator:
 
 
 class CLTParsimonyEstimator(CLTEstimator):
-    def __init__(self, orig_barcode: List[str], bcode_meta: BarcodeMetadata):
+    def __init__(self, orig_barcode: List[str], bcode_meta: BarcodeMetadata, mix_path: str = MIX_PATH):
         self.orig_barcode = orig_barcode
         self.bcode_meta = bcode_meta
+        self.mix_path = mix_path
 
     def _process_observations(self, observations: List[ObservedAlignedSeq]):
         """
@@ -110,7 +111,7 @@ class CLTParsimonyEstimator(CLTEstimator):
             observations)
         write_seqs_to_phy(processed_seqs, event_dict, "infile",
                           "test.abundance", encode_hidden=encode_hidden)
-        cmd = ["rm -f outfile outtree && mix < mix.cfg"]
+        cmd = ["rm -f outfile outtree && % < mix.cfg" % self.mix_path]
         res = subprocess.call(cmd, shell=True)
         assert (res == 0)
         # Parse the outfile -- these are still regular Tree, not CellLineageTrees

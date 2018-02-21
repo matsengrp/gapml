@@ -29,7 +29,6 @@ from approximator import ApproximatorLB
 from constants import *
 from summary_util import *
 
-
 def main():
     '''do things, the main things'''
     parser = argparse.ArgumentParser(description='simulate GESTALT')
@@ -87,6 +86,10 @@ def main():
             default=0,
             help="ridge parameter on the branch lengths")
     parser.add_argument('--max-iters', type=int, default=1000)
+    parser.add_argument(
+            '--mix-path',
+            type=str,
+            default=MIX_PATH)
     parser.add_argument('--align', action='store_true')
     parser.add_argument('--use-parsimony', action='store_true', help="use mix (CS parsimony) to estimate tree topologies")
     args = parser.parse_args()
@@ -157,7 +160,7 @@ def main():
             true_branch_lens.append(node.dist)
 
         # Get the parsimony-estimated topologies
-        parsimony_estimator = CLTParsimonyEstimator(barcode_orig, bcode_meta)
+        parsimony_estimator = CLTParsimonyEstimator(barcode_orig, bcode_meta, args.mix_path)
         parsimony_trees = parsimony_estimator.estimate(obs_leaves) if args.use_parsimony else []
         if args.use_parsimony:
             print("Total parsimony trees", len(parsimony_trees))

@@ -16,6 +16,7 @@ CONTROL_ORGANS = ["7B_1_to_500_blood", "7B_1_to_20_blood", "7B_1_to_100_blood"]
 COLORS = ["cyan", "green", "orange"]
 
 MIX_CFG_FILE = "mix.cfg"
+MIX_PATH = "~/phylip-3.697/exe/mix"
 
 UNLIKELY = "unlikely"
 PERTURB_ZERO = 1e-10
