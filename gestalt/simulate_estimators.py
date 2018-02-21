@@ -42,7 +42,7 @@ def main():
         '--target-lambdas',
         type=float,
         nargs=10,
-        default=[0.1] * 20,
+        default=[0.001] * 10,
         help='target cut rates -- will get slightly perturbed for the true value')
     parser.add_argument(
         '--repair-long-probability',
@@ -68,7 +68,7 @@ def main():
         default=1,
         help='poisson parameter for distribution of insertion in cut site(s)')
     parser.add_argument(
-        '--birth-lambda', type=float, default=1, help='birth rate')
+        '--birth-lambda', type=float, default=2, help='birth rate')
     parser.add_argument(
         '--death-lambda', type=float, default=0.001, help='death rate')
     parser.add_argument(
@@ -84,9 +84,9 @@ def main():
     parser.add_argument(
             '--pen-param',
             type=float,
-            default=0.1,
+            default=0,
             help="ridge parameter on the branch lengths")
-    parser.add_argument('--max-iters', type=int, default=300)
+    parser.add_argument('--max-iters', type=int, default=500)
     parser.add_argument('--align', action='store_true')
     parser.add_argument('--use-parsimony', action='store_true', help="use mix (CS parsimony) to estimate tree topologies")
     args = parser.parse_args()
@@ -137,7 +137,7 @@ def main():
             clt_simulator = CLTSimulatorSimple(
                     cell_type_simulator,
                     allele_simulator)
-            max_nodes = 30
+            max_nodes = 70
         clt = clt_simulator.simulate(
                 Allele(barcode_orig, bcode_meta),
                 CellState(categorical=cell_type_tree),
@@ -147,15 +147,17 @@ def main():
         # Now sample the leaves
         observer = CLTObserver(args.sampling_rate)
         obs_leaves, pruned_clt = observer.observe_leaves(clt, seed = args.seed)
-        print(pruned_clt.get_ascii(attributes=["allele_events"], show_internal=True))
+        #print("Pruned CLT, num leaves")
+        #print(pruned_clt.get_ascii(attributes=["allele_events"], show_internal=True))
+        print("Number of uniq obs alleles", len(obs_leaves))
 
-        # Process the true tree
-        true_tree = CollapsedTree.collapse(pruned_clt, deduplicate_sisters=True, deduplicate_parent_child=True)
+        # Create a true tree
+        true_tree = CollapsedTree.collapse(pruned_clt, deduplicate=True)
+        print("True tree topology, num leaves", len(true_tree))
+        print(true_tree.get_ascii(attributes=["allele_events"], show_internal=True))
         true_branch_lens = []
         for node in true_tree.traverse(model_params.NODE_ORDER):
             true_branch_lens.append(node.dist)
-        print("True tree topology, num leaves", len(true_tree))
-        print(true_tree.get_ascii(attributes=["allele_events"], show_internal=True))
 
         # Get the parsimony-estimated topologies
         parsimony_estimator = CLTParsimonyEstimator(barcode_orig, bcode_meta)
@@ -169,15 +171,20 @@ def main():
             res_model = CLTLikelihoodModel(
                     tree,
                     bcode_meta,
-                    sess)
+                    sess,
+                    #target_lams = np.array(args.target_lambdas))
+                    branch_lens = np.array(true_branch_lens))
             estimator = CLTPenalizedEstimator(res_model, approximator)
             pen_log_lik = estimator.fit(args.pen_param, args.max_iters)
             return pen_log_lik, res_model
 
-        for tree in parsimony_trees[:10]:
+        # Fit parsimony trees
+        for tree in parsimony_trees[:2]:
             pen_log_lik, res_model = fit_pen_likelihood(tree)
             print("Mix topology score", pen_log_lik)
             print(tree.get_ascii(attributes=["allele_events"], show_internal=True))
+
+        # Fit oracle tree
         pen_log_lik, oracle_model = fit_pen_likelihood(true_tree)
         print("True tree score", pen_log_lik)
 

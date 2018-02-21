@@ -51,11 +51,11 @@ class CLTPenalizedEstimator(CLTEstimator):
                         self.model.pen_param_ph: penalty_param
                     })
             if i % print_iter == print_iter - 1:
-                print("iter", i, "neg pen log lik", pen_log_lik, "log lik", log_lik)
+                print("iter", i, "pen log lik", pen_log_lik, "log lik", log_lik)
 
         for v in self.model.get_vars():
             print(v)
-        return -pen_log_lik
+        return pen_log_lik
 
     def create_logger(self):
         self.model.create_logger()

@@ -124,24 +124,20 @@ class CLTParsimonyEstimator(CLTEstimator):
         # collapsing them to get multifurcating trees
         # TODO: make this much more efficient - right now checks all other trees
         #       to see if there is an equiv tree.
-        uniq_trees = trees
-        #uniq_trees = []
-        #for t in trees:
-        #    collapsed_est_tree = CollapsedTree.collapse(t, collapse_zero_lens=True, deduplicate_sisters=False)
-        #    # that should have only collapsed internal nodes because the taxa
-        #    # should be unique
-        #    assert len(collapsed_est_tree) == len(t)
-        #    if len(uniq_trees) == 0:
-        #        uniq_trees.append(collapsed_est_tree)
-        #    else:
-        #        # We are going to use the unrooted tree assuming that the collapsed tree output
-        #        # does not have multifurcating branches...
-        #        dists = [
-        #            collapsed_est_tree.robinson_foulds(uniq_t, unrooted_trees=False)[0]
-        #            for uniq_t in uniq_trees]
-        #        if min(dists) > 0:
-        #            uniq_trees.append(collapsed_est_tree)
-        #            continue
+        uniq_trees = []
+        for t in trees:
+            collapsed_est_tree = CollapsedTree.collapse(t, collapse_zero_lens=True)
+            if len(uniq_trees) == 0:
+                uniq_trees.append(collapsed_est_tree)
+            else:
+                # We are going to use the unrooted tree assuming that the collapsed tree output
+                # does not have multifurcating branches...
+                dists = [
+                    collapsed_est_tree.robinson_foulds(uniq_t, unrooted_trees=True)[0]
+                    for uniq_t in uniq_trees]
+                if min(dists) > 0:
+                    uniq_trees.append(collapsed_est_tree)
+                    continue
 
         # print('trees post-collapse: {}'.format(len(uniq_trees)))
 

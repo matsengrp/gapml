@@ -39,7 +39,7 @@ class CLTLikelihoodModel:
             trim_poissons: ndarray = 2.5 * np.ones(2),
             insert_zero_prob: float = 0.5,
             insert_poisson: float = 0.2,
-            double_cut_weight: float = 0.01):
+            double_cut_weight: float = 0.0001):
             #TODO: cell_type_lams: ndarray = None):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
