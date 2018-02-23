@@ -13,8 +13,12 @@ import warnings
 
 
 def write_seqs_to_phy(processed_seqs: Dict[str, List],
-                      all_event_dict: Dict[str, int], phy_file: str,
-                      abundance_file: str, encode_hidden=True):
+                      all_event_dict: Dict[str, int],
+                      phy_file: str,
+                      abundance_file: str,
+                      encode_hidden=True,
+                    # TODO: currently ignored. include cell state in the future?
+                      use_cell_state=False):
     """
     @param processed_seqs: dict key = sequence id, dict val = [abundance, list of events, cell state]
     @param all_event_dict: dict key = event id, dict val = event phylip id
@@ -43,6 +47,7 @@ def write_seqs_to_phy(processed_seqs: Dict[str, List],
         for seq_id, seq_data in processed_seqs.items():
             seq_abundance = seq_data[0]
             seq_events = seq_data[1]
+            seq_cell_state = seq_data[2]
             event_idxs = [all_event_dict[seq_ev] for seq_ev in seq_events]
             event_arr = np.array(['0' for _ in range(num_events)])
             event_arr[event_idxs] = '1'

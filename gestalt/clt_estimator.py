@@ -98,8 +98,11 @@ class CLTParsimonyEstimator(CLTEstimator):
         self._do_convert(clt, tree, event_list, processed_obs, processed_abund)
         return clt
 
-    def estimate(self, observations: List[ObservedAlignedSeq],
-                 encode_hidden: bool = False):
+    def estimate(self,
+            observations: List[ObservedAlignedSeq],
+            encode_hidden: bool = False,
+            use_cell_state: bool = False,
+            max_trees: int = None):
         """
         @return a list of unique cell lineage tree estimates
                 calls out to mix on the command line
@@ -109,8 +112,13 @@ class CLTParsimonyEstimator(CLTEstimator):
         """
         processed_seqs, event_dict, event_list = self._process_observations(
             observations)
-        write_seqs_to_phy(processed_seqs, event_dict, "infile",
-                          "test.abundance", encode_hidden=encode_hidden)
+        write_seqs_to_phy(
+                processed_seqs,
+                event_dict,
+                "infile",
+                "test.abundance",
+                encode_hidden=encode_hidden,
+                use_cell_state=use_cell_state)
         cmd = ["rm -f outfile outtree && %s < mix.cfg" % self.mix_path]
         res = subprocess.call(cmd, shell=True)
         assert (res == 0)
@@ -138,7 +146,10 @@ class CLTParsimonyEstimator(CLTEstimator):
                     for uniq_t in uniq_trees]
                 if min(dists) > 0:
                     uniq_trees.append(collapsed_est_tree)
-                    continue
+                    if max_trees is not None and len(uniq_trees) > max_trees:
+                        break
+                    else:
+                        continue
 
         # print('trees post-collapse: {}'.format(len(uniq_trees)))
 

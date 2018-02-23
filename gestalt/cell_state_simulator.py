@@ -45,9 +45,9 @@ class CellTypeSimulator(CellStateSimulator):
             branch_length = np.min(t_speciates)
             remain_time = remain_time - branch_length
             if remain_time > 0:
-                # Ran out of time
                 curr_cell_type = children[race_winner]
             else:
+                # Ran out of time
                 return CellState(categorical=curr_cell_type)
 
 

@@ -10,6 +10,7 @@ from scipy.stats import poisson
 from tensorflow import Session
 
 from cell_lineage_tree import CellLineageTree
+from cell_state import CellTypeTree
 from barcode_metadata import BarcodeMetadata
 from indel_sets import IndelSet, TargetTract, AncState, SingletonWC, Singleton, TractRepr, DeactTract, DeactTargetsEvt, Tract
 from transition_matrix import TransitionMatrixWrapper
@@ -39,8 +40,8 @@ class CLTLikelihoodModel:
             trim_poissons: ndarray = 2.5 * np.ones(2),
             insert_zero_prob: float = 0.5,
             insert_poisson: float = 0.2,
-            double_cut_weight: float = 0.0001):
-            #TODO: cell_type_lams: ndarray = None):
+            double_cut_weight: float = 0.0001,
+            cell_type_tree: CellTypeTree = None):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
         Will randomly initialize model parameters
@@ -58,6 +59,21 @@ class CLTLikelihoodModel:
         self.bcode_meta = bcode_meta
         self.num_targets = bcode_meta.n_targets
         self.double_cut_weight = double_cut_weight
+
+        # Process cell type tree
+        self.cell_type_tree = cell_type_tree
+        cell_type_lams = []
+        if cell_type_tree:
+            max_cell_type = 0
+            cell_type_dict = {}
+            for node in cell_type_tree.traverse(self.NODE_ORDER):
+                if node.is_root():
+                    self.cell_type_root = node.cell_type
+                cell_type_dict[node.cell_type] = node.rate
+                max_cell_type = max(max_cell_type, node.cell_type)
+            for i in range(max_cell_type + 1):
+                cell_type_lams.append(cell_type_dict[i])
+        cell_type_lams = np.array(cell_type_lams)
 
         # Save tensorflow session
         self.sess = sess
@@ -80,7 +96,8 @@ class CLTLikelihoodModel:
                 [trim_zero_prob],
                 trim_poissons,
                 [insert_zero_prob],
-                [insert_poisson])
+                [insert_poisson],
+                cell_type_lams)
         self.pen_param_ph = tf.placeholder(tf.float64)
 
         self._create_hazard_node_for_simulation()
@@ -94,7 +111,8 @@ class CLTLikelihoodModel:
             trim_zero_prob: float,
             trim_poissons: ndarray,
             insert_zero_prob: float,
-            insert_poisson: float):
+            insert_poisson: float,
+            cell_type_lams: ndarray):
         self.all_vars = tf.Variable(
                 np.concatenate([
                     # Fix the first target value -- not for optimization
@@ -104,7 +122,8 @@ class CLTLikelihoodModel:
                     np.log(trim_poissons),
                     inv_sigmoid(insert_zero_prob),
                     np.log(insert_poisson),
-                    np.log(branch_lens)]),
+                    np.log(branch_lens),
+                    np.log(cell_type_lams)]),
                 dtype=tf.float64)
         self.all_vars_ph = tf.placeholder(tf.float64, shape=self.all_vars.shape)
         self.assign_all_vars = self.all_vars.assign(self.all_vars_ph)
@@ -132,7 +151,10 @@ class CLTLikelihoodModel:
         prev_size = up_to_size
         up_to_size += 1
         self.insert_poisson = tf.exp(self.all_vars[prev_size: up_to_size])
-        self.branch_lens = tf.exp(self.all_vars[-branch_lens.size:])
+        prev_size = up_to_size
+        up_to_size += branch_lens.size
+        self.branch_lens = tf.exp(self.all_vars[prev_size: up_to_size])
+        self.cell_type_lams = tf.exp(self.all_vars[-cell_type_lams.size:])
 
         # Create my poisson distributions
         self.poiss_left = tf.contrib.distributions.Poisson(self.trim_poissons[0])
@@ -140,7 +162,15 @@ class CLTLikelihoodModel:
         self.poiss_insert = tf.contrib.distributions.Poisson(self.insert_poisson)
 
     def get_vars(self):
-        return self.sess.run([self.target_lams, self.trim_long_probs, self.trim_zero_prob, self.trim_poissons, self.insert_zero_prob, self.insert_poisson, self.branch_lens])
+        return self.sess.run([
+            self.target_lams,
+            self.trim_long_probs,
+            self.trim_zero_prob,
+            self.trim_poissons,
+            self.insert_zero_prob,
+            self.insert_poisson,
+            self.branch_lens,
+            self.cell_type_lams])
 
     def _create_hazard_node_for_simulation(self):
         """
@@ -421,16 +451,17 @@ class CLTLikelihoodModel:
             dkey_list = list(self.D.keys())
             D_vals = [self.D[k] for k in dkey_list]
             trans_mats_vals = [self.trans_mats[k] for k in dkey_list]
+            D_cell_type_vals = [self.D_cell_type[k] for k in list(self.D_cell_type.keys())]
 
             if get_grad:
-                log_lik, grad, Ds, q_mats = self.sess.run(
-                        [self.log_lik, self.log_lik_grad, D_vals, trans_mats_vals],
+                log_lik, grad, Ds, q_mats, D_types = self.sess.run(
+                        [self.log_lik, self.log_lik_grad, D_vals, trans_mats_vals, D_cell_type_vals],
                         options=run_options,
                         run_metadata=run_metadata)
                 grad = grad[0][0]
             else:
-                log_lik, Ds, q_mats = self.sess.run(
-                        [self.log_lik, D_vals, trans_mats_vals],
+                log_lik, Ds, q_mats, D_types = self.sess.run(
+                        [self.log_lik, D_vals, trans_mats_vals, D_cell_type_vals],
                         options=run_options,
                         run_metadata=run_metadata)
                 grad = None
@@ -450,6 +481,72 @@ class CLTLikelihoodModel:
             return log_lik, grad
         else:
             return self.sess.run(self.log_lik), None
+
+    def _create_cell_type_instant_matrix(self, haz_away=1e-10):
+        num_leaves = tf.constant(len(self.cell_type_tree), dtype=tf.float64)
+        index_vals = []
+        self.num_cell_types = 0
+        for node in self.cell_type_tree.traverse(self.NODE_ORDER):
+            self.num_cell_types += 1
+            if node.is_leaf():
+                haz_node = haz_away + np.random.rand() * 1e-10
+                haz_node_away = tf.constant(haz_node, dtype=tf.float64)
+                index_vals.append([(node.cell_type, node.cell_type), -haz_away])
+                for leaf in self.cell_type_tree:
+                    if leaf.cell_type != node.cell_type:
+                        index_vals.append([(node.cell_type, leaf.cell_type), haz_node_away/(num_leaves - 1)])
+            else:
+                tot_haz = tf.zeros([], dtype=tf.float64)
+                for child in node.get_children():
+                    haz_child = self.cell_type_lams[child.cell_type]
+                    index_vals.append([(node.cell_type, child.cell_type), haz_child])
+                    tot_haz = tf.add(tot_haz, haz_child)
+                index_vals.append([(node.cell_type, node.cell_type), -tot_haz])
+
+        q_matrix = tf_common.scatter_nd(
+                index_vals,
+                output_shape=[self.num_cell_types, self.num_cell_types],
+                name="top.cell_type_q_matrix")
+        return q_matrix
+
+    def create_cell_type_log_lik(self):
+        """
+        Create a tensorflow graph of the likelihood calculation
+        """
+        self.cell_type_q_mat = self._create_cell_type_instant_matrix()
+        # Store the tensorflow objects that calculate the prob of a node being in each state given the leaves
+        self.L_cell_type = dict()
+        self.D_cell_type = dict()
+        # Store all the scaling terms addressing numerical underflow
+        scaling_terms = []
+        for node in self.topology.traverse(self.NODE_ORDER):
+            if node.is_leaf():
+                cell_type_one_hot = np.zeros((self.num_cell_types, 1))
+                cell_type_one_hot[node.cell_state.categorical_state.cell_type] = 1
+                self.L_cell_type[node.node_id] = tf.constant(cell_type_one_hot, dtype=tf.float64)
+            else:
+                self.L_cell_type[node.node_id] = tf.constant(1.0, dtype=tf.float64)
+                for child in node.children:
+                    # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
+                    branch_len = self.branch_lens[child.node_id]
+                    with tf.name_scope("cell_type_expm_ops%d" % node.node_id):
+                        pr_matrix, _, _, D = tf_common.myexpm(self.cell_type_q_mat, branch_len)
+                        self.D_cell_type[child.node_id] = D
+                        down_probs = tf.matmul(pr_matrix, self.L_cell_type[child.node_id])
+                        self.L_cell_type[node.node_id] = tf.multiply(self.L_cell_type[node.node_id], down_probs)
+
+                # Handle numerical underflow
+                scaling_term = tf.reduce_sum(self.L_cell_type[node.node_id], name="scaling_term")
+                self.L_cell_type[node.node_id] = tf.div(self.L_cell_type[node.node_id], scaling_term, name="sub_log_lik")
+                scaling_terms.append(scaling_term)
+
+        with tf.name_scope("cell_type_log_lik"):
+            # Account for the scaling terms we used for handling numerical underflow
+            scaling_terms = tf.stack(scaling_terms)
+            self.log_lik_cell_type = tf.add(
+                tf.reduce_sum(tf.log(scaling_terms), name="add_normalizer"),
+                tf.log(self.L_cell_type[self.root_node_id][self.cell_type_root]),
+                name="cell_type_log_lik")
 
     def create_topology_log_lik(self, transition_matrix_wrappers: Dict):
         """
@@ -540,23 +637,36 @@ class CLTLikelihoodModel:
                 self.L[node.node_id] = tf.div(self.L[node.node_id], scaling_term, name="sub_log_lik")
                 scaling_terms.append(scaling_term)
 
-        with tf.name_scope("log_lik"):
+        with tf.name_scope("alleles_log_lik"):
             # Account for the scaling terms we used for handling numerical underflow
             scaling_terms = tf.stack(scaling_terms)
-            self.log_lik = tf.add(
+            self.log_lik_alleles = tf.add(
                 tf.reduce_sum(tf.log(scaling_terms), name="add_normalizer"),
                 tf.log(self.L[self.root_node_id]),
-                name="final_log_lik")
-            self.pen_log_lik = tf.add(
-                    self.log_lik,
-                    -self.pen_param_ph * tf.reduce_sum(tf.pow(self.branch_lens, 2)),
-                    name="final_pen_log_lik")
+                name="alleles_log_lik")
 
-            self.pen_log_lik_grad = self.grad_opt.compute_gradients(
-                self.pen_log_lik,
-                var_list=[self.all_vars])
+    def create_log_lik(self, transition_matrix_wrappers: Dict):
+        self.log_lik_cell_type = tf.zeros([])
+        self.create_topology_log_lik(transition_matrix_wrappers)
+        if self.cell_type_tree is None:
+            self.log_lik = self.log_lik_alleles
+        else:
+            self.create_cell_type_log_lik()
+            self.log_lik = self.log_lik_cell_type + self.log_lik_alleles
 
-            self.train_op = self.grad_opt.minimize(-self.pen_log_lik, var_list=self.all_vars)
+        self.log_lik_grad = self.grad_opt.compute_gradients(
+            self.log_lik,
+            var_list=[self.all_vars])
+
+        self.pen_log_lik = tf.add(
+                self.log_lik,
+                -self.pen_param_ph * tf.reduce_sum(tf.pow(self.branch_lens, 2)),
+                name="final_pen_log_lik")
+        self.pen_log_lik_grad = self.grad_opt.compute_gradients(
+            self.pen_log_lik,
+            var_list=[self.all_vars])
+
+        self.train_op = self.grad_opt.minimize(-self.pen_log_lik, var_list=self.all_vars)
 
     def _create_transition_matrix(self,
             matrix_wrapper: TransitionMatrixWrapper,
