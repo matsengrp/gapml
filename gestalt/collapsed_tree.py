@@ -6,18 +6,25 @@ class CollapsedTree:
     def collapse(
             raw_tree: TreeNode,
             collapse_zero_lens=False,
+            collapse_zero_leaves=False,
+            collapse_same_ancestral=False,
             deduplicate=False):
         tree = raw_tree.copy()
         tree.ladderize()
-        if collapse_zero_lens:
+        if collapse_zero_lens or collapse_zero_leaves:
             # first remove zero-length edges
-            #for node in tree.get_descendants(strategy='postorder'):
-            #    if node.dist == 0 and node.is_leaf():
-            for node in tree:
+            iterable_tree = tree.get_descendants(strategy='postorder') if collapse_zero_lens else tree
+            for node in iterable_tree:
                 if node.dist == 0:
                     # TODO: one day we might want to think about collapsing only if the cell states are the same
                     node.up.name = node.name
                     node.delete(prevent_nondicotomic=False)
+
+        if collapse_same_ancestral:
+            # collapse if ancestor node has exactly the same events
+            for node in tree.get_descendants(strategy='postorder'):
+                if not node.is_root() and node.allele_events.events == node.up.allele_events.events:
+                    node.delete(prevent_nondicotomic=False, preserve_branch_length=True)
 
         # collapse identical nodes
         if deduplicate:

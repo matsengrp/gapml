@@ -42,7 +42,8 @@ class CLTObserver:
     def observe_leaves(self,
                        cell_lineage_tree: CellLineageTree,
                        give_pruned_clt: bool = True,
-                       seed: int = None):
+                       seed: int = None,
+                       observe_cell_state: bool = True):
         """
         Samples leaves from the cell lineage tree, of those that are not dead
 
@@ -70,8 +71,6 @@ class CLTObserver:
         for node in clt.iter_descendants():
             if sum((node2.name in observed_leaves) for node2 in node.traverse()) == 0:
                 node.detach()
-        # Collapse the tree
-        clt = CollapsedTree.collapse(clt, deduplicate=True)
 
         observations = {}
         # Now gather the observed leaves, calculating abundance
@@ -83,11 +82,11 @@ class CLTObserver:
                                           event.insert_str)
                                          for event in allele_with_errors_events.events])
             leaf.allele_events = allele_with_errors_events
-            # ignore cell state for now!
-            # TODO: add back cell state later
-            if len(allele_with_errors_events.events) == 0:
-                continue
-            cell_id = (str(allele_with_errors_events), ) #str(leaf.cell_state))
+            if observe_cell_state:
+                cell_id = (str(allele_with_errors_events), str(leaf.cell_state))
+            else:
+                cell_id = (str(allele_with_errors_events),)
+
             if cell_id in observations:
                 observations[cell_id].abundance += 1
             else:
@@ -103,6 +102,9 @@ class CLTObserver:
             raise RuntimeError('all lineages extinct, nothing to observe')
 
         if give_pruned_clt:
+            # Collapse the tree
+            clt = CollapsedTree.collapse(clt, deduplicate=True, collapse_same_ancestral=True)
+
             return list(observations.values()), clt
         else:
             return list(observations.values())

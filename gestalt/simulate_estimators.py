@@ -41,7 +41,7 @@ def main():
         '--target-lambdas',
         type=float,
         nargs=10,
-        default=[0.001] * 10,
+        default=[0.01] * 10,
         help='target cut rates -- will get slightly perturbed for the true value')
     parser.add_argument(
         '--repair-long-probability',
@@ -67,7 +67,7 @@ def main():
         default=1,
         help='poisson parameter for distribution of insertion in cut site(s)')
     parser.add_argument(
-        '--birth-lambda', type=float, default=2, help='birth rate')
+        '--birth-lambda', type=float, default=1, help='birth rate')
     parser.add_argument(
         '--death-lambda', type=float, default=0.001, help='death rate')
     parser.add_argument(
@@ -100,19 +100,22 @@ def main():
     args.target_lambdas = np.array(args.target_lambdas) + np.random.uniform(size=args.num_targets) * 0.08
     print("args.target_lambdas", args.target_lambdas)
 
+    # TODO: make this a real parameter
+    use_cell_state = False
+
     sess = tf.Session()
     with sess.as_default():
         # Create a cell-type tree
-        cell_type_tree = CellTypeTree(cell_type=None, rate=0)
+        cell_type_tree = CellTypeTree(cell_type=0, rate=0)
         cell_type_tree.add_child(
-            CellTypeTree(cell_type=0, rate=0.05))
+            CellTypeTree(cell_type=1, rate=0.18))
         cell_type_tree.add_child(
-            CellTypeTree(cell_type=1, rate=0.05))
+            CellTypeTree(cell_type=2, rate=0.20))
 
         # Instantiate all the simulators
         barcode_orig = BarcodeMetadata.create_fake_barcode(args.num_targets) if args.num_targets != NUM_BARCODE_V7_TARGETS else BARCODE_V7
         bcode_meta = BarcodeMetadata(unedited_barcode = barcode_orig)
-        model_params = CLTLikelihoodModel(
+        clt_model = CLTLikelihoodModel(
                 None,
                 bcode_meta,
                 sess,
@@ -121,13 +124,15 @@ def main():
                 trim_zero_prob = args.repair_indel_probability,
                 trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
                 insert_zero_prob = args.repair_indel_probability,
-                insert_poisson = args.repair_insertion_lambda)
+                insert_poisson = args.repair_insertion_lambda,
+                cell_type_tree = cell_type_tree if use_cell_state else None)
         tf.global_variables_initializer().run()
 
         allele_simulator = AlleleSimulatorSimultaneous(
             bcode_meta,
-            model_params)
+            clt_model)
 
+        # TODO: merge cell type simulator into allele simulator
         cell_type_simulator = CellTypeSimulator(cell_type_tree)
         if not args.debug:
             clt_simulator = CLTSimulatorBifurcating(
@@ -149,39 +154,61 @@ def main():
 
         # Now sample the leaves and create the true topology
         observer = CLTObserver(args.sampling_rate)
-        obs_leaves, true_tree = observer.observe_leaves(clt, seed = args.seed)
-        print("True tree topology, num leaves", len(true_tree))
-        print(true_tree.get_ascii(attributes=["allele_events"], show_internal=True))
-        print("Number of uniq obs alleles", len(obs_leaves))
-
-        # Create a true tree
+        obs_leaves, true_tree = observer.observe_leaves(
+                clt,
+                seed=args.seed,
+                observe_cell_state=use_cell_state)
+        # Gather true branch lengths
         true_branch_lens = []
-        for node in true_tree.traverse(model_params.NODE_ORDER):
+        for node in true_tree.traverse(clt_model.NODE_ORDER):
             true_branch_lens.append(node.dist)
 
         # Get the parsimony-estimated topologies
         parsimony_estimator = CLTParsimonyEstimator(barcode_orig, bcode_meta, args.mix_path)
-        parsimony_trees = parsimony_estimator.estimate(obs_leaves) if args.use_parsimony else []
+        #TODO: DOESN"T ACTUALLY USE CELL STATE
+        parsimony_trees = parsimony_estimator.estimate(
+                obs_leaves,
+                use_cell_state=use_cell_state,
+                max_trees=100) if args.use_parsimony else []
         if args.use_parsimony:
             print("Total parsimony trees", len(parsimony_trees))
 
         # Instantiate approximator used by our penalized MLE
         approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
         def fit_pen_likelihood(tree):
+            #TODO: right now initializes with the correct parameters
             res_model = CLTLikelihoodModel(
                     tree,
                     bcode_meta,
-                    sess)
+                    sess,
+                target_lams = np.array(args.target_lambdas),
+                #branch_lens = np.array(true_branch_lens) + 0.0001,
+                trim_long_probs = np.array(args.repair_long_probability),
+                trim_zero_prob = args.repair_indel_probability,
+                trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
+                insert_zero_prob = args.repair_indel_probability,
+                insert_poisson = args.repair_insertion_lambda,
+                cell_type_tree = cell_type_tree if use_cell_state else None)
             estimator = CLTPenalizedEstimator(res_model, approximator)
             pen_log_lik = estimator.fit(args.pen_param, args.max_iters)
             return pen_log_lik, res_model
 
+        print("True tree topology, num leaves", len(true_tree))
+        print(true_tree.get_ascii(attributes=["allele_events"], show_internal=True))
+        print(true_tree.get_ascii(attributes=["cell_state"], show_internal=True))
+        print("Number of uniq obs alleles", len(obs_leaves))
+
         # Fit parsimony trees
         rf_dist_trees = {}
         for tree in parsimony_trees:
-            rf_dist = true_tree.robinson_foulds(tree, attr_t1="allele_events", attr_t2="allele_events")[0]
-            print("rf dist", rf_dist)
+            rf_dist = true_tree.robinson_foulds(
+                    tree,
+                    attr_t1="allele_events",
+                    attr_t2="allele_events",
+                    unrooted_trees=True)[0]
             if rf_dist not in rf_dist_trees:
+                print("rf dist", rf_dist)
+                print(tree.get_ascii(attributes=["allele_events"], show_internal=True))
                 rf_dist_trees[rf_dist] = [tree]
             else:
                 rf_dist_trees[rf_dist].append(tree)
@@ -207,7 +234,7 @@ def main():
         print(true_branch_lens)
 
         fitted_vars = oracle_model.get_vars()
-        print("pearson branch (to oracle)", pearsonr(true_branch_lens[:-1], fitted_vars[-1][:-1]))
+        print("pearson branch (to oracle)", pearsonr(true_branch_lens[:-1], fitted_vars[-2][:-1]))
         print("ignore branch index (root)", oracle_model.root_node_id)
         print("pearson target (to oracle)", pearsonr(args.target_lambdas, fitted_vars[0]))
 
