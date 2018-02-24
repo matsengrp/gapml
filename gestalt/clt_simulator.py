@@ -12,36 +12,31 @@ from allele_simulator import AlleleSimulator
 from common import sigmoid
 
 class CLTSimulator:
+    """
+    Class for creating cell lineage trees with allele and cell state information
+    """
     def simulate(self, root_allele: Allele, root_cell_state: CellState, time: float, max_nodes: int = 10):
         raise NotImplementedError()
 
-class CLTSimulatorBifurcating(CLTSimulator):
+class BirthDeathTreeSimulator:
     """
-    Class for simulating cell lineage trees.
-    Subclass this to play around with different generative models.
-
-    This class is generates CLT based on cell division/death/cell-type-differentiation. Allele is independently modified along branches.
+    Class for creating cell lineage trees without allele or cell types
     """
-
     def __init__(self,
         birth_rate: float,
-        death_rate: float,
-        cell_state_simulator: CellStateSimulator,
-        allele_simulator: AlleleSimulator):
+        death_rate: float):
         """
         @param birth_rate: the CTMC rate param for cell division
         @param death_rate: the CTMC rate param for cell death
-        @param cell_type_tree: the tree that specifies how cells differentiate
-        @param allele_simulator: a simulator for how alleles get modified
         """
         self.birth_scale = 1.0 / birth_rate
         self.death_scale = 1.0 / death_rate
-        self.cell_state_simulator = cell_state_simulator
-        self.allele_simulator = allele_simulator
 
     def simulate(self, root_allele: Allele, root_cell_state: CellState, time: float, max_nodes: int = 10):
         """
         Generates a CLT based on the model
+        The root_allele and root_cell_state is constant (used as a dummy only).
+        Override them if you want them to change
 
         @param time: amount of time to simulate the CLT
         """
@@ -76,7 +71,6 @@ class CLTSimulatorBifurcating(CLTSimulator):
         branch_length = np.min([t_birth, t_death])
         return division_happens, branch_length
 
-
     def _simulate_tree(self, tree: CellLineageTree, time: float):
         """
         The recursive function that actually makes the tree
@@ -98,16 +92,9 @@ class CLTSimulatorBifurcating(CLTSimulator):
         obs_branch_length = min(branch_length, time)
         remain_time = time - obs_branch_length
 
-        branch_end_cell_state = self.cell_state_simulator.simulate(
-            tree.cell_state,
-            time=obs_branch_length)
-
-        branch_end_allele = self.allele_simulator.simulate(
-            tree.allele,
-            time=obs_branch_length)
-        # Cells are not allowed to reach the end of a branch but have allele
-        # cut up into multiple pieces
-        assert(len(branch_end_allele.needs_repair) == 0)
+        # Keep allele/cell state constant
+        branch_end_cell_state = tree.cell_state
+        branch_end_allele = tree.allele
 
         if remain_time <= 0:
             assert remain_time == 0
@@ -197,3 +184,71 @@ class CLTSimulatorBifurcating(CLTSimulator):
             dist=branch_length,
             dead=True)
         tree.add_child(child1)
+
+class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
+    """
+    Class for simulating cell lineage trees.
+    Subclass this to play around with different generative models.
+
+    This class is generates CLT based on cell division/death. Allele is independently modified along branches.
+    """
+
+    def __init__(self,
+        birth_rate: float,
+        death_rate: float,
+        cell_state_simulator: CellStateSimulator,
+        allele_simulator: AlleleSimulator):
+        """
+        @param birth_rate: the CTMC rate param for cell division
+        @param death_rate: the CTMC rate param for cell death
+        @param cell_type_tree: the tree that specifies how cells differentiate
+        @param allele_simulator: a simulator for how alleles get modified
+        """
+        self.bd_tree_simulator = BirthDeathTreeSimulator(birth_rate, death_rate)
+        self.cell_state_simulator = cell_state_simulator
+        self.allele_simulator = allele_simulator
+
+    def simulate(self,
+            tree_seed: int,
+            data_seed: int,
+            root_allele: Allele,
+            root_cell_state: CellState,
+            time: float,
+            max_nodes: int = 10):
+        """
+        Generates a CLT based on the model
+
+        @param time: amount of time to simulate the CLT
+        """
+        np.random.seed(tree_seed)
+        tree = self.bd_tree_simulator.simulate(
+                root_allele,
+                root_cell_state,
+                time,
+                max_nodes)
+
+        np.random.seed(data_seed)
+        for node in tree.traverse('preorder'):
+            if not node.is_root():
+                self._simulate_branch(node)
+
+        return tree
+
+    def _simulate_branch(self, node: CellLineageTree):
+        """
+        The recursive function that actually makes the tree
+
+        @param tree: the root node to create a tree from
+        @param time: the max amount of time to simulate from this node
+        """
+        branch_end_cell_state = self.cell_state_simulator.simulate(
+            node.up.cell_state,
+            time=node.dist)
+
+        branch_end_allele = self.allele_simulator.simulate(
+            node.up.allele,
+            time=node.dist)
+
+        node.allele = branch_end_allele
+        node.allele_events = branch_end_allele.get_event_encoding()
+        node.cell_state = branch_end_cell_state

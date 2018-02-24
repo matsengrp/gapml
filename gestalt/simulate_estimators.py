@@ -21,7 +21,6 @@ from allele import Allele
 from clt_observer import CLTObserver
 from clt_estimator import CLTParsimonyEstimator
 from clt_likelihood_estimator import *
-from collapsed_tree import CollapsedTree
 from alignment import AlignerNW
 from barcode_metadata import BarcodeMetadata
 from approximator import ApproximatorLB
@@ -79,13 +78,23 @@ def main():
         help='proportion cells sampled/alleles successfully sequenced')
     parser.add_argument(
         '--debug', action='store_true', help='debug tensorflow')
-    parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument(
+            '--model-seed',
+            type=int,
+            default=0,
+            help="Seed for generating the model")
+    parser.add_argument(
+            '--data-seed',
+            type=int,
+            default=0,
+            help="Seed for generating data")
     parser.add_argument(
             '--pen-param',
             type=float,
             default=0,
             help="ridge parameter on the branch lengths")
     parser.add_argument('--max-iters', type=int, default=1000)
+    parser.add_argument('--num-inits', type=int, default=1)
     parser.add_argument(
             '--mix-path',
             type=str,
@@ -94,7 +103,7 @@ def main():
     parser.add_argument('--use-parsimony', action='store_true', help="use mix (CS parsimony) to estimate tree topologies")
     args = parser.parse_args()
     args.num_targets = len(args.target_lambdas)
-    np.random.seed(seed=args.seed)
+    np.random.seed(seed=args.model_seed)
 
     # initialize the target lambdas with some perturbation to ensure we don't have eigenvalues that are exactly equal
     args.target_lambdas = np.array(args.target_lambdas) + np.random.uniform(size=args.num_targets) * 0.08
@@ -131,7 +140,6 @@ def main():
         allele_simulator = AlleleSimulatorSimultaneous(
             bcode_meta,
             clt_model)
-
         # TODO: merge cell type simulator into allele simulator
         cell_type_simulator = CellTypeSimulator(cell_type_tree)
         if not args.debug:
@@ -147,16 +155,18 @@ def main():
                     allele_simulator)
             max_nodes = 70
         clt = clt_simulator.simulate(
-                Allele(barcode_orig, bcode_meta),
-                CellState(categorical=cell_type_tree),
-                args.time,
-                max_nodes=max_nodes)
+                tree_seed = args.model_seed,
+                data_seed = args.data_seed,
+                root_allele = Allele(barcode_orig, bcode_meta),
+                root_cell_state = CellState(categorical=cell_type_tree),
+                time = args.time,
+                max_nodes = max_nodes)
 
         # Now sample the leaves and create the true topology
         observer = CLTObserver(args.sampling_rate)
         obs_leaves, true_tree = observer.observe_leaves(
                 clt,
-                seed=args.seed,
+                seed=args.model_seed,
                 observe_cell_state=use_cell_state)
         # Gather true branch lengths
         true_branch_lens = []
@@ -182,15 +192,18 @@ def main():
                     bcode_meta,
                     sess,
                 target_lams = np.array(args.target_lambdas),
-                #branch_lens = np.array(true_branch_lens) + 0.0001,
                 trim_long_probs = np.array(args.repair_long_probability),
                 trim_zero_prob = args.repair_indel_probability,
                 trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
                 insert_zero_prob = args.repair_indel_probability,
                 insert_poisson = args.repair_insertion_lambda,
+                branch_lens = np.ones(len(true_branch_lens)),
                 cell_type_tree = cell_type_tree if use_cell_state else None)
             estimator = CLTPenalizedEstimator(res_model, approximator)
-            pen_log_lik = estimator.fit(args.pen_param, args.max_iters)
+            pen_log_lik = estimator.fit(
+                    args.pen_param,
+                    args.num_inits,
+                    args.max_iters)
             return pen_log_lik, res_model
 
         print("True tree topology, num leaves", len(true_tree))
