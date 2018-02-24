@@ -8,7 +8,7 @@ class CollapsedTree:
             collapse_zero_lens=False,
             collapse_zero_leaves=False,
             collapse_same_ancestral=False,
-            deduplicate=False):
+            collapse_first_appear=False):
         tree = raw_tree.copy()
         tree.ladderize()
         if collapse_zero_lens or collapse_zero_leaves:
@@ -26,8 +26,8 @@ class CollapsedTree:
                 if not node.is_root() and node.allele_events.events == node.up.allele_events.events:
                     node.delete(prevent_nondicotomic=False, preserve_branch_length=True)
 
-        # collapse identical nodes
-        if deduplicate:
+        # collapse to subtree to first appearance of each leaf
+        if collapse_first_appear:
             did_something = True
             while did_something:
                 did_something = False

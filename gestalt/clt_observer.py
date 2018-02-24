@@ -103,7 +103,7 @@ class CLTObserver:
 
         if give_pruned_clt:
             # Collapse the tree
-            clt = CollapsedTree.collapse(clt, deduplicate=True, collapse_same_ancestral=True)
+            clt = CollapsedTree.collapse(clt, collapse_same_ancestral=True)
 
             return list(observations.values()), clt
         else:

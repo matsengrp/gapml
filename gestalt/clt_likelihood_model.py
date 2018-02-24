@@ -27,20 +27,19 @@ class CLTLikelihoodModel:
     cell_type_lams: rate of differentiating to a cell type
     """
     NODE_ORDER = "postorder"
-    gamma_prior = (1,0.2)
 
     def __init__(self,
             topology: CellLineageTree,
             bcode_meta: BarcodeMetadata,
             sess: Session,
-            branch_lens: ndarray = None,
-            target_lams: ndarray = None,
+            target_lams: ndarray,
             trim_long_probs: ndarray = 0.05 * np.ones(2),
             trim_zero_prob: float = 0.5,
             trim_poissons: ndarray = 2.5 * np.ones(2),
             insert_zero_prob: float = 0.5,
             insert_poisson: float = 0.2,
             double_cut_weight: float = 0.0001,
+            branch_lens: ndarray = np.array([]),
             cell_type_tree: CellTypeTree = None):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
@@ -79,25 +78,17 @@ class CLTLikelihoodModel:
         self.sess = sess
 
         # Create all the variables
-        if branch_lens is None:
-            branch_lens = np.random.gamma(
-                    self.gamma_prior[0],
-                    self.gamma_prior[1],
-                    self.num_nodes)
-        if target_lams is None:
-            # initialize the target lambdas with some perturbation to ensure we
-            # don't have eigenvalues that are exactly equal
-            target_lams = 0.1 * np.ones(self.num_targets) + np.random.uniform(size=self.num_targets) * 0.1
-
         self._create_parameters(
-                branch_lens,
                 target_lams,
                 trim_long_probs,
                 [trim_zero_prob],
                 trim_poissons,
                 [insert_zero_prob],
                 [insert_poisson],
+                branch_lens,
                 cell_type_lams)
+
+        # Stores the penalty parameter
         self.pen_param_ph = tf.placeholder(tf.float64)
 
         self._create_hazard_node_for_simulation()
@@ -105,13 +96,13 @@ class CLTLikelihoodModel:
         self.grad_opt = tf.train.AdamOptimizer(learning_rate=0.01)
 
     def _create_parameters(self,
-            branch_lens: ndarray,
             target_lams: ndarray,
             trim_long_probs: ndarray,
             trim_zero_prob: float,
             trim_poissons: ndarray,
             insert_zero_prob: float,
             insert_poisson: float,
+            branch_lens: ndarray,
             cell_type_lams: ndarray):
         self.all_vars = tf.Variable(
                 np.concatenate([
@@ -126,7 +117,7 @@ class CLTLikelihoodModel:
                     np.log(cell_type_lams)]),
                 dtype=tf.float64)
         self.all_vars_ph = tf.placeholder(tf.float64, shape=self.all_vars.shape)
-        self.assign_all_vars = self.all_vars.assign(self.all_vars_ph)
+        self.assign_op = self.all_vars.assign(self.all_vars_ph)
 
         # For easy access to these model parameters
         up_to_size = target_lams.size - 1
@@ -160,6 +151,27 @@ class CLTLikelihoodModel:
         self.poiss_left = tf.contrib.distributions.Poisson(self.trim_poissons[0])
         self.poiss_right = tf.contrib.distributions.Poisson(self.trim_poissons[1])
         self.poiss_insert = tf.contrib.distributions.Poisson(self.insert_poisson)
+
+    def init_params(self,
+            target_lams: ndarray,
+            trim_long_probs: ndarray,
+            trim_zero_prob: float,
+            trim_poissons: ndarray,
+            insert_zero_prob: float,
+            insert_poisson: float,
+            branch_lens: ndarray,
+            cell_type_lams: ndarray):
+        init_val = np.concatenate([
+            # Fix the first target value -- not for optimization
+            np.log(target_lams[1:]),
+            inv_sigmoid(trim_long_probs),
+            inv_sigmoid(trim_zero_prob),
+            np.log(trim_poissons),
+            inv_sigmoid(insert_zero_prob),
+            np.log(insert_poisson),
+            np.log(branch_lens),
+            np.log(cell_type_lams)])
+        self.sess.run(self.assign_op, feed_dict={self.all_vars_phs: init_val})
 
     def get_vars(self):
         return self.sess.run([
