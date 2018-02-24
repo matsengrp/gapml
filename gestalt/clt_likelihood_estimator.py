@@ -59,7 +59,7 @@ class CLTPenalizedEstimator(CLTEstimator):
             # initialize the target lambdas with some perturbation to ensure we
             # don't have eigenvalues that are exactly equal
             target_lams = 0.1 * np.ones(self.model.num_targets) + np.random.uniform(size=self.model.num_targets) * 0.1
-            self.model.init_params(
+            self.model.set_params(
                     target_lams = target_lams,
                     trim_long_probs = best_vars[1],
                     trim_zero_prob = best_vars[2],
@@ -67,7 +67,7 @@ class CLTPenalizedEstimator(CLTEstimator):
                     insert_zero_prob = best_vars[4],
                     insert_poisson = best_vars[5],
                     branch_lens = branch_lens,
-                    cell_type_lams = best_vars[-1])
+                    cell_type_lams = best_vars[7])
 
             pen_log_lik = self._fit(penalty_param, max_iters, print_iter)
             if pen_log_lik > best_pen_log_lik:
@@ -82,6 +82,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         Fits for a single initialization
         """
         # Run a gradient descent and see what happens
+        pen_log_lik = None
         for i in range(max_iters):
             _, log_lik, log_lik_alleles, log_lik_cell_type, pen_log_lik, grad = self.model.sess.run(
                     [

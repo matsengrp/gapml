@@ -145,14 +145,17 @@ class CLTLikelihoodModel:
         prev_size = up_to_size
         up_to_size += branch_lens.size
         self.branch_lens = tf.exp(self.all_vars[prev_size: up_to_size])
-        self.cell_type_lams = tf.exp(self.all_vars[-cell_type_lams.size:])
+        if self.cell_type_tree:
+            self.cell_type_lams = tf.exp(self.all_vars[-cell_type_lams.size:])
+        else:
+            self.cell_type_lams = tf.zeros([])
 
         # Create my poisson distributions
         self.poiss_left = tf.contrib.distributions.Poisson(self.trim_poissons[0])
         self.poiss_right = tf.contrib.distributions.Poisson(self.trim_poissons[1])
         self.poiss_insert = tf.contrib.distributions.Poisson(self.insert_poisson)
 
-    def init_params(self,
+    def set_params(self,
             target_lams: ndarray,
             trim_long_probs: ndarray,
             trim_zero_prob: float,
@@ -161,6 +164,12 @@ class CLTLikelihoodModel:
             insert_poisson: float,
             branch_lens: ndarray,
             cell_type_lams: ndarray):
+        """
+        Set model params
+        """
+        if self.cell_type_tree is None:
+            cell_type_lams = np.array([])
+
         init_val = np.concatenate([
             # Fix the first target value -- not for optimization
             np.log(target_lams[1:]),
@@ -171,7 +180,7 @@ class CLTLikelihoodModel:
             np.log(insert_poisson),
             np.log(branch_lens),
             np.log(cell_type_lams)])
-        self.sess.run(self.assign_op, feed_dict={self.all_vars_phs: init_val})
+        self.sess.run(self.assign_op, feed_dict={self.all_vars_ph: init_val})
 
     def get_vars(self):
         return self.sess.run([

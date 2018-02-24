@@ -190,7 +190,7 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
     Class for simulating cell lineage trees.
     Subclass this to play around with different generative models.
 
-    This class is generates CLT based on cell division/death/cell-type-differentiation. Allele is independently modified along branches.
+    This class is generates CLT based on cell division/death. Allele is independently modified along branches.
     """
 
     def __init__(self,
