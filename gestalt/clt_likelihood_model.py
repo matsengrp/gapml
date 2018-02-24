@@ -95,11 +95,13 @@ class CLTLikelihoodModel:
                 cell_type_lams)
 
         # Stores the penalty parameter
-        self.pen_param_ph = tf.placeholder(tf.float64)
+        self.lasso_param_ph = tf.placeholder(tf.float64)
+        self.ridge_param_ph = tf.placeholder(tf.float64)
 
         self._create_hazard_node_for_simulation()
 
-        self.grad_opt = tf.train.AdamOptimizer(learning_rate=0.01)
+        self.adam_opt = tf.train.AdamOptimizer(learning_rate=0.01)
+        self.grad_opt = tf.train.GradientDescentOptimizer(learning_rate=0.01)
 
     def _create_parameters(self,
             target_lams: ndarray,
@@ -155,6 +157,8 @@ class CLTLikelihoodModel:
         self.group_branch_lens = tf.exp(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
         up_to_size += branch_len_perturbs.size
+        # Helper indices to know which values to apply lasso to
+        self.lasso_idx = np.arange(prev_size, up_to_size)
         self.branch_len_perturbs = self.all_vars[prev_size: up_to_size]
         if self.cell_type_tree:
             self.cell_type_lams = tf.exp(self.all_vars[-cell_type_lams.size:])
@@ -708,19 +712,22 @@ class CLTLikelihoodModel:
             self.create_cell_type_log_lik()
             self.log_lik = self.log_lik_cell_type + self.log_lik_alleles
 
-        self.log_lik_grad = self.grad_opt.compute_gradients(
-            self.log_lik,
+        self.smooth_log_lik = tf.add(
+                self.log_lik,
+                -self.ridge_param_ph * tf.reduce_sum(tf.pow(self.group_branch_lens, 2)))
+        self.smooth_log_lik_grad = self.grad_opt.compute_gradients(
+            self.smooth_log_lik,
             var_list=[self.all_vars])
 
         self.pen_log_lik = tf.add(
-                self.log_lik,
-                -self.pen_param_ph * tf.reduce_sum(tf.pow(self.branch_lens, 2)),
+                self.smooth_log_lik,
+                -self.lasso_param_ph * tf.reduce_sum(tf.abs(self.branch_len_perturbs)),
                 name="final_pen_log_lik")
         self.pen_log_lik_grad = self.grad_opt.compute_gradients(
             self.pen_log_lik,
             var_list=[self.all_vars])
 
-        self.train_op = self.grad_opt.minimize(-self.pen_log_lik, var_list=self.all_vars)
+        self.adam_train_op = self.adam_opt.minimize(-self.smooth_log_lik, var_list=self.all_vars)
 
     def _create_transition_matrix(self,
             matrix_wrapper: TransitionMatrixWrapper,

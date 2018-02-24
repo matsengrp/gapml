@@ -89,10 +89,15 @@ def main():
             default=0,
             help="Seed for generating data")
     parser.add_argument(
-            '--pen-param',
+            '--ridge-param',
+            type=float,
+            default=0.1,
+            help="ridge parameter on the branch lengths")
+    parser.add_argument(
+            '--lasso-param',
             type=float,
             default=0,
-            help="ridge parameter on the branch lengths")
+            help="lasso parameter on the branch lengths")
     parser.add_argument('--max-iters', type=int, default=1000)
     parser.add_argument('--num-inits', type=int, default=1)
     parser.add_argument(
@@ -195,11 +200,14 @@ def main():
                 insert_zero_prob = args.repair_indel_probability,
                 insert_poisson = args.repair_insertion_lambda,
                 group_branch_lens = np.ones(num_nodes) * 0.3,
-                branch_len_perturbs = np.random.randn(num_nodes) * 0.01,
+                branch_len_perturbs = np.random.randn(num_nodes) * 0.1,
                 cell_type_tree = cell_type_tree if use_cell_state else None)
-            estimator = CLTPenalizedEstimator(res_model, approximator)
+            estimator = CLTPenalizedEstimator(
+                    res_model,
+                    approximator,
+                    args.ridge_param,
+                    args.lasso_param)
             pen_log_lik = estimator.fit(
-                    args.pen_param,
                     args.num_inits,
                     args.max_iters)
             return pen_log_lik, res_model
@@ -280,16 +288,18 @@ def main():
             true_dist_to_root.append(true_dist)
             est_dist_to_root.append(est_dist)
             stupid_dist_to_root.append(stupid_dist)
+        print("---- to oracle ====")
         print("pearson dist to root (to oracle)", pearsonr(true_dist_to_root, est_dist_to_root))
         print("spearman dist to root (to oracle)", spearmanr(true_dist_to_root, est_dist_to_root))
         print("kendalltau dist to root (to oracle)", kendalltau(
-            np.argsort(true_dist_to_root),
-            np.argsort(est_dist_to_root)))
+            true_dist_to_root,
+            est_dist_to_root))
+        print("---- to stupid ====")
         print("pearson dist to root (to stupid)", pearsonr(true_dist_to_root, stupid_dist_to_root))
         print("spearman dist to root (to stupid)", spearmanr(true_dist_to_root, stupid_dist_to_root))
         print("kendalltau dist to root (to stupid)", kendalltau(
-            np.argsort(true_dist_to_root),
-            np.argsort(stupid_dist_to_root)))
+            true_dist_to_root,
+            stupid_dist_to_root))
 
 if __name__ == "__main__":
     main()

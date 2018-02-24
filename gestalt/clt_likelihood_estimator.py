@@ -21,13 +21,17 @@ class CLTPenalizedEstimator(CLTEstimator):
     def __init__(
         self,
         model: CLTLikelihoodModel,
-        approximator: ApproximatorLB):
+        approximator: ApproximatorLB,
+        ridge_param: float,
+        lasso_param: float):
         """
         @param penalty_param: lasso penalty parameter
         @param model: initial CLT model params
         """
         self.model = model
         self.approximator = approximator
+        self.ridge_param = ridge_param
+        self.lasso_param = lasso_param
 
         # Create the skeletons for the transition matrices -- via state sum approximation
         self.transition_mat_wrappers = self.approximator.create_transition_matrix_wrappers(model)
@@ -44,11 +48,11 @@ class CLTPenalizedEstimator(CLTEstimator):
 
         #self.model.check_grad(self.transition_mat_wrappers)
 
-    def fit(self, penalty_param, num_inits, max_iters, print_iter=100):
+    def fit(self, num_inits, max_iters, print_iter=100):
         """
         Finds the best model parameters over `num_inits` initializations
         """
-        best_pen_log_lik = self._fit(penalty_param, max_iters, print_iter)
+        best_pen_log_lik = self._fit(max_iters, print_iter)
         best_vars = self.model.get_vars()
         for i in range(num_inits - 1):
             # Initialization -- only perturbing branch lengths and target lams for now...
@@ -69,7 +73,7 @@ class CLTPenalizedEstimator(CLTEstimator):
                     branch_lens = branch_lens,
                     cell_type_lams = best_vars[7])
 
-            pen_log_lik = self._fit(penalty_param, max_iters, print_iter)
+            pen_log_lik = self._fit(max_iters, print_iter)
             if pen_log_lik > best_pen_log_lik:
                 best_vars = self.model.get_vars()
                 best_pen_log_lik = pen_log_lik
@@ -77,26 +81,58 @@ class CLTPenalizedEstimator(CLTEstimator):
         self.model.set_params(*best_vars)
         return best_pen_log_lik
 
-    def _fit(self, penalty_param, max_iters, print_iter):
+    def _fit(self, max_iters, print_iter = 1, step_size = 0.01):
         """
         Fits for a single initialization
         """
         # Run a gradient descent and see what happens
         pen_log_lik = None
         for i in range(max_iters):
-            _, log_lik, log_lik_alleles, log_lik_cell_type, pen_log_lik, grad = self.model.sess.run(
-                    [
-                        self.model.train_op,
-                        self.model.log_lik,
-                        self.model.log_lik_alleles,
-                        self.model.log_lik_cell_type,
-                        self.model.pen_log_lik,
-                        self.model.pen_log_lik_grad],
-                    feed_dict={
-                        self.model.pen_param_ph: penalty_param
-                    })
+            if self.lasso_param > 0:
+                # We are actually trying to use the lasso
+                log_lik, log_lik_alleles, log_lik_cell_type, pen_log_lik, grad = self.model.sess.run(
+                        [
+                            self.model.log_lik,
+                            self.model.log_lik_alleles,
+                            self.model.log_lik_cell_type,
+                            self.model.pen_log_lik,
+                            self.model.smooth_log_lik_grad],
+                        feed_dict={
+                            self.model.lasso_param_ph: self.lasso_param,
+                            self.model.ridge_param_ph: self.ridge_param
+                        })
+
+                grad_val = grad[0][0]
+                # Gradient step on the smooth part
+                var_val = grad[0][1] + grad_val * step_size
+                val_to_lasso = var_val[self.model.lasso_idx]
+                # soft threshold
+                val_soft_thres = np.multiply(
+                        np.sign(val_to_lasso),
+                        np.clip(np.abs(val_to_lasso) - step_size * self.lasso_param, a_min=0, a_max=None))
+                var_val[self.model.lasso_idx] = val_soft_thres
+                self.model.sess.run(
+                        self.model.assign_op,
+                        feed_dict={self.model.all_vars_ph: var_val})
+            else:
+                # Not using the lasso -- use Adam since it's probably faster
+                _, log_lik, log_lik_alleles, log_lik_cell_type = self.model.sess.run(
+                        [
+                            self.model.adam_train_op,
+                            self.model.log_lik,
+                            self.model.log_lik_alleles,
+                            self.model.log_lik_cell_type],
+                        feed_dict={
+                            self.model.ridge_param_ph: self.ridge_param
+                        })
+
             if i % print_iter == print_iter - 1:
-                print("iter", i, "pen log lik", pen_log_lik, "log lik", log_lik, "alleles", log_lik_alleles, "cell type", log_lik_cell_type)
+                print(
+                        "iter", i,
+                        "pen log lik", pen_log_lik,
+                        "log lik", log_lik,
+                        "alleles", log_lik_alleles,
+                        "cell type", log_lik_cell_type)
 
         return pen_log_lik
 
