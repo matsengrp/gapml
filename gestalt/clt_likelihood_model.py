@@ -26,7 +26,7 @@ class CLTLikelihoodModel:
     target_lams: cutting rate for each target
     cell_type_lams: rate of differentiating to a cell type
     """
-    NODE_ORDER = "postorder"
+    NODE_ORDER = "preorder"
 
     def __init__(self,
             topology: CellLineageTree,
@@ -39,10 +39,15 @@ class CLTLikelihoodModel:
             insert_zero_prob: float = 0.5,
             insert_poisson: float = 0.2,
             double_cut_weight: float = 0.0001,
-            branch_lens: ndarray = np.array([]),
+            group_branch_lens: ndarray = np.array([]),
+            branch_len_perturbs: ndarray = np.array([]),
             cell_type_tree: CellTypeTree = None):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
+        @param group_branch_lens: array with length = number of tree nodes (not all of these parameters will be used)
+                                  the value indicates length of branches for children nodes
+        @param branch_len_perturbs: array with length = number of tree nodes (not all of these parameters will be used)
+                                  the value indicates perturbation from length of branches for node
         Will randomly initialize model parameters
         """
         self.topology = topology
@@ -85,15 +90,18 @@ class CLTLikelihoodModel:
                 trim_poissons,
                 [insert_zero_prob],
                 [insert_poisson],
-                branch_lens,
+                group_branch_lens,
+                branch_len_perturbs,
                 cell_type_lams)
 
         # Stores the penalty parameter
-        self.pen_param_ph = tf.placeholder(tf.float64)
+        self.lasso_param_ph = tf.placeholder(tf.float64)
+        self.ridge_param_ph = tf.placeholder(tf.float64)
 
         self._create_hazard_node_for_simulation()
 
-        self.grad_opt = tf.train.AdamOptimizer(learning_rate=0.01)
+        self.adam_opt = tf.train.AdamOptimizer(learning_rate=0.01)
+        self.grad_opt = tf.train.GradientDescentOptimizer(learning_rate=0.01)
 
     def _create_parameters(self,
             target_lams: ndarray,
@@ -102,7 +110,8 @@ class CLTLikelihoodModel:
             trim_poissons: ndarray,
             insert_zero_prob: float,
             insert_poisson: float,
-            branch_lens: ndarray,
+            group_branch_lens: ndarray,
+            branch_len_perturbs: ndarray,
             cell_type_lams: ndarray):
         self.all_vars = tf.Variable(
                 np.concatenate([
@@ -113,7 +122,8 @@ class CLTLikelihoodModel:
                     np.log(trim_poissons),
                     inv_sigmoid(insert_zero_prob),
                     np.log(insert_poisson),
-                    np.log(branch_lens),
+                    np.log(group_branch_lens),
+                    branch_len_perturbs,
                     np.log(cell_type_lams)]),
                 dtype=tf.float64)
         self.all_vars_ph = tf.placeholder(tf.float64, shape=self.all_vars.shape)
@@ -143,8 +153,13 @@ class CLTLikelihoodModel:
         up_to_size += 1
         self.insert_poisson = tf.exp(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
-        up_to_size += branch_lens.size
-        self.branch_lens = tf.exp(self.all_vars[prev_size: up_to_size])
+        up_to_size += group_branch_lens.size
+        self.group_branch_lens = tf.exp(self.all_vars[prev_size: up_to_size])
+        prev_size = up_to_size
+        up_to_size += branch_len_perturbs.size
+        # Helper indices to know which values to apply lasso to
+        self.lasso_idx = np.arange(prev_size, up_to_size)
+        self.branch_len_perturbs = self.all_vars[prev_size: up_to_size]
         if self.cell_type_tree:
             self.cell_type_lams = tf.exp(self.all_vars[-cell_type_lams.size:])
         else:
@@ -162,7 +177,8 @@ class CLTLikelihoodModel:
             trim_poissons: ndarray,
             insert_zero_prob: float,
             insert_poisson: float,
-            branch_lens: ndarray,
+            group_branch_lens: ndarray,
+            branch_len_perturbs: ndarray,
             cell_type_lams: ndarray):
         """
         Set model params
@@ -178,11 +194,15 @@ class CLTLikelihoodModel:
             np.log(trim_poissons),
             inv_sigmoid(insert_zero_prob),
             np.log(insert_poisson),
-            np.log(branch_lens),
+            np.log(group_branch_lens),
+            branch_len_perturbs,
             np.log(cell_type_lams)])
         self.sess.run(self.assign_op, feed_dict={self.all_vars_ph: init_val})
 
     def get_vars(self):
+        """
+        @return the variable values -- companion for set_params (aka the ordering of the output matches set_params)
+        """
         return self.sess.run([
             self.target_lams,
             self.trim_long_probs,
@@ -190,8 +210,21 @@ class CLTLikelihoodModel:
             self.trim_poissons,
             self.insert_zero_prob,
             self.insert_poisson,
-            self.branch_lens,
+            self.group_branch_lens,
+            self.branch_len_perturbs,
             self.cell_type_lams])
+
+    def get_branch_lens(self):
+        """
+        @return dictionary of branch length (node id to branch length)
+        """
+        group_lens, perturb_lens = self.sess.run([self.group_branch_lens, self.branch_len_perturbs])
+        branch_lens = {}
+        # tree traversal order doesnt matter
+        for node in self.topology.traverse("preorder"):
+            if not node.is_root():
+                branch_lens[node.node_id] = group_lens[node.up.node_id] + perturb_lens[node.node_id]
+        return branch_lens
 
     def _create_hazard_node_for_simulation(self):
         """
@@ -507,7 +540,8 @@ class CLTLikelihoodModel:
         num_leaves = tf.constant(len(self.cell_type_tree), dtype=tf.float64)
         index_vals = []
         self.num_cell_types = 0
-        for node in self.cell_type_tree.traverse(self.NODE_ORDER):
+        # Note: tree traversal order doesnt matter
+        for node in self.cell_type_tree.traverse("preorder"):
             self.num_cell_types += 1
             if node.is_leaf():
                 haz_node = haz_away + np.random.rand() * 1e-10
@@ -540,7 +574,8 @@ class CLTLikelihoodModel:
         self.D_cell_type = dict()
         # Store all the scaling terms addressing numerical underflow
         scaling_terms = []
-        for node in self.topology.traverse(self.NODE_ORDER):
+        # Traversal needs to be postorder!
+        for node in self.topology.traverse("postorder"):
             if node.is_leaf():
                 cell_type_one_hot = np.zeros((self.num_cell_types, 1))
                 cell_type_one_hot[node.cell_state.categorical_state.cell_type] = 1
@@ -549,7 +584,7 @@ class CLTLikelihoodModel:
                 self.L_cell_type[node.node_id] = tf.constant(1.0, dtype=tf.float64)
                 for child in node.children:
                     # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
-                    branch_len = self.branch_lens[child.node_id]
+                    branch_len = self.group_branch_lens[node.node_id] + self.branch_len_perturbs[child.node_id]
                     with tf.name_scope("cell_type_expm_ops%d" % node.node_id):
                         pr_matrix, _, _, D = tf_common.myexpm(self.cell_type_q_mat, branch_len)
                         self.D_cell_type[child.node_id] = D
@@ -593,7 +628,8 @@ class CLTLikelihoodModel:
         self.trim_probs = dict()
         # Store all the scaling terms addressing numerical underflow
         scaling_terms = []
-        for node in self.topology.traverse(self.NODE_ORDER):
+        # Tree traversal order should be postorder
+        for node in self.topology.traverse("postorder"):
             if node.is_leaf():
                 trans_mat_w = transition_matrix_wrappers[node.node_id]
                 self.L[node.node_id] = np.zeros((trans_mat_w.num_likely_states + 1, 1))
@@ -621,7 +657,8 @@ class CLTLikelihoodModel:
                                 child)
 
                     # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
-                    branch_len = self.branch_lens[child.node_id]
+                    # TODO: add some assert to make sure branch length is not negative
+                    branch_len = self.group_branch_lens[node.node_id] + self.branch_len_perturbs[child.node_id]
                     with tf.name_scope("expm_ops%d" % node.node_id):
                         pr_matrix, _, _, D = tf_common.myexpm(self.trans_mats[child.node_id], branch_len)
                     self.D[child.node_id] = D
@@ -675,19 +712,22 @@ class CLTLikelihoodModel:
             self.create_cell_type_log_lik()
             self.log_lik = self.log_lik_cell_type + self.log_lik_alleles
 
-        self.log_lik_grad = self.grad_opt.compute_gradients(
-            self.log_lik,
+        self.smooth_log_lik = tf.add(
+                self.log_lik,
+                -self.ridge_param_ph * tf.reduce_sum(tf.pow(self.group_branch_lens, 2)))
+        self.smooth_log_lik_grad = self.grad_opt.compute_gradients(
+            self.smooth_log_lik,
             var_list=[self.all_vars])
 
         self.pen_log_lik = tf.add(
-                self.log_lik,
-                -self.pen_param_ph * tf.reduce_sum(tf.pow(self.branch_lens, 2)),
+                self.smooth_log_lik,
+                -self.lasso_param_ph * tf.reduce_sum(tf.abs(self.branch_len_perturbs)),
                 name="final_pen_log_lik")
         self.pen_log_lik_grad = self.grad_opt.compute_gradients(
             self.pen_log_lik,
             var_list=[self.all_vars])
 
-        self.train_op = self.grad_opt.minimize(-self.pen_log_lik, var_list=self.all_vars)
+        self.adam_train_op = self.adam_opt.minimize(-self.smooth_log_lik, var_list=self.all_vars)
 
     def _create_transition_matrix(self,
             matrix_wrapper: TransitionMatrixWrapper,
