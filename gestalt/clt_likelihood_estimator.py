@@ -74,7 +74,7 @@ class CLTPenalizedEstimator(CLTEstimator):
                 best_vars = self.model.get_vars()
                 best_pen_log_lik = pen_log_lik
 
-        self.model.init_params(*best_vars)
+        self.model.set_params(*best_vars)
         return best_pen_log_lik
 
     def _fit(self, penalty_param, max_iters, print_iter):

@@ -10,7 +10,7 @@ matplotlib.use('agg')
 import time
 import tensorflow as tf
 from tensorflow.python import debug as tf_debug
-from scipy.stats import pearsonr
+from scipy.stats import pearsonr, spearmanr, kendalltau
 
 from cell_state import CellState, CellTypeTree
 from cell_state_simulator import CellTypeSimulator
@@ -168,10 +168,7 @@ def main():
                 clt,
                 seed=args.model_seed,
                 observe_cell_state=use_cell_state)
-        # Gather true branch lengths
-        true_branch_lens = []
-        for node in true_tree.traverse(clt_model.NODE_ORDER):
-            true_branch_lens.append(node.dist)
+        num_nodes = len([t for t in true_tree.traverse()])
 
         # Get the parsimony-estimated topologies
         parsimony_estimator = CLTParsimonyEstimator(barcode_orig, bcode_meta, args.mix_path)
@@ -197,7 +194,8 @@ def main():
                 trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
                 insert_zero_prob = args.repair_indel_probability,
                 insert_poisson = args.repair_insertion_lambda,
-                branch_lens = np.ones(len(true_branch_lens)),
+                group_branch_lens = np.ones(num_nodes) * 0.3,
+                branch_len_perturbs = np.random.randn(num_nodes) * 0.01,
                 cell_type_tree = cell_type_tree if use_cell_state else None)
             estimator = CLTPenalizedEstimator(res_model, approximator)
             pen_log_lik = estimator.fit(
@@ -244,12 +242,54 @@ def main():
         print([args.repair_deletion_lambda, args.repair_deletion_lambda])
         print(args.repair_indel_probability)
         print(args.repair_insertion_lambda)
-        print(true_branch_lens)
 
         fitted_vars = oracle_model.get_vars()
-        print("pearson branch (to oracle)", pearsonr(true_branch_lens[:-1], fitted_vars[-2][:-1]))
-        print("ignore branch index (root)", oracle_model.root_node_id)
+        est_branch_lens = oracle_model.get_branch_lens()
+        # Gather true branch lengths
+        true_branch_lens = {}
+        for node in oracle_model.topology.traverse(oracle_model.NODE_ORDER):
+            if not node.is_root():
+                true_branch_lens[node.node_id] = node.dist
+        print("====branch lens (true, est)=====")
+        true_br_list = []
+        est_br_list = []
+        for k in true_branch_lens.keys():
+            true_br_list.append(true_branch_lens[k])
+            est_br_list.append(est_branch_lens[k])
+            print(true_branch_lens[k], est_branch_lens[k])
+        print("pearson branch (to oracle)", pearsonr(true_br_list, est_br_list))
+        print("spearman branch (to oracle)", spearmanr(true_br_list, est_br_list))
         print("pearson target (to oracle)", pearsonr(args.target_lambdas, fitted_vars[0]))
+
+        # Compare distance to root?
+        true_dist_to_root = []
+        est_dist_to_root = []
+        # this just assigns length 1 to each branch
+        # TODO: in the future, maybe assign length by number of changes?
+        stupid_dist_to_root = []
+        for leaf in oracle_model.topology:
+            true_dist = leaf.dist
+            est_dist = est_branch_lens[leaf.node_id]
+            stupid_dist = 1
+            curr_node = leaf
+            while not curr_node.up.is_root():
+                true_dist += curr_node.up.dist
+                est_dist += est_branch_lens[curr_node.up.node_id]
+                stupid_dist += 1
+                curr_node = curr_node.up
+            true_dist_to_root.append(true_dist)
+            est_dist_to_root.append(est_dist)
+            stupid_dist_to_root.append(stupid_dist)
+        print("pearson dist to root (to oracle)", pearsonr(true_dist_to_root, est_dist_to_root))
+        print("spearman dist to root (to oracle)", spearmanr(true_dist_to_root, est_dist_to_root))
+        print("kendalltau dist to root (to oracle)", kendalltau(
+            np.argsort(true_dist_to_root),
+            np.argsort(est_dist_to_root)))
+        print("pearson dist to root (to stupid)", pearsonr(true_dist_to_root, stupid_dist_to_root))
+        print("spearman dist to root (to stupid)", spearmanr(true_dist_to_root, stupid_dist_to_root))
+        print("kendalltau dist to root (to stupid)", kendalltau(
+            np.argsort(true_dist_to_root),
+            np.argsort(stupid_dist_to_root)))
 
 if __name__ == "__main__":
     main()
