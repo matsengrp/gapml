@@ -38,6 +38,8 @@ class BirthDeathTreeSimulator:
         The root_allele and root_cell_state is constant (used as a dummy only).
         Override them if you want them to change
 
+        @param root_allele: ignored
+        @param root_cell_state: ignored
         @param time: amount of time to simulate the CLT
         """
         tree = CellLineageTree(
@@ -65,7 +67,7 @@ class BirthDeathTreeSimulator:
                 branch_length: time til the next event
         """
         # Birth rate very high initially?
-        t_birth = expon.rvs(scale=self.birth_scale * sigmoid(-1 + time))
+        t_birth = expon.rvs(scale=self.birth_scale * sigmoid(-1.5 + time))
         t_death = expon.rvs(scale=self.death_scale)
         division_happens = t_birth < t_death
         branch_length = np.min([t_birth, t_death])
@@ -211,8 +213,6 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
     def simulate(self,
             tree_seed: int,
             data_seed: int,
-            root_allele: Allele,
-            root_cell_state: CellState,
             time: float,
             max_nodes: int = 10):
         """
@@ -221,6 +221,8 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
         @param time: amount of time to simulate the CLT
         """
         np.random.seed(tree_seed)
+        root_allele = self.allele_simulator.get_root()
+        root_cell_state = self.cell_state_simulator.get_root()
         tree = self.bd_tree_simulator.simulate(
                 root_allele,
                 root_cell_state,

@@ -22,6 +22,9 @@ class CellTypeSimulator(CellStateSimulator):
         for node in cell_type_tree.traverse("preorder"):
             self.cell_type_dict[node.get_gen_name()] = node
 
+    def get_root(self):
+        return CellState(categorical=self.cell_type_tree)
+
     def _get_speciate_scale(self, cell_type: CellTypeTree):
         scale = cell_type.scale
         if scale is not None:

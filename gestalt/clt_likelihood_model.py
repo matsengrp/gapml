@@ -214,6 +214,23 @@ class CLTLikelihoodModel:
             self.branch_len_perturbs,
             self.cell_type_lams])
 
+    def get_vars_as_dict(self):
+        """
+        @return the variable values -- companion for set_params (aka the ordering of the output matches set_params)
+        """
+        var_vals = self.get_vars()
+        var_labels = [
+            "target_lams",
+            "trim_long_probs",
+            "trim_zero_prob",
+            "trim_poissons",
+            "insert_zero_prob",
+            "insert_poisson",
+            "group_branch_lens",
+            "branch_len_perturbs",
+            "cell_type_lams"]
+        return {lab: val for lab, val in zip(var_labels, var_vals)}
+
     def get_branch_lens(self):
         """
         @return dictionary of branch length (node id to branch length)
@@ -718,16 +735,12 @@ class CLTLikelihoodModel:
         self.smooth_log_lik_grad = self.grad_opt.compute_gradients(
             self.smooth_log_lik,
             var_list=[self.all_vars])
+        self.adam_train_op = self.adam_opt.minimize(-self.smooth_log_lik, var_list=self.all_vars)
 
-        self.pen_log_lik = tf.add(
+        self.lasso_log_lik = tf.add(
                 self.smooth_log_lik,
                 -self.lasso_param_ph * tf.reduce_sum(tf.abs(self.branch_len_perturbs)),
                 name="final_pen_log_lik")
-        self.pen_log_lik_grad = self.grad_opt.compute_gradients(
-            self.pen_log_lik,
-            var_list=[self.all_vars])
-
-        self.adam_train_op = self.adam_opt.minimize(-self.smooth_log_lik, var_list=self.all_vars)
 
     def _create_transition_matrix(self,
             matrix_wrapper: TransitionMatrixWrapper,
@@ -957,6 +970,28 @@ class CLTLikelihoodModel:
                 name="hazard_away")
         return hazard_away_nodes
 
+    def create_logger(self):
+        self.profile_writer = tf.summary.FileWriter("_output", self.sess.graph)
+
+    def close_logger(self):
+        self.profile_writer.close()
+
+    def check_grad(self, transition_matrices, epsilon=1e-10):
+        orig_params = self.sess.run(self.all_vars)
+        self.create_topology_log_lik(transition_matrices)
+        log_lik, grad = self.get_log_lik(get_grad=True)
+        print("log lik", log_lik)
+        print("all grad", grad)
+        for i in range(len(orig_params)):
+            new_params = np.copy(orig_params)
+            new_params[i] += epsilon
+            self.sess.run(self.assign_all_vars, feed_dict={self.all_vars_ph: new_params})
+
+            log_lik_eps, _ = self.get_log_lik()
+            log_lik_approx = (log_lik_eps - log_lik)/epsilon
+            print("index", i, " -- LOG LIK GRAD APPROX", log_lik_approx)
+            print("index", i, " --                GRAD ", grad[i])
+
     @staticmethod
     def get_matching_singletons(anc_state: AncState, tract_repr: TractRepr):
         """
@@ -1097,25 +1132,3 @@ class CLTLikelihoodModel:
                 output_shape=[trans_mat_w.num_likely_states + 1, 1],
                 name="top.down_probs")
         return down_probs
-
-    def check_grad(self, transition_matrices, epsilon=1e-10):
-        orig_params = self.sess.run(self.all_vars)
-        self.create_topology_log_lik(transition_matrices)
-        log_lik, grad = self.get_log_lik(get_grad=True)
-        print("log lik", log_lik)
-        print("all grad", grad)
-        for i in range(len(orig_params)):
-            new_params = np.copy(orig_params)
-            new_params[i] += epsilon
-            self.sess.run(self.assign_all_vars, feed_dict={self.all_vars_ph: new_params})
-
-            log_lik_eps, _ = self.get_log_lik()
-            log_lik_approx = (log_lik_eps - log_lik)/epsilon
-            print("index", i, " -- LOG LIK GRAD APPROX", log_lik_approx)
-            print("index", i, " --                GRAD ", grad[i])
-
-    def create_logger(self):
-        self.profile_writer = tf.summary.FileWriter("_output", self.sess.graph)
-
-    def close_logger(self):
-        self.profile_writer.close()

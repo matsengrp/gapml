@@ -18,13 +18,11 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
     Allele cut/repair simulator where the cut/repair are simultaneous
     """
     def __init__(self,
-        bcode_meta: BarcodeMetadata,
         model: CLTLikelihoodModel):
         """
-        @param bcode_meta: metadata about the barcode
         @param model
         """
-        self.bcode_meta = bcode_meta
+        self.bcode_meta = model.bcode_meta
         self.model = model
 
         self.left_del_distributions = self._create_bounded_poissons(
@@ -36,6 +34,9 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             max_vals = self.bcode_meta.right_max_trim,
             poiss_lambda = self.model.trim_poissons[1].eval())
         self.insertion_distribution = poisson(mu=self.model.insert_poisson.eval())
+
+    def get_root(self):
+        return Allele(self.bcode_meta.unedited_barcode, self.bcode_meta)
 
     def _create_bounded_poissons(self, min_vals: List[float], max_vals: List[float], poiss_lambda: float):
         """

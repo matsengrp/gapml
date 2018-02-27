@@ -50,6 +50,7 @@ class CLTObserver:
         TODO: this probably won't work very well for very large trees.
 
         @param cell_lineage_tree: tree to sample leaves from
+        @param seed: controls how the sampling is performed
 
         @return a list of the sampled observations (List[ObservedAlignedSeq])
                 a cell lineage tree with pruned leaves

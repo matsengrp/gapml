@@ -5,6 +5,7 @@ import scipy.linalg
 from typing import List, Tuple, Dict
 from numpy import ndarray
 import tensorflow as tf
+import logging
 
 from clt_estimator import CLTEstimator
 from cell_lineage_tree import CellLineageTree
@@ -95,7 +96,7 @@ class CLTPenalizedEstimator(CLTEstimator):
                             self.model.log_lik,
                             self.model.log_lik_alleles,
                             self.model.log_lik_cell_type,
-                            self.model.pen_log_lik,
+                            self.model.lasso_log_lik,
                             self.model.smooth_log_lik_grad],
                         feed_dict={
                             self.model.lasso_param_ph: self.lasso_param,
@@ -116,10 +117,11 @@ class CLTPenalizedEstimator(CLTEstimator):
                         feed_dict={self.model.all_vars_ph: var_val})
             else:
                 # Not using the lasso -- use Adam since it's probably faster
-                _, log_lik, log_lik_alleles, log_lik_cell_type = self.model.sess.run(
+                _, log_lik, pen_log_lik, log_lik_alleles, log_lik_cell_type = self.model.sess.run(
                         [
                             self.model.adam_train_op,
                             self.model.log_lik,
+                            self.model.smooth_log_lik,
                             self.model.log_lik_alleles,
                             self.model.log_lik_cell_type],
                         feed_dict={
@@ -127,12 +129,9 @@ class CLTPenalizedEstimator(CLTEstimator):
                         })
 
             if i % print_iter == print_iter - 1:
-                print(
-                        "iter", i,
-                        "pen log lik", pen_log_lik,
-                        "log lik", log_lik,
-                        "alleles", log_lik_alleles,
-                        "cell type", log_lik_cell_type)
+                logging.info(
+                    "iter %d pen log lik %f log lik %f alleles %f cell type %f",
+                    i, pen_log_lik, log_lik, log_lik_alleles, log_lik_cell_type)
 
         return pen_log_lik
 

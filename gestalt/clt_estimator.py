@@ -25,8 +25,8 @@ class CLTEstimator:
 
 
 class CLTParsimonyEstimator(CLTEstimator):
-    def __init__(self, orig_barcode: List[str], bcode_meta: BarcodeMetadata, mix_path: str = MIX_PATH):
-        self.orig_barcode = orig_barcode
+    def __init__(self, bcode_meta: BarcodeMetadata, mix_path: str = MIX_PATH):
+        self.orig_barcode = bcode_meta.unedited_barcode
         self.bcode_meta = bcode_meta
         self.mix_path = mix_path
 
