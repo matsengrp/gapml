@@ -59,7 +59,9 @@ def _custom_expm(x, t):
     D, A = np.linalg.eig(x)
     A_inv = np.linalg.inv(A)
     res =  np.dot(A, np.dot(
-        np.diag(np.exp(D * t)),
+        np.diag(np.exp(
+            # Do not allow overflow!
+            np.minimum(D * t, 100))),
         A_inv))
     return [res, A, A_inv, D]
 
@@ -86,6 +88,11 @@ def _expm_grad(op, grad0, grad1, grad2, grad3):
     expDt = tf.exp(D * t, name="expDt")
     expDt_vec = tf.reshape(expDt, (Q_len, 1))
     DD_diff = tf.subtract(D_vec, tf.transpose(D_vec), name="DD_diff_raw")
+    # Make sure that the difference matrix doesnt have things exactly equal to zero
+    # Perturb a little bit if that happens.
+    DD_diff = tf.add(
+            DD_diff,
+            (DD_diff == 0) * 1e-8)
     DD_diff = tf.matrix_set_diag(DD_diff, tf.ones(Q_len, dtype=tf.float64), name="DD_diff_set_diag")
     t_factor = tf.divide(expDt_vec - tf.transpose(expDt_vec), DD_diff, name="t_factor_raw")
     t_factor = tf.matrix_set_diag(t_factor, t * expDt, name="t_factor_filled")

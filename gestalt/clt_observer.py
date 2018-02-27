@@ -26,20 +26,19 @@ class ObservedAlignedSeq:
 
 
 class CLTObserver:
-    def __init__(self, sampling_rate: float,
+    def __init__(self,
                  error_rate: float = 0,
                  aligner: Aligner = None):
         """
         @param sampling_rate: the rate at which alleles from the alive leaf cells are observed
         @param error_rate: sequencing error, introduce alternative bases uniformly at this rate
         """
-        assert (0 < sampling_rate <= 1)
         assert (0 <= error_rate <= 1)
-        self.sampling_rate = sampling_rate
         self.error_rate = error_rate
         self.aligner = aligner
 
     def observe_leaves(self,
+                       sampling_rate: float,
                        cell_lineage_tree: CellLineageTree,
                        give_pruned_clt: bool = True,
                        seed: int = None,
@@ -55,6 +54,7 @@ class CLTObserver:
         @return a list of the sampled observations (List[ObservedAlignedSeq])
                 a cell lineage tree with pruned leaves
         """
+        assert (0 < sampling_rate <= 1)
         np.random.seed(seed)
         clt = cell_lineage_tree.copy()
 
@@ -63,7 +63,7 @@ class CLTObserver:
         # First sample the leaves
         for leaf in clt:
             if not leaf.dead:
-                is_sampled = np.random.binomial(1, self.sampling_rate)
+                is_sampled = np.random.binomial(1, sampling_rate)
                 if is_sampled:
                     observed_leaves.add(leaf.name)
 
@@ -97,7 +97,6 @@ class CLTObserver:
                     cell_state=leaf.cell_state,
                     abundance=1,
                 )
-                print(allele_with_errors_events)
 
         if len(observations) == 0:
             raise RuntimeError('all lineages extinct, nothing to observe')

@@ -113,6 +113,7 @@ def parse_args():
     args = parser.parse_args()
     args.num_targets = len(args.target_lambdas)
     args.log_file = "%s/fit_log.txt" % args.out_folder
+    print("Log file", args.log_file)
     args.model_data_file = "%s/model_data.pkl" % args.out_folder
     return args
 
@@ -138,7 +139,7 @@ def create_simulators(args, clt_model):
         clt_simulator = CLTSimulatorSimple(
                 cell_type_simulator,
                 allele_simulator)
-    observer = CLTObserver(args.sampling_rate)
+    observer = CLTObserver()
     return clt_simulator, observer
 
 def create_cell_lineage_tree(args, clt_model):
@@ -148,45 +149,49 @@ def create_cell_lineage_tree(args, clt_model):
     obs_leaves = set()
     MAX_TRIES = 10
     num_tries = 0
-    while len(obs_leaves) <= args.min_leaves and num_tries < MAX_TRIES:
-        clt = clt_simulator.simulate(
-                tree_seed = args.model_seed,
-                data_seed = args.data_seed,
-                time = args.time,
-                max_nodes = args.max_clt_nodes)
+    clt = clt_simulator.simulate(
+            tree_seed = args.model_seed,
+            data_seed = args.data_seed,
+            time = args.time,
+            max_nodes = args.max_clt_nodes)
+    sampling_rate = args.sampling_rate
+    while len(obs_leaves) <= args.min_leaves and sampling_rate < 1:
         # Now sample the leaves and create the true topology
         obs_leaves, true_tree = observer.observe_leaves(
+                sampling_rate,
                 clt,
                 seed=args.model_seed,
                 observe_cell_state=args.use_cell_state)
+        logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
         num_tries += 1
+        sampling_rate += 0.2
     if len(obs_leaves) <= args.min_leaves:
         raise Exception("Could not manage to get enough leaves")
     return clt, obs_leaves, true_tree
 
-def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_trees=100):
+def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=100):
     parsimony_estimator = CLTParsimonyEstimator(bcode_meta, args.mix_path)
     #TODO: DOESN"T ACTUALLY USE CELL STATE
     parsimony_trees = parsimony_estimator.estimate(
             obs_leaves,
             use_cell_state=args.use_cell_state,
-            max_trees=100)
-    logging.info("Total parsimony trees", len(parsimony_trees))
+            max_uniq_trees=max_uniq_trees)
+    logging.info("Total parsimony trees %d", len(parsimony_trees))
 
     # Sort the parsimony trees into their robinson foulds distance from the truth
-    rf_dist_trees = {}
+    parsimony_tree_dict = {}
     for tree in parsimony_trees:
         rf_dist = true_tree.robinson_foulds(
                 tree,
                 attr_t1="allele_events",
                 attr_t2="allele_events",
                 unrooted_trees=True)[0]
-        if rf_dist not in rf_dist_trees:
-            logging.info("rf dist", rf_dist)
+        if rf_dist not in parsimony_tree_dict:
+            logging.info("rf dist %d", rf_dist)
             logging.info(tree.get_ascii(attributes=["allele_events"], show_internal=True))
-            rf_dist_trees[rf_dist] = [tree]
+            parsimony_tree_dict[rf_dist] = [tree]
         else:
-            rf_dist_trees[rf_dist].append(tree)
+            parsimony_tree_dict[rf_dist].append(tree)
     return parsimony_tree_dict
 
 def main(args=sys.argv[1:]):
@@ -248,12 +253,13 @@ def main(args=sys.argv[1:]):
                     tree,
                     bcode_meta,
                     sess,
-                target_lams = np.array(args.target_lambdas),
-                trim_long_probs = np.array(args.repair_long_probability),
-                trim_zero_prob = args.repair_indel_probability,
-                trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
-                insert_zero_prob = args.repair_indel_probability,
-                insert_poisson = args.repair_insertion_lambda,
+                target_lams = 0.3 * np.ones(args.target_lambdas.size) + np.random.uniform(size=args.num_targets) * 0.08,
+                #target_lams = np.array(args.target_lambdas),
+                #trim_long_probs = np.array(args.repair_long_probability),
+                #trim_zero_prob = args.repair_indel_probability,
+                #trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
+                #insert_zero_prob = args.repair_indel_probability,
+                #insert_poisson = args.repair_insertion_lambda,
                 group_branch_lens = np.ones(num_nodes) * 0.3,
                 branch_len_perturbs = np.random.randn(num_nodes) * 0.1,
                 cell_type_tree = cell_type_tree if args.use_cell_state else None)
@@ -329,18 +335,58 @@ def main(args=sys.argv[1:]):
             true_dist_to_root.append(true_dist)
             est_dist_to_root.append(est_dist)
             stupid_dist_to_root.append(stupid_dist)
-        logging.info("---- to oracle ====")
-        logging.info("pearson dist to root %s", pearsonr(true_dist_to_root, est_dist_to_root))
-        logging.info("spearman dist to root %s", spearmanr(true_dist_to_root, est_dist_to_root))
-        logging.info("kendalltau dist to root %s", kendalltau(
+        logging.info("---- leaf oracle ====")
+        logging.info("pearson %s", pearsonr(true_dist_to_root, est_dist_to_root))
+        logging.info("spearman %s", spearmanr(true_dist_to_root, est_dist_to_root))
+        logging.info("kendalltau %s", kendalltau(
             true_dist_to_root,
             est_dist_to_root))
-        logging.info("---- to stupid ====")
-        logging.info("pearson dist to root %s", pearsonr(true_dist_to_root, stupid_dist_to_root))
-        logging.info("spearman dist to root %s", spearmanr(true_dist_to_root, stupid_dist_to_root))
-        logging.info("kendalltau dist to root %s", kendalltau(
+        logging.info("---- leaf stupid ====")
+        if np.unique(stupid_dist_to_root).size > 1:
+            logging.info("pearson %s", pearsonr(true_dist_to_root, stupid_dist_to_root))
+            logging.info("spearman %s", spearmanr(true_dist_to_root, stupid_dist_to_root))
+            logging.info("kendalltau %s", kendalltau(
+                true_dist_to_root,
+                stupid_dist_to_root))
+        else:
+            logging.info("all assigned same length")
+
+        # Compare distance root to nodes
+        true_dist_to_root = []
+        est_dist_to_root = []
+        # this just assigns length 1 to each branch
+        # TODO: in the future, maybe assign length by number of changes?
+        stupid_dist_to_root = []
+        for node in oracle_model.topology.traverse("preorder"):
+            if node.is_root():
+                continue
+            true_dist = node.dist
+            est_dist = est_branch_lens[node.node_id]
+            stupid_dist = 1
+            curr_node = node
+            while not curr_node.up.is_root():
+                true_dist += curr_node.up.dist
+                est_dist += est_branch_lens[curr_node.up.node_id]
+                stupid_dist += 1
+                curr_node = curr_node.up
+            true_dist_to_root.append(true_dist)
+            est_dist_to_root.append(est_dist)
+            stupid_dist_to_root.append(stupid_dist)
+        logging.info("---- inner node oracle ====")
+        logging.info("pearson %s", pearsonr(true_dist_to_root, est_dist_to_root))
+        logging.info("spearman %s", spearmanr(true_dist_to_root, est_dist_to_root))
+        logging.info("kendalltau %s", kendalltau(
             true_dist_to_root,
-            stupid_dist_to_root))
+            est_dist_to_root))
+        logging.info("---- inner node stupid ====")
+        if np.unique(stupid_dist_to_root).size > 1:
+            logging.info("pearson %s", pearsonr(true_dist_to_root, stupid_dist_to_root))
+            logging.info("spearman %s", spearmanr(true_dist_to_root, stupid_dist_to_root))
+            logging.info("kendalltau %s", kendalltau(
+                true_dist_to_root,
+                stupid_dist_to_root))
+        else:
+            logging.info("all assigned same length")
 
 if __name__ == "__main__":
     main()

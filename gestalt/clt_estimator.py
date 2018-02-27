@@ -102,7 +102,7 @@ class CLTParsimonyEstimator(CLTEstimator):
             observations: List[ObservedAlignedSeq],
             encode_hidden: bool = False,
             use_cell_state: bool = False,
-            max_trees: int = None):
+            max_uniq_trees: int = None):
         """
         @return a list of unique cell lineage tree estimates
                 calls out to mix on the command line

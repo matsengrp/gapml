@@ -49,7 +49,7 @@ class CLTPenalizedEstimator(CLTEstimator):
 
         #self.model.check_grad(self.transition_mat_wrappers)
 
-    def fit(self, num_inits, max_iters, print_iter=100):
+    def fit(self, num_inits, max_iters, print_iter=1):
         """
         Finds the best model parameters over `num_inits` initializations
         """
@@ -84,14 +84,13 @@ class CLTPenalizedEstimator(CLTEstimator):
 
     def _fit(self, max_iters, print_iter = 1, step_size = 0.01):
         """
-        Fits for a single initialization
+        Fits for a single initialization -- runs proximal gradient descent
         """
-        # Run a gradient descent and see what happens
-        pen_log_lik = None
+        tf_pen_log_lik = self.model.lasso_log_lik if self.lasso_param else self.model.smooth_log_lik
         for i in range(max_iters):
             if self.lasso_param > 0:
                 # We are actually trying to use the lasso
-                log_lik, log_lik_alleles, log_lik_cell_type, pen_log_lik, grad = self.model.sess.run(
+                log_lik, log_lik_alleles, log_lik_cell_type, prev_pen_log_lik, grad = self.model.sess.run(
                         [
                             self.model.log_lik,
                             self.model.log_lik_alleles,
@@ -102,19 +101,31 @@ class CLTPenalizedEstimator(CLTEstimator):
                             self.model.lasso_param_ph: self.lasso_param,
                             self.model.ridge_param_ph: self.ridge_param
                         })
+                while True:
+                    # Try tentative step
+                    grad_val = grad[0][0]
+                    # Gradient step on the smooth part
+                    var_val = grad[0][1] + grad_val * step_size
+                    val_to_lasso = var_val[self.model.lasso_idx]
+                    # soft threshold
+                    val_soft_thres = np.multiply(
+                            np.sign(val_to_lasso),
+                            np.clip(np.abs(val_to_lasso) - step_size * self.lasso_param, a_min=0, a_max=None))
+                    var_val[self.model.lasso_idx] = val_soft_thres
+                    self.model.sess.run(
+                            self.model.assign_op,
+                            feed_dict={self.model.all_vars_ph: var_val})
 
-                grad_val = grad[0][0]
-                # Gradient step on the smooth part
-                var_val = grad[0][1] + grad_val * step_size
-                val_to_lasso = var_val[self.model.lasso_idx]
-                # soft threshold
-                val_soft_thres = np.multiply(
-                        np.sign(val_to_lasso),
-                        np.clip(np.abs(val_to_lasso) - step_size * self.lasso_param, a_min=0, a_max=None))
-                var_val[self.model.lasso_idx] = val_soft_thres
-                self.model.sess.run(
-                        self.model.assign_op,
-                        feed_dict={self.model.all_vars_ph: var_val})
+                    # figure out if this updated variable helped
+                    pen_log_lik = self.model.sess.run(self.model.lasso_log_lik, feed_dict={
+                        self.model.lasso_param_ph: self.lasso_param,
+                        self.model.ridge_param_ph: self.ridge_param})
+                    if pen_log_lik > prev_pen_log_lik * 0.98:
+                        break
+                    else:
+                        step_size *= 0.5
+                        if step_size < 1e-6:
+                            return pen_log_lik
             else:
                 # Not using the lasso -- use Adam since it's probably faster
                 _, log_lik, pen_log_lik, log_lik_alleles, log_lik_cell_type = self.model.sess.run(
@@ -128,6 +139,7 @@ class CLTPenalizedEstimator(CLTEstimator):
                             self.model.ridge_param_ph: self.ridge_param
                         })
 
+            prev_pen_log_lik = pen_log_lik
             if i % print_iter == print_iter - 1:
                 logging.info(
                     "iter %d pen log lik %f log lik %f alleles %f cell type %f",
