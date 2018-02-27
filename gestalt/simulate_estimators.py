@@ -112,7 +112,7 @@ def parse_args():
     parser.add_argument('--use-parsimony', action='store_true', help="use mix (CS parsimony) to estimate tree topologies")
     args = parser.parse_args()
     args.num_targets = len(args.target_lambdas)
-    args.log_file = "%s/log.txt" % args.out_folder
+    args.log_file = "%s/fit_log.txt" % args.out_folder
     args.model_data_file = "%s/model_data.pkl" % args.out_folder
     return args
 
