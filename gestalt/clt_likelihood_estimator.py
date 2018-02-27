@@ -86,7 +86,6 @@ class CLTPenalizedEstimator(CLTEstimator):
         """
         Fits for a single initialization -- runs proximal gradient descent
         """
-        tf_pen_log_lik = self.model.lasso_log_lik if self.lasso_param else self.model.smooth_log_lik
         for i in range(max_iters):
             if self.lasso_param > 0:
                 # We are actually trying to use the lasso
@@ -120,11 +119,12 @@ class CLTPenalizedEstimator(CLTEstimator):
                     pen_log_lik = self.model.sess.run(self.model.lasso_log_lik, feed_dict={
                         self.model.lasso_param_ph: self.lasso_param,
                         self.model.ridge_param_ph: self.ridge_param})
-                    if pen_log_lik > prev_pen_log_lik * 0.98:
+                    if pen_log_lik > prev_pen_log_lik * 1.01:
                         break
                     else:
                         step_size *= 0.5
-                        if step_size < 1e-6:
+                        if step_size < 1e-10:
+                            logging.info("step size too small")
                             return pen_log_lik
             else:
                 # Not using the lasso -- use Adam since it's probably faster
