@@ -12,16 +12,15 @@ class CollapsedTree:
     def collapse_zero_lens(raw_tree: TreeNode, feature_name: str = "observed"):
         tree = CollapsedTree._preprocess(raw_tree)
         # remove zero-length edges
-        for node in tree.get_descendants(strategy='postorder'):
+        for node in tree.traverse(strategy='postorder'):
             if not hasattr(node, feature_name):
                 node.add_feature(feature_name, node.is_leaf())
-            if node.dist == 0:
+            if node.dist == 0 and not node.is_root():
                 # TODO: one day we might want to think about collapsing only if the cell states are the same
                 up_node = node.up
                 up_node.name = node.name
                 node.delete(prevent_nondicotomic=False)
                 up_node.add_feature(feature_name, getattr(node, feature_name))
-        print(tree.get_ascii(attributes=["observed"], show_internal=True))
         return tree
 
     @staticmethod
@@ -46,7 +45,7 @@ class CollapsedTree:
         """
         tree = CollapsedTree._preprocess(raw_tree)
         # collapse if ancestor node has exactly the same events
-        for node in tree.get_descendants(strategy='postorder'):
+        for node in tree.traverse(strategy='postorder'):
             if not hasattr(node, feature_name):
                 node.add_feature(feature_name, node.is_leaf())
             if not node.is_root():
@@ -71,7 +70,7 @@ class CollapsedTree:
                     did_something = True
 
         for node in tree.get_descendants(strategy="postorder"):
-            if len(node.get_children()) == 1 and not node.is_root() and node.up.allele_events.events == node.allele_events.events:
+            if len(node.get_children()) == 1 and node.up.allele_events.events == node.allele_events.events:
                 node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
 
         return tree

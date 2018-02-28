@@ -45,7 +45,10 @@ def parse_args():
         default=[0.01] * 10,
         help='target cut rates -- will get slightly perturbed for the true value')
     parser.add_argument(
-        '--target-lambdas-known',
+        '--know-target-lambdas',
+        action='store_true')
+    parser.add_argument(
+        '--know-cell-lambdas',
         action='store_true')
     parser.add_argument(
         '--repair-long-probability',
@@ -124,10 +127,14 @@ def parse_args():
 def create_cell_type_tree():
     # This first rate means nothing!
     cell_type_tree = CellTypeTree(cell_type=0, rate=0.1)
-    cell_type_tree.add_child(
-        CellTypeTree(cell_type=1, rate=0.18))
-    cell_type_tree.add_child(
-        CellTypeTree(cell_type=2, rate=0.20))
+    cell1 = CellTypeTree(cell_type=1, rate=0.20)
+    cell2 = CellTypeTree(cell_type=2, rate=0.25)
+    cell3 = CellTypeTree(cell_type=3, rate=0.15)
+    cell4 = CellTypeTree(cell_type=4, rate=0.15)
+    cell_type_tree.add_child(cell1)
+    cell_type_tree.add_child(cell2)
+    cell2.add_child(cell3)
+    cell1.add_child(cell4)
     return cell_type_tree
 
 def create_simulators(args, clt_model):
@@ -258,7 +265,7 @@ def main(args=sys.argv[1:]):
         approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
         def fit_pen_likelihood(tree):
             #TODO: right now initializes with the correct parameters
-            if args.target_lambdas_known:
+            if args.know_target_lambdas:
                 target_lams = np.array(args.target_lambdas)
             else:
                 target_lams = 0.3 * np.ones(args.target_lambdas.size) + np.random.uniform(size=args.num_targets) * 0.08
@@ -268,7 +275,7 @@ def main(args=sys.argv[1:]):
                     bcode_meta,
                     sess,
                     target_lams = target_lams,
-                    target_lams_known=args.target_lambdas_known,
+                    target_lams_known=args.know_target_lambdas,
                     #trim_long_probs = np.array(args.repair_long_probability),
                 #trim_zero_prob = args.repair_indel_probability,
                 #trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
@@ -276,7 +283,8 @@ def main(args=sys.argv[1:]):
                 #insert_poisson = args.repair_insertion_lambda,
                 group_branch_lens = np.ones(num_nodes) * 0.3,
                 branch_len_perturbs = np.random.randn(num_nodes) * 0.05,
-                cell_type_tree = cell_type_tree if args.use_cell_state else None)
+                cell_type_tree = cell_type_tree if args.use_cell_state else None,
+                cell_lambdas_known = args.know_cell_lambdas)
             estimator = CLTPenalizedEstimator(
                     res_model,
                     approximator,

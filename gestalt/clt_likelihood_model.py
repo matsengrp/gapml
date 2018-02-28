@@ -42,7 +42,8 @@ class CLTLikelihoodModel:
             double_cut_weight: float = 1.0,
             group_branch_lens: ndarray = np.array([]),
             branch_len_perturbs: ndarray = np.array([]),
-            cell_type_tree: CellTypeTree = None):
+            cell_type_tree: CellTypeTree = None,
+            cell_lambdas_known: bool = False):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
         @param group_branch_lens: array with length = number of tree nodes (not all of these parameters will be used)
@@ -84,6 +85,7 @@ class CLTLikelihoodModel:
         self.sess = sess
 
         self.target_lams_known = target_lams_known
+        self.cell_lambdas_known = cell_lambdas_known
 
         # Create all the variables
         self._create_parameters(
@@ -116,8 +118,8 @@ class CLTLikelihoodModel:
             branch_len_perturbs: ndarray,
             cell_type_lams: ndarray):
         # Fix the first target value -- not for optimization
-        model_param_list = [] if self.target_lams_known else [np.log(target_lams[1:])]
-        model_params = np.concatenate(model_param_list + [
+        model_params = np.concatenate([
+                    [] if self.target_lams_known else np.log(target_lams[1:]),
                     inv_sigmoid(trim_long_probs),
                     inv_sigmoid(trim_zero_prob),
                     np.log(trim_poissons),
@@ -125,7 +127,7 @@ class CLTLikelihoodModel:
                     np.log(insert_poisson),
                     np.log(group_branch_lens),
                     branch_len_perturbs,
-                    np.log(cell_type_lams)])
+                    [] if self.cell_lambdas_known else np.log(cell_type_lams)])
         self.all_vars = tf.Variable(model_params, dtype=tf.float64)
         self.all_vars_ph = tf.placeholder(tf.float64, shape=self.all_vars.shape)
         self.assign_op = self.all_vars.assign(self.all_vars_ph)
@@ -166,7 +168,10 @@ class CLTLikelihoodModel:
         self.lasso_idx = np.arange(prev_size, up_to_size)
         self.branch_len_perturbs = self.all_vars[prev_size: up_to_size]
         if self.cell_type_tree:
-            self.cell_type_lams = tf.exp(self.all_vars[-cell_type_lams.size:])
+            if self.cell_lambdas_known:
+                self.cell_type_lams = tf.constant(cell_type_lams, dtype=tf.float64)
+            else:
+                self.cell_type_lams = tf.exp(self.all_vars[-cell_type_lams.size:])
         else:
             self.cell_type_lams = tf.zeros([])
 
@@ -205,12 +210,8 @@ class CLTLikelihoodModel:
         if self.cell_type_tree is None:
             cell_type_lams = np.array([])
 
-        if self.target_lams_known:
-            model_param_list = []
-        else:
-            # Fix the first target value -- not for optimization
-            model_param_list = [np.log(target_lams[1:])]
-        init_val = np.concatenate(model_param_list + [
+        init_val = np.concatenate([
+            [] if self.target_lams_known else np.log(target_lams[1:]),
             inv_sigmoid(trim_long_probs),
             inv_sigmoid(trim_zero_prob),
             np.log(trim_poissons),
@@ -218,7 +219,7 @@ class CLTLikelihoodModel:
             np.log(insert_poisson),
             np.log(group_branch_lens),
             branch_len_perturbs,
-            np.log(cell_type_lams)])
+            [] if self.cell_lambdas_known else np.log(cell_type_lams)])
         self.sess.run(self.assign_op, feed_dict={self.all_vars_ph: init_val})
 
     def get_vars(self):
@@ -238,7 +239,7 @@ class CLTLikelihoodModel:
 
     def get_vars_as_dict(self):
         """
-        @return the variable values -- companion for set_params (aka the ordering of the output matches set_params)
+        @return the variable values as dictionary instead
         """
         var_vals = self.get_vars()
         var_labels = [
@@ -622,7 +623,19 @@ class CLTLikelihoodModel:
                                 self.branch_lens[child.node_id])
                         self.D_cell_type[child.node_id] = D
                         down_probs = tf.matmul(pr_matrix, self.L_cell_type[child.node_id])
-                        self.L_cell_type[node.node_id] = tf.multiply(self.L_cell_type[node.node_id], down_probs)
+                        self.L_cell_type[node.node_id] = tf.multiply(
+                                self.L_cell_type[node.node_id],
+                                down_probs)
+
+                if node.observed:
+                    # If node is observed, we don't need all the other values in this vector
+                    # TODO: we might be doing extra computation, though it seems okay for now
+                    node_observe_state = node.cell_state.categorical_state.cell_type
+                    cell_type_one_hot = np.zeros((self.num_cell_types, 1))
+                    cell_type_one_hot[node_observe_state] = 1
+                    self.L_cell_type[node.node_id] = tf.multiply(
+                            self.L_cell_type[node.node_id][node_observe_state],
+                            tf.constant(cell_type_one_hot, dtype=tf.float64))
 
                 # Handle numerical underflow
                 scaling_term = tf.reduce_sum(self.L_cell_type[node.node_id], name="scaling_term")
