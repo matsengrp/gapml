@@ -45,6 +45,9 @@ def parse_args():
         default=[0.01] * 10,
         help='target cut rates -- will get slightly perturbed for the true value')
     parser.add_argument(
+        '--target-lambdas-known',
+        action='store_true')
+    parser.add_argument(
         '--repair-long-probability',
         type=float,
         nargs=2,
@@ -93,12 +96,12 @@ def parse_args():
     parser.add_argument(
             '--ridge-param',
             type=float,
-            default=0.1,
+            default=0.2,
             help="ridge parameter on the branch lengths")
     parser.add_argument(
             '--lasso-param',
             type=float,
-            default=0,
+            default=0.1,
             help="lasso parameter on the branch lengths")
     parser.add_argument('--max-iters', type=int, default=1000)
     parser.add_argument('--min-leaves', type=int, default=1)
@@ -255,13 +258,18 @@ def main(args=sys.argv[1:]):
         approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
         def fit_pen_likelihood(tree):
             #TODO: right now initializes with the correct parameters
+            if args.target_lambdas_known:
+                target_lams = np.array(args.target_lambdas)
+            else:
+                target_lams = 0.3 * np.ones(args.target_lambdas.size) + np.random.uniform(size=args.num_targets) * 0.08
+
             res_model = CLTLikelihoodModel(
                     tree,
                     bcode_meta,
                     sess,
-                target_lams = 0.3 * np.ones(args.target_lambdas.size) + np.random.uniform(size=args.num_targets) * 0.08,
-                #target_lams = np.array(args.target_lambdas),
-                #trim_long_probs = np.array(args.repair_long_probability),
+                    target_lams = target_lams,
+                    target_lams_known=args.target_lambdas_known,
+                    #trim_long_probs = np.array(args.repair_long_probability),
                 #trim_zero_prob = args.repair_indel_probability,
                 #trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
                 #insert_zero_prob = args.repair_indel_probability,
@@ -322,78 +330,6 @@ def main(args=sys.argv[1:]):
         logging.info("pearson branch %s", pearsonr(true_br_list, est_br_list))
         logging.info("spearman branch %s", spearmanr(true_br_list, est_br_list))
         logging.info("pearson target %s", pearsonr(args.target_lambdas, fitted_vars[0]))
-
-        # Compare distance to root?
-        true_dist_to_root = []
-        est_dist_to_root = []
-        # this just assigns length 1 to each branch
-        # TODO: in the future, maybe assign length by number of changes?
-        stupid_dist_to_root = []
-        for leaf in oracle_model.topology:
-            true_dist = leaf.dist
-            est_dist = est_branch_lens[leaf.node_id]
-            stupid_dist = 1
-            curr_node = leaf
-            while not curr_node.up.is_root():
-                true_dist += curr_node.up.dist
-                est_dist += est_branch_lens[curr_node.up.node_id]
-                stupid_dist += 1
-                curr_node = curr_node.up
-            true_dist_to_root.append(true_dist)
-            est_dist_to_root.append(est_dist)
-            stupid_dist_to_root.append(stupid_dist)
-        logging.info("---- leaf oracle ====")
-        logging.info("pearson %s", pearsonr(true_dist_to_root, est_dist_to_root))
-        logging.info("spearman %s", spearmanr(true_dist_to_root, est_dist_to_root))
-        logging.info("kendalltau %s", kendalltau(
-            true_dist_to_root,
-            est_dist_to_root))
-        logging.info("---- leaf stupid ====")
-        if np.unique(stupid_dist_to_root).size > 1:
-            logging.info("pearson %s", pearsonr(true_dist_to_root, stupid_dist_to_root))
-            logging.info("spearman %s", spearmanr(true_dist_to_root, stupid_dist_to_root))
-            logging.info("kendalltau %s", kendalltau(
-                true_dist_to_root,
-                stupid_dist_to_root))
-        else:
-            logging.info("all assigned same length")
-
-        # Compare distance root to nodes
-        true_dist_to_root = []
-        est_dist_to_root = []
-        # this just assigns length 1 to each branch
-        # TODO: in the future, maybe assign length by number of changes?
-        stupid_dist_to_root = []
-        for node in oracle_model.topology.traverse("preorder"):
-            if node.is_root():
-                continue
-            true_dist = node.dist
-            est_dist = est_branch_lens[node.node_id]
-            stupid_dist = 1
-            curr_node = node
-            while not curr_node.up.is_root():
-                true_dist += curr_node.up.dist
-                est_dist += est_branch_lens[curr_node.up.node_id]
-                stupid_dist += 1
-                curr_node = curr_node.up
-            true_dist_to_root.append(true_dist)
-            est_dist_to_root.append(est_dist)
-            stupid_dist_to_root.append(stupid_dist)
-        logging.info("---- inner node oracle ====")
-        logging.info("pearson %s", pearsonr(true_dist_to_root, est_dist_to_root))
-        logging.info("spearman %s", spearmanr(true_dist_to_root, est_dist_to_root))
-        logging.info("kendalltau %s", kendalltau(
-            true_dist_to_root,
-            est_dist_to_root))
-        logging.info("---- inner node stupid ====")
-        if np.unique(stupid_dist_to_root).size > 1:
-            logging.info("pearson %s", pearsonr(true_dist_to_root, stupid_dist_to_root))
-            logging.info("spearman %s", spearmanr(true_dist_to_root, stupid_dist_to_root))
-            logging.info("kendalltau %s", kendalltau(
-                true_dist_to_root,
-                stupid_dist_to_root))
-        else:
-            logging.info("all assigned same length")
 
 if __name__ == "__main__":
     main()
