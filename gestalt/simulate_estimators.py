@@ -118,7 +118,8 @@ def parse_args():
     return args
 
 def create_cell_type_tree():
-    cell_type_tree = CellTypeTree(cell_type=0, rate=0)
+    # This first rate means nothing!
+    cell_type_tree = CellTypeTree(cell_type=0, rate=0.1)
     cell_type_tree.add_child(
         CellTypeTree(cell_type=1, rate=0.18))
     cell_type_tree.add_child(
@@ -261,7 +262,7 @@ def main(args=sys.argv[1:]):
                 #insert_zero_prob = args.repair_indel_probability,
                 #insert_poisson = args.repair_insertion_lambda,
                 group_branch_lens = np.ones(num_nodes) * 0.3,
-                branch_len_perturbs = np.random.randn(num_nodes) * 0.1,
+                branch_len_perturbs = np.random.randn(num_nodes) * 0.05,
                 cell_type_tree = cell_type_tree if args.use_cell_state else None)
             estimator = CLTPenalizedEstimator(
                     res_model,

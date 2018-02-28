@@ -38,7 +38,7 @@ class CLTLikelihoodModel:
             trim_poissons: ndarray = 2.5 * np.ones(2),
             insert_zero_prob: float = 0.5,
             insert_poisson: float = 0.2,
-            double_cut_weight: float = 0.0001,
+            double_cut_weight: float = 1,
             group_branch_lens: ndarray = np.array([]),
             branch_len_perturbs: ndarray = np.array([]),
             cell_type_tree: CellTypeTree = None):
@@ -113,8 +113,7 @@ class CLTLikelihoodModel:
             group_branch_lens: ndarray,
             branch_len_perturbs: ndarray,
             cell_type_lams: ndarray):
-        self.all_vars = tf.Variable(
-                np.concatenate([
+        model_params = np.concatenate([
                     # Fix the first target value -- not for optimization
                     np.log(target_lams[1:]),
                     inv_sigmoid(trim_long_probs),
@@ -124,8 +123,8 @@ class CLTLikelihoodModel:
                     np.log(insert_poisson),
                     np.log(group_branch_lens),
                     branch_len_perturbs,
-                    np.log(cell_type_lams)]),
-                dtype=tf.float64)
+                    np.log(cell_type_lams)])
+        self.all_vars = tf.Variable(model_params, dtype=tf.float64)
         self.all_vars_ph = tf.placeholder(tf.float64, shape=self.all_vars.shape)
         self.assign_op = self.all_vars.assign(self.all_vars_ph)
 
@@ -169,6 +168,20 @@ class CLTLikelihoodModel:
         self.poiss_left = tf.contrib.distributions.Poisson(self.trim_poissons[0])
         self.poiss_right = tf.contrib.distributions.Poisson(self.trim_poissons[1])
         self.poiss_insert = tf.contrib.distributions.Poisson(self.insert_poisson)
+
+        # Get branch lengths
+        if self.topology:
+            branch_lens_dict = []
+            # tree traversal order doesnt matter
+            for node in self.topology.traverse("preorder"):
+                if not node.is_root():
+                    branch_lens_dict.append([
+                        [node.node_id],
+                        self.group_branch_lens[node.up.node_id] + self.branch_len_perturbs[node.node_id]])
+            self.branch_lens = tf_common.scatter_nd(
+                    branch_lens_dict,
+                    output_shape=self.branch_len_perturbs.shape,
+                    name="branch_lengths")
 
     def set_params(self,
             target_lams: ndarray,
@@ -235,13 +248,7 @@ class CLTLikelihoodModel:
         """
         @return dictionary of branch length (node id to branch length)
         """
-        group_lens, perturb_lens = self.sess.run([self.group_branch_lens, self.branch_len_perturbs])
-        branch_lens = {}
-        # tree traversal order doesnt matter
-        for node in self.topology.traverse("preorder"):
-            if not node.is_root():
-                branch_lens[node.node_id] = group_lens[node.up.node_id] + perturb_lens[node.node_id]
-        return branch_lens
+        return self.sess.run(self.branch_lens)
 
     def _create_hazard_node_for_simulation(self):
         """
@@ -601,9 +608,10 @@ class CLTLikelihoodModel:
                 self.L_cell_type[node.node_id] = tf.constant(1.0, dtype=tf.float64)
                 for child in node.children:
                     # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
-                    branch_len = self.group_branch_lens[node.node_id] + self.branch_len_perturbs[child.node_id]
                     with tf.name_scope("cell_type_expm_ops%d" % node.node_id):
-                        pr_matrix, _, _, D = tf_common.myexpm(self.cell_type_q_mat, branch_len)
+                        pr_matrix, _, _, D = tf_common.myexpm(
+                                self.cell_type_q_mat,
+                                self.branch_lens[child.node_id])
                         self.D_cell_type[child.node_id] = D
                         down_probs = tf.matmul(pr_matrix, self.L_cell_type[child.node_id])
                         self.L_cell_type[node.node_id] = tf.multiply(self.L_cell_type[node.node_id], down_probs)
@@ -675,9 +683,10 @@ class CLTLikelihoodModel:
 
                     # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
                     # TODO: add some assert to make sure branch length is not negative
-                    branch_len = self.group_branch_lens[node.node_id] + self.branch_len_perturbs[child.node_id]
                     with tf.name_scope("expm_ops%d" % node.node_id):
-                        pr_matrix, _, _, D = tf_common.myexpm(self.trans_mats[child.node_id], branch_len)
+                        pr_matrix, _, _, D = tf_common.myexpm(
+                                self.trans_mats[child.node_id],
+                                self.branch_lens[child.node_id])
                     self.D[child.node_id] = D
                     self.pt_matrix[child.node_id] = pr_matrix
 
@@ -731,7 +740,7 @@ class CLTLikelihoodModel:
 
         self.smooth_log_lik = tf.add(
                 self.log_lik,
-                -self.ridge_param_ph * tf.reduce_sum(tf.pow(self.group_branch_lens, 2)))
+                -self.ridge_param_ph * tf.reduce_sum(tf.pow(self.branch_lens, 2)))
         self.smooth_log_lik_grad = self.grad_opt.compute_gradients(
             self.smooth_log_lik,
             var_list=[self.all_vars])
@@ -749,7 +758,6 @@ class CLTLikelihoodModel:
         """
         Uses tensorflow to create the instantaneous transition matrix
         """
-        #print("NUM UNLIKELY", matrix_wrapper.num_likely_states)
         unlikely_key = matrix_wrapper.num_likely_states
 
         # Now fill in the matrix -- match tensorflow object with indices of instant transition matrix

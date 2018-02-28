@@ -17,7 +17,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
     def setUp(self):
         self.bcode_metadata = BarcodeMetadata(
             unedited_barcode = ("AA", "ATCGATCG", "ACTG", "ATCGATCG", "ACTG", "TGACTAGC", "TT"),
-            cut_sites = [3, 3, 3],
+            cut_site = 3,
             crucial_pos_len = [3,3])
         self.num_targets = self.bcode_metadata.n_targets
 
@@ -26,14 +26,20 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         # Actually do an approximation
         self.approximator = ApproximatorLB(extra_steps=1, anc_generations=1, bcode_metadata=self.bcode_metadata)
 
-    def _create_model(self, topology, bcode_metadata, branch_len):
+    def _create_model(self, topology, bcode_metadata, branch_len, branch_lens = []):
         sess = tf.InteractiveSession()
         num_nodes = len([n for n in topology.traverse("postorder")])
+        if len(branch_lens) == 0:
+            branch_lens = [branch_len - 0.01 for _ in range(num_nodes)]
+        else:
+            branch_lens = [0] + [br_len - 0.01 for br_len in branch_lens]
+
         model = CLTLikelihoodModel(
                 topology,
                 bcode_metadata,
                 sess,
-                branch_lens = np.array([branch_len for _ in range(num_nodes)]),
+                group_branch_lens = 0.01 * np.ones(num_nodes),
+                branch_len_perturbs = np.array(branch_lens),
                 target_lams = np.ones(bcode_metadata.n_targets) + np.random.uniform(
                     size=bcode_metadata.n_targets) * 0.1,
                 trim_long_probs = 0.1 * np.ones(2),
@@ -54,7 +60,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         model = self._create_model(topology, self.bcode_metadata, branch_len)
 
         t_mats = self.exact_approximator.create_transition_matrix_wrappers(model)
-        model.create_topology_log_lik(t_mats)
+        model.create_log_lik(t_mats)
         log_lik, _ = model.get_log_lik()
 
         # Manually calculate the hazard
@@ -66,13 +72,13 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         manual_log_prob = np.log(prob_mat[0,0])
 
         # Check the two are equal
-        self.assertEqual(log_lik, manual_log_prob)
+        self.assertTrue(np.isclose(log_lik[0], manual_log_prob))
 
         # Calculate the hazard using approximate algo -- should be same
         t_mats = self.approximator.create_transition_matrix_wrappers(model)
-        model.create_topology_log_lik(t_mats)
+        model.create_log_lik(t_mats)
         log_lik_approx, _ = model.get_log_lik()
-        self.assertEqual(log_lik_approx, manual_log_prob)
+        self.assertEqual(np.isclose(log_lik_approx[0], manual_log_prob))
 
     def test_branch_likelihood(self):
         # Create a branch with one event
@@ -93,7 +99,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         trim_long_probs = model.trim_long_probs.eval()
 
         t_mats = self.exact_approximator.create_transition_matrix_wrappers(model)
-        model.create_topology_log_lik(t_mats)
+        model.create_log_lik(t_mats)
         log_lik, _ = model.get_log_lik()
 
         # Manually calculate the hazard
@@ -143,7 +149,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         trim_long_probs = model.trim_long_probs.eval()
 
         t_mats = self.exact_approximator.create_transition_matrix_wrappers(model)
-        model.create_topology_log_lik(t_mats)
+        model.create_log_lik(t_mats)
         log_lik, _ = model.get_log_lik()
 
         # Manually calculate the hazard -- can cut the middle only or cut the whole barcode
@@ -177,7 +183,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
 
         # Calculate the hazard using approximate algo -- should be smaller
         t_mats = self.approximator.create_transition_matrix_wrappers(model)
-        model.create_topology_log_lik(t_mats)
+        model.create_log_lik(t_mats)
         log_lik_approx, _ = model.get_log_lik()
         self.assertTrue(log_lik_approx < manual_log_prob)
 
@@ -197,13 +203,18 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         topology.add_child(child1)
         child1.add_child(child2)
 
-        branch_len = 10
-        model = self._create_model(topology, self.bcode_metadata, branch_len)
+        branch_len1 = 10
+        branch_len2 = 5
+        model = self._create_model(
+                topology,
+                self.bcode_metadata,
+                branch_len=None,
+                branch_lens=[branch_len1, branch_len2])
         target_lams = model.target_lams.eval()
         trim_long_probs = model.trim_long_probs.eval()
 
         t_mats = self.exact_approximator.create_transition_matrix_wrappers(model)
-        model.create_topology_log_lik(t_mats)
+        model.create_log_lik(t_mats)
         log_lik, _ = model.get_log_lik()
 
         # The probability should be the same as a single branch with double the length
@@ -218,7 +229,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             [0, -hazard_away_from_cut1, hazard_to_cut03, hazard_away - hazard_to_cut03],
             [0, 0, 0, 0],
             [0, 0, 0, 0]])
-        prob_mat = tf_common._custom_expm(q_mat, branch_len * 2)[0]
+        prob_mat = tf_common._custom_expm(q_mat, branch_len1 + branch_len2)[0]
         manual_cut_log_prob = np.log(prob_mat[0,2])
 
         # Get prob of deletion
@@ -238,11 +249,15 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
 
         # Calculate the hazard using approximate algo -- should be smaller
         t_mats = self.approximator.create_transition_matrix_wrappers(model)
-        model.create_topology_log_lik(t_mats)
+        model.create_log_lik(t_mats)
         log_lik_approx, _ = model.get_log_lik()
         self.assertTrue(log_lik_approx < manual_log_prob)
 
     def test_three_branch_likelihood(self):
+        """
+        This is just looking at how bad the approximation is.
+        Not a real test
+        """
         bcode_metadata = BarcodeMetadata()
         num_targets = bcode_metadata.n_targets
 
@@ -279,12 +294,12 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         model = self._create_model(topology, bcode_metadata, branch_len)
 
         t_mats = exact_approximator.create_transition_matrix_wrappers(model)
-        model.create_topology_log_lik(t_mats)
+        model.create_log_lik(t_mats)
         log_lik, _ = model.get_log_lik()
 
         # Calculate the hazard using approximate algo -- should be smaller
         t_mats = approximator.create_transition_matrix_wrappers(model)
-        model.create_topology_log_lik(t_mats)
+        model.create_log_lik(t_mats)
         log_lik_approx, _ = model.get_log_lik()
 
         print("log lik approx", log_lik_approx)

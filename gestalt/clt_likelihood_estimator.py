@@ -116,12 +116,16 @@ class CLTPenalizedEstimator(CLTEstimator):
                             feed_dict={self.model.all_vars_ph: var_val})
 
                     # figure out if this updated variable helped
-                    pen_log_lik = self.model.sess.run(self.model.lasso_log_lik, feed_dict={
-                        self.model.lasso_param_ph: self.lasso_param,
-                        self.model.ridge_param_ph: self.ridge_param})
-                    if pen_log_lik > prev_pen_log_lik * 1.01:
+                    pen_log_lik, branch_lens = self.model.sess.run(
+                        [self.model.lasso_log_lik, self.model.branch_lens],
+                        feed_dict={
+                            self.model.lasso_param_ph: self.lasso_param,
+                            self.model.ridge_param_ph: self.ridge_param})
+                    if pen_log_lik > prev_pen_log_lik * 1.01 and np.all(branch_lens > 0):
                         break
                     else:
+                        if np.any(branch_lens < 0):
+                            logging.info('BRANCH LENGTH NEGATIVE %s', str(branch_lens))
                         step_size *= 0.5
                         if step_size < 1e-10:
                             logging.info("step size too small")
