@@ -54,6 +54,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         # Create a branch with no events
         topology = CellLineageTree()
         child = CellLineageTree(allele_events=AlleleEvents([], num_targets=self.num_targets))
+        child.add_feature("observed", True)
         topology.add_child(child)
 
         branch_len = 0.1
@@ -92,6 +93,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         child = CellLineageTree(
                 allele_events=AlleleEvents([event], num_targets=self.num_targets))
         topology.add_child(child)
+        child.add_feature("observed", True)
 
         branch_len = 10
         model = self._create_model(topology, self.bcode_metadata, branch_len)
@@ -142,6 +144,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         child = CellLineageTree(
                 allele_events=AlleleEvents([event], num_targets=self.num_targets))
         topology.add_child(child)
+        child.add_feature("observed", True)
 
         branch_len = 10
         model = self._create_model(topology, self.bcode_metadata, branch_len)
@@ -202,6 +205,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
                 allele_events=AlleleEvents([event], num_targets=self.num_targets))
         topology.add_child(child1)
         child1.add_child(child2)
+        child2.add_feature("observed", True)
 
         branch_len1 = 10
         branch_len2 = 5
@@ -289,6 +293,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         topology.add_child(child1)
         child1.add_child(child2)
         child2.add_child(child3)
+        child3.add_feature("observed", True)
 
         branch_len = 0.5
         model = self._create_model(topology, bcode_metadata, branch_len)

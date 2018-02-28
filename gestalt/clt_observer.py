@@ -24,6 +24,9 @@ class ObservedAlignedSeq:
         self.cell_state = cell_state
         self.abundance = abundance
 
+    def __str__(self):
+        return str(self.allele_events)
+
 
 class CLTObserver:
     def __init__(self,
@@ -103,7 +106,9 @@ class CLTObserver:
 
         if give_pruned_clt:
             # Collapse the tree
-            clt = CollapsedTree.collapse(clt, collapse_same_ancestral=True)
+            clt = CollapsedTree.collapse_same_ancestral(
+                    clt,
+                    feature_name="observed")
 
             return list(observations.values()), clt
         else:

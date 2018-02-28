@@ -27,7 +27,6 @@ class CellLineageTree(TreeNode):
     Class can be used for storing information about the true cell lineage tree and can be
     used for storing the estimate of the cell lineage tree.
     """
-
     def __init__(self,
                  allele: Allele = None,
                  allele_events: AlleleEvents = None,
@@ -264,3 +263,25 @@ class CellLineageTree(TreeNode):
                 break
             anc = anc.up
         return anc
+
+    @staticmethod
+    def convert(node: TreeNode,
+                 allele: Allele = None,
+                 allele_events: AlleleEvents = None,
+                 cell_state: CellState = None,
+                 dist: float = 0,
+                 dead: bool = False,
+                 n_id: int = None,
+                 abundance: int = 1):
+        new_node = CellLineageTree(
+                 allele,
+                 allele_events,
+                 cell_state,
+                 dist,
+                 dead,
+                 n_id,
+                 abundance)
+        for k in node.features:
+            if k not in new_node.features:
+                new_node.add_feature(k, getattr(node, k))
+        return new_node

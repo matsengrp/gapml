@@ -282,6 +282,7 @@ def main(args=sys.argv[1:]):
         logging.info("True tree topology, num leaves %d", len(true_tree))
         logging.info(true_tree.get_ascii(attributes=["allele_events"], show_internal=True))
         logging.info(true_tree.get_ascii(attributes=["cell_state"], show_internal=True))
+        logging.info(true_tree.get_ascii(attributes=["observed"], show_internal=True))
         logging.info("Number of uniq obs alleles %d", len(obs_leaves))
 
         # Fit parsimony trees -- only look at a couple trees per RF distance
