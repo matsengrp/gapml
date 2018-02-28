@@ -9,6 +9,32 @@ from allele_events import AlleleEvents, Event
 from constants import BARCODE_V7, NUM_BARCODE_V7_TARGETS
 from barcode_metadata import BarcodeMetadata
 
+class AlleleList:
+    """
+    Contains a list of alleles -- assumes we observe the same length alleles in each cell
+    (and we know exactly which allele is which)
+    """
+    def __init__(self, allele_strs: List[List[str]], bcode_meta: BarcodeMetadata):
+        self.alleles = [Allele(a, bcode_meta) for a in allele_strs]
+        self.bcode_meta = bcode_meta
+
+    def get_event_encoding(self, aligner: Aligner = None):
+        return tuple(a.get_event_encoding(aligner) for a in self.alleles)
+
+    def observe_with_errors(self, error_rate: float):
+        alleles_err = [a.observe_with_errors(error_rate) for a in self.alleles]
+        return AlleleList(
+                [a.allele for a in alleles_err],
+                self.bcode_meta)
+
+    def process_events(self, events_list: List[List[Tuple[int, int, str]]]):
+        """
+        Given a list of observed events, rerun the events and recreate the allele
+        Assumes all events are NOT overlapping!!!
+        """
+        for a, evts in zip(self.alleles, events_list):
+            a.process_events(evts)
+
 class Allele:
     '''
     GESTALT target array with spacer sequences

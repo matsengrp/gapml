@@ -17,19 +17,23 @@ def annotate_ancestral_states(tree: CellLineageTree, bcode_meta: BarcodeMetadata
     """
     for node in tree.traverse("postorder"):
         if node.observed:
-            node.add_feature("anc_state", AncState.create_for_observed_allele(node.allele_events, bcode_meta))
+            node.add_feature("anc_state_list", [
+                AncState.create_for_observed_allele(evts, bcode_meta)
+                for evts in node.allele_events_list])
         elif node.is_root():
-            node.add_feature("anc_state", AncState())
+            node.add_feature("anc_state_list", [AncState() for _ in range(bcode_meta.num_barcodes)])
         else:
             node_anc_state = get_possible_anc_states(node)
-            node.add_feature("anc_state", node_anc_state)
+            node.add_feature("anc_state_list", node_anc_state)
 
 def get_possible_anc_states(tree: CellLineageTree):
     # TODO: use a python reduce function?
     children = tree.get_children()
-    parent_anc_state = children[0].anc_state
-    for c in children[1:]:
-        parent_anc_state = AncState.intersect(
-            parent_anc_state,
-            c.anc_state)
-    return parent_anc_state
+    parent_anc_state_list = []
+    for bcode_idx, par_anc_state in enumerate(children[0].anc_state_list):
+        for c in children[1:]:
+            par_anc_state = AncState.intersect(
+                par_anc_state,
+                c.anc_state_list[bcode_idx])
+        parent_anc_state_list.append(par_anc_state)
+    return parent_anc_state_list

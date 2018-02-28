@@ -43,8 +43,8 @@ class ApproximatorLB:
         transition_matrix_wrappers = dict()
         for node in model.topology.traverse("postorder"):
             if not node.is_root():
-                trans_mat = self._create_transition_matrix_wrapper(node)
-                transition_matrix_wrappers[node.node_id] = trans_mat
+                trans_mats = self._create_transition_matrix_wrapper(node)
+                transition_matrix_wrappers[node.node_id] = trans_mats
         return transition_matrix_wrappers
 
     def _annotate_state_sum_transitions(self, tree: CellLineageTree):
@@ -64,15 +64,24 @@ class ApproximatorLB:
         """
         for node in tree.traverse("preorder"):
             if node.is_root():
-                node.add_feature("state_sum", StateSum([TractRepr()]))
+                node.add_feature("state_sum_list", [StateSum([TractRepr()]) for _ in range(self.bcode_meta.num_barcodes)])
             else:
-                transition_graph_dict, state_sum = self._get_branch_state_sum_transitions(node)
+                transition_graph_dict_list, state_sum_list = self._get_branch_state_sum_transitions(node)
                 if node.observed:
-                    state_sum = StateSum.create_for_observed_allele(node.allele_events, self.bcode_meta)
-                node.add_feature("state_sum", state_sum)
-                node.add_feature("transition_graph_dict", transition_graph_dict)
+                    state_sum_list = StateSum.create_for_observed_allele(node.allele_events_list, self.bcode_meta)
+                node.add_feature("state_sum_list", state_sum_list)
+                node.add_feature("transition_graph_dict_list", transition_graph_dict_list)
 
     def _get_branch_state_sum_transitions(self, node: CellLineageTree):
+        transition_graph_dict_list = []
+        state_sum_list = []
+        for i in range(self.bcode_meta.num_barcodes):
+            graph_dict, state_sum = self._get_branch_state_sum_transitions_barcode(node, i)
+            transition_graph_dict_list.append(graph_dict)
+            state_sum_list.append(state_sum)
+        return transition_graph_dict_list, state_sum_list
+
+    def _get_branch_state_sum_transitions_barcode(self, node: CellLineageTree, bcode_idx: int):
         """
         @param node: the node we are getting the state sum for
         @return a dictionary of transition graphs between groups of target tracts,
@@ -80,14 +89,16 @@ class ApproximatorLB:
                 AND the state sum for this node
         """
         anc = node.up_generations(self.anc_generations)
-        if len(node.anc_state.indel_set_list) == 0:
+        node_anc_state = node.anc_state_list[bcode_idx]
+        anc_anc_state = node.anc_state_list[bcode_idx]
+        if len(node_anc_state.indel_set_list) == 0:
             # If unmodified
-            return dict(), anc.state_sum
+            return dict(), anc.state_sum_list[bcode_idx]
 
         # Partition the anc's anc_state according to node's anc_state.
         # Used for deciding which states to add in node's StateSum since node's StateSum is
         # composed of states that cannot be < ancestor node's anc_state.
-        anc_partition = self.partition(anc.anc_state.indel_set_list, node.anc_state)
+        anc_partition = self.partition(anc_anc_state.indel_set_list, node_anc_state)
 
         # For each state in the parent node's StateSum, find the subgraph of nearby target tract repr
         node_state_sum = set()
@@ -95,11 +106,11 @@ class ApproximatorLB:
         subgraph_dict = {}
         # Stores previously-calculated partitioned state sums and max_indel_set
         sub_state_sums_dict = {}
-        for tract_repr in node.up.state_sum.tract_repr_list:
+        for tract_repr in node.up.state_sum_list[bcode_idx].tract_repr_list:
             # Partition each state in the ancestral node's StateSum according to node's anc_state
-            tract_repr_partition = self.partition(tract_repr, node.anc_state)
+            tract_repr_partition = self.partition(tract_repr, node_anc_state)
             tract_repr_sub_state_sums = []
-            for max_indel_set in node.anc_state.indel_set_list:
+            for max_indel_set in node_anc_state.indel_set_list:
                 tract_tuple_start = tract_repr_partition[max_indel_set]
                 graph_key = (tract_tuple_start, max_indel_set)
                 if graph_key not in subgraph_dict:
@@ -197,17 +208,28 @@ class ApproximatorLB:
 
     def _create_transition_matrix_wrapper(self, node: CellLineageTree):
         """
+        @return List[TransitionMatrixWrapper]
+        """
+        transition_matrix_wrapper_list = []
+        for i in range(self.bcode_meta.num_barcodes):
+            trans_mat_wrap = self._create_transition_matrix_wrapper_barcode(node, i)
+            transition_matrix_wrapper_list.append(trans_mat_wrap)
+        return transition_matrix_wrapper_list
+
+    def _create_transition_matrix_wrapper_barcode(self, node: CellLineageTree, bcode_idx: int):
+        """
         @return TransitionMatrixWrapper for the particular branch ending at `node`
                 only contains the states relevant to state_sum
         """
         transition_dict = dict()
-        indel_set_list = node.anc_state.indel_set_list
+        node_anc_state = node.anc_state_list[bcode_idx]
+        indel_set_list = node_anc_state.indel_set_list
         # Determine the values in the transition matrix by considering all possible states
         # starting at the parent's StateSum.
         # Recurse through all of its children to build out the transition matrix
-        for tract_repr in node.up.state_sum.tract_repr_list:
+        for tract_repr in node.up.state_sum_list[bcode_idx].tract_repr_list:
             tract_repr_partition_info = dict()
-            tract_repr_partition = self.partition(tract_repr, node.anc_state)
+            tract_repr_partition = self.partition(tract_repr, node_anc_state)
             for indel_set in indel_set_list:
                 tract_tuple = tract_repr_partition[indel_set]
                 graph_key = (tract_tuple, indel_set)
@@ -215,7 +237,7 @@ class ApproximatorLB:
                 # (target tract group) we are currently located at.
                 tract_repr_partition_info[indel_set] = {
                         "start": tract_tuple,
-                        "graph": node.transition_graph_dict[graph_key]}
+                        "graph": node.transition_graph_dict_list[bcode_idx][graph_key]}
             self._add_transition_dict_row(tract_repr_partition_info, indel_set_list, transition_dict)
 
         # Create sparse transition matrix given the dictionary representation

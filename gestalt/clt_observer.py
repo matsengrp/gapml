@@ -1,7 +1,7 @@
 from typing import List, Dict, Tuple
 import numpy as np
 
-from allele import Allele
+from allele import Allele, AlleleList
 from allele_events import AlleleEvents
 from cell_state import CellState
 from cell_lineage_tree import CellLineageTree
@@ -10,8 +10,8 @@ from collapsed_tree import CollapsedTree
 
 class ObservedAlignedSeq:
     def __init__(self,
-            allele: Allele,
-            allele_events: AlleleEvents,
+            allele_list: AlleleList,
+            allele_events_list: List[AlleleEvents],
             cell_state: CellState,
             abundance: float):
         """
@@ -19,13 +19,13 @@ class ObservedAlignedSeq:
         Since these are stored using the allele class,
         it implicitly gives us the alignment
         """
-        self.allele = allele
-        self.allele_events = allele_events
+        self.allele_list = allele_list
+        self.allele_events_list = allele_events_list
         self.cell_state = cell_state
         self.abundance = abundance
 
     def __str__(self):
-        return str(self.allele_events)
+        return str(self.allele_events_list)
 
 
 class CLTObserver:
@@ -79,24 +79,27 @@ class CLTObserver:
         observations = {}
         # Now gather the observed leaves, calculating abundance
         for leaf in clt:
-            allele_with_errors = leaf.allele.observe_with_errors(self.error_rate)
-            allele_with_errors_events = allele_with_errors.get_event_encoding(aligner=self.aligner)
-            leaf.allele.process_events([(event.start_pos,
-                                          event.start_pos + event.del_len,
-                                          event.insert_str)
-                                         for event in allele_with_errors_events.events])
-            leaf.allele_events = allele_with_errors_events
+            allele_list_with_errors = leaf.allele_list.observe_with_errors(self.error_rate)
+            allele_list_with_errors_events = allele_list_with_errors.get_event_encoding(aligner=self.aligner)
+            events_per_bcode = [
+                    [(event.start_pos,
+                      event.start_pos + event.del_len,
+                      event.insert_str)
+                    for event in a.events]
+                for a in allele_list_with_errors_events]
+            leaf.allele_list.process_events(events_per_bcode)
+            leaf.allele_events_list = allele_list_with_errors_events
             if observe_cell_state:
-                cell_id = (str(allele_with_errors_events), str(leaf.cell_state))
+                cell_id = (str(allele_list_with_errors_events), str(leaf.cell_state))
             else:
-                cell_id = (str(allele_with_errors_events),)
+                cell_id = (str(allele_list_with_errors_events),)
 
             if cell_id in observations:
                 observations[cell_id].abundance += 1
             else:
                 observations[cell_id] = ObservedAlignedSeq(
-                    allele=allele_with_errors,
-                    allele_events=allele_with_errors_events,
+                    allele_list=allele_list_with_errors,
+                    allele_events_list=allele_list_with_errors_events,
                     cell_state=leaf.cell_state,
                     abundance=1,
                 )

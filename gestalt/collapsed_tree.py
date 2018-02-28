@@ -50,7 +50,10 @@ class CollapsedTree:
                 node.add_feature(feature_name, node.is_leaf())
             if not node.is_root():
                 up_node = node.up
-                if node.allele_events.events == node.up.allele_events.events:
+                is_equal = all([node_evts == node_up_evts
+                        for node_evts, node_up_evts
+                        in zip(node.allele_events_list, node.up.allele_events_list)])
+                if is_equal:
                     node.delete(prevent_nondicotomic=False, preserve_branch_length=True)
                     up_node.add_feature(feature_name, getattr(node, feature_name))
         return tree

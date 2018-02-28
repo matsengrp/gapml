@@ -471,7 +471,7 @@ class CLTLikelihoodModel:
             log_indel_probs = log_del_probs + log_insert_probs
             return log_indel_probs
 
-    def _create_hazard_dict(self, trans_mat_wrappers: List[TransitionMatrixWrapper]):
+    def _create_hazard_dict(self, trans_mat_wrappers_list: List[List[TransitionMatrixWrapper]]):
         """
         @param transition_matrix_wrappers: iterable with transition matrix wrappers
 
@@ -480,10 +480,11 @@ class CLTLikelihoodModel:
                 a tensorflow tensor with the calculations for the hazard of introducing the deact tracts
         """
         deact_evts = set()
-        for trans_mat_wrapper in trans_mat_wrappers:
-            # Get inputs ready for tensorflow
-            for start_tracts, matrix_row in trans_mat_wrapper.matrix_dict.items():
-                deact_evts.update(matrix_row.values())
+        for trans_mat_wrappers in trans_mat_wrappers_list:
+            for trans_mat_wrapper in trans_mat_wrappers:
+                # Get inputs ready for tensorflow
+                for start_tracts, matrix_row in trans_mat_wrapper.matrix_dict.items():
+                    deact_evts.update(matrix_row.values())
 
         # Gets hazards (by tensorflow)
         target_tracts = [deact_evt for deact_evt in deact_evts if deact_evt.is_target_tract]
@@ -500,7 +501,7 @@ class CLTLikelihoodModel:
 
         return hazard_dict, hazard_target_tracts, hazard_deact_tracts
 
-    def _create_hazard_away_dict(self, trans_mat_wrappers: List[TransitionMatrixWrapper]):
+    def _create_hazard_away_dict(self, trans_mat_wrappers_list: List[List[TransitionMatrixWrapper]]):
         """
         @param transition_matrix_wrappers: iterable with transition matrix wrappers
 
@@ -508,10 +509,11 @@ class CLTLikelihoodModel:
                 a tensorflow tensor with the calculations for the hazard away
         """
         tract_repr_starts = set()
-        for trans_mat_wrapper in trans_mat_wrappers:
-            # Get inputs ready for tensorflow
-            for start_tract_repr, matrix_row in trans_mat_wrapper.matrix_dict.items():
-                tract_repr_starts.add(start_tract_repr)
+        for trans_mat_wrappers in trans_mat_wrappers_list:
+            for trans_mat_wrapper in trans_mat_wrappers:
+                # Get inputs ready for tensorflow
+                for start_tract_repr, matrix_row in trans_mat_wrapper.matrix_dict.items():
+                    tract_repr_starts.add(start_tract_repr)
 
         # Gets hazards (by tensorflow)
         tract_repr_starts = list(tract_repr_starts)
@@ -650,62 +652,74 @@ class CLTLikelihoodModel:
                 tf.log(self.L_cell_type[self.root_node_id][self.cell_type_root]),
                 name="cell_type_log_lik")
 
-    def create_topology_log_lik(self, transition_matrix_wrappers: Dict):
+    def create_topology_log_lik(self, transition_matrix_wrappers: Dict[int, List[TransitionMatrixWrapper]]):
         """
         Create a tensorflow graph of the likelihood calculation
         """
         # Get the hazards for making the instantaneous transition matrix
         # Doing it all at once to speed up computation
-        hazard_dict, hazard_target_tracts, hazard_deact_tracts = self._create_hazard_dict(
+        self.hazard_dict, self.hazard_target_tracts, self.hazard_deact_tracts = self._create_hazard_dict(
                 transition_matrix_wrappers.values())
-        hazard_away_dict, hazard_aways = self._create_hazard_away_dict(transition_matrix_wrappers.values())
+        self.hazard_away_dict, self.hazard_aways = self._create_hazard_away_dict(transition_matrix_wrappers.values())
 
         # Get all the conditional probabilities of the trims
         # Doing it all at once to speed up computation
         singletons = CLTLikelihoodModel._get_unmasked_indels(self.topology)
-        singleton_index_dict = {sg: int(i) for i, sg in enumerate(singletons)}
-        singleton_log_cond_prob = self._create_log_indel_probs(singletons)
+        self.singleton_index_dict = {sg: int(i) for i, sg in enumerate(singletons)}
+        self.singleton_log_cond_prob = self._create_log_indel_probs(singletons)
 
+        self.log_lik_alleles_list = []
+        self.Ddiags_list = []
+        for bcode_idx in range(self.bcode_meta.num_barcodes):
+            log_lik_alleles, Ddiags = self._create_topology_log_lik_barcode(transition_matrix_wrappers, bcode_idx)
+            self.log_lik_alleles_list.append(log_lik_alleles)
+            self.Ddiags_list.append(Ddiags)
+        self.log_lik_alleles = tf.add_n(self.log_lik_alleles_list)
+
+    def _create_topology_log_lik_barcode(self,
+            transition_matrix_wrappers: Dict[int, List[TransitionMatrixWrapper]],
+            bcode_idx: int):
         # Store the tensorflow objects that calculate the prob of a node being in each state given the leaves
-        self.L = dict()
-        self.D = dict()
-        self.pt_matrix = dict()
-        self.trans_mats = dict()
-        self.trim_probs = dict()
+        Lprob = dict()
+        Ddiags = dict()
+        pt_matrix = dict()
+        trans_mats = dict()
+        trim_probs = dict()
         # Store all the scaling terms addressing numerical underflow
         scaling_terms = []
         # Tree traversal order should be postorder
         for node in self.topology.traverse("postorder"):
             if node.is_leaf():
-                trans_mat_w = transition_matrix_wrappers[node.node_id]
-                self.L[node.node_id] = np.zeros((trans_mat_w.num_likely_states + 1, 1))
-                assert len(node.state_sum.tract_repr_list) == 1
-                tract_repr_key = trans_mat_w.key_dict[node.state_sum.tract_repr_list[0]]
-                self.L[node.node_id][tract_repr_key] = 1
+                trans_mat_w = transition_matrix_wrappers[node.node_id][bcode_idx]
+                Lprob[node.node_id] = np.zeros((trans_mat_w.num_likely_states + 1, 1))
+                assert len(node.state_sum_list[bcode_idx].tract_repr_list) == 1
+                tract_repr_key = trans_mat_w.key_dict[node.state_sum_list[bcode_idx].tract_repr_list[0]]
+                Lprob[node.node_id][tract_repr_key] = 1
                 # Convert to tensorflow usage
-                self.L[node.node_id] = tf.constant(self.L[node.node_id], dtype=tf.float64)
+                Lprob[node.node_id] = tf.constant(Lprob[node.node_id], dtype=tf.float64)
             else:
-                self.L[node.node_id] = tf.constant(1.0, dtype=tf.float64)
+                Lprob[node.node_id] = tf.constant(1.0, dtype=tf.float64)
                 for child in node.children:
-                    ch_trans_mat_w = transition_matrix_wrappers[child.node_id]
+                    ch_trans_mat_w = transition_matrix_wrappers[child.node_id][bcode_idx]
                     with tf.name_scope("Transition_matrix%d" % node.node_id):
-                        self.trans_mats[child.node_id] = self._create_transition_matrix(
+                        trans_mats[child.node_id] = self._create_transition_matrix(
                                 ch_trans_mat_w,
-                                hazard_dict,
-                                hazard_away_dict)
+                                self.hazard_dict,
+                                self.hazard_away_dict)
                     # Get the trim probabilities
                     with tf.name_scope("trim_matrix%d" % node.node_id):
-                        self.trim_probs[child.node_id] = self._create_trim_prob_matrix(
+                        trim_probs[child.node_id] = self._create_trim_prob_matrix(
                                 ch_trans_mat_w,
-                                singleton_log_cond_prob,
-                                singleton_index_dict,
+                                self.singleton_log_cond_prob,
+                                self.singleton_index_dict,
                                 node,
-                                child)
+                                child,
+                                bcode_idx)
 
                     # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
                     with tf.name_scope("expm_ops%d" % node.node_id):
-                        self.pt_matrix[child.node_id], _, _, self.D[child.node_id] = tf_common.myexpm(
-                                self.trans_mats[child.node_id],
+                        pt_matrix[child.node_id], _, _, Ddiags[child.node_id] = tf_common.myexpm(
+                                trans_mats[child.node_id],
                                 self.branch_lens[child.node_id])
 
                     # Get the probability for the data descended from the child node, assuming that the node
@@ -713,39 +727,40 @@ class CLTLikelihoodModel:
                     # These down probs are ordered according to the child node's numbering of the TTs states
                     with tf.name_scope("recurse%d" % node.node_id):
                         ch_ordered_down_probs = tf.matmul(
-                                tf.multiply(self.pt_matrix[child.node_id], self.trim_probs[child.node_id]),
-                                self.L[child.node_id])
+                                tf.multiply(pt_matrix[child.node_id], trim_probs[child.node_id]),
+                                Lprob[child.node_id])
 
                     with tf.name_scope("rearrange%d" % node.node_id):
                         if not node.is_root():
                             # Reorder summands according to node's numbering of tract_repr states
-                            trans_mat_w = transition_matrix_wrappers[node.node_id]
+                            trans_mat_w = transition_matrix_wrappers[node.node_id][bcode_idx]
 
                             down_probs = CLTLikelihoodModel._reorder_likelihoods(
                                     ch_ordered_down_probs,
-                                    node.state_sum.tract_repr_list,
+                                    node.state_sum_list[bcode_idx].tract_repr_list,
                                     trans_mat_w,
                                     ch_trans_mat_w)
 
-                            self.L[node.node_id] = tf.multiply(self.L[node.node_id], down_probs)
+                            Lprob[node.node_id] = tf.multiply(Lprob[node.node_id], down_probs)
                         else:
                             # For the root node, we just want the probability where the root node is unmodified
                             # No need to reorder
                             ch_id = ch_trans_mat_w.key_dict[()]
-                            self.L[node.node_id] = tf.multiply(self.L[node.node_id], ch_ordered_down_probs[ch_id])
+                            Lprob[node.node_id] = tf.multiply(Lprob[node.node_id], ch_ordered_down_probs[ch_id])
 
                 # Handle numerical underflow
-                scaling_term = tf.reduce_sum(self.L[node.node_id], name="scaling_term")
-                self.L[node.node_id] = tf.div(self.L[node.node_id], scaling_term, name="sub_log_lik")
+                scaling_term = tf.reduce_sum(Lprob[node.node_id], name="scaling_term")
+                Lprob[node.node_id] = tf.div(Lprob[node.node_id], scaling_term, name="sub_log_lik")
                 scaling_terms.append(scaling_term)
 
         with tf.name_scope("alleles_log_lik"):
             # Account for the scaling terms we used for handling numerical underflow
             scaling_terms = tf.stack(scaling_terms)
-            self.log_lik_alleles = tf.add(
+            log_lik_alleles = tf.add(
                 tf.reduce_sum(tf.log(scaling_terms), name="add_normalizer"),
-                tf.log(self.L[self.root_node_id]),
+                tf.log(Lprob[self.root_node_id]),
                 name="alleles_log_lik")
+        return log_lik_alleles, Ddiags
 
     def create_log_lik(self, transition_matrix_wrappers: Dict):
         self.log_lik_cell_type = tf.zeros([])
@@ -819,7 +834,8 @@ class CLTLikelihoodModel:
             singleton_log_cond_prob: Tensor,
             singleton_index_dict: Dict[int, Singleton],
             node: CellLineageTree,
-            child: CellLineageTree):
+            child: CellLineageTree,
+            bcode_idx: int):
         """
         @param ch_trans_mat_w: the transition matrix wrapper corresponding to child node
                                 (we make sure the entries in the trim prob matrix match
@@ -833,12 +849,14 @@ class CLTLikelihoodModel:
         """
         index_vals = []
 
-        for node_tract_repr in node.state_sum.tract_repr_list:
+        for node_tract_repr in node.state_sum_list[bcode_idx].tract_repr_list:
             node_tract_repr_key = ch_trans_mat_w.key_dict[node_tract_repr]
-            for child_tract_repr in child.state_sum.tract_repr_list:
+            for child_tract_repr in child.state_sum_list[bcode_idx].tract_repr_list:
                 child_tract_repr_key = ch_trans_mat_w.key_dict[child_tract_repr]
                 diff_target_tracts = node_tract_repr.diff(child_tract_repr)
-                singletons = CLTLikelihoodModel.get_matching_singletons(child.anc_state, diff_target_tracts)
+                singletons = CLTLikelihoodModel.get_matching_singletons(
+                        child.anc_state_list[bcode_idx],
+                        diff_target_tracts)
 
                 if singletons:
                     log_trim_probs = tf.gather(
@@ -1127,13 +1145,14 @@ class CLTLikelihoodModel:
         for node in topology.traverse("postorder"):
             if not node.is_leaf():
                 for child in node.children:
-                    for node_tract_repr in node.state_sum.tract_repr_list:
-                        for child_tract_repr in child.state_sum.tract_repr_list:
-                            diff_target_tracts = node_tract_repr.diff(child_tract_repr)
-                            matching_sgs = CLTLikelihoodModel.get_matching_singletons(
-                                    child.anc_state,
-                                    diff_target_tracts)
-                            singletons.update(matching_sgs)
+                    for node_state_sum, child_state_sum, child_anc_state in zip(node.state_sum_list, child.state_sum_list, child.anc_state_list):
+                        for node_tract_repr in node_state_sum.tract_repr_list:
+                            for child_tract_repr in child_state_sum.tract_repr_list:
+                                diff_target_tracts = node_tract_repr.diff(child_tract_repr)
+                                matching_sgs = CLTLikelihoodModel.get_matching_singletons(
+                                        child_anc_state,
+                                        diff_target_tracts)
+                                singletons.update(matching_sgs)
         return singletons
 
     @staticmethod
