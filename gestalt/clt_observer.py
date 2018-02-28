@@ -89,10 +89,11 @@ class CLTObserver:
                 for a in allele_list_with_errors_events]
             leaf.allele_list.process_events(events_per_bcode)
             leaf.allele_events_list = allele_list_with_errors_events
+            allele_str_id = tuple([str(a) for a in allele_list_with_errors_events])
             if observe_cell_state:
-                cell_id = (str(allele_list_with_errors_events), str(leaf.cell_state))
+                cell_id = (allele_str_id, str(leaf.cell_state))
             else:
-                cell_id = (str(allele_list_with_errors_events),)
+                cell_id = (allele_str_id,)
 
             if cell_id in observations:
                 observations[cell_id].abundance += 1
