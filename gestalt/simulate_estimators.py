@@ -102,7 +102,8 @@ def parse_args():
             help="lasso parameter on the branch lengths")
     parser.add_argument('--max-iters', type=int, default=1000)
     parser.add_argument('--min-leaves', type=int, default=1)
-    parser.add_argument('--max-clt-nodes', type=int, default=4000)
+    parser.add_argument('--max-leaves', type=int, default=100)
+    parser.add_argument('--max-clt-nodes', type=int, default=8000)
     parser.add_argument('--num-inits', type=int, default=1)
     parser.add_argument(
             '--mix-path',
@@ -156,7 +157,7 @@ def create_cell_lineage_tree(args, clt_model):
             time = args.time,
             max_nodes = args.max_clt_nodes)
     sampling_rate = args.sampling_rate
-    while len(obs_leaves) <= args.min_leaves and sampling_rate < 1:
+    while (len(obs_leaves) <= args.min_leaves or len(obs_leaves) >= args.max_leaves) and sampling_rate < 1:
         # Now sample the leaves and create the true topology
         obs_leaves, true_tree = observer.observe_leaves(
                 sampling_rate,
@@ -165,7 +166,11 @@ def create_cell_lineage_tree(args, clt_model):
                 observe_cell_state=args.use_cell_state)
         logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
         num_tries += 1
-        sampling_rate += 0.2
+        if len(obs_leaves) <= args.min_leaves:
+            sampling_rate += 0.025
+        elif len(obs_leaves) >= args.max_leaves:
+            sampling_rate = max(1e-3, sampling_rate - 0.05)
+
     if len(obs_leaves) <= args.min_leaves:
         raise Exception("Could not manage to get enough leaves")
     return clt, obs_leaves, true_tree

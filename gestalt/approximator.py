@@ -183,6 +183,16 @@ class ApproximatorLB:
                     update_with_state(i, to_node.tract_group)
                     tract_group_graph.add_edge(tract_grp_start, to_node)
 
+        if self.extra_steps == 0 and singleton is not None:
+            # In this special case, add the singleton because it might be required at the leaves
+            for tract_grp_start in tract_group_steps[0]:
+                if (singleton_tt,) != tract_grp_start:
+                    if len(tract_group_steps) == 1:
+                        tract_group_steps.append(set())
+                    to_node = TransitionToNode(singleton_tt, (singleton_tt, ))
+                    update_with_state(1, to_node.tract_group)
+                    tract_group_graph.add_edge(tract_grp_start, to_node)
+
         return tract_group_graph
 
     def _create_transition_matrix_wrapper(self, node: CellLineageTree):

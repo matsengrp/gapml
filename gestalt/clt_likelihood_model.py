@@ -38,7 +38,7 @@ class CLTLikelihoodModel:
             trim_poissons: ndarray = 2.5 * np.ones(2),
             insert_zero_prob: float = 0.5,
             insert_poisson: float = 0.2,
-            double_cut_weight: float = 1,
+            double_cut_weight: float = 1.0,
             group_branch_lens: ndarray = np.array([]),
             branch_len_perturbs: ndarray = np.array([]),
             cell_type_tree: CellTypeTree = None):
@@ -101,7 +101,6 @@ class CLTLikelihoodModel:
         self._create_hazard_node_for_simulation()
 
         self.adam_opt = tf.train.AdamOptimizer(learning_rate=0.01)
-        self.grad_opt = tf.train.GradientDescentOptimizer(learning_rate=0.01)
 
     def _create_parameters(self,
             target_lams: ndarray,
@@ -295,7 +294,6 @@ class CLTLikelihoodModel:
 
         @return tensorflow tensor with the i-th value corresponding to the i-th deactivation targets event in the arguments
         """
-        #TODO: check the math here!
         # all four targets are different
         is_four_diff = tf_common.not_equal_float(t3, t2)
         left_lambda = (tf.gather(self.target_lams, t0) * self.trim_short_probs[0]
@@ -682,13 +680,10 @@ class CLTLikelihoodModel:
                                 child)
 
                     # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
-                    # TODO: add some assert to make sure branch length is not negative
                     with tf.name_scope("expm_ops%d" % node.node_id):
-                        pr_matrix, _, _, D = tf_common.myexpm(
+                        self.pt_matrix[child.node_id], _, _, self.D[child.node_id] = tf_common.myexpm(
                                 self.trans_mats[child.node_id],
                                 self.branch_lens[child.node_id])
-                    self.D[child.node_id] = D
-                    self.pt_matrix[child.node_id] = pr_matrix
 
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.
@@ -740,8 +735,10 @@ class CLTLikelihoodModel:
 
         self.smooth_log_lik = tf.add(
                 self.log_lik,
-                -self.ridge_param_ph * tf.reduce_sum(tf.pow(self.branch_lens, 2)))
-        self.smooth_log_lik_grad = self.grad_opt.compute_gradients(
+                -self.ridge_param_ph * (
+                    tf.reduce_sum(tf.pow(self.group_branch_lens, 2))
+                    + tf.reduce_sum(tf.pow(self.branch_len_perturbs, 2))))
+        self.smooth_log_lik_grad = self.adam_opt.compute_gradients(
             self.smooth_log_lik,
             var_list=[self.all_vars])
         self.adam_train_op = self.adam_opt.minimize(-self.smooth_log_lik, var_list=self.all_vars)

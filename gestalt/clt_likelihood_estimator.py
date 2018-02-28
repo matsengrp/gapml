@@ -49,7 +49,7 @@ class CLTPenalizedEstimator(CLTEstimator):
 
         #self.model.check_grad(self.transition_mat_wrappers)
 
-    def fit(self, num_inits, max_iters, print_iter=1):
+    def fit(self, num_inits, max_iters, print_iter=50):
         """
         Finds the best model parameters over `num_inits` initializations
         """
@@ -100,6 +100,8 @@ class CLTPenalizedEstimator(CLTEstimator):
                             self.model.lasso_param_ph: self.lasso_param,
                             self.model.ridge_param_ph: self.ridge_param
                         })
+
+                neg_mask = None
                 while True:
                     # Try tentative step
                     grad_val = grad[0][0]
@@ -110,6 +112,9 @@ class CLTPenalizedEstimator(CLTEstimator):
                     val_soft_thres = np.multiply(
                             np.sign(val_to_lasso),
                             np.clip(np.abs(val_to_lasso) - step_size * self.lasso_param, a_min=0, a_max=None))
+                    if neg_mask is not None:
+                        # If things are negative, here is a last-ditch effort
+                        val_soft_thres[neg_mask] = -branch_lens[neg_mask] + 1e-6
                     var_val[self.model.lasso_idx] = val_soft_thres
                     self.model.sess.run(
                             self.model.assign_op,
@@ -121,17 +126,22 @@ class CLTPenalizedEstimator(CLTEstimator):
                         feed_dict={
                             self.model.lasso_param_ph: self.lasso_param,
                             self.model.ridge_param_ph: self.ridge_param})
-                    if pen_log_lik > prev_pen_log_lik * 1.01 and np.all(branch_lens > 0):
+                    if pen_log_lik > prev_pen_log_lik * 1.01 and np.all(branch_lens[1:] > 0):
+                        # Ensure the penalized log likelihood is increasing
+                        # and the branch length (excluding the root) are all positive
                         break
                     else:
-                        if np.any(branch_lens < 0):
+                        if np.any(branch_lens[1:] < 0):
                             logging.info('BRANCH LENGTH NEGATIVE %s', str(branch_lens))
+                            neg_mask = branch_lens < 0
+                        logging.info("pen_log_lik %f prev_pen_log_lik %f", pen_log_lik, prev_pen_log_lik)
                         step_size *= 0.5
                         if step_size < 1e-10:
                             logging.info("step size too small")
                             return pen_log_lik
             else:
                 # Not using the lasso -- use Adam since it's probably faster
+                # Be careful! This could take really bad step sizes since our thing is quite... sensitive
                 _, log_lik, pen_log_lik, log_lik_alleles, log_lik_cell_type = self.model.sess.run(
                         [
                             self.model.adam_train_op,
