@@ -33,7 +33,6 @@ class CLTObserver:
                  error_rate: float = 0,
                  aligner: Aligner = None):
         """
-        @param sampling_rate: the rate at which alleles from the alive leaf cells are observed
         @param error_rate: sequencing error, introduce alternative bases uniformly at this rate
         """
         assert (0 <= error_rate <= 1)
@@ -51,6 +50,7 @@ class CLTObserver:
 
         TODO: this probably won't work very well for very large trees.
 
+        @param sampling_rate: the rate at which alleles from the alive leaf cells are observed
         @param cell_lineage_tree: tree to sample leaves from
         @param seed: controls how the sampling is performed
 
