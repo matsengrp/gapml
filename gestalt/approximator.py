@@ -67,7 +67,7 @@ class ApproximatorLB:
                 node.add_feature("state_sum", StateSum([TractRepr()]))
             else:
                 transition_graph_dict, state_sum = self._get_branch_state_sum_transitions(node)
-                if node.is_leaf():
+                if node.observed:
                     state_sum = StateSum.create_for_observed_allele(node.allele_events, self.bcode_meta)
                 node.add_feature("state_sum", state_sum)
                 node.add_feature("transition_graph_dict", transition_graph_dict)

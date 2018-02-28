@@ -75,11 +75,11 @@ class CLTParsimonyEstimator(CLTEstimator):
                                          event.insert_str) for event in events])
             cell_state = None if not c.is_leaf() else processed_obs[c.name]
             cell_abundance = 0 if not c.is_leaf() else processed_abund[c.name]
-            child_clt = CellLineageTree(child_allele,
+            child_clt = CellLineageTree.convert(c,
+                                        allele=child_allele,
                                         cell_state=cell_state,
                                         abundance=cell_abundance,
                                         dist=branch_length)
-
             clt.add_child(child_clt)
             self._do_convert(child_clt, c, event_list, processed_obs, processed_abund)
 
@@ -92,7 +92,8 @@ class CLTParsimonyEstimator(CLTEstimator):
         Make a regular TreeNode to a Cell lineage tree
         """
         # TODO: update cell state maybe in the future?
-        clt = CellLineageTree(
+        clt = CellLineageTree.convert(
+                tree,
                 Allele(self.orig_barcode, self.bcode_meta),
                 cell_state=None)
         self._do_convert(clt, tree, event_list, processed_obs, processed_abund)
@@ -121,6 +122,7 @@ class CLTParsimonyEstimator(CLTEstimator):
                 use_cell_state=use_cell_state)
         cmd = ["rm -f outfile outtree && %s < mix.cfg" % self.mix_path]
         res = subprocess.call(cmd, shell=True)
+        # Check that mix ran properly
         assert (res == 0)
         # Parse the outfile -- these are still regular Tree, not CellLineageTrees
         # In the future, we can simultaneously build a cell lineage tree while parsing the
@@ -135,7 +137,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         #       to see if there is an equiv tree.
         uniq_trees = []
         for t in trees:
-            collapsed_est_tree = CollapsedTree.collapse(t, collapse_zero_lens=True)
+            collapsed_est_tree = CollapsedTree.collapse_zero_lens(t)
             if len(uniq_trees) == 0:
                 uniq_trees.append(collapsed_est_tree)
             else:
