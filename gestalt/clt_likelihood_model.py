@@ -33,6 +33,7 @@ class CLTLikelihoodModel:
             bcode_meta: BarcodeMetadata,
             sess: Session,
             target_lams: ndarray,
+            target_lams_known: bool = False,
             trim_long_probs: ndarray = 0.05 * np.ones(2),
             trim_zero_prob: float = 0.5,
             trim_poissons: ndarray = 2.5 * np.ones(2),
@@ -82,6 +83,8 @@ class CLTLikelihoodModel:
         # Save tensorflow session
         self.sess = sess
 
+        self.target_lams_known = target_lams_known
+
         # Create all the variables
         self._create_parameters(
                 target_lams,
@@ -112,9 +115,9 @@ class CLTLikelihoodModel:
             group_branch_lens: ndarray,
             branch_len_perturbs: ndarray,
             cell_type_lams: ndarray):
-        model_params = np.concatenate([
-                    # Fix the first target value -- not for optimization
-                    np.log(target_lams[1:]),
+        # Fix the first target value -- not for optimization
+        model_param_list = [] if self.target_lams_known else [np.log(target_lams[1:])]
+        model_params = np.concatenate(model_param_list + [
                     inv_sigmoid(trim_long_probs),
                     inv_sigmoid(trim_zero_prob),
                     np.log(trim_poissons),
@@ -128,9 +131,13 @@ class CLTLikelihoodModel:
         self.assign_op = self.all_vars.assign(self.all_vars_ph)
 
         # For easy access to these model parameters
-        up_to_size = target_lams.size - 1
         # First target lambda is fixed. The rest can vary. Addresses scaling issues.
-        self.target_lams = tf.concat([
+        if self.target_lams_known:
+            up_to_size = 0
+            self.target_lams = tf.constant(target_lams, dtype=tf.float64)
+        else:
+            up_to_size = target_lams.size - 1
+            self.target_lams = tf.concat([
                     tf.constant([target_lams[0]], dtype=tf.float64),
                     tf.exp(self.all_vars[:up_to_size])],
                     axis=0)
@@ -198,9 +205,12 @@ class CLTLikelihoodModel:
         if self.cell_type_tree is None:
             cell_type_lams = np.array([])
 
-        init_val = np.concatenate([
+        if self.target_lams_known:
+            model_param_list = []
+        else:
             # Fix the first target value -- not for optimization
-            np.log(target_lams[1:]),
+            model_param_list = [np.log(target_lams[1:])]
+        init_val = np.concatenate(model_param_list + [
             inv_sigmoid(trim_long_probs),
             inv_sigmoid(trim_zero_prob),
             np.log(trim_poissons),
