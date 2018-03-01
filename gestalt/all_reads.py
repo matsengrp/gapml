@@ -43,7 +43,7 @@ class CellReads:
         evt_weight_dict = dict()
         for allele_evts in self.reads:
             for evt in allele_evts.events:
-                evt_id = str(evt)
+                evt_id = evt
                 if evt_id not in evt_weight_dict:
                     evt_weight_dict[evt_id] = 1
                 else:

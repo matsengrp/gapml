@@ -67,7 +67,6 @@ class Event(tuple):
         else:
             return False
 
-
 class AlleleEvents:
     """
     Represents a allele in event-encoding.

@@ -4,7 +4,7 @@ import numpy as np
 
 from read_seq_data import parse_reads_file_format7B
 from all_reads import CellReads
-
+from allele_events import Event
 
 def parse_args():
     parser = argparse.ArgumentParser(description='read cell file')
@@ -16,15 +16,15 @@ def parse_args():
     return parser.parse_args()
 
 
-def make_phylip_lines(cell_reads: CellReads, evt_to_id_dict: Dict[str, int]):
+def make_phylip_lines(cell_reads: CellReads, evt_to_id_dict: Dict[Event, int]):
     """
     convert each AlleleEvents object to PHYLIP MIX inputs
     """
-    num_events = len(cell_reads.event_str_ids)
+    num_events = len(cell_reads.uniq_events)
     lines = []
     for allele_i, allele in enumerate(cell_reads.uniq_alleles):
         event_idxs = [
-            evt_to_id_dict[evt.get_str_id()] for evt in allele.get_uniq_events()
+            evt_to_id_dict[evt] for evt in allele.events
         ]
         event_arr = np.zeros((num_events, ), dtype=int)
         event_arr[event_idxs] = 1
@@ -50,15 +50,15 @@ def scale_to_phylip_weights(value: int, min_val: int, max_val: int):
     return WEIGHT_ARRAY[ret]
 
 
-def make_phylip_weights(cell_reads: CellReads, evt_to_id_dict: Dict[str, int]):
+def make_phylip_weights(cell_reads: CellReads, evt_to_id_dict: Dict[Event, int]):
     """
     Make PHYLIP weights for each event
     """
-    num_events = len(cell_reads.event_str_ids)
+    num_events = len(cell_reads.uniq_events)
     max_count = max(cell_reads.event_abundance.values())
     event_weights = [0] * num_events
-    for evt_str_id, evt_abundance in cell_reads.event_abundance.items():
-        evt_id = evt_to_id_dict[evt_str_id]
+    for evt, evt_abundance in cell_reads.event_abundance.items():
+        evt_id = evt_to_id_dict[evt]
         event_weights[evt_id] = scale_to_phylip_weights(
             evt_abundance, 0, max_count)
     return event_weights
@@ -74,10 +74,10 @@ def convert_cell_reads_to_phylip(
     """
     cell_reads = parse_reads_file_format7B(file_name)
     evt_to_id_dict = {
-        evt_str: i
-        for i, evt_str in enumerate(cell_reads.event_str_ids)
+        evt: i
+        for i, evt in enumerate(cell_reads.uniq_events)
     }
-    num_events = len(cell_reads.event_str_ids)
+    num_events = len(cell_reads.uniq_events)
 
     phylip_lines = make_phylip_lines(cell_reads, evt_to_id_dict)
     with open(phylip_infile, "w") as f:
@@ -92,6 +92,7 @@ def convert_cell_reads_to_phylip(
 def main():
     args = parse_args()
     convert_cell_reads_to_phylip(args.reads_file)
+    print("Done! See infile weights for the input file. Proceed to run Mix")
 
 
 if __name__ == "__main__":

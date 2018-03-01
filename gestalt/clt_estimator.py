@@ -9,7 +9,7 @@ from fastq_to_phylip import write_seqs_to_phy
 import phylip_parse
 from collapsed_tree import CollapsedTree
 from cell_lineage_tree import CellLineageTree
-from allele import Allele
+from allele import Allele, AlleleList
 from cell_state import CellState
 from barcode_metadata import BarcodeMetadata
 
@@ -45,9 +45,13 @@ class CLTParsimonyEstimator(CLTEstimator):
         processed_seqs = {}
         all_events = set()
         for idx, obs in enumerate(observations):
-            evts = obs.allele_events.events
-            processed_seqs["seq{}".format(idx)] = [obs.abundance, evts, obs.cell_state]
-            all_events.update(evts)
+            evts_list = []
+            for bcode_idx, allele_evts in enumerate(obs.allele_events_list):
+                evts = allele_evts.events
+                evts_bcode = [(bcode_idx, evt) for evt in evts]
+                all_events.update(evts_bcode)
+                evts_list += evts_bcode
+            processed_seqs["seq{}".format(idx)] = [obs.abundance, evts_list, obs.cell_state]
         all_event_dict = {event_id: i for i, event_id in enumerate(all_events)}
         event_list = [event_id for i, event_id in enumerate(all_events)]
         return processed_seqs, all_event_dict, event_list
@@ -69,14 +73,23 @@ class CLTParsimonyEstimator(CLTEstimator):
                 if allele_char == "1"
             ]
             events = [event_list[idx] for idx in child_event_ids]
-            child_allele = Allele(self.orig_barcode, self.bcode_meta)
-            child_allele.process_events([(event.start_pos,
-                                         event.start_pos + event.del_len,
-                                         event.insert_str) for event in events])
+            grouped_events = [[] for _ in range(self.bcode_meta.num_barcodes)]
+            for evt in events:
+                bcode_idx = evt[0]
+                actual_evt = evt[1]
+                grouped_events[bcode_idx].append(actual_evt)
+
+            child_allele_list = AlleleList(
+                    [self.orig_barcode] * self.bcode_meta.num_barcodes,
+                    self.bcode_meta)
+            child_allele_list.process_events(
+                    [[(event.start_pos,
+                        event.start_pos + event.del_len,
+                        event.insert_str) for event in events] for events in grouped_events])
             cell_state = None if not c.is_leaf() else processed_obs[c.name]
             cell_abundance = 0 if not c.is_leaf() else processed_abund[c.name]
             child_clt = CellLineageTree.convert(c,
-                                        allele=child_allele,
+                                        allele_list=child_allele_list,
                                         cell_state=cell_state,
                                         abundance=cell_abundance,
                                         dist=branch_length)
@@ -94,7 +107,9 @@ class CLTParsimonyEstimator(CLTEstimator):
         # TODO: update cell state maybe in the future?
         clt = CellLineageTree.convert(
                 tree,
-                Allele(self.orig_barcode, self.bcode_meta),
+                AlleleList(
+                    [self.orig_barcode] * self.bcode_meta.num_barcodes,
+                    self.bcode_meta),
                 cell_state=None)
         self._do_convert(clt, tree, event_list, processed_obs, processed_abund)
         return clt
