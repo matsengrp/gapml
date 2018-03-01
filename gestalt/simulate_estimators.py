@@ -44,11 +44,6 @@ def parse_args():
         default=1,
         help="number of independent barcodes. we assume all the same")
     parser.add_argument(
-        '--collapse-num',
-        type=int,
-        default=1,
-        help="use the first couple barcodes for collapsing branches")
-    parser.add_argument(
         '--target-lambdas',
         type=float,
         nargs=2,
@@ -191,8 +186,7 @@ def create_cell_lineage_tree(args, clt_model):
                 sampling_rate,
                 clt,
                 seed=args.model_seed,
-                observe_cell_state=args.use_cell_state,
-                collapse_idx=range(args.collapse_num))
+                observe_cell_state=args.use_cell_state)
         logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
         num_tries += 1
         if len(obs_leaves) < args.min_leaves:

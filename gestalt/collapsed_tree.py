@@ -64,8 +64,11 @@ class CollapsedTree:
                 if all_same:
                     node.delete(prevent_nondicotomic=False, preserve_branch_length=True)
                     up_node.add_feature(feature_name, getattr(node, feature_name))
-        return tree
 
+        for node in tree.get_descendants(strategy="postorder"):
+            if len(node.get_children()) == 1 and not getattr(node, feature_name):
+                node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
+        return tree
 
     @staticmethod
     def collapse_first_appear(raw_tree: TreeNode, feature_name: str = "observed"):
