@@ -96,7 +96,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         while time_remain > 0:
             target_tract, event_time = self._race_target_tracts(allele)
             if event_time is None:
-                continue
+                break
             time_remain = max(time_remain - event_time, 0)
 
             if time_remain > 0:

@@ -8,58 +8,82 @@ from allele_simulator import AlleleSimulator
 from clt_simulator import CLTSimulator
 from common import sigmoid
 
-class CLTSimulatorSimple(CLTSimulator):
+class CLTSimulatorOneLayer(CLTSimulator):
     """
     Class for simulating cell lineage trees.
     Used for testing things.
     """
-    def __init__(self,
-        cell_state_simulator: CellStateSimulator,
-        allele_simulator: AlleleSimulator):
+    def simulate(self,
+            tree_seed: int,
+            data_seed: int,
+            time: float,
+            max_nodes: int = 10):
         """
-        @param cell_type_tree: the tree that specifies how cells differentiate
-        @param allele_simulator: a simulator for how alleles get modified
-        """
-        self.cell_state_simulator = cell_state_simulator
-        self.allele_simulator = allele_simulator
+        Generates a CLT based on the model
 
-    def simulate(self, root_allele: Allele, root_cell_state: CellState, time: float, max_nodes: int = 10):
+        @param time: amount of time to simulate the CLT
+        @param max_layers: number of layers in this tree. at most 2
+        """
+        np.random.seed(tree_seed)
+        np.random.seed(data_seed)
+
+        root_allele = self.allele_simulator.get_root()
+        root_cell_state = self.cell_state_simulator.get_root()
+        tree = CellLineageTree(
+            allele_list=root_allele,
+            cell_state=root_cell_state,
+            dist=0)
+
+        for i in range(max_nodes):
+            child = CellLineageTree(
+                allele_list=self.allele_simulator.get_root(),
+                cell_state=self.cell_state_simulator.get_root(),
+                dist=max(time + np.random.randn() * 0.3, 0.1))
+            tree.add_child(child)
+
+        print("treee", tree)
+        self._simulate_on_branches(tree)
+        self._label_leaves(tree)
+        return tree
+
+class CLTSimulatorTwoLayers(CLTSimulator):
+    """
+    Class for simulating cell lineage trees.
+    Used for testing things.
+    """
+    def simulate(self,
+            tree_seed: int,
+            data_seed: int,
+            time: float,
+            max_nodes: int = 10):
         """
         Generates a CLT based on the model
 
         @param time: amount of time to simulate the CLT
         """
+        np.random.seed(tree_seed)
+        np.random.seed(data_seed)
+
+        root_allele = self.allele_simulator.get_root()
+        root_cell_state = self.cell_state_simulator.get_root()
         tree = CellLineageTree(
-            allele=root_allele,
+            allele_list=root_allele,
             cell_state=root_cell_state,
             dist=0)
 
         for i in range(max_nodes):
-            child = self._simulate_branch(tree, time + np.random.rand() * 0.5)
+            child = CellLineageTree(
+                allele_list=self.allele_simulator.get_root(),
+                cell_state=self.cell_state_simulator.get_root(),
+                dist=max(time + np.random.randn() * 0.3, 0.1))
             tree.add_child(child)
             for i in range(2):
-                child2 = self._simulate_branch(child, time/2 + np.random.rand() * 0.5)
+                child2 = CellLineageTree(
+                    allele_list=self.allele_simulator.get_root(),
+                    cell_state=self.cell_state_simulator.get_root(),
+                    dist=max(time + np.random.randn() * 0.3, 0.1))
                 child.add_child(child2)
 
-        # Need to label the leaves (alive cells only) so that we
-        # can later prune the tree. Leaf names must be unique!
-        for idx, leaf in enumerate(tree, 1):
-            if not leaf.dead:
-                leaf.name = "leaf%d" % idx
+        self._simulate_on_branches(tree)
+        self._label_leaves(tree)
         return tree
-
-    def _simulate_branch(self, tree: CellLineageTree, time: float):
-        """
-        @param time: the max amount of time to simulate from this node
-        """
-        branch_end_cell_state = tree.cell_state
-
-        branch_end_allele = self.allele_simulator.simulate(
-            tree.allele,
-            time=time)
-
-        child = CellLineageTree(
-            allele=branch_end_allele,
-            cell_state=branch_end_cell_state,
-            dist=time)
-        return child

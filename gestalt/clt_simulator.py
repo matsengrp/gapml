@@ -15,8 +15,63 @@ class CLTSimulator:
     """
     Class for creating cell lineage trees with allele and cell state information
     """
+    def __init__(self,
+        cell_state_simulator: CellStateSimulator,
+        allele_simulator: AlleleSimulator):
+        """
+        @param cell_type_tree: the tree that specifies how cells differentiate
+        @param allele_simulator: a simulator for how alleles get modified
+        """
+        self.cell_state_simulator = cell_state_simulator
+        self.allele_simulator = allele_simulator
+
     def simulate(self, root_allele: Allele, root_cell_state: CellState, time: float, max_nodes: int = 10):
         raise NotImplementedError()
+
+    def _label_leaves(self, tree: CellLineageTree):
+        # Need to label the leaves (alive cells only) so that we
+        # can later prune the tree. Leaf names must be unique!
+        for idx, leaf in enumerate(tree, 1):
+            if not leaf.dead:
+                leaf.name = "leaf%d" % idx
+
+    def _simulate_on_branches(self, tree: CellLineageTree):
+        """
+        assumes the tree has been built and we just simulate alleles and cell states along the branches
+        """
+        for bcode_idx in range(tree.allele_list.bcode_meta.num_barcodes):
+            for node in tree.traverse('preorder'):
+                if not node.is_root():
+                    self._simulate_branch_barcode(node, bcode_idx)
+
+        for node in tree.traverse('preorder'):
+            if not node.is_root():
+                node.allele_events_list = node.allele_list.get_event_encoding()
+
+    def _simulate_branch_barcode(self, node: CellLineageTree, bcode_idx: int):
+        """
+        The recursive function that actually makes the tree
+
+        @param tree: the root node to create a tree from
+        @param time: the max amount of time to simulate from this node
+        """
+        if bcode_idx == 0:
+            branch_end_cell_state = self.cell_state_simulator.simulate(
+                node.up.cell_state,
+                time=node.dist)
+            node.cell_state = branch_end_cell_state
+
+        allele = node.up.allele_list.alleles[bcode_idx]
+        branch_end_allele = self.allele_simulator.simulate(
+            allele,
+            time=node.dist)
+        new_allele_list = [a.allele for a in node.allele_list.alleles]
+        new_allele_list[bcode_idx] = branch_end_allele.allele
+        branch_end_allele_list = AlleleList(
+                new_allele_list,
+                allele.bcode_meta)
+
+        node.allele_list = branch_end_allele_list
 
 class BirthDeathTreeSimulator:
     """
@@ -50,13 +105,6 @@ class BirthDeathTreeSimulator:
         self.curr_nodes = 1
         self.max_nodes = max_nodes
         self._simulate_tree(tree, time)
-
-        # Need to label the leaves (alive cells only) so that we
-        # can later prune the tree. Leaf names must be unique!
-        for idx, leaf in enumerate(tree, 1):
-            if not leaf.dead:
-                leaf.name = "leaf%d" % idx
-
         return tree
 
     def _run_race(self, time:float):
@@ -230,37 +278,6 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
                 max_nodes)
 
         np.random.seed(data_seed)
-        for bcode_idx in range(root_allele.bcode_meta.num_barcodes):
-            for node in tree.traverse('preorder'):
-                if not node.is_root():
-                    self._simulate_branch_barcode(node, bcode_idx)
-
-        for node in tree.traverse('preorder'):
-            if not node.is_root():
-                node.allele_events_list = node.allele_list.get_event_encoding()
+        self._simulate_on_branches(tree)
+        self._label_leaves(tree)
         return tree
-
-    def _simulate_branch_barcode(self, node: CellLineageTree, bcode_idx: int):
-        """
-        The recursive function that actually makes the tree
-
-        @param tree: the root node to create a tree from
-        @param time: the max amount of time to simulate from this node
-        """
-        if bcode_idx == 0:
-            branch_end_cell_state = self.cell_state_simulator.simulate(
-                node.up.cell_state,
-                time=node.dist)
-            node.cell_state = branch_end_cell_state
-
-        allele = node.up.allele_list.alleles[bcode_idx]
-        branch_end_allele = self.allele_simulator.simulate(
-            allele,
-            time=node.dist)
-        new_allele_list = [a.allele for a in node.allele_list.alleles]
-        new_allele_list[bcode_idx] = branch_end_allele.allele
-        branch_end_allele_list = AlleleList(
-                new_allele_list,
-                allele.bcode_meta)
-
-        node.allele_list = branch_end_allele_list

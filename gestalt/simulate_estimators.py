@@ -17,7 +17,7 @@ import pickle
 from cell_state import CellState, CellTypeTree
 from cell_state_simulator import CellTypeSimulator
 from clt_simulator import CLTSimulatorBifurcating
-from clt_simulator_simple import CLTSimulatorSimple
+from clt_simulator_simple import CLTSimulatorOneLayer, CLTSimulatorTwoLayers
 from allele_simulator_simult import AlleleSimulatorSimultaneous
 from allele import Allele
 from clt_observer import CLTObserver
@@ -51,7 +51,7 @@ def parse_args():
     parser.add_argument(
         '--target-lambdas',
         type=float,
-        nargs=10,
+        nargs=2,
         default=[0.01] * 10,
         help='target cut rates -- will get slightly perturbed for the true value')
     parser.add_argument(
@@ -96,6 +96,10 @@ def parse_args():
         help='proportion cells sampled/alleles successfully sequenced')
     parser.add_argument(
         '--debug', action='store_true', help='debug tensorflow')
+    parser.add_argument(
+        '--single-layer', action='store_true', help='single layer tree')
+    parser.add_argument(
+        '--two-layers', action='store_true', help='two layer tree')
     parser.add_argument(
             '--model-seed',
             type=int,
@@ -151,14 +155,18 @@ def create_simulators(args, clt_model):
     allele_simulator = AlleleSimulatorSimultaneous(clt_model)
     # TODO: merge cell type simulator into allele simulator
     cell_type_simulator = CellTypeSimulator(clt_model.cell_type_tree)
-    if not args.debug:
-        clt_simulator = CLTSimulatorBifurcating(
-                args.birth_lambda,
-                args.death_lambda,
+    if args.single_layer:
+        clt_simulator = CLTSimulatorOneLayer(
+                cell_type_simulator,
+                allele_simulator)
+    elif args.two_layers:
+        clt_simulator = CLTSimulatorTwoLayers(
                 cell_type_simulator,
                 allele_simulator)
     else:
-        clt_simulator = CLTSimulatorSimple(
+        clt_simulator = CLTSimulatorBifurcating(
+                args.birth_lambda,
+                args.death_lambda,
                 cell_type_simulator,
                 allele_simulator)
     observer = CLTObserver()
@@ -177,7 +185,7 @@ def create_cell_lineage_tree(args, clt_model):
             time = args.time,
             max_nodes = args.max_clt_nodes)
     sampling_rate = args.sampling_rate
-    while (len(obs_leaves) <= args.min_leaves or len(obs_leaves) >= args.max_leaves) and sampling_rate < 1:
+    while (len(obs_leaves) < args.min_leaves or len(obs_leaves) >= args.max_leaves) and sampling_rate <= 1:
         # Now sample the leaves and create the true topology
         obs_leaves, true_tree = observer.observe_leaves(
                 sampling_rate,
@@ -187,12 +195,12 @@ def create_cell_lineage_tree(args, clt_model):
                 collapse_idx=range(args.collapse_num))
         logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
         num_tries += 1
-        if len(obs_leaves) <= args.min_leaves:
+        if len(obs_leaves) < args.min_leaves:
             sampling_rate += 0.025
         elif len(obs_leaves) >= args.max_leaves:
             sampling_rate = max(1e-3, sampling_rate - 0.05)
 
-    if len(obs_leaves) <= args.min_leaves:
+    if len(obs_leaves) < args.min_leaves:
         raise Exception("Could not manage to get enough leaves")
     return clt, obs_leaves, true_tree
 
