@@ -148,27 +148,30 @@ class CLTParsimonyEstimator(CLTEstimator):
         processed_seqs, event_dict, event_list = self._process_observations(
             observations)
         new_mix_cfg_file = self._create_mix_cfg()
+        infile = "%s/infile" % self.out_folder
+        abundance_file = "%s/test.abundance" % self.out_folder
         write_seqs_to_phy(
                 processed_seqs,
                 event_dict,
-                "%s/infile" % self.out_folder,
-                "%s/test.abundance" % self.out_folder,
+                infile,
+                abundance_file,
                 encode_hidden=encode_hidden,
                 use_cell_state=use_cell_state)
-        cmd = ["rm -f %s/outfile %s/outtree && %s < %s" % (
-            self.out_folder,
-            self.out_folder,
+        outfile = "%s/outfile" % self.out_folder
+        outtree = "%s/outtree" % self.out_folder
+        cmd = ["rm -f %s %s && %s < %s" % (
+            outfile,
+            outtree,
             self.mix_path,
             new_mix_cfg_file)]
         res = subprocess.call(cmd, shell=True)
         # Check that mix ran properly
-        assert (res == 0)
+        assert res == 0, "Mix failed to run"
+
         # Parse the outfile -- these are still regular Tree, not CellLineageTrees
         # In the future, we can simultaneously build a cell lineage tree while parsing the
         # output, rather than parsing output and later converting.
-        trees = phylip_parse.parse_outfile("outfile", "test.abundance")
-
-        # print('trees pre-collapse: {}'.format(len(trees)))
+        trees = phylip_parse.parse_outfile(outfile, abundance_file)
 
         # Only return unique trees, so check if trees are equivalent by first
         # collapsing them to get multifurcating trees

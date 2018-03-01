@@ -268,6 +268,14 @@ def main(args=sys.argv[1:]):
                 obs_leaves,
                 true_tree,
                 clt)
+        # Print fun facts about the data
+        for node in true_tree.traverse("preorder"):
+            node.add_feature("fun", str([str(a) for a in node.allele_events_list]))
+        logging.info("True tree topology, num leaves %d", len(true_tree))
+        logging.info(true_tree.get_ascii(attributes=["fun"], show_internal=True))
+        logging.info(true_tree.get_ascii(attributes=["cell_state"], show_internal=True))
+        logging.info(true_tree.get_ascii(attributes=["observed"], show_internal=True))
+        logging.info("Number of uniq obs alleles %d", len(obs_leaves))
 
         num_nodes = len([t for t in true_tree.traverse()])
 
@@ -314,14 +322,6 @@ def main(args=sys.argv[1:]):
                     args.num_inits,
                     args.max_iters)
             return pen_log_lik, res_model
-
-        for node in true_tree.traverse("preorder"):
-            node.add_feature("fun", str([str(a) for a in node.allele_events_list]))
-        logging.info("True tree topology, num leaves %d", len(true_tree))
-        logging.info(true_tree.get_ascii(attributes=["fun"], show_internal=True))
-        logging.info(true_tree.get_ascii(attributes=["cell_state"], show_internal=True))
-        logging.info(true_tree.get_ascii(attributes=["observed"], show_internal=True))
-        logging.info("Number of uniq obs alleles %d", len(obs_leaves))
 
         # Fit parsimony trees -- only look at a couple trees per RF distance
         for rf_dist, pars_trees in parsimony_tree_dict.items():
