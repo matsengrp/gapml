@@ -5,7 +5,7 @@ import numpy as np
 from cell_lineage_tree import CellLineageTree
 from cell_state import CellTypeTree, CellState
 from cell_state_simulator import CellStateSimulator
-from allele import Allele
+from allele import Allele, AlleleList
 from allele_events import AlleleEvents
 from allele_simulator import AlleleSimulator
 
@@ -32,7 +32,7 @@ class BirthDeathTreeSimulator:
         self.birth_scale = 1.0 / birth_rate
         self.death_scale = 1.0 / death_rate
 
-    def simulate(self, root_allele: Allele, root_cell_state: CellState, time: float, max_nodes: int = 10):
+    def simulate(self, root_allele_list: AlleleList, root_cell_state: CellState, time: float, max_nodes: int = 10):
         """
         Generates a CLT based on the model
         The root_allele and root_cell_state is constant (used as a dummy only).
@@ -43,7 +43,7 @@ class BirthDeathTreeSimulator:
         @param time: amount of time to simulate the CLT
         """
         tree = CellLineageTree(
-            allele=root_allele,
+            allele_list=root_allele_list,
             cell_state=root_cell_state,
             dist=0)
 
@@ -96,7 +96,7 @@ class BirthDeathTreeSimulator:
 
         # Keep allele/cell state constant
         branch_end_cell_state = tree.cell_state
-        branch_end_allele = tree.allele
+        branch_end_allele_list = tree.allele_list
 
         if remain_time <= 0:
             assert remain_time == 0
@@ -105,14 +105,14 @@ class BirthDeathTreeSimulator:
                 tree,
                 obs_branch_length,
                 branch_end_cell_state,
-                branch_end_allele)
+                branch_end_allele_list)
         elif division_happens:
             # Cell division
             self._process_cell_birth(
                 tree,
                 obs_branch_length,
                 branch_end_cell_state,
-                branch_end_allele,
+                branch_end_allele_list,
                 remain_time)
         else:
             # Cell died
@@ -120,19 +120,19 @@ class BirthDeathTreeSimulator:
                 tree,
                 obs_branch_length,
                 branch_end_cell_state,
-                branch_end_allele)
+                branch_end_allele_list)
 
     def _process_observe_end(
         self,
         tree: CellLineageTree,
         branch_length: float,
         branch_end_cell_state: CellState,
-        branch_end_allele: Allele):
+        branch_end_allele_list: Allele):
         """
         Observation time is up. Stop observing cell.
         """
         child1 = CellLineageTree(
-            allele=branch_end_allele,
+            allele_list=branch_end_allele_list,
             cell_state=branch_end_cell_state,
             dist=branch_length)
         tree.add_child(child1)
@@ -142,24 +142,24 @@ class BirthDeathTreeSimulator:
         tree: CellLineageTree,
         branch_length: float,
         branch_end_cell_state: CellState,
-        branch_end_allele: Allele,
+        branch_end_allele_list: Allele,
         remain_time: float):
         """
         Cell division
 
-        Make two cells with identical alleles and cell states
+        Make two cells with identical allele_lists and cell states
         """
         child0 = CellLineageTree(
-            allele=branch_end_allele,
+            allele_list=branch_end_allele_list,
             cell_state=branch_end_cell_state,
             dist=branch_length)
         child1 = CellLineageTree(
-            allele=branch_end_allele,
+            allele_list=branch_end_allele_list,
             cell_state=branch_end_cell_state,
             dist=0)
-        branch_end_allele2 = copy.deepcopy(branch_end_allele)
+        branch_end_allele_list2 = copy.deepcopy(branch_end_allele_list)
         child2 = CellLineageTree(
-            allele=branch_end_allele2,
+            allele_list=branch_end_allele_list2,
             cell_state=branch_end_cell_state,
             dist=0)
         child0.add_child(child1)
@@ -176,12 +176,12 @@ class BirthDeathTreeSimulator:
         tree: CellLineageTree,
         branch_length: float,
         branch_end_cell_state: CellState,
-        branch_end_allele: Allele):
+        branch_end_allele_list: Allele):
         """
         Cell has died. Add a dead child cell to `tree`.
         """
         child1 = CellLineageTree(
-            allele=branch_end_allele,
+            allele_list=branch_end_allele_list,
             cell_state=branch_end_cell_state,
             dist=branch_length,
             dead=True)
@@ -230,27 +230,37 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
                 max_nodes)
 
         np.random.seed(data_seed)
+        for bcode_idx in range(root_allele.bcode_meta.num_barcodes):
+            for node in tree.traverse('preorder'):
+                if not node.is_root():
+                    self._simulate_branch_barcode(node, bcode_idx)
+
         for node in tree.traverse('preorder'):
             if not node.is_root():
-                self._simulate_branch(node)
-
+                node.allele_events_list = node.allele_list.get_event_encoding()
         return tree
 
-    def _simulate_branch(self, node: CellLineageTree):
+    def _simulate_branch_barcode(self, node: CellLineageTree, bcode_idx: int):
         """
         The recursive function that actually makes the tree
 
         @param tree: the root node to create a tree from
         @param time: the max amount of time to simulate from this node
         """
-        branch_end_cell_state = self.cell_state_simulator.simulate(
-            node.up.cell_state,
-            time=node.dist)
+        if bcode_idx == 0:
+            branch_end_cell_state = self.cell_state_simulator.simulate(
+                node.up.cell_state,
+                time=node.dist)
+            node.cell_state = branch_end_cell_state
 
+        allele = node.up.allele_list.alleles[bcode_idx]
         branch_end_allele = self.allele_simulator.simulate(
-            node.up.allele,
+            allele,
             time=node.dist)
+        new_allele_list = [a.allele for a in node.allele_list.alleles]
+        new_allele_list[bcode_idx] = branch_end_allele.allele
+        branch_end_allele_list = AlleleList(
+                new_allele_list,
+                allele.bcode_meta)
 
-        node.allele = branch_end_allele
-        node.allele_events = branch_end_allele.get_event_encoding()
-        node.cell_state = branch_end_cell_state
+        node.allele_list = branch_end_allele_list

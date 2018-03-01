@@ -39,6 +39,16 @@ def parse_args():
         default="_output",
         help='folder to put output in')
     parser.add_argument(
+        '--num-barcodes',
+        type=int,
+        default=1,
+        help="number of independent barcodes. we assume all the same")
+    parser.add_argument(
+        '--collapse-num',
+        type=int,
+        default=1,
+        help="use the first couple barcodes for collapsing branches")
+    parser.add_argument(
         '--target-lambdas',
         type=float,
         nargs=10,
@@ -173,7 +183,8 @@ def create_cell_lineage_tree(args, clt_model):
                 sampling_rate,
                 clt,
                 seed=args.model_seed,
-                observe_cell_state=args.use_cell_state)
+                observe_cell_state=args.use_cell_state,
+                collapse_idx=range(args.collapse_num))
         logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
         num_tries += 1
         if len(obs_leaves) <= args.min_leaves:
@@ -215,8 +226,8 @@ def main(args=sys.argv[1:]):
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     np.random.seed(seed=args.model_seed)
 
-    barcode_orig = BarcodeMetadata.create_fake_barcode(args.num_targets) if args.num_targets != NUM_BARCODE_V7_TARGETS else BARCODE_V7
-    bcode_meta = BarcodeMetadata(unedited_barcode = barcode_orig)
+    barcode_orig = BarcodeMetadata.create_fake_barcode_str(args.num_targets) if args.num_targets != NUM_BARCODE_V7_TARGETS else BARCODE_V7
+    bcode_meta = BarcodeMetadata(unedited_barcode = barcode_orig, num_barcodes = args.num_barcodes)
 
     # initialize the target lambdas with some perturbation to ensure we don't have eigenvalues that are exactly equal
     args.target_lambdas = np.array(args.target_lambdas) + np.random.uniform(size=args.num_targets) * 0.08
@@ -295,8 +306,10 @@ def main(args=sys.argv[1:]):
                     args.max_iters)
             return pen_log_lik, res_model
 
+        for node in true_tree.traverse("preorder"):
+            node.add_feature("fun", str([str(a) for a in node.allele_events_list]))
         logging.info("True tree topology, num leaves %d", len(true_tree))
-        logging.info(true_tree.get_ascii(attributes=["allele_events"], show_internal=True))
+        logging.info(true_tree.get_ascii(attributes=["fun"], show_internal=True))
         logging.info(true_tree.get_ascii(attributes=["cell_state"], show_internal=True))
         logging.info(true_tree.get_ascii(attributes=["observed"], show_internal=True))
         logging.info("Number of uniq obs alleles %d", len(obs_leaves))

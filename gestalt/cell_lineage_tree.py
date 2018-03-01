@@ -9,13 +9,14 @@ from matplotlib.colors import LogNorm
 import seaborn as sns
 sns.set(style="white", color_codes=True)
 sns.set_style('ticks')
+from typing import List
 
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio.Alphabet import generic_dna
 from Bio import AlignIO, SeqIO
 
-from allele import Allele
+from allele import Allele, AlleleList
 from allele_events import AlleleEvents
 from cell_state import CellState
 from common import get_color
@@ -28,8 +29,8 @@ class CellLineageTree(TreeNode):
     used for storing the estimate of the cell lineage tree.
     """
     def __init__(self,
-                 allele: Allele = None,
-                 allele_events: AlleleEvents = None,
+                 allele_list: AlleleList = None,
+                 allele_events_list: List[AlleleEvents] = None,
                  cell_state: CellState = None,
                  dist: float = 0,
                  dead: bool = False,
@@ -46,13 +47,14 @@ class CellLineageTree(TreeNode):
         """
         super().__init__()
         self.dist = dist
-        if allele is not None:
-            self.add_feature("allele", allele)
-            self.add_feature("allele_events", allele.get_event_encoding())
+        if allele_list is not None:
+            self.add_feature("allele_list", allele_list)
+            self.add_feature("allele_events_list", [
+                allele.get_event_encoding() for allele in allele_list.alleles])
         else:
-            self.add_feature("allele_events", allele_events)
+            self.add_feature("allele_events_list", allele_events)
             # Maybe we'll need this conversion someday. For now we leave it empty.
-            self.add_feature("allele", None)
+            self.add_feature("allele_list", None)
 
         self.add_feature("cell_state", cell_state)
         self.add_feature("dead", dead)
@@ -266,16 +268,16 @@ class CellLineageTree(TreeNode):
 
     @staticmethod
     def convert(node: TreeNode,
-                 allele: Allele = None,
-                 allele_events: AlleleEvents = None,
+                 allele_list: AlleleList = None,
+                 allele_events_list: List[AlleleEvents] = None,
                  cell_state: CellState = None,
                  dist: float = 0,
                  dead: bool = False,
                  n_id: int = None,
                  abundance: int = 1):
         new_node = CellLineageTree(
-                 allele,
-                 allele_events,
+                 allele_list,
+                 allele_events_list,
                  cell_state,
                  dist,
                  dead,

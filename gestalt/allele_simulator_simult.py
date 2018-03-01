@@ -5,7 +5,7 @@ from scipy.stats import expon
 from numpy.random import choice, random
 from scipy.stats import poisson
 
-from allele import Allele
+from allele import Allele, AlleleList
 from indel_sets import TargetTract
 from allele_simulator import AlleleSimulator
 from barcode_metadata import BarcodeMetadata
@@ -36,7 +36,9 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         self.insertion_distribution = poisson(mu=self.model.insert_poisson.eval())
 
     def get_root(self):
-        return Allele(self.bcode_meta.unedited_barcode, self.bcode_meta)
+        return AlleleList(
+                [self.bcode_meta.unedited_barcode] * self.bcode_meta.num_barcodes,
+                self.bcode_meta)
 
     def _create_bounded_poissons(self, min_vals: List[float], max_vals: List[float], poiss_lambda: float):
         """
@@ -78,29 +80,23 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             min_time = np.min(tt_times)
             return race_winner, min_time
         else:
-            # Nothing to cut and nothing to repair
             return None, None
-
 
     def simulate(self, init_allele: Allele, time: float):
         """
         @param init_allele: the initial state of the allele
         @param time: the amount of time to simulate the allele modification process
 
-        @return allele after the simulation procedure
+        @return allele list after the simulation procedure
                 does not modify the allele that got passed in :)
         """
-        allele = Allele(
-            init_allele.allele,
-            init_allele.bcode_meta)
+        allele = Allele(init_allele.allele, init_allele.bcode_meta)
 
         time_remain = time
         while time_remain > 0:
             target_tract, event_time = self._race_target_tracts(allele)
-            if target_tract is None:
-                # Nothing to cut
-                # no point in simulating the allele process then
-                return allele
+            if event_time is None:
+                continue
             time_remain = max(time_remain - event_time, 0)
 
             if time_remain > 0:

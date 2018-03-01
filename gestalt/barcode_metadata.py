@@ -7,6 +7,7 @@ from constants import BARCODE_V7, NUM_BARCODE_V7_TARGETS
 class BarcodeMetadata:
     def __init__(self,
             unedited_barcode: List[str] = BARCODE_V7,
+            num_barcodes: int = 1,
             cut_site: int = 6,
             crucial_pos_len: List[int] = [6,6]):
         """
@@ -21,6 +22,7 @@ class BarcodeMetadata:
         """
         # The original barcode
         self.unedited_barcode = unedited_barcode
+        self.num_barcodes = num_barcodes
         self.orig_substr_lens = [len(s) for s in unedited_barcode]
         self.orig_length = sum(self.orig_substr_lens)
         self.n_targets = (len(self.unedited_barcode) - 1) // 2
@@ -78,7 +80,10 @@ class BarcodeMetadata:
         return min_deact_target, max_deact_target
 
     @staticmethod
-    def create_fake_barcode(num_targets: int):
+    def create_fake_barcode_str(num_targets: int):
+        """
+        @return List[str], return a single barcode, not an object!
+        """
         start_end_spacer = BARCODE_V7[0]
         target_seq = BARCODE_V7[1]
         btw_target_spacer = BARCODE_V7[2]
