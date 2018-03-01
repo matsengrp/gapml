@@ -1,5 +1,6 @@
 from ete3 import TreeNode
 import numpy as np
+from typing import List
 
 class CollapsedTree:
     @staticmethod
@@ -35,7 +36,7 @@ class CollapsedTree:
         return tree
 
     @staticmethod
-    def collapse_same_ancestral(raw_tree: TreeNode, feature_name: str = "observed"):
+    def collapse_same_ancestral(raw_tree: TreeNode, idxs: List[int] = None, feature_name: str = "observed"):
         """
         @param feature_name: This feature will be attached to each node
                             The leaf nodes will have this feature be true
@@ -44,16 +45,23 @@ class CollapsedTree:
                             were collapsed from the leaves.
         """
         tree = CollapsedTree._preprocess(raw_tree)
+
+        if idxs is None:
+            idxs = range(len(tree.allele_events_list))
+
         # collapse if ancestor node has exactly the same events
         for node in tree.traverse(strategy='postorder'):
             if not hasattr(node, feature_name):
                 node.add_feature(feature_name, node.is_leaf())
             if not node.is_root():
                 up_node = node.up
-                is_equal = all([node_evts == node_up_evts
-                        for node_evts, node_up_evts
-                        in zip(node.allele_events_list, node.up.allele_events_list)])
-                if is_equal:
+                all_same = True
+                for idx in idxs:
+                    node_evts = node.allele_events_list[idx]
+                    node_up_evts = node.up.allele_events_list[idx]
+                    if not (node_evts == node_up_evts):
+                        all_same = False
+                if all_same:
                     node.delete(prevent_nondicotomic=False, preserve_branch_length=True)
                     up_node.add_feature(feature_name, getattr(node, feature_name))
         return tree

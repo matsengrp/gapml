@@ -62,7 +62,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             dstns.append(long_short_dstns)
         return dstns
 
-    def _race_target_tracts(self, allele_list: AlleleList):
+    def _race_target_tracts(self, allele: Allele):
         """
         Race cutting (with no regard to time limits)
         @return race_winner: target tract if event occurs
@@ -70,25 +70,19 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
                 event_time: the time of the event that won
                             if no event happens, then returns None
         """
-        min_time_overall = None
-        barcode_idx_winner = None
-        race_winner_overall = None
-        for i, allele in enumerate(allele_list.alleles):
-            active_targets = allele.get_active_targets()
-            num_active_targets = len(active_targets)
-            if num_active_targets:
-                target_tracts = list(CLTLikelihoodModel.get_possible_target_tracts(active_targets))
-                all_hazards = self.model.get_hazards(target_tracts)
-                tt_times = [expon.rvs(scale=1.0 / hz) for hz in all_hazards]
-                race_winner = target_tracts[np.argmin(tt_times)]
-                min_time = np.min(tt_times)
-                if race_winner_overall is None or min_time_overall > min_time:
-                    race_winner_overall = race_winner
-                    min_time_overall = min_time
-                    barcode_idx_winner = i
-        return race_winner_overall, barcode_idx_winner, min_time_overall
+        active_targets = allele.get_active_targets()
+        num_active_targets = len(active_targets)
+        if num_active_targets:
+            target_tracts = list(CLTLikelihoodModel.get_possible_target_tracts(active_targets))
+            all_hazards = self.model.get_hazards(target_tracts)
+            tt_times = [expon.rvs(scale=1.0 / hz) for hz in all_hazards]
+            race_winner = target_tracts[np.argmin(tt_times)]
+            min_time = np.min(tt_times)
+            return race_winner, min_time
+        else:
+            return None, None
 
-    def simulate(self, init_allele_list: AlleleList, time: float):
+    def simulate(self, init_allele: Allele, time: float):
         """
         @param init_allele: the initial state of the allele
         @param time: the amount of time to simulate the allele modification process
@@ -96,27 +90,22 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         @return allele list after the simulation procedure
                 does not modify the allele that got passed in :)
         """
-        allele_list = AlleleList(
-            [a.allele for a in init_allele_list.alleles],
-            init_allele_list.bcode_meta)
+        allele = Allele(init_allele.allele, init_allele.bcode_meta)
 
         time_remain = time
         while time_remain > 0:
-            target_tract, barcode_idx, event_time = self._race_target_tracts(allele_list)
-            if target_tract is None:
-                # Nothing to cut
-                # no point in simulating the allele process then
-                return allele_list
+            target_tract, event_time = self._race_target_tracts(allele)
+            if event_time is None:
+                continue
             time_remain = max(time_remain - event_time, 0)
 
             if time_remain > 0:
                 # Target(s) got cut
-                allele = allele_list.alleles[barcode_idx]
                 allele.cut(target_tract.min_target)
                 if target_tract.min_target != target_tract.max_target:
                     allele.cut(target_tract.max_target)
                 self._do_repair(allele, target_tract)
-        return allele_list
+        return allele
 
     def _do_repair(self, allele: Allele, target_tract: TargetTract):
         """

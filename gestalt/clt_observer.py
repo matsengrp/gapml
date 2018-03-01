@@ -44,7 +44,8 @@ class CLTObserver:
                        cell_lineage_tree: CellLineageTree,
                        give_pruned_clt: bool = True,
                        seed: int = None,
-                       observe_cell_state: bool = True):
+                       observe_cell_state: bool = True,
+                       collapse_idx: List[int] = [0]):
         """
         Samples leaves from the cell lineage tree, of those that are not dead
 
@@ -89,6 +90,8 @@ class CLTObserver:
                 for a in allele_list_with_errors_events]
             leaf.allele_list.process_events(events_per_bcode)
             leaf.allele_events_list = allele_list_with_errors_events
+            # TODO: this is a bit tricky -- how does parsimony work if we want to recover
+            #       the collapsed branch length by the other idx?
             allele_str_id = tuple([str(a) for a in allele_list_with_errors_events])
             if observe_cell_state:
                 cell_id = (allele_str_id, str(leaf.cell_state))
@@ -110,7 +113,7 @@ class CLTObserver:
 
         if give_pruned_clt:
             # Collapse the tree
-            clt = CollapsedTree.collapse_same_ancestral(clt)
+            clt = CollapsedTree.collapse_same_ancestral(clt, idxs=collapse_idx)
             return list(observations.values()), clt
         else:
             return list(observations.values())

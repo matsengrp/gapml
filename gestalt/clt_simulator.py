@@ -230,27 +230,37 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
                 max_nodes)
 
         np.random.seed(data_seed)
+        for bcode_idx in range(root_allele.bcode_meta.num_barcodes):
+            for node in tree.traverse('preorder'):
+                if not node.is_root():
+                    self._simulate_branch_barcode(node, bcode_idx)
+
         for node in tree.traverse('preorder'):
             if not node.is_root():
-                self._simulate_branch(node)
-
+                node.allele_events_list = node.allele_list.get_event_encoding()
         return tree
 
-    def _simulate_branch(self, node: CellLineageTree):
+    def _simulate_branch_barcode(self, node: CellLineageTree, bcode_idx: int):
         """
         The recursive function that actually makes the tree
 
         @param tree: the root node to create a tree from
         @param time: the max amount of time to simulate from this node
         """
-        branch_end_cell_state = self.cell_state_simulator.simulate(
-            node.up.cell_state,
-            time=node.dist)
+        if bcode_idx == 0:
+            branch_end_cell_state = self.cell_state_simulator.simulate(
+                node.up.cell_state,
+                time=node.dist)
+            node.cell_state = branch_end_cell_state
 
-        branch_end_allele_list = self.allele_simulator.simulate(
-            node.up.allele_list,
+        allele = node.up.allele_list.alleles[bcode_idx]
+        branch_end_allele = self.allele_simulator.simulate(
+            allele,
             time=node.dist)
+        new_allele_list = [a.allele for a in node.allele_list.alleles]
+        new_allele_list[bcode_idx] = branch_end_allele.allele
+        branch_end_allele_list = AlleleList(
+                new_allele_list,
+                allele.bcode_meta)
 
         node.allele_list = branch_end_allele_list
-        node.allele_events_list = branch_end_allele_list.get_event_encoding()
-        node.cell_state = branch_end_cell_state
