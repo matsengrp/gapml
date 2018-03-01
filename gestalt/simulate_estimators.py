@@ -199,7 +199,10 @@ def create_cell_lineage_tree(args, clt_model):
     return clt, obs_leaves, true_tree
 
 def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=100):
-    parsimony_estimator = CLTParsimonyEstimator(bcode_meta, args.mix_path)
+    parsimony_estimator = CLTParsimonyEstimator(
+            bcode_meta,
+            args.out_folder,
+            args.mix_path)
     #TODO: DOESN"T ACTUALLY USE CELL STATE
     parsimony_trees = parsimony_estimator.estimate(
             obs_leaves,

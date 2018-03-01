@@ -25,9 +25,10 @@ class CLTEstimator:
 
 
 class CLTParsimonyEstimator(CLTEstimator):
-    def __init__(self, bcode_meta: BarcodeMetadata, mix_path: str = MIX_PATH):
+    def __init__(self, bcode_meta: BarcodeMetadata, out_folder: str, mix_path: str = MIX_PATH):
         self.orig_barcode = bcode_meta.unedited_barcode
         self.bcode_meta = bcode_meta
+        self.out_folder = out_folder
         self.mix_path = mix_path
 
     def _process_observations(self, observations: List[ObservedAlignedSeq]):
@@ -114,6 +115,24 @@ class CLTParsimonyEstimator(CLTEstimator):
         self._do_convert(clt, tree, event_list, processed_obs, processed_abund)
         return clt
 
+    def _create_mix_cfg(self):
+        mix_cfg_lines = [
+                "%s/infile\n" % self.out_folder,
+                "F\n",
+                "%s/outfile\n" % self.out_folder,
+                ]
+        with open(MIX_CFG_FILE, "r") as f:
+            mix_cfg_lines += f.readlines()
+        mix_cfg_lines += [
+                "F\n",
+                "%s/outtree\n" % self.out_folder,
+                ]
+        new_mix_cfg_file = "%s/%s" % (self.out_folder, MIX_CFG_FILE)
+        with open(new_mix_cfg_file, "w") as f:
+            for line in mix_cfg_lines:
+                f.write(line)
+        return new_mix_cfg_file
+
     def estimate(self,
             observations: List[ObservedAlignedSeq],
             encode_hidden: bool = False,
@@ -124,18 +143,23 @@ class CLTParsimonyEstimator(CLTEstimator):
                 calls out to mix on the command line
                 writes files: infile, test.abundance, outfile, outtree
 
-        TODO: have these input/output files be written in a tmp folder instead
+        TODO: send weights to phylip mix too eventually
         """
         processed_seqs, event_dict, event_list = self._process_observations(
             observations)
+        new_mix_cfg_file = self._create_mix_cfg()
         write_seqs_to_phy(
                 processed_seqs,
                 event_dict,
-                "infile",
-                "test.abundance",
+                "%s/infile" % self.out_folder,
+                "%s/test.abundance" % self.out_folder,
                 encode_hidden=encode_hidden,
                 use_cell_state=use_cell_state)
-        cmd = ["rm -f outfile outtree && %s < mix.cfg" % self.mix_path]
+        cmd = ["rm -f %s/outfile %s/outtree && %s < %s" % (
+            self.out_folder,
+            self.out_folder,
+            self.mix_path,
+            new_mix_cfg_file)]
         res = subprocess.call(cmd, shell=True)
         # Check that mix ran properly
         assert (res == 0)
