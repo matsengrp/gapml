@@ -186,7 +186,9 @@ class CLTParsimonyEstimator(CLTEstimator):
                 # We are going to use the unrooted tree assuming that the collapsed tree output
                 # does not have multifurcating branches...
                 dists = [
-                    collapsed_est_tree.robinson_foulds(uniq_t, unrooted_trees=True)[0]
+                    collapsed_est_tree.robinson_foulds(
+                        uniq_t,
+                        unrooted_trees=True)[0]
                     for uniq_t in uniq_trees]
                 if min(dists) > 0:
                     uniq_trees.append(collapsed_est_tree)
@@ -205,5 +207,6 @@ class CLTParsimonyEstimator(CLTEstimator):
         uniq_clts = []
         for t in uniq_trees:
             clt_new = self.convert_tree_to_clt(t, event_list, processed_obs, processed_abund)
+            clt_new.label_tree_with_strs()
             uniq_clts.append(clt_new)
         return uniq_clts

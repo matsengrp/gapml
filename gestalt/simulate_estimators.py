@@ -197,6 +197,7 @@ def create_cell_lineage_tree(args, clt_model):
 
     if len(obs_leaves) < args.min_leaves:
         raise Exception("Could not manage to get enough leaves")
+    true_tree.label_tree_with_strs()
     return clt, obs_leaves, true_tree
 
 def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=100):
@@ -216,12 +217,12 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=
     for tree in parsimony_trees:
         rf_dist = true_tree.robinson_foulds(
                 tree,
-                attr_t1="allele_events",
-                attr_t2="allele_events",
+                attr_t1="allele_events_list_str",
+                attr_t2="allele_events_list_str",
                 unrooted_trees=True)[0]
         if rf_dist not in parsimony_tree_dict:
             logging.info("rf dist %d", rf_dist)
-            logging.info(tree.get_ascii(attributes=["allele_events"], show_internal=True))
+            logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
             parsimony_tree_dict[rf_dist] = [tree]
         else:
             parsimony_tree_dict[rf_dist].append(tree)
@@ -269,10 +270,8 @@ def main(args=sys.argv[1:]):
                 true_tree,
                 clt)
         # Print fun facts about the data
-        for node in true_tree.traverse("preorder"):
-            node.add_feature("fun", str([str(a) for a in node.allele_events_list]))
         logging.info("True tree topology, num leaves %d", len(true_tree))
-        logging.info(true_tree.get_ascii(attributes=["fun"], show_internal=True))
+        logging.info(true_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
         logging.info(true_tree.get_ascii(attributes=["cell_state"], show_internal=True))
         logging.info(true_tree.get_ascii(attributes=["observed"], show_internal=True))
         logging.info("Number of uniq obs alleles %d", len(obs_leaves))

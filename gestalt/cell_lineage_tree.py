@@ -51,8 +51,10 @@ class CellLineageTree(TreeNode):
             self.add_feature("allele_list", allele_list)
             self.add_feature("allele_events_list", [
                 allele.get_event_encoding() for allele in allele_list.alleles])
+            self.add_feature("allele_events_list_str", str([str(a) for a in self.allele_events_list]))
         else:
-            self.add_feature("allele_events_list", allele_events)
+            self.add_feature("allele_events_list", allele_events_list)
+            self.add_feature("allele_events_list_str", str([str(a) for a in allele_events_list]))
             # Maybe we'll need this conversion someday. For now we leave it empty.
             self.add_feature("allele_list", None)
 
@@ -60,6 +62,10 @@ class CellLineageTree(TreeNode):
         self.add_feature("dead", dead)
         self.add_feature("id", n_id)
         self.add_feature("abundance", abundance)
+
+    def label_tree_with_strs(self):
+        for node in self.traverse("preorder"):
+            node.allele_events_list_str = str([str(a) for a in node.allele_events_list])
 
     def _create_sequences(self):
         """
