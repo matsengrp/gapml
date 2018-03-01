@@ -187,7 +187,7 @@ class CLTParsimonyEstimator(CLTEstimator):
                     for uniq_t in uniq_trees]
                 if min(dists) > 0:
                     uniq_trees.append(collapsed_est_tree)
-                    if max_trees is not None and len(uniq_trees) > max_trees:
+                    if max_uniq_trees is not None and len(uniq_trees) > max_uniq_trees:
                         break
                     else:
                         continue

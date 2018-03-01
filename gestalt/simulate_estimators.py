@@ -126,6 +126,7 @@ def parse_args():
             default=MIX_PATH)
     parser.add_argument('--use-cell-state', action='store_true')
     parser.add_argument('--use-parsimony', action='store_true', help="use mix (CS parsimony) to estimate tree topologies")
+    parser.add_argument('--topology-only', action='store_true', help="topology only")
     args = parser.parse_args()
     args.num_targets = len(args.target_lambdas)
     args.log_file = "%s/fit_log.txt" % args.out_folder
@@ -276,6 +277,9 @@ def main(args=sys.argv[1:]):
                 args,
                 bcode_meta,
                 true_tree) if args.use_parsimony else {}
+        if args.topology_only:
+            print("Done! You only wanted topology estimation")
+            return
 
         # Instantiate approximator used by our penalized MLE
         approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
