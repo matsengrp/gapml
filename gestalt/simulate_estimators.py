@@ -215,13 +215,20 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=
     # Sort the parsimony trees into their robinson foulds distance from the truth
     parsimony_tree_dict = {}
     for tree in parsimony_trees:
-        rf_dist = true_tree.robinson_foulds(
+        rf_dist_res = true_tree.robinson_foulds(
                 tree,
                 attr_t1="allele_events_list_str",
                 attr_t2="allele_events_list_str",
-                unrooted_trees=True)[0]
+                # Not only is this option buggy, I think we actually want the unrooted
+                # calculation -- we want to compare if the MRCAs of the two trees
+                # are the same. This means partitioning along internal edges and
+                # doing a symmetric difference of the sets of partitions.
+                expand_polytomies=False,
+                unrooted_trees=True)
+        rf_dist_max = rf_dist_res[1]
+        rf_dist = rf_dist_res[0]
         if rf_dist not in parsimony_tree_dict:
-            logging.info("rf dist %d", rf_dist)
+            logging.info("rf dist %d (max %d)", rf_dist, rf_dist_max)
             logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
             parsimony_tree_dict[rf_dist] = [tree]
         else:
@@ -270,6 +277,7 @@ def main(args=sys.argv[1:]):
                 true_tree,
                 clt)
         # Print fun facts about the data
+        logging.info("Full clt leaves %d" % len(clt))
         logging.info("True tree topology, num leaves %d", len(true_tree))
         logging.info(true_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
         logging.info(true_tree.get_ascii(attributes=["cell_state"], show_internal=True))

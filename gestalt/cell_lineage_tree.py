@@ -51,10 +51,10 @@ class CellLineageTree(TreeNode):
             self.add_feature("allele_list", allele_list)
             self.add_feature("allele_events_list", [
                 allele.get_event_encoding() for allele in allele_list.alleles])
-            self.add_feature("allele_events_list_str", str([str(a) for a in self.allele_events_list]))
+            self.add_feature("allele_events_list_str", CellLineageTree._allele_list_to_str(self.allele_events_list))
         else:
             self.add_feature("allele_events_list", allele_events_list)
-            self.add_feature("allele_events_list_str", str([str(a) for a in allele_events_list]))
+            self.add_feature("allele_events_list_str", CellLineageTree._allele_list_to_str(allele_events_list))
             # Maybe we'll need this conversion someday. For now we leave it empty.
             self.add_feature("allele_list", None)
 
@@ -65,7 +65,17 @@ class CellLineageTree(TreeNode):
 
     def label_tree_with_strs(self):
         for node in self.traverse("preorder"):
-            node.allele_events_list_str = str([str(a) for a in node.allele_events_list])
+            node.allele_events_list_str = CellLineageTree._allele_list_to_str(node.allele_events_list)
+
+    @staticmethod
+    def _allele_list_to_str(allele_evts_list):
+        return_str = "||".join([str(a) for a in allele_evts_list])
+        if return_str == "":
+            return "no_evts"
+        else:
+            print("re", return_str)
+            return return_str
+
 
     def _create_sequences(self):
         """
