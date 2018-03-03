@@ -41,6 +41,7 @@ class CLTLikelihoodModel:
             insert_poisson: float = 0.2,
             double_cut_weight: float = 1.0,
             group_branch_lens: ndarray = np.array([]),
+            group_branch_lens_known: bool = False,
             branch_len_perturbs: ndarray = np.array([]),
             cell_type_tree: CellTypeTree = None,
             cell_lambdas_known: bool = False):
@@ -86,6 +87,7 @@ class CLTLikelihoodModel:
 
         self.target_lams_known = target_lams_known
         self.cell_lambdas_known = cell_lambdas_known
+        self.group_branch_lens_known = group_branch_lens_known
 
         # Create all the variables
         self._create_parameters(
@@ -125,7 +127,7 @@ class CLTLikelihoodModel:
                     np.log(trim_poissons),
                     inv_sigmoid(insert_zero_prob),
                     np.log(insert_poisson),
-                    np.log(group_branch_lens),
+                    [] if self.group_branch_lens_known else np.log(group_branch_lens),
                     branch_len_perturbs,
                     [] if self.cell_lambdas_known else np.log(cell_type_lams)])
         self.all_vars = tf.Variable(model_params, dtype=tf.float64)
@@ -160,9 +162,12 @@ class CLTLikelihoodModel:
         up_to_size += 1
         self.insert_poisson = tf.exp(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
-        up_to_size += group_branch_lens.size
-        self.group_branch_lens = tf.exp(self.all_vars[prev_size: up_to_size])
-        prev_size = up_to_size
+        if self.group_branch_lens_known:
+            self.group_branch_lens = tf.constant(group_branch_lens, dtype=tf.float64)
+        else:
+            up_to_size += group_branch_lens.size
+            self.group_branch_lens = tf.exp(self.all_vars[prev_size: up_to_size])
+            prev_size = up_to_size
         up_to_size += branch_len_perturbs.size
         # Helper indices to know which values to apply lasso to
         self.lasso_idx = np.arange(prev_size, up_to_size)
@@ -217,7 +222,7 @@ class CLTLikelihoodModel:
             np.log(trim_poissons),
             inv_sigmoid(insert_zero_prob),
             np.log(insert_poisson),
-            np.log(group_branch_lens),
+            [] if self.group_branch_lens_known else np.log(group_branch_lens),
             branch_len_perturbs,
             [] if self.cell_lambdas_known else np.log(cell_type_lams)])
         self.sess.run(self.assign_op, feed_dict={self.all_vars_ph: init_val})
@@ -1157,8 +1162,8 @@ class CLTLikelihoodModel:
 
     @staticmethod
     def _reorder_likelihoods(
-            ch_ordered_down_probs,
-            tract_repr_list:List[TractRepr],
+            ch_ordered_down_probs: Tensor,
+            tract_repr_list: List[TractRepr],
             trans_mat_w: TransitionMatrixWrapper,
             ch_trans_mat_w: TransitionMatrixWrapper):
         """

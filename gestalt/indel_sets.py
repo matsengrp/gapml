@@ -17,10 +17,12 @@ class IndelSet(tuple):
         if indel_set1 == indel_set2:
             return indel_set1
         else:
-            wc1 = indel_set1.inner_wc if indel_set1.__class__ == SingletonWC else indel_set1
-            wc2 = indel_set2.inner_wc if indel_set2.__class__ == SingletonWC else indel_set2
-            if wc1 is None or wc2 is None:
-                return None
+            wc1 = indel_set1.inner_wc
+            wc2 = indel_set2.inner_wc
+            if wc1 is not None and wc1.min_target <= indel_set2.min_deact_target and indel_set2.max_deact_target <= wc1.max_target:
+                return indel_set2
+            elif wc2 is not None and wc2.min_target <= indel_set1.min_deact_target and indel_set1.max_deact_target <= wc2.max_target:
+                return indel_set1
             else:
                 return Wildcard.intersect(wc1, wc2)
 
@@ -58,6 +60,8 @@ class Wildcard(IndelSet):
 
     @staticmethod
     def intersect(wc1, wc2):
+        if wc1 is None or wc2 is None:
+            return None
         min_targ = max(wc1.min_target, wc2.min_target)
         max_targ = min(wc1.max_target, wc2.max_target)
         return Wildcard(min_targ, max_targ)
@@ -244,7 +248,7 @@ class TargetTract(Tract, DeactEvt):
     @property
     def is_right_long(self):
         return self.max_deact_target != self.max_target
-    
+
     @property
     def is_target_tract(self):
         return True
@@ -345,7 +349,7 @@ class AncState:
                 intersect_list.append(indel_sets_intersect)
 
             # Increment counter
-            if indel_set1.max_target > indel_set2.max_target:
+            if indel_set1.max_target < indel_set2.max_target:
                 idx1 += 1
             else:
                 idx2 += 1
@@ -473,7 +477,7 @@ def merge_tracts(tract_group_orig: Tuple[Tract], tract_result: Tract):
     # If there is a lingering deact tract to add to the list...
     if curr_deact_tract:
         tract_tuple_merged += (curr_deact_tract, )
-    
+
     return tract_tuple_merged
 
 def get_deactivated_targets(tract_grp: Tuple[IndelSet]):

@@ -284,8 +284,6 @@ def main(args=sys.argv[1:]):
         logging.info(true_tree.get_ascii(attributes=["observed"], show_internal=True))
         logging.info("Number of uniq obs alleles %d", len(obs_leaves))
 
-        num_nodes = len([t for t in true_tree.traverse()])
-
         # Get the parsimony-estimated topologies
         parsimony_tree_dict = get_parsimony_trees(
                 obs_leaves,
@@ -299,7 +297,8 @@ def main(args=sys.argv[1:]):
         # Instantiate approximator used by our penalized MLE
         approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
         def fit_pen_likelihood(tree):
-            #TODO: right now initializes with the correct parameters
+            num_nodes = len([t for t in tree.traverse()])
+
             if args.know_target_lambdas:
                 target_lams = np.array(args.target_lambdas)
             else:
@@ -317,6 +316,8 @@ def main(args=sys.argv[1:]):
                 #insert_zero_prob = args.repair_indel_probability,
                 #insert_poisson = args.repair_insertion_lambda,
                 group_branch_lens = np.ones(num_nodes) * 0.3,
+                #group_branch_lens_known = True, #np.array([tree.dist in tree.traverse("preorder")]) - 0.3,
+                #branch_len_perturbs = np.array([n.dist for n in tree.traverse("preorder")]) - 0.3,
                 branch_len_perturbs = np.random.randn(num_nodes) * 0.05,
                 cell_type_tree = cell_type_tree if args.use_cell_state else None,
                 cell_lambdas_known = args.know_cell_lambdas)

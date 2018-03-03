@@ -73,7 +73,6 @@ class CellLineageTree(TreeNode):
         if return_str == "":
             return "no_evts"
         else:
-            print("re", return_str)
             return return_str
 
 
