@@ -32,3 +32,7 @@ def save_model_data(file_name, model_vars, cell_type_tree, obs_leaves, true_tree
             "true_tree": true_tree,
             "clt": clt,
         }, f, protocol=-1)
+
+def save_fitted_models(file_name, fitted_models_dict):
+    with open(file_name, "wb") as f:
+        pickle.dump(fitted_models_dict, f, protocol=-1)

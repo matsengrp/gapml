@@ -116,7 +116,7 @@ def parse_args():
             default=0.1,
             help="lasso parameter on the branch lengths")
     parser.add_argument('--max-iters', type=int, default=1000)
-    parser.add_argument('--min-leaves', type=int, default=1)
+    parser.add_argument('--min-leaves', type=int, default=2)
     parser.add_argument('--max-leaves', type=int, default=100)
     parser.add_argument('--max-clt-nodes', type=int, default=8000)
     parser.add_argument('--num-inits', type=int, default=1)
@@ -132,6 +132,7 @@ def parse_args():
     args.log_file = "%s/fit_log.txt" % args.out_folder
     print("Log file", args.log_file)
     args.model_data_file = "%s/model_data.pkl" % args.out_folder
+    args.fitted_models_file = "%s/fitted.pkl" % args.out_folder
     return args
 
 def create_cell_type_tree():
@@ -332,13 +333,26 @@ def main(args=sys.argv[1:]):
             return pen_log_lik, res_model
 
         # Fit parsimony trees -- only look at a couple trees per RF distance
+        fitting_results = {}
         for rf_dist, pars_trees in parsimony_tree_dict.items():
+            fitting_results[rf_dist] = []
             for tree in pars_trees[:2]:
                 pen_log_lik, res_model = fit_pen_likelihood(tree)
                 logging.info("Mix pen log lik %f RF %d", pen_log_lik, rf_dist)
+                fitting_results[rf_dist].append((
+                    pen_log_lik,
+                    res_model.get_vars_as_dict()))
 
         # Fit oracle tree
-        pen_log_lik, oracle_model = fit_pen_likelihood(true_tree)
+        if 0 in fitting_results:
+            # we already found the oracle model
+            oracle_results = fitting_results[0][0]
+            pen_log_lik = oracle_results[0]
+            oracle_model = oracle_results[1]
+        else:
+            pen_log_lik, oracle_model = fit_pen_likelihood(true_tree)
+            fitting_results[0] = [(pen_log_lik, oracle_model.get_vars_as_dict())]
+        save_fitted_models(args.fitted_models_file, fitting_results)
         logging.info("True tree score %f", pen_log_lik)
 
         logging.info("---- TRUTH -----")
