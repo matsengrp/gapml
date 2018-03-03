@@ -10,6 +10,7 @@ import phylip_parse
 from collapsed_tree import CollapsedTree
 from cell_lineage_tree import CellLineageTree
 from allele import Allele, AlleleList
+from allele_events import Event
 from cell_state import CellState
 from barcode_metadata import BarcodeMetadata
 
@@ -36,31 +37,42 @@ class CLTParsimonyEstimator(CLTEstimator):
         Prepares the observations to be sent to phylip
         Each event is represented by a tuple (start idx, end idx, insertion)
 
-        @return processed_seqs: Dict[str, List[float, List[event_tuple], CellState]]
+        @return processed_seqs: Dict[str, List[float, List[List[Event]], CellState]]
                     this maps the sequence names to event list and abundance
                 all_event_dict: Dict[event_tuple, event number]
                     maps events to their event number
                 event_list: List[event_tuple]
                     the reverse of all_event_dict
         """
+        # Figure out what events happened
         processed_seqs = {}
-        all_events = set()
+        all_events = [set() for _ in range(self.bcode_meta.num_barcodes)]
         for idx, obs in enumerate(observations):
             evts_list = []
             for bcode_idx, allele_evts in enumerate(obs.allele_events_list):
                 evts = allele_evts.events
-                evts_bcode = [(bcode_idx, evt) for evt in evts]
-                all_events.update(evts_bcode)
-                evts_list += evts_bcode
+                evts_bcode = [evt for evt in evts]
+                all_events[bcode_idx].update(evts_bcode)
+                evts_list.append(evts_bcode)
             processed_seqs["seq{}".format(idx)] = [obs.abundance, evts_list, obs.cell_state]
-        all_event_dict = {event_id: i for i, event_id in enumerate(all_events)}
-        event_list = [event_id for i, event_id in enumerate(all_events)]
-        return processed_seqs, all_event_dict, event_list
+
+        # Assemble events in a dictionary
+        event_dicts = []
+        event_list = []
+        num_evts = 0
+        for bcode_idx, bcode_evts in enumerate(all_events):
+            bcode_evt_list = list(bcode_evts)
+            event_list += [(bcode_idx, evt) for evt in bcode_evt_list]
+            event_bcode_dict = {evt: num_evts + i for i, evt in enumerate(bcode_evt_list)}
+            num_evts += len(event_bcode_dict)
+            event_dicts.append(event_bcode_dict)
+
+        return processed_seqs, event_dicts, event_list
 
     def _do_convert(self,
             clt: CellLineageTree,
             tree: TreeNode,
-            event_list: List[Tuple[int, int, str]],
+            event_list: List[Event],
             processed_obs: Dict[str, CellState],
             processed_abund: Dict[str, int]):
         """
@@ -99,7 +111,7 @@ class CLTParsimonyEstimator(CLTEstimator):
 
     def convert_tree_to_clt(self,
             tree: TreeNode,
-            event_list: List[Tuple[int, int, str]],
+            event_list: List[Event],
             processed_obs: Dict[str, CellState],
             processed_abund: Dict[str, int]):
         """
@@ -135,7 +147,7 @@ class CLTParsimonyEstimator(CLTEstimator):
 
     def estimate(self,
             observations: List[ObservedAlignedSeq],
-            encode_hidden: bool = False,
+            encode_hidden: bool = True,
             use_cell_state: bool = False,
             max_uniq_trees: int = None):
         """
@@ -145,14 +157,14 @@ class CLTParsimonyEstimator(CLTEstimator):
 
         TODO: send weights to phylip mix too eventually
         """
-        processed_seqs, event_dict, event_list = self._process_observations(
+        processed_seqs, event_dicts, event_list = self._process_observations(
             observations)
         new_mix_cfg_file = self._create_mix_cfg()
         infile = "%s/infile" % self.out_folder
         abundance_file = "%s/test.abundance" % self.out_folder
         write_seqs_to_phy(
                 processed_seqs,
-                event_dict,
+                event_dicts,
                 infile,
                 abundance_file,
                 encode_hidden=encode_hidden,

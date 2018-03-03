@@ -252,6 +252,8 @@ def main(args=sys.argv[1:]):
     # Create a cell-type tree
     cell_type_tree = create_cell_type_tree(args)
 
+    logging.info(str(args))
+
     sess = tf.Session()
     with sess.as_default():
         # Create model
@@ -342,7 +344,7 @@ def main(args=sys.argv[1:]):
                 logging.info("Mix pen log lik %f RF %d", pen_log_lik, rf_dist)
                 fitting_results[rf_dist].append((
                     pen_log_lik,
-                    res_model.get_vars_as_dict()))
+                    res_model))
 
         # Fit oracle tree
         if 0 in fitting_results:
@@ -352,7 +354,7 @@ def main(args=sys.argv[1:]):
             oracle_model = oracle_results[1]
         else:
             pen_log_lik, oracle_model = fit_pen_likelihood(true_tree)
-            fitting_results[0] = [(pen_log_lik, oracle_model.get_vars_as_dict())]
+            fitting_results[0] = [(pen_log_lik, oracle_model)]
         save_fitted_models(args.fitted_models_file, fitting_results)
         logging.info("True tree score %f", pen_log_lik)
 

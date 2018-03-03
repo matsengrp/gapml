@@ -10,32 +10,37 @@ import re
 from Bio import SeqIO
 import numpy as np
 import warnings
+from allele_events import Event
+from cell_state import CellState
 
 
 def write_seqs_to_phy(processed_seqs: Dict[str, List],
-                      all_event_dict: Dict[str, int],
+                      event_dicts: List[Dict[Event, int]],
                       phy_file: str,
                       abundance_file: str,
-                      encode_hidden=True,
+                      encode_hidden: bool =True,
                     # TODO: currently ignored. include cell state in the future?
-                      use_cell_state=False):
+                    use_cell_state: bool =False):
     """
     @param processed_seqs: dict key = sequence id, dict val = [abundance, list of events, cell state]
-    @param all_event_dict: dict key = event id, dict val = event phylip id
+    @param event_dicts: list for dicts, one for each barcode, key = event, dict val = event phylip id
     @param phy_file: name of file to input to phylip
     @param abundance_file: name of file with abundance values
     @param mark_hidden: whether or not to encode hidden states as "?"
     """
-    num_events = len(all_event_dict)
-
+    num_events = sum([len(evt_dict) for evt_dict in event_dicts])
+    event_dict_merged = {}
+    for evt_dict in event_dicts:
+        event_dict_merged.update(evt_dict)
 
     # Some events hide others, so we build a dictionary mapping event ids to the
     # ids of the events they hide. We will use this to encode indeterminate states.
     if encode_hidden:
-        hidden_events = {all_event_dict[evt]:
-                         [all_event_dict[evt2] for evt2 in all_event_dict
-                          if evt2 is not evt and evt.hides(evt2)]
-                         for evt in all_event_dict}
+        hidden_events_dict = {}
+        for evt_dict in event_dicts:
+            for evt, evt_idx in evt_dict.items():
+                hidden_evts = [evt2_idx for evt2, evt2_idx in evt_dict.items() if evt2 is not evt and evt.hides(evt2)]
+                hidden_events_dict[evt_idx] = hidden_evts
 
     # Output file for PHYLIP
     # species name must be 10 characters long, followed by a sequence of 0s and
@@ -46,17 +51,18 @@ def write_seqs_to_phy(processed_seqs: Dict[str, List],
         f2.write('id\tabundance\n')
         for seq_id, seq_data in processed_seqs.items():
             seq_abundance = seq_data[0]
-            seq_events = seq_data[1]
+            all_seq_events = seq_data[1]
             seq_cell_state = seq_data[2]
-            event_idxs = [all_event_dict[seq_ev] for seq_ev in seq_events]
+            event_idxs = [event_dict_merged[evt] for bcode_evts in all_seq_events for evt in bcode_evts]
             event_arr = np.array(['0' for _ in range(num_events)])
             event_arr[event_idxs] = '1'
             if encode_hidden:
-                indeterminate_idxs = list(set([hidden_idx
-                                               for event_idx in event_idxs
-                                               for hidden_idx in hidden_events[event_idx]]))
-                assert(set(indeterminate_idxs).isdisjoint(set(event_idxs)))
-                event_arr[indeterminate_idxs] = "?"
+                indeterminate_idxs = set([
+                    hidden_idx
+                    for evt_idx in event_idxs
+                    for hidden_idx in hidden_events_dict[evt_idx]])
+                assert(indeterminate_idxs.isdisjoint(set(event_idxs)))
+                event_arr[list(indeterminate_idxs)] = "?"
             event_encoding = "".join(event_arr)
             seq_name = seq_id
             seq_name += " " * (10 - len(seq_name))
