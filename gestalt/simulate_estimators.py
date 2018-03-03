@@ -135,13 +135,14 @@ def parse_args():
     args.fitted_models_file = "%s/fitted.pkl" % args.out_folder
     return args
 
-def create_cell_type_tree():
+def create_cell_type_tree(args):
     # This first rate means nothing!
     cell_type_tree = CellTypeTree(cell_type=0, rate=0.1)
-    cell1 = CellTypeTree(cell_type=1, rate=0.20)
-    cell2 = CellTypeTree(cell_type=2, rate=0.25)
-    cell3 = CellTypeTree(cell_type=3, rate=0.15)
-    cell4 = CellTypeTree(cell_type=4, rate=0.15)
+    args.cell_rates = [0.20, 0.25, 0.15, 0.15]
+    cell1 = CellTypeTree(cell_type=1, rate=args.cell_rates[0])
+    cell2 = CellTypeTree(cell_type=2, rate=args.cell_rates[1])
+    cell3 = CellTypeTree(cell_type=3, rate=args.cell_rates[2])
+    cell4 = CellTypeTree(cell_type=4, rate=args.cell_rates[3])
     cell_type_tree.add_child(cell1)
     cell_type_tree.add_child(cell2)
     cell2.add_child(cell3)
@@ -249,7 +250,7 @@ def main(args=sys.argv[1:]):
     logging.info("args.target_lambdas %s" % str(args.target_lambdas))
 
     # Create a cell-type tree
-    cell_type_tree = create_cell_type_tree()
+    cell_type_tree = create_cell_type_tree(args)
 
     sess = tf.Session()
     with sess.as_default():
@@ -355,15 +356,17 @@ def main(args=sys.argv[1:]):
         save_fitted_models(args.fitted_models_file, fitting_results)
         logging.info("True tree score %f", pen_log_lik)
 
-        logging.info("---- TRUTH -----")
+        logging.info("---- ORACLE -----")
         for v in oracle_model.get_vars():
             logging.info(v)
+        logging.info("---- TRUTH -----")
         logging.info(args.target_lambdas)
         logging.info(args.repair_long_probability)
         logging.info(args.repair_indel_probability)
         logging.info([args.repair_deletion_lambda, args.repair_deletion_lambda])
         logging.info(args.repair_indel_probability)
         logging.info(args.repair_insertion_lambda)
+        logging.info(args.cell_rates)
 
         fitted_vars = oracle_model.get_vars()
         est_branch_lens = oracle_model.get_branch_lens()
