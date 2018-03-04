@@ -1,6 +1,7 @@
 from ete3 import TreeNode
 import numpy as np
 from typing import List
+import logging
 
 class CollapsedTree:
     @staticmethod
@@ -22,6 +23,12 @@ class CollapsedTree:
                 up_node.name = node.name
                 node.delete(prevent_nondicotomic=False)
                 up_node.add_feature(feature_name, getattr(node, feature_name))
+
+        for node in tree.get_descendants(strategy="postorder"):
+            if len(node.get_children()) == 1 and not getattr(node, feature_name):
+                logging.info("WARNING: There was an inner node with only one child!")
+                node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
+
         return tree
 
     @staticmethod
@@ -36,7 +43,7 @@ class CollapsedTree:
         return tree
 
     @staticmethod
-    def collapse_same_ancestral(raw_tree: TreeNode, idxs: List[int] = None, feature_name: str = "observed"):
+    def collapse_same_ancestral(raw_tree: TreeNode, feature_name: str = "observed"):
         """
         @param feature_name: This feature will be attached to each node
                             The leaf nodes will have this feature be true
@@ -45,29 +52,36 @@ class CollapsedTree:
                             were collapsed from the leaves.
         """
         tree = CollapsedTree._preprocess(raw_tree)
+        tree.label_tree_with_strs()
 
-        if idxs is None:
-            idxs = range(len(tree.allele_events_list))
+        idxs = range(len(tree.allele_events_list))
 
         # collapse if ancestor node has exactly the same events
         for node in tree.traverse(strategy='postorder'):
-            if not hasattr(node, feature_name):
-                node.add_feature(feature_name, node.is_leaf())
-            if not node.is_root():
-                up_node = node.up
-                all_same = True
-                for idx in idxs:
-                    node_evts = node.allele_events_list[idx]
-                    node_up_evts = node.up.allele_events_list[idx]
-                    if not (node_evts == node_up_evts):
+            if node.is_leaf():
+                node.add_feature(feature_name, True)
+            else:
+                is_observed = False
+                for c in node.get_children():
+                    all_same = True
+                    if len(c.allele_events_list) != len(node.allele_events_list):
                         all_same = False
-                if all_same:
-                    node.delete(prevent_nondicotomic=False, preserve_branch_length=True)
-                    up_node.add_feature(feature_name, getattr(node, feature_name))
+                        continue
+                    for c_evts, node_evts in zip(c.allele_events_list, node.allele_events_list):
+                        if not c_evts == node_evts:
+                            all_same = False
+                            break
+                    # Then everything is the same
+                    if all_same:
+                        c.delete(prevent_nondicotomic=False, preserve_branch_length=True)
+                        is_observed |= getattr(c, feature_name)
+                node.add_feature(feature_name, is_observed)
 
         for node in tree.get_descendants(strategy="postorder"):
             if len(node.get_children()) == 1 and not getattr(node, feature_name):
-                node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
+                up_node = node.up
+                node.delete(prevent_nondicotomic=False, preserve_branch_length=True)
+
         return tree
 
     @staticmethod

@@ -1,6 +1,7 @@
 from typing import List, Dict, Tuple
 import subprocess
 import re
+import logging
 
 from ete3 import Tree, TreeNode
 
@@ -55,6 +56,7 @@ class CLTParsimonyEstimator(CLTEstimator):
                 all_events[bcode_idx].update(evts_bcode)
                 evts_list.append(evts_bcode)
             processed_seqs["seq{}".format(idx)] = [obs.abundance, evts_list, obs.cell_state]
+            logging.info("seq%d %s", idx, str(obs))
 
         # Assemble events in a dictionary
         event_dicts = []

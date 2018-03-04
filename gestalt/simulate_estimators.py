@@ -56,6 +56,9 @@ def parse_args():
         '--know-cell-lambdas',
         action='store_true')
     parser.add_argument(
+        '--const-branch-len',
+        action='store_true')
+    parser.add_argument(
         '--repair-long-probability',
         type=float,
         nargs=2,
@@ -241,6 +244,7 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=
         rf_dist = rf_dist_res[0]
         logging.info("rf dist %d (max %d)", rf_dist, rf_dist_max)
         logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+        logging.info(tree.get_ascii(attributes=["observed"], show_internal=True))
         if rf_dist not in parsimony_tree_dict:
             parsimony_tree_dict[rf_dist] = [tree]
         else:
@@ -330,9 +334,9 @@ def main(args=sys.argv[1:]):
                 #insert_zero_prob = args.repair_indel_probability,
                 #insert_poisson = args.repair_insertion_lambda,
                 group_branch_lens = np.ones(num_nodes) * 0.3,
-                #group_branch_lens_known = True, #np.array([tree.dist in tree.traverse("preorder")]) - 0.3,
+                group_branch_lens_known = args.const_branch_len,
                 #branch_len_perturbs = np.array([n.dist for n in tree.traverse("preorder")]) - 0.3,
-                branch_len_perturbs = np.random.randn(num_nodes) * 0.05,
+                branch_len_perturbs = np.random.randn(num_nodes) * 0.05 if not args.const_branch_len else np.zeros(num_nodes),
                 cell_type_tree = cell_type_tree if args.use_cell_state else None,
                 cell_lambdas_known = args.know_cell_lambdas)
             estimator = CLTPenalizedEstimator(
@@ -362,6 +366,19 @@ def main(args=sys.argv[1:]):
         fitting_results["oracle"] = [(pen_log_lik, oracle_model)]
         save_fitted_models(args.fitted_models_file, fitting_results)
         logging.info("True tree score %f", pen_log_lik)
+
+        # Correlation between RF dist and likelihood
+        rf_dists = []
+        pen_log_liks = []
+        for rf_dist, res in fitting_results.items():
+            if rf_dist != "oracle":
+                for r in res:
+                    rf_dists.append(rf_dist)
+                    pen_log_liks.append(r[0][0])
+        logging.info("rf_dists %s", str(rf_dists))
+        logging.info("pen log liks %s", str(pen_log_liks))
+        logging.info("pearson rf to log lik %s", pearsonr(rf_dists, pen_log_liks))
+        logging.info("spearman rf to log lik %s", spearmanr(rf_dists, pen_log_liks))
 
         logging.info("---- ORACLE -----")
         for v in oracle_model.get_vars():
