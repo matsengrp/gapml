@@ -122,7 +122,7 @@ class CLTObserver:
             for node in clt.traverse():
                 if node.observed:
                     tree_evts.append(node.allele_events_list_str)
-            logging.info("diff events?", set(obs_evts_list) - set(tree_evts))
+            logging.info("diff events? %s", str(set(obs_evts_list) - set(tree_evts)))
             assert set(tree_evts) == set(obs_evts_list), "the two sets are not equal"
             return list(observations.values()), clt
         else:

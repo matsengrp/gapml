@@ -374,7 +374,7 @@ def main(args=sys.argv[1:]):
             if rf_dist != "oracle":
                 for r in res:
                     rf_dists.append(rf_dist)
-                    pen_log_liks.append(r[0])
+                    pen_log_liks.append(r[0][0])
         logging.info("rf_dists %s", str(rf_dists))
         logging.info("pen log liks %s", str(pen_log_liks))
         logging.info("pearson rf to log lik %s", pearsonr(rf_dists, pen_log_liks))
