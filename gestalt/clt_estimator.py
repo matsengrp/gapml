@@ -73,7 +73,7 @@ class CLTParsimonyEstimator(CLTEstimator):
             clt: CellLineageTree,
             tree: TreeNode,
             event_list: List[Event],
-            processed_obs: Dict[str, CellState],
+            processed_obs: Dict[str, List[List[Event]]],
             processed_abund: Dict[str, int]):
         """
         Performs the recursive process of forming a cell lineage tree
@@ -97,7 +97,7 @@ class CLTParsimonyEstimator(CLTEstimator):
                     self.bcode_meta)
             child_allele_list.process_events(
                     [[(event.start_pos,
-                        event.start_pos + event.del_len,
+                        event.del_end,
                         event.insert_str) for event in events] for events in grouped_events])
             cell_state = None if not c.is_leaf() else processed_obs[c.name]
             cell_abundance = 0 if not c.is_leaf() else processed_abund[c.name]
@@ -112,7 +112,7 @@ class CLTParsimonyEstimator(CLTEstimator):
     def convert_tree_to_clt(self,
             tree: TreeNode,
             event_list: List[Event],
-            processed_obs: Dict[str, CellState],
+            processed_obs: Dict[str, List[List[Event]]],
             processed_abund: Dict[str, int]):
         """
         Make a regular TreeNode to a Cell lineage tree

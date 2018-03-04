@@ -133,6 +133,10 @@ def parse_args():
     print("Log file", args.log_file)
     args.model_data_file = "%s/model_data.pkl" % args.out_folder
     args.fitted_models_file = "%s/fitted.pkl" % args.out_folder
+
+    if args.use_parsimony and args.use_cell_state:
+        raise ValueError("Cannot use parsimony while observing cell state...")
+
     return args
 
 def create_cell_type_tree(args):
@@ -200,6 +204,13 @@ def create_cell_lineage_tree(args, clt_model):
     if len(obs_leaves) < args.min_leaves:
         raise Exception("Could not manage to get enough leaves")
     true_tree.label_tree_with_strs()
+
+    # Check all leaves unique because rf distance code requires leaves to be unique
+    # The only reason leaves wouldn't be unique is if we are observing cell state OR
+    # we happen to have the same allele arise spontaneously in different parts of the tree.
+    if not args.use_cell_state:
+        assert len(set([n.allele_events_list_str for n in true_tree])) == len(true_tree), "leaves must be unique"
+
     return clt, obs_leaves, true_tree
 
 def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=100):
@@ -207,10 +218,9 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=
             bcode_meta,
             args.out_folder,
             args.mix_path)
-    #TODO: DOESN"T ACTUALLY USE CELL STATE
+    #TODO: DOESN'T USE CELL STATE
     parsimony_trees = parsimony_estimator.estimate(
             obs_leaves,
-            use_cell_state=args.use_cell_state,
             max_uniq_trees=max_uniq_trees)
     logging.info("Total parsimony trees %d", len(parsimony_trees))
 
@@ -230,11 +240,15 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=
         rf_dist_max = rf_dist_res[1]
         rf_dist = rf_dist_res[0]
         if rf_dist not in parsimony_tree_dict:
+            parsimony_tree_dict[rf_dist] = [tree]
             logging.info("rf dist %d (max %d)", rf_dist, rf_dist_max)
             logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-            parsimony_tree_dict[rf_dist] = [tree]
         else:
             parsimony_tree_dict[rf_dist].append(tree)
+            if rf_dist == 0:
+                # There is another tree that is RF dist zero... but this is because of a collapsed topology I assume?
+                logging.info("rf dist %d (max %d)", rf_dist, rf_dist_max)
+                logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
     return parsimony_tree_dict
 
 def main(args=sys.argv[1:]):
@@ -347,14 +361,8 @@ def main(args=sys.argv[1:]):
                     res_model))
 
         # Fit oracle tree
-        if 0 in fitting_results:
-            # we already found the oracle model
-            oracle_results = fitting_results[0][0]
-            pen_log_lik = oracle_results[0]
-            oracle_model = oracle_results[1]
-        else:
-            pen_log_lik, oracle_model = fit_pen_likelihood(true_tree)
-            fitting_results[0] = [(pen_log_lik, oracle_model)]
+        pen_log_lik, oracle_model = fit_pen_likelihood(true_tree)
+        fitting_results["oracle"] = [(pen_log_lik, oracle_model)]
         save_fitted_models(args.fitted_models_file, fitting_results)
         logging.info("True tree score %f", pen_log_lik)
 
