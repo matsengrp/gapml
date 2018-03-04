@@ -1,5 +1,6 @@
 from typing import List, Dict, Tuple
 import numpy as np
+import logging
 
 from allele import Allele, AlleleList
 from allele_events import AlleleEvents
@@ -25,7 +26,7 @@ class ObservedAlignedSeq:
         self.abundance = abundance
 
     def __str__(self):
-        return str(self.allele_events_list)
+        return "||".join([str(allele_evts) for allele_evts in self.allele_events_list])
 
 
 class CLTObserver:
@@ -44,8 +45,7 @@ class CLTObserver:
                        cell_lineage_tree: CellLineageTree,
                        give_pruned_clt: bool = True,
                        seed: int = None,
-                       observe_cell_state: bool = True,
-                       collapse_idx: List[int] = [0]):
+                       observe_cell_state: bool = True):
         """
         Samples leaves from the cell lineage tree, of those that are not dead
 
@@ -104,6 +104,7 @@ class CLTObserver:
                 observations[cell_id] = ObservedAlignedSeq(
                     allele_list=allele_list_with_errors,
                     allele_events_list=allele_list_with_errors_events,
+                    # TODO: what if lots of possible cell states?!
                     cell_state=leaf.cell_state,
                     abundance=1,
                 )
@@ -113,7 +114,16 @@ class CLTObserver:
 
         if give_pruned_clt:
             # Collapse the tree
-            clt = CollapsedTree.collapse_same_ancestral(clt, idxs=collapse_idx)
+            clt = CollapsedTree.collapse_same_ancestral(clt)
+            obs_evts_list = []
+            tree_evts = []
+            for o in observations.values():
+                obs_evts_list.append(str(o))
+            for node in clt.traverse():
+                if node.observed:
+                    tree_evts.append(node.allele_events_list_str)
+            logging.info("diff events?", set(obs_evts_list) - set(tree_evts))
+            assert set(tree_evts) == set(obs_evts_list), "the two sets are not equal"
             return list(observations.values()), clt
         else:
             return list(observations.values())
