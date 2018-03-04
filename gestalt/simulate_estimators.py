@@ -239,16 +239,12 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=
                 unrooted_trees=True)
         rf_dist_max = rf_dist_res[1]
         rf_dist = rf_dist_res[0]
+        logging.info("rf dist %d (max %d)", rf_dist, rf_dist_max)
+        logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
         if rf_dist not in parsimony_tree_dict:
             parsimony_tree_dict[rf_dist] = [tree]
-            logging.info("rf dist %d (max %d)", rf_dist, rf_dist_max)
-            logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
         else:
             parsimony_tree_dict[rf_dist].append(tree)
-            if rf_dist == 0:
-                # There is another tree that is RF dist zero... but this is because of a collapsed topology I assume?
-                logging.info("rf dist %d (max %d)", rf_dist, rf_dist_max)
-                logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
     return parsimony_tree_dict
 
 def main(args=sys.argv[1:]):
@@ -353,6 +349,7 @@ def main(args=sys.argv[1:]):
         fitting_results = {}
         for rf_dist, pars_trees in parsimony_tree_dict.items():
             fitting_results[rf_dist] = []
+            logging.info("There are %d trees with RF %d", len(pars_trees), rf_dist)
             for tree in pars_trees[:2]:
                 pen_log_lik, res_model = fit_pen_likelihood(tree)
                 logging.info("Mix pen log lik %f RF %d", pen_log_lik, rf_dist)

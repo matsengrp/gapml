@@ -175,7 +175,7 @@ def build_tree(leaf_seqs, edges, counts=None):
     # compute branch lengths
     root_node.dist = 0 # no branch above root
     for node in root_node.iter_descendants():
-        node.dist = sum(x != y for x, y in zip(node.binary_allele, node.up.binary_allele)) # 0 if node.binary_allele == node.up.binary_allele else 1
+        node.dist = sum(x != y and x != "?" for x, y in zip(node.binary_allele, node.up.binary_allele)) # 0 if node.binary_allele == node.up.binary_allele else 1
 
     # # # convert the leaves back to contain "?"
     # # # NOTE: don't compute branch lengths from binary_allele differences after this
