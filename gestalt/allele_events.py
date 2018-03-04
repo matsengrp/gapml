@@ -61,8 +61,8 @@ class Event(tuple):
 
     def hides(self, other):
         """return True if this event hides another event"""
-        if other.start_pos >= self.start_pos \
-        and other.start_pos + other.del_len <= self.start_pos + self.del_len:
+        if self.min_target < other.min_target and other.max_target < self.max_target:
+            assert other.start_pos >= self.start_pos and other.del_end <= self.del_end
             return True
         else:
             return False
@@ -109,6 +109,6 @@ class AlleleEvents:
 
     def __str__(self):
         if self.events:
-            return "-".join(["_".join([str(e) for e in evts]) for evts in self.events])
+            return "=".join(["_".join([str(e) for e in evts]) for evts in self.events])
         else:
             return "no_events"

@@ -52,8 +52,9 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
 
     def test_branch_likelihood_no_events(self):
         # Create a branch with no events
-        topology = CellLineageTree()
-        child = CellLineageTree(allele_events=AlleleEvents([], num_targets=self.num_targets))
+        topology = CellLineageTree(allele_events_list = [AlleleEvents(num_targets=self.num_targets)])
+        topology.add_feature("observed", True)
+        child = CellLineageTree(allele_events_list=[AlleleEvents(num_targets=self.num_targets)])
         child.add_feature("observed", True)
         topology.add_child(child)
 
@@ -79,11 +80,12 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         t_mats = self.approximator.create_transition_matrix_wrappers(model)
         model.create_log_lik(t_mats)
         log_lik_approx, _ = model.get_log_lik()
-        self.assertEqual(np.isclose(log_lik_approx[0], manual_log_prob))
+        self.assertTrue(np.isclose(log_lik_approx[0], manual_log_prob))
 
     def test_branch_likelihood(self):
         # Create a branch with one event
-        topology = CellLineageTree()
+        topology = CellLineageTree(allele_events_list = [AlleleEvents(num_targets=self.num_targets)])
+        topology.add_feature("observed", True)
         event = Event(
                 start_pos = 6,
                 del_len = 3,
@@ -91,7 +93,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
                 max_target = 0,
                 insert_str = "")
         child = CellLineageTree(
-                allele_events=AlleleEvents([event], num_targets=self.num_targets))
+                allele_events_list=[AlleleEvents([event], num_targets=self.num_targets)])
         topology.add_child(child)
         child.add_feature("observed", True)
 
@@ -134,7 +136,8 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
 
     def test_branch_likelihood_big_intertarget_del(self):
         # Create one branch
-        topology = CellLineageTree()
+        topology = CellLineageTree(allele_events_list = [AlleleEvents(num_targets=self.num_targets)])
+        topology.add_feature("observed", True)
         event = Event(
                 start_pos = 6,
                 del_len = 28,
@@ -142,7 +145,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
                 max_target = 2,
                 insert_str = "ATC")
         child = CellLineageTree(
-                allele_events=AlleleEvents([event], num_targets=self.num_targets))
+                allele_events_list=[AlleleEvents([event], num_targets=self.num_targets)])
         topology.add_child(child)
         child.add_feature("observed", True)
 
@@ -192,7 +195,8 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
 
     def test_two_branch_likelihood_big_intertarget_del(self):
         # Create two branches: Root -- child1 -- child2
-        topology = CellLineageTree()
+        topology = CellLineageTree(allele_events_list = [AlleleEvents(num_targets=self.num_targets)])
+        topology.add_feature("observed", True)
         event = Event(
                 start_pos = 6,
                 del_len = 28,
@@ -200,11 +204,12 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
                 max_target = 2,
                 insert_str = "ATC")
         child1 = CellLineageTree(
-                allele_events=AlleleEvents([], num_targets=self.num_targets))
+                allele_events_list=[AlleleEvents(num_targets=self.num_targets)])
         child2 = CellLineageTree(
-                allele_events=AlleleEvents([event], num_targets=self.num_targets))
+                allele_events_list=[AlleleEvents([event], num_targets=self.num_targets)])
         topology.add_child(child1)
         child1.add_child(child2)
+        child1.add_feature("observed", False)
         child2.add_feature("observed", True)
 
         branch_len1 = 10
@@ -271,7 +276,8 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         approximator = ApproximatorLB(extra_steps=1, anc_generations=1, bcode_metadata=bcode_metadata)
 
         # Create three branches: Root -- child1 -- child2 -- child3
-        topology = CellLineageTree()
+        topology = CellLineageTree(allele_events_list = [AlleleEvents(num_targets=self.num_targets)])
+        topology.add_feature("observed", True)
         event1 = Event(
                 start_pos = 6,
                 del_len = 23,
@@ -285,14 +291,16 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
                 max_target = 3,
                 insert_str = "")
         child1 = CellLineageTree(
-                allele_events=AlleleEvents([], num_targets=num_targets))
+                allele_events_list=[AlleleEvents(num_targets=num_targets)])
         child2 = CellLineageTree(
-                allele_events=AlleleEvents([], num_targets=num_targets))
+                allele_events_list=[AlleleEvents(num_targets=num_targets)])
         child3 = CellLineageTree(
-                allele_events=AlleleEvents([event1, event2], num_targets=num_targets))
+                allele_events_list=[AlleleEvents([event1, event2], num_targets=num_targets)])
         topology.add_child(child1)
         child1.add_child(child2)
         child2.add_child(child3)
+        child1.add_feature("observed", False)
+        child2.add_feature("observed", False)
         child3.add_feature("observed", True)
 
         branch_len = 0.5

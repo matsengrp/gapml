@@ -32,3 +32,23 @@ def save_model_data(file_name, model_vars, cell_type_tree, obs_leaves, true_tree
             "true_tree": true_tree,
             "clt": clt,
         }, f, protocol=-1)
+
+def save_fitted_models(
+        file_name,
+        fitted_models_dict):
+    """
+    @param file_name: str, file to save to
+    @param fitted_models_dict: dictionary mapping rf distance to a list of
+                tuples. Each tuple has its first elem as the penalized log lik score
+                and the second elem as the CLTLikelihoodEstimator
+
+    Pickles the models (while avoiding tensorflow unhappiness)
+    """
+    res_dict = {}
+    for k, v in fitted_models_dict.items():
+        res_dict[k] = [
+                (model_res[0], model_res[1].get_vars_as_dict())
+                for model_res in v]
+
+    with open(file_name, "wb") as f:
+        pickle.dump(res_dict, f, protocol=-1)
