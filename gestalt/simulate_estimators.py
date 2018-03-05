@@ -217,6 +217,7 @@ def create_cell_lineage_tree(args, clt_model):
         for n in true_tree:
             if n.allele_events_list_str in uniq_leaves:
                 logging.info("repeated leaf %s", n.allele_events_list_str)
+                clt.label_tree_with_strs()
                 logging.info(clt.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
             else:
                 uniq_leaves.add(n.allele_events_list_str)

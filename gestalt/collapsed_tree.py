@@ -88,6 +88,34 @@ class CollapsedTree:
         return tree
 
     @staticmethod
+    def collapse_identical_leaves(raw_tree: TreeNode, feature_name: str = "observed", idxs: List[int] = None):
+        tree = CollapsedTree._preprocess(raw_tree)
+        observed_alleles = set()
+        for leaf in tree:
+            leaf_evts_tuple = tuple(leaf.allele_events_list)
+            if leaf_evts_tuple in observed_alleles:
+                print("asjdkflajsdfl", leaf.allele_events_list_str)
+                logging.info("Spontaneous leaf found %s", leaf.allele_events_list_str)
+                leaf.delete(prevent_nondicotomic=False)
+                anc = leaf.up
+                while not anc.is_root():
+                    any_obs = False
+                    for node_of_anc in anc.traverse():
+                        if getattr(leaves_anc, feature_name):
+                            any_obs = True
+                            break
+                    if any_obs:
+                        # This has some observed children, so stop going up tree.
+                        break
+                    else:
+                        # This anc node has no observed children, so keep going up tree.
+                        anc.detach()
+                        anc = leaf.up
+            else:
+                observed_alleles.add(leaf_evts_tuple)
+        return tree
+
+    @staticmethod
     def collapse_first_appear(raw_tree: TreeNode, feature_name: str = "observed"):
         tree = CollapsedTree._preprocess(raw_tree)
         # collapse to subtree to first appearance of each leaf
