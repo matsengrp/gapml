@@ -1,5 +1,6 @@
 import re
 import scipy
+import six
 import pandas as pd
 from ete3 import TreeNode #, NodeStyle, SeqMotifFace, TreeStyle, TextFace, RectFace
 import matplotlib
@@ -304,26 +305,27 @@ class CellLineageTree(TreeNode):
                 new_node.add_feature(k, getattr(node, k))
         return new_node
 
-    def get_robinson_foulds_collapsed(self, coll_tree2, attr1, attr2, idxs=None):
-        def make_fake_leaves(tree, attr):
-            for node in tree.traverse():
-                if getattr(node, attr) and not node.is_leaf():
-                    new_child = CellLineageTree.convert(
-                            node,
-                            node.allele_list,
-                            node.allele_events_list,
-                            node.cell_state,
-                            0)
-                    node.add_child(new_child)
+    @staticmethod
+    def make_fake_leaves(tree, attr):
+        for node in tree.traverse():
+            if getattr(node, attr) and not node.is_leaf():
+                new_child = CellLineageTree.convert(
+                        node,
+                        node.allele_list,
+                        node.allele_events_list,
+                        node.cell_state,
+                        0)
+                node.add_child(new_child)
 
+    def get_robinson_foulds_collapsed(self, coll_tree2, attr1, attr2, idxs=None):
         tree1 = self.copy()
         tree2 = coll_tree2.copy()
         if idxs is not None:
             tree1 = CollapsedTree.collapse_same_ancestral(tree1, idxs=idxs)
             tree2 = CollapsedTree.collapse_same_ancestral(tree2, idxs=idxs)
 
-        make_fake_leaves(tree1, attr1)
-        make_fake_leaves(tree2, attr2)
+        CellLineageTree.make_fake_leaves(tree1, attr1)
+        CellLineageTree.make_fake_leaves(tree2, attr2)
         rf_dist_res = tree1.robinson_foulds(
                 tree2,
                 attr_t1=attr1,
@@ -334,12 +336,48 @@ class CellLineageTree(TreeNode):
                 unrooted_trees=True)
         return rf_dist_res[0], rf_dist_res[1]
 
+    def get_positive_negative_edge_rates(self, tree2, attr1, attr2):
+        t1 = self.copy()
+        t2 = tree2.copy()
+        CellLineageTree.make_fake_leaves(t1, attr1)
+        CellLineageTree.make_fake_leaves(t2, attr2)
+
+        # CODE COPIED FROM ETE3
+        attrs_t1 = set([getattr(n, attr1) for n in t1.iter_leaves() if hasattr(n, attr1)])
+        attrs_t2 = set([getattr(n, attr2) for n in t2.iter_leaves() if hasattr(n, attr2)])
+        common_attrs = attrs_t1 & attrs_t2
+        # release mem
+        attrs_t1, attrs_t2 = None, None
+        t1_content = t1.get_cached_content()
+        t1_leaves = t1_content[t1]
+        edges1 = set([
+            tuple(sorted([tuple(sorted([getattr(n, attr1) for n in content if hasattr(n, attr1) and getattr(n, attr1) in common_attrs])),
+                          tuple(sorted([getattr(n, attr1) for n in t1_leaves-content if hasattr(n, attr1) and getattr(n, attr1) in common_attrs]))]))
+            for content in six.itervalues(t1_content)])
+        edges1.discard(((),()))
+
+        t2_content = t2.get_cached_content()
+        t2_leaves = t2_content[t2]
+        edges2 = set([
+            tuple(sorted([
+                        tuple(sorted([getattr(n, attr2) for n in content if hasattr(n, attr2) and getattr(n, attr2) in common_attrs])),
+                        tuple(sorted([getattr(n, attr2) for n in t2_leaves-content if hasattr(n, attr2) and getattr(n, attr2) in common_attrs]))]))
+            for content in six.itervalues(t2_content)])
+        edges2.discard(((),()))
+
+        rf = len(edges1 ^ edges2)
+        max_parts = (len([p for p in edges1 if len(p[0])>1 and len(p[1])>1]) +
+                    len([p for p in edges2 if len(p[0])>1 and len(p[1])>1]))
+        false_negative_edges = len(edges1 - edges2)
+        false_positive_edges = len(edges2 - edges1)
+        return rf, max_parts, false_negative_edges, false_positive_edges
+
     def get_root_to_observed_lens(self, est_branch_lens = None):
         use_dist = est_branch_lens is None
         est_dist_to_root = {}
         stupid_dist_to_root = {}
         for node in self.traverse():
-            if node.observed:
+            if node.observed and not node.is_root():
                 est_dist = node.dist if use_dist else est_branch_lens[node.node_id]
                 stupid_dist = 1
                 curr_node = node

@@ -181,7 +181,7 @@ def create_cell_lineage_tree(args, clt_model):
     clt_simulator, observer = create_simulators(args, clt_model)
 
     # Keep trying to make CLT until enough leaves in observed tree
-    obs_leaves = set()
+    num_sampled = 0
     MAX_TRIES = 10
     num_tries = 0
     clt = clt_simulator.simulate(
@@ -190,42 +190,43 @@ def create_cell_lineage_tree(args, clt_model):
             time = args.time,
             max_nodes = args.max_clt_nodes)
     sampling_rate = args.sampling_rate
-    while (len(obs_leaves) < args.min_leaves or len(obs_leaves) >= args.max_leaves) and sampling_rate <= 1:
+    while (num_sampled < args.min_leaves or num_sampled >= args.max_leaves) and sampling_rate <= 1:
         # Now sample the leaves and create the true topology
-        obs_leaves, true_tree = observer.observe_leaves(
+        obs_leaves, true_tree_collapsed, true_tree_raw = observer.observe_leaves(
                 sampling_rate,
                 clt,
                 seed=args.model_seed,
                 observe_cell_state=args.use_cell_state)
-        logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
+        num_sampled = len(true_tree_raw)
+        logging.info("sampling rate %f, num leaves %d", sampling_rate, num_sampled)
         num_tries += 1
-        if len(obs_leaves) < args.min_leaves:
+        if num_sampled < args.min_leaves:
             sampling_rate += 0.025
-        elif len(obs_leaves) >= args.max_leaves:
+        elif num_sampled >= args.max_leaves:
             sampling_rate = max(1e-3, sampling_rate - 0.05)
 
-    if len(obs_leaves) < args.min_leaves:
+    if num_sampled < args.min_leaves:
         raise Exception("Could not manage to get enough leaves")
-    true_tree.label_tree_with_strs()
-    logging.info(true_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    true_tree_collapsed.label_tree_with_strs()
+    logging.info(true_tree_collapsed.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
     # Check all leaves unique because rf distance code requires leaves to be unique
     # The only reason leaves wouldn't be unique is if we are observing cell state OR
     # we happen to have the same allele arise spontaneously in different parts of the tree.
     if not args.use_cell_state:
         uniq_leaves = set()
-        for n in true_tree:
+        for n in true_tree_collapsed:
             if n.allele_events_list_str in uniq_leaves:
                 logging.info("repeated leaf %s", n.allele_events_list_str)
                 clt.label_tree_with_strs()
                 logging.info(clt.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
             else:
                 uniq_leaves.add(n.allele_events_list_str)
-        assert len(set([n.allele_events_list_str for n in true_tree])) == len(true_tree), "leaves must be unique"
+        assert len(set([n.allele_events_list_str for n in true_tree_collapsed])) == len(true_tree_collapsed), "leaves must be unique"
 
-    return clt, obs_leaves, true_tree
+    return clt, obs_leaves, true_tree_collapsed, true_tree_raw
 
-def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=100):
+def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree_collapsed, true_tree_raw, max_uniq_trees=100):
     parsimony_estimator = CLTParsimonyEstimator(
             bcode_meta,
             args.out_folder,
@@ -239,24 +240,27 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=
     # Sort the parsimony trees into their robinson foulds distance from the truth
     parsimony_tree_dict = {}
     for tree in parsimony_trees:
-        rf_dist, rf_dist_max = true_tree.get_robinson_foulds_collapsed(
+        rf_dist, rf_dist_max = true_tree_collapsed.get_robinson_foulds_collapsed(
                 tree,
                 attr1="allele_events_list_str",
                 attr2="allele_events_list_str")
-        logging.info("full barcode tree: rf dist %d (max %d)", rf_dist, rf_dist_max)
-        if bcode_meta.num_barcodes > 1:
-            rf_dist, rf_dist_max = true_tree.get_robinson_foulds_collapsed(
-                    tree,
-                    attr1="allele_events_list_str",
-                    attr2="allele_events_list_str",
-                    idxs = [0])
-            logging.info("first barcode tree: rf dist %d (max %d)", rf_dist, rf_dist_max)
+        logging.info("collapsed barcode tree: rf dist %d (max %d)", rf_dist, rf_dist_max)
+        rf_dist_me, rf_dist_max_me, false_neg, false_pos = true_tree_collapsed.get_positive_negative_edge_rates(
+                tree,
+                attr1="allele_events_list_str",
+                attr2="allele_events_list_str")
+        assert rf_dist_me == rf_dist
+        assert rf_dist_max_me == rf_dist_max
+        logging.info("barcode tree: rf dist %d (max %d)", rf_dist, rf_dist_max)
+        logging.info("barcode tree: false positive %d (rate %f)", false_pos, false_pos/float(rf_dist_max_me))
+        logging.info("barcode tree: false negative %d (rate %f)", false_neg, false_neg/float(rf_dist_max_me))
         logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
         logging.info(tree.get_ascii(attributes=["observed"], show_internal=True))
+        pars_tree = (tree, rf_dist_max, false_pos, false_neg)
         if rf_dist not in parsimony_tree_dict:
-            parsimony_tree_dict[rf_dist] = [tree]
+            parsimony_tree_dict[rf_dist] = [pars_tree]
         else:
-            parsimony_tree_dict[rf_dist].append(tree)
+            parsimony_tree_dict[rf_dist].append(pars_tree)
     return parsimony_tree_dict
 
 def compare_lengths(length_dict1, length_dict2, label):
@@ -303,14 +307,14 @@ def main(args=sys.argv[1:]):
                 cell_type_tree = cell_type_tree)
         tf.global_variables_initializer().run()
 
-        clt, obs_leaves, true_tree = create_cell_lineage_tree(args, clt_model)
+        clt, obs_leaves, true_tree_collapsed, true_tree_raw = create_cell_lineage_tree(args, clt_model)
         # Gather true branch lengths
-        true_tree.label_node_ids(CLTLikelihoodModel.NODE_ORDER)
+        true_tree_collapsed.label_node_ids(CLTLikelihoodModel.NODE_ORDER)
         true_branch_lens = {}
-        for node in true_tree.traverse(CLTLikelihoodModel.NODE_ORDER):
+        for node in true_tree_collapsed.traverse(CLTLikelihoodModel.NODE_ORDER):
             if not node.is_root():
                 true_branch_lens[node.node_id] = node.dist
-        true_root_to_observed, stupid_root_to_observed = true_tree.get_root_to_observed_lens(
+        true_root_to_observed, stupid_root_to_observed = true_tree_collapsed.get_root_to_observed_lens(
                 true_branch_lens)
         compare_lengths(
                 stupid_root_to_observed,
@@ -323,14 +327,14 @@ def main(args=sys.argv[1:]):
                 clt_model.get_vars_as_dict(),
                 cell_type_tree,
                 obs_leaves,
-                true_tree,
+                true_tree_raw,
                 clt)
         # Print fun facts about the data
         logging.info("Full clt leaves %d" % len(clt))
-        logging.info("True tree topology, num leaves %d", len(true_tree))
-        logging.info(true_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-        logging.info(true_tree.get_ascii(attributes=["cell_state"], show_internal=True))
-        logging.info(true_tree.get_ascii(attributes=["observed"], show_internal=True))
+        logging.info("True tree topology, num leaves %d", len(true_tree_collapsed))
+        logging.info(true_tree_collapsed.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+        logging.info(true_tree_collapsed.get_ascii(attributes=["cell_state"], show_internal=True))
+        logging.info(true_tree_collapsed.get_ascii(attributes=["observed"], show_internal=True))
         logging.info("Number of uniq obs alleles %d", len(obs_leaves))
 
         # Get the parsimony-estimated topologies
@@ -338,7 +342,8 @@ def main(args=sys.argv[1:]):
                 obs_leaves,
                 args,
                 bcode_meta,
-                true_tree) if args.use_parsimony else {}
+                true_tree_collapsed,
+                true_tree_raw) if args.use_parsimony else {}
         if args.topology_only:
             print("Done! You only wanted topology estimation")
             return
@@ -385,14 +390,25 @@ def main(args=sys.argv[1:]):
         for rf_dist, pars_trees in parsimony_tree_dict.items():
             fitting_results[rf_dist] = []
             logging.info("There are %d trees with RF %d", len(pars_trees), rf_dist)
-            for tree in pars_trees[:2]:
+            for tree_data in pars_trees[:2]:
+                tree = tree_data[0]
+                tree_rf_dist_max = tree_data[1]
+                tree_false_pos = tree_data[2]
+                tree_false_neg = tree_data[3]
                 pen_log_lik, res_model = fit_pen_likelihood(tree)
                 fitting_results[rf_dist].append((
                     pen_log_lik,
                     res_model))
 
                 # Print some summaries
-                logging.info("Mix pen log lik %f RF %d", pen_log_lik, rf_dist)
+                logging.info(
+                        "Mix pen log lik %f RF %d, %d (%f), %d (%f)",
+                        pen_log_lik,
+                        rf_dist,
+                        tree_false_pos,
+                        tree_false_pos/float(tree_rf_dist_max),
+                        tree_false_neg,
+                        tree_false_neg/float(tree_rf_dist_max))
                 # Compare root to leaf distances
                 est_branch_lens = res_model.get_branch_lens()
                 est_root_to_observed, est_stupid_root_to_observed = tree.get_root_to_observed_lens(
@@ -419,7 +435,7 @@ def main(args=sys.argv[1:]):
         logging.info("spearman rf to log lik %s", spearmanr(rf_dists, pen_log_liks))
 
         # Fit oracle tree
-        pen_log_lik, oracle_model = fit_pen_likelihood(true_tree)
+        pen_log_lik, oracle_model = fit_pen_likelihood(true_tree_collapsed)
         fitting_results["oracle"] = [(pen_log_lik, oracle_model)]
         save_fitted_models(args.fitted_models_file, fitting_results)
         logging.info("True tree score %f", pen_log_lik)
@@ -440,7 +456,7 @@ def main(args=sys.argv[1:]):
         est_branch_lens = oracle_model.get_branch_lens()
         compare_lengths(true_branch_lens, est_branch_lens, label="oracle est vs true branches")
         # Compare root to leaf dists
-        est_root_to_observed, _ = true_tree.get_root_to_observed_lens(est_branch_lens)
+        est_root_to_observed, _ = true_tree_collapsed.get_root_to_observed_lens(est_branch_lens)
         compare_lengths(
                 est_root_to_observed,
                 true_root_to_observed,

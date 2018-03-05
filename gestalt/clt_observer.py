@@ -114,17 +114,17 @@ class CLTObserver:
 
         if give_pruned_clt:
             # Collapse the tree
-            clt = CollapsedTree.collapse_same_ancestral(clt)
-            clt = CollapsedTree.collapse_identical_leaves(clt)
+            collapsed_clt = CollapsedTree.collapse_same_ancestral(clt)
+            collapsed_clt = CollapsedTree.collapse_identical_leaves(collapsed_clt)
             obs_evts_list = []
             tree_evts = []
             for o in observations.values():
                 obs_evts_list.append(str(o))
-            for node in clt.traverse():
+            for node in collapsed_clt.traverse():
                 if node.observed:
                     tree_evts.append(node.allele_events_list_str)
             logging.info("diff events? %s", str(set(obs_evts_list) - set(tree_evts)))
             assert set(tree_evts) == set(obs_evts_list), "the two sets are not equal"
-            return list(observations.values()), clt
+            return list(observations.values()), collapsed_clt, clt
         else:
             return list(observations.values())
