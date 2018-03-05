@@ -137,10 +137,6 @@ class CLTParsimonyEstimator(CLTEstimator):
                 ]
         with open(MIX_CFG_FILE, "r") as f:
             mix_cfg_lines += f.readlines()
-        mix_cfg_lines += [
-                "F\n",
-                "%s/outtree\n" % self.out_folder,
-                ]
         new_mix_cfg_file = "%s/%s" % (self.out_folder, MIX_CFG_FILE)
         with open(new_mix_cfg_file, "w") as f:
             for line in mix_cfg_lines:
@@ -155,7 +151,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         """
         @return a list of unique cell lineage tree estimates
                 calls out to mix on the command line
-                writes files: infile, test.abundance, outfile, outtree
+                writes files: infile, test.abundance, outfile
 
         TODO: send weights to phylip mix too eventually
         """
@@ -172,10 +168,8 @@ class CLTParsimonyEstimator(CLTEstimator):
                 encode_hidden=encode_hidden,
                 use_cell_state=use_cell_state)
         outfile = "%s/outfile" % self.out_folder
-        outtree = "%s/outtree" % self.out_folder
-        cmd = ["rm -f %s %s && %s < %s" % (
+        cmd = ["rm -f %s && %s < %s" % (
             outfile,
-            outtree,
             self.mix_path,
             new_mix_cfg_file)]
         res = subprocess.call(cmd, shell=True)
