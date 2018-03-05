@@ -333,3 +333,28 @@ class CellLineageTree(TreeNode):
                 expand_polytomies=False,
                 unrooted_trees=True)
         return rf_dist_res[0], rf_dist_res[1]
+
+    def get_root_to_leaf_lens(self, est_branch_lens = None):
+        use_dist = est_branch_lens is None
+        est_dist_to_root = {}
+        stupid_dist_to_root = {}
+        for leaf in self:
+            est_dist = leaf.dist if use_dist else est_branch_lens[leaf.node_id]
+            stupid_dist = 1
+            curr_node = leaf
+            while not curr_node.up.is_root():
+                est_dist += curr_node.up.dist if use_dist else est_branch_lens[curr_node.up.node_id]
+                stupid_dist += 1
+                curr_node = curr_node.up
+            est_dist_to_root[leaf.node_id] = est_dist
+            stupid_dist_to_root[leaf.node_id] = stupid_dist
+        return est_dist_to_root, stupid_dist_to_root
+
+    def label_node_ids(self, order):
+        node_id = 0
+        for node in self.traverse(order):
+            node.add_feature("node_id", node_id)
+            if node.is_root():
+                root_node_id = node_id
+            node_id += 1
+        return root_node_id, node_id

@@ -259,6 +259,17 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=
             parsimony_tree_dict[rf_dist].append(tree)
     return parsimony_tree_dict
 
+def compare_lengths(length_dict1, length_dict2, label):
+    logging.info("compare lengths %s", label)
+    length_list1 = []
+    length_list2 = []
+    for k in length_dict1.keys():
+        length_list1.append(length_dict1[k])
+        length_list2.append(length_dict2[k])
+        logging.info("%f %f", length_dict1[k], length_dict2[k])
+    logging.info("pearson %s %s", label, pearsonr(length_list1, length_list2))
+    logging.info("spearman %s %s", label, spearmanr(length_list1, length_list2))
+
 def main(args=sys.argv[1:]):
     args = parse_args()
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
@@ -293,6 +304,14 @@ def main(args=sys.argv[1:]):
         tf.global_variables_initializer().run()
 
         clt, obs_leaves, true_tree = create_cell_lineage_tree(args, clt_model)
+        # Gather true branch lengths
+        true_tree.label_node_ids(CLTLikelihoodModel.NODE_ORDER)
+        true_branch_lens = {}
+        for node in true_tree.traverse(CLTLikelihoodModel.NODE_ORDER):
+            if not node.is_root():
+                true_branch_lens[node.node_id] = node.dist
+        true_root_to_leaves, stupid_root_to_leaves = true_tree.get_root_to_leaf_lens(true_branch_lens)
+        compare_lengths(stupid_root_to_leaves, true_root_to_leaves, label="const branch vs true root to leaves")
 
         # Save the data
         save_model_data(
@@ -364,29 +383,41 @@ def main(args=sys.argv[1:]):
             logging.info("There are %d trees with RF %d", len(pars_trees), rf_dist)
             for tree in pars_trees[:2]:
                 pen_log_lik, res_model = fit_pen_likelihood(tree)
-                logging.info("Mix pen log lik %f RF %d", pen_log_lik, rf_dist)
                 fitting_results[rf_dist].append((
                     pen_log_lik,
                     res_model))
+
+                # Print some summaries
+                logging.info("Mix pen log lik %f RF %d", pen_log_lik, rf_dist)
+                # Compare root to leaf distances
+                est_branch_lens = res_model.get_branch_lens()
+                est_root_to_leaves, est_stupid_root_to_leaves = tree.get_root_to_leaf_lens(est_branch_lens)
+                compare_lengths(
+                        est_root_to_leaves,
+                        true_root_to_leaves,
+                        label="parsimony est vs true root to leaves, RF %d" % rf_dist)
+                compare_lengths(
+                        est_stupid_root_to_leaves,
+                        true_root_to_leaves,
+                        label="parsimony stupid est vs true root to leaves, RF %d" % rf_dist)
+
+        # Correlation between RF dist and likelihood among parsimony trees
+        rf_dists = []
+        pen_log_liks = []
+        for rf_dist, res in fitting_results.items():
+            for r in res:
+                rf_dists.append(rf_dist)
+                pen_log_liks.append(r[0][0])
+        logging.info("rf_dists %s", str(rf_dists))
+        logging.info("pen log liks %s", str(pen_log_liks))
+        logging.info("pearson rf to log lik %s", pearsonr(rf_dists, pen_log_liks))
+        logging.info("spearman rf to log lik %s", spearmanr(rf_dists, pen_log_liks))
 
         # Fit oracle tree
         pen_log_lik, oracle_model = fit_pen_likelihood(true_tree)
         fitting_results["oracle"] = [(pen_log_lik, oracle_model)]
         save_fitted_models(args.fitted_models_file, fitting_results)
         logging.info("True tree score %f", pen_log_lik)
-
-        # Correlation between RF dist and likelihood
-        rf_dists = []
-        pen_log_liks = []
-        for rf_dist, res in fitting_results.items():
-            if rf_dist != "oracle":
-                for r in res:
-                    rf_dists.append(rf_dist)
-                    pen_log_liks.append(r[0][0])
-        logging.info("rf_dists %s", str(rf_dists))
-        logging.info("pen log liks %s", str(pen_log_liks))
-        logging.info("pearson rf to log lik %s", pearsonr(rf_dists, pen_log_liks))
-        logging.info("spearman rf to log lik %s", spearmanr(rf_dists, pen_log_liks))
 
         logging.info("---- ORACLE -----")
         for v in oracle_model.get_vars():
@@ -400,22 +431,18 @@ def main(args=sys.argv[1:]):
         logging.info(args.repair_insertion_lambda)
         logging.info(args.cell_rates)
 
-        fitted_vars = oracle_model.get_vars()
+        # Compare branch lengths
         est_branch_lens = oracle_model.get_branch_lens()
-        # Gather true branch lengths
-        true_branch_lens = {}
-        for node in oracle_model.topology.traverse(oracle_model.NODE_ORDER):
-            if not node.is_root():
-                true_branch_lens[node.node_id] = node.dist
-        logging.info("====branch lens (true, est)=====")
-        true_br_list = []
-        est_br_list = []
-        for k in true_branch_lens.keys():
-            true_br_list.append(true_branch_lens[k])
-            est_br_list.append(est_branch_lens[k])
-            logging.info("%f %f", true_branch_lens[k], est_branch_lens[k])
-        logging.info("pearson branch %s", pearsonr(true_br_list, est_br_list))
-        logging.info("spearman branch %s", spearmanr(true_br_list, est_br_list))
+        est_root_to_leaves, _ = true_tree.get_root_to_leaf_lens(est_branch_lens)
+        compare_lengths(true_branch_lens, est_branch_lens, label="oracle est vs true branches")
+        # Compare root to leaf dists
+        compare_lengths(
+                est_root_to_leaves,
+                true_root_to_leaves,
+                label="oracle est vs true root to leaves")
+
+        # Also compare target estimates
+        fitted_vars = oracle_model.get_vars()
         logging.info("pearson target %s", pearsonr(args.target_lambdas, fitted_vars[0]))
 
 if __name__ == "__main__":
