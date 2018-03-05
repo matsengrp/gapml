@@ -310,8 +310,12 @@ def main(args=sys.argv[1:]):
         for node in true_tree.traverse(CLTLikelihoodModel.NODE_ORDER):
             if not node.is_root():
                 true_branch_lens[node.node_id] = node.dist
-        true_root_to_leaves, stupid_root_to_leaves = true_tree.get_root_to_leaf_lens(true_branch_lens)
-        compare_lengths(stupid_root_to_leaves, true_root_to_leaves, label="const branch vs true root to leaves")
+        true_root_to_observed, stupid_root_to_observed = true_tree.get_root_to_observed_lens(
+                true_branch_lens)
+        compare_lengths(
+                stupid_root_to_observed,
+                true_root_to_observed,
+                label="const branch vs true root to observed")
 
         # Save the data
         save_model_data(
@@ -391,15 +395,16 @@ def main(args=sys.argv[1:]):
                 logging.info("Mix pen log lik %f RF %d", pen_log_lik, rf_dist)
                 # Compare root to leaf distances
                 est_branch_lens = res_model.get_branch_lens()
-                est_root_to_leaves, est_stupid_root_to_leaves = tree.get_root_to_leaf_lens(est_branch_lens)
+                est_root_to_observed, est_stupid_root_to_observed = tree.get_root_to_observed_lens(
+                        est_branch_lens)
                 compare_lengths(
-                        est_root_to_leaves,
-                        true_root_to_leaves,
-                        label="parsimony est vs true root to leaves, RF %d" % rf_dist)
+                        est_root_to_observed,
+                        true_root_to_observed,
+                        label="parsimony est vs true root to observed, RF %d" % rf_dist)
                 compare_lengths(
-                        est_stupid_root_to_leaves,
-                        true_root_to_leaves,
-                        label="parsimony stupid est vs true root to leaves, RF %d" % rf_dist)
+                        est_stupid_root_to_observed,
+                        true_root_to_observed,
+                        label="parsimony stupid est vs true root to observed, RF %d" % rf_dist)
 
         # Correlation between RF dist and likelihood among parsimony trees
         rf_dists = []
@@ -433,13 +438,13 @@ def main(args=sys.argv[1:]):
 
         # Compare branch lengths
         est_branch_lens = oracle_model.get_branch_lens()
-        est_root_to_leaves, _ = true_tree.get_root_to_leaf_lens(est_branch_lens)
         compare_lengths(true_branch_lens, est_branch_lens, label="oracle est vs true branches")
         # Compare root to leaf dists
+        est_root_to_observed, _ = true_tree.get_root_to_observed_lens(est_branch_lens)
         compare_lengths(
-                est_root_to_leaves,
-                true_root_to_leaves,
-                label="oracle est vs true root to leaves")
+                est_root_to_observed,
+                true_root_to_observed,
+                label="oracle est vs true root to observed")
 
         # Also compare target estimates
         fitted_vars = oracle_model.get_vars()
