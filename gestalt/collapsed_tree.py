@@ -43,7 +43,7 @@ class CollapsedTree:
         return tree
 
     @staticmethod
-    def collapse_same_ancestral(raw_tree: TreeNode, feature_name: str = "observed"):
+    def collapse_same_ancestral(raw_tree: TreeNode, feature_name: str = "observed", idxs: List[int] = None):
         """
         @param feature_name: This feature will be attached to each node
                             The leaf nodes will have this feature be true
@@ -54,7 +54,8 @@ class CollapsedTree:
         tree = CollapsedTree._preprocess(raw_tree)
         tree.label_tree_with_strs()
 
-        idxs = range(len(tree.allele_events_list))
+        if idxs is None:
+            idxs = range(len(tree.allele_events_list))
 
         # collapse if ancestor node has exactly the same events
         for node in tree.traverse(strategy='postorder'):
@@ -67,7 +68,9 @@ class CollapsedTree:
                     if len(c.allele_events_list) != len(node.allele_events_list):
                         all_same = False
                         continue
-                    for c_evts, node_evts in zip(c.allele_events_list, node.allele_events_list):
+                    for idx in idxs:
+                        c_evts = c.allele_events_list[idx]
+                        node_evts = node.allele_events_list[idx]
                         if not c_evts == node_evts:
                             all_same = False
                             break
@@ -82,6 +85,34 @@ class CollapsedTree:
                 up_node = node.up
                 node.delete(prevent_nondicotomic=False, preserve_branch_length=True)
 
+        return tree
+
+    @staticmethod
+    def collapse_identical_leaves(raw_tree: TreeNode, feature_name: str = "observed", idxs: List[int] = None):
+        tree = CollapsedTree._preprocess(raw_tree)
+        observed_alleles = set()
+        for leaf in tree:
+            leaf_evts_tuple = tuple(leaf.allele_events_list)
+            if leaf_evts_tuple in observed_alleles:
+                print("asjdkflajsdfl", leaf.allele_events_list_str)
+                logging.info("Spontaneous leaf found %s", leaf.allele_events_list_str)
+                leaf.delete(prevent_nondicotomic=False)
+                anc = leaf.up
+                while not anc.is_root():
+                    any_obs = False
+                    for node_of_anc in anc.traverse():
+                        if getattr(leaves_anc, feature_name):
+                            any_obs = True
+                            break
+                    if any_obs:
+                        # This has some observed children, so stop going up tree.
+                        break
+                    else:
+                        # This anc node has no observed children, so keep going up tree.
+                        anc.detach()
+                        anc = leaf.up
+            else:
+                observed_alleles.add(leaf_evts_tuple)
         return tree
 
     @staticmethod

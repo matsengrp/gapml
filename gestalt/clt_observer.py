@@ -115,6 +115,7 @@ class CLTObserver:
         if give_pruned_clt:
             # Collapse the tree
             clt = CollapsedTree.collapse_same_ancestral(clt)
+            clt = CollapsedTree.collapse_identical_leaves(clt)
             obs_evts_list = []
             tree_evts = []
             for o in observations.values():

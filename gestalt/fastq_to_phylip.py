@@ -29,9 +29,6 @@ def write_seqs_to_phy(processed_seqs: Dict[str, List],
     @param mark_hidden: whether or not to encode hidden states as "?"
     """
     num_events = sum([len(evt_dict) for evt_dict in event_dicts])
-    event_dict_merged = {}
-    for evt_dict in event_dicts:
-        event_dict_merged.update(evt_dict)
 
     # Some events hide others, so we build a dictionary mapping event ids to the
     # ids of the events they hide. We will use this to encode indeterminate states.
@@ -53,7 +50,7 @@ def write_seqs_to_phy(processed_seqs: Dict[str, List],
             seq_abundance = seq_data[0]
             all_seq_events = seq_data[1]
             seq_cell_state = seq_data[2]
-            event_idxs = [event_dict_merged[evt] for bcode_evts in all_seq_events for evt in bcode_evts]
+            event_idxs = [event_dicts[bcode_idx][evt] for bcode_idx, bcode_evts in enumerate(all_seq_events) for evt in bcode_evts]
             event_arr = np.array(['0' for _ in range(num_events)])
             event_arr[event_idxs] = '1'
             if encode_hidden:
