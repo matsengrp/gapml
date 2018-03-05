@@ -19,6 +19,7 @@ from Bio import AlignIO, SeqIO
 from allele import Allele, AlleleList
 from allele_events import AlleleEvents
 from cell_state import CellState
+from collapsed_tree import CollapsedTree
 from common import get_color
 
 
@@ -303,7 +304,7 @@ class CellLineageTree(TreeNode):
                 new_node.add_feature(k, getattr(node, k))
         return new_node
 
-    def get_robinson_foulds_collapsed(self, coll_tree2, attr1, attr2):
+    def get_robinson_foulds_collapsed(self, coll_tree2, attr1, attr2, idxs=None):
         def make_fake_leaves(tree, attr):
             for node in tree.traverse():
                 if getattr(node, attr) and not node.is_leaf():
@@ -317,16 +318,18 @@ class CellLineageTree(TreeNode):
 
         tree1 = self.copy()
         tree2 = coll_tree2.copy()
+        if idxs is not None:
+            tree1 = CollapsedTree.collapse_same_ancestral(tree1, idxs=idxs)
+            tree2 = CollapsedTree.collapse_same_ancestral(tree2, idxs=idxs)
+
         make_fake_leaves(tree1, attr1)
         make_fake_leaves(tree2, attr2)
         rf_dist_res = tree1.robinson_foulds(
                 tree2,
                 attr_t1=attr1,
                 attr_t2=attr2,
-                # Not only is this option buggy, I think we actually want the unrooted
-                # calculation -- we want to compare if the MRCAs of the two trees
-                # are the same. This means partitioning along internal edges and
-                # doing a symmetric difference of the sets of partitions.
+                # The expand_polytomies option is buggy.
+                # Also, I think we actually want the unrooted calculation.
                 expand_polytomies=False,
                 unrooted_trees=True)
         return rf_dist_res[0], rf_dist_res[1]

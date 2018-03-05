@@ -207,11 +207,19 @@ def create_cell_lineage_tree(args, clt_model):
     if len(obs_leaves) < args.min_leaves:
         raise Exception("Could not manage to get enough leaves")
     true_tree.label_tree_with_strs()
+    logging.info(true_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
     # Check all leaves unique because rf distance code requires leaves to be unique
     # The only reason leaves wouldn't be unique is if we are observing cell state OR
     # we happen to have the same allele arise spontaneously in different parts of the tree.
     if not args.use_cell_state:
+        uniq_leaves = set()
+        for n in true_tree:
+            if n.allele_events_list_str in uniq_leaves:
+                logging.info("repeated leaf %s", n.allele_events_list_str)
+                logging.info(clt.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+            else:
+                uniq_leaves.add(n.allele_events_list_str)
         assert len(set([n.allele_events_list_str for n in true_tree])) == len(true_tree), "leaves must be unique"
 
     return clt, obs_leaves, true_tree
@@ -234,7 +242,14 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=
                 tree,
                 attr1="allele_events_list_str",
                 attr2="allele_events_list_str")
-        logging.info("rf dist %d (max %d)", rf_dist, rf_dist_max)
+        logging.info("full barcode tree: rf dist %d (max %d)", rf_dist, rf_dist_max)
+        if bcode_meta.num_barcodes > 1:
+            rf_dist, rf_dist_max = true_tree.get_robinson_foulds_collapsed(
+                    tree,
+                    attr1="allele_events_list_str",
+                    attr2="allele_events_list_str",
+                    idxs = [0])
+            logging.info("first barcode tree: rf dist %d (max %d)", rf_dist, rf_dist_max)
         logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
         logging.info(tree.get_ascii(attributes=["observed"], show_internal=True))
         if rf_dist not in parsimony_tree_dict:

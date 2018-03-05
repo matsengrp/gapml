@@ -40,7 +40,7 @@ class CLTParsimonyEstimator(CLTEstimator):
 
         @return processed_seqs: Dict[str, List[float, List[List[Event]], CellState]]
                     this maps the sequence names to event list and abundance
-                all_event_dict: Dict[event_tuple, event number]
+                all_event_dict: List[Dict[event_tuple, event number]]
                     maps events to their event number
                 event_list: List[event_tuple]
                     the reverse of all_event_dict

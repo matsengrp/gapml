@@ -43,7 +43,7 @@ class CollapsedTree:
         return tree
 
     @staticmethod
-    def collapse_same_ancestral(raw_tree: TreeNode, feature_name: str = "observed"):
+    def collapse_same_ancestral(raw_tree: TreeNode, feature_name: str = "observed", idxs: List[int] = None):
         """
         @param feature_name: This feature will be attached to each node
                             The leaf nodes will have this feature be true
@@ -54,7 +54,8 @@ class CollapsedTree:
         tree = CollapsedTree._preprocess(raw_tree)
         tree.label_tree_with_strs()
 
-        idxs = range(len(tree.allele_events_list))
+        if idxs is None:
+            idxs = range(len(tree.allele_events_list))
 
         # collapse if ancestor node has exactly the same events
         for node in tree.traverse(strategy='postorder'):
@@ -67,7 +68,9 @@ class CollapsedTree:
                     if len(c.allele_events_list) != len(node.allele_events_list):
                         all_same = False
                         continue
-                    for c_evts, node_evts in zip(c.allele_events_list, node.allele_events_list):
+                    for idx in idxs:
+                        c_evts = c.allele_events_list[idx]
+                        node_evts = node.allele_events_list[idx]
                         if not c_evts == node_evts:
                             all_same = False
                             break
