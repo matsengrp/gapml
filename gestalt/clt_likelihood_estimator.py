@@ -53,6 +53,19 @@ class CLTPenalizedEstimator(CLTEstimator):
         """
         Finds the best model parameters over `num_inits` initializations
         """
+        # Random branch length checks
+        br_lens = self.model.get_branch_lens()
+        for b in br_lens:
+            print(b)
+        #assert all([b > 0 for b in br_lens])
+        for node in self.model.topology:
+            tot_len = br_lens[node.node_id]
+            up_node = node.up
+            while up_node is not None:
+                tot_len += br_lens[up_node.node_id]
+                up_node = up_node.up
+            print(tot_len)
+
         best_pen_log_lik = self._fit(max_iters, print_iter)
         best_vars = self.model.get_vars()
         for i in range(num_inits - 1):
@@ -88,6 +101,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         """
         for i in range(max_iters):
             if self.lasso_param > 0:
+                1/0
                 # We are actually trying to use the lasso
                 log_lik, log_lik_alleles, log_lik_cell_type, prev_pen_log_lik, grad = self.model.sess.run(
                         [
@@ -142,9 +156,10 @@ class CLTPenalizedEstimator(CLTEstimator):
             else:
                 # Not using the lasso -- use Adam since it's probably faster
                 # Be careful! This could take really bad step sizes since our thing is quite... sensitive
-                _, log_lik, pen_log_lik, log_lik_alleles, log_lik_cell_type = self.model.sess.run(
+                _, log_barr, log_lik, pen_log_lik, log_lik_alleles, log_lik_cell_type = self.model.sess.run(
                         [
                             self.model.adam_train_op,
+                            self.model.branch_log_barr,
                             self.model.log_lik,
                             self.model.smooth_log_lik,
                             self.model.log_lik_alleles,
@@ -152,7 +167,10 @@ class CLTPenalizedEstimator(CLTEstimator):
                         feed_dict={
                             self.model.ridge_param_ph: self.ridge_param
                         })
-
+                print("log barrr", log_barr)
+                print("br", self.model.get_branch_lens())
+                if log_barr == -np.inf:
+                    1/0
             prev_pen_log_lik = pen_log_lik
             if i % print_iter == print_iter - 1:
                 logging.info(

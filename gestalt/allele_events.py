@@ -111,4 +111,4 @@ class AlleleEvents:
         if self.events:
             return "=".join(["_".join([str(e) for e in evts]) for evts in self.events])
         else:
-            return "no_events"
+            return "no_evts"
