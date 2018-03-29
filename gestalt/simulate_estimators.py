@@ -134,6 +134,9 @@ def parse_args():
     parser.add_argument('--max-trees',
             type=int,
             default=1000)
+    parser.add_argument('--num-jumbles',
+            type=int,
+            default=2)
     parser.add_argument('--use-parsimony', action='store_true', help="use mix (CS parsimony) to estimate tree topologies")
     parser.add_argument('--topology-only', action='store_true', help="topology only")
     args = parser.parse_args()
@@ -252,7 +255,8 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_trees):
     #TODO: DOESN'T USE CELL STATE
     parsimony_trees = parsimony_estimator.estimate(
             obs_leaves,
-            max_trees=max_trees)
+            max_trees=max_trees,
+            num_mix_runs=args.num_jumbles)
     logging.info("Total parsimony trees %d", len(parsimony_trees))
 
     # Sort the parsimony trees into their robinson foulds distance from the truth

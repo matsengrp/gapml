@@ -132,14 +132,23 @@ class CLTParsimonyEstimator(CLTEstimator):
             node.add_feature("observed", node.is_leaf())
         return clt
 
-    def _create_mix_cfg(self):
+    def _create_mix_cfg(self, seed_num, num_jumbles=5):
         mix_cfg_lines = [
-                "%s/infile\n" % self.out_folder,
-                "F\n",
-                "%s/outfile\n" % self.out_folder,
+                "%s/infile" % self.out_folder,
+                "F",
+                "%s/outfile" % self.out_folder,
+                "1",
+                "4",
+                "5",
+                "6",
+                "P",
+                "J",
+                # Seed for jumbling must be odd
+                str(seed_num * 2 + 1),
+                str(num_jumbles),
+                "Y"
                 ]
-        with open(MIX_CFG_FILE, "r") as f:
-            mix_cfg_lines += f.readlines()
+        mix_cfg_lines = ["%s\n" % s for s in mix_cfg_lines]
         new_mix_cfg_file = "%s/%s" % (self.out_folder, MIX_CFG_FILE)
         with open(new_mix_cfg_file, "w") as f:
             for line in mix_cfg_lines:
@@ -150,7 +159,8 @@ class CLTParsimonyEstimator(CLTEstimator):
             observations: List[ObservedAlignedSeq],
             encode_hidden: bool = True,
             use_cell_state: bool = False,
-            max_trees: int = -1):
+            max_trees: int = -1,
+            num_mix_runs: int = 2):
         """
         @return a list of unique cell lineage tree estimates
                 calls out to mix on the command line
@@ -160,29 +170,34 @@ class CLTParsimonyEstimator(CLTEstimator):
         """
         processed_seqs, event_dicts, event_list = self._process_observations(
             observations)
-        new_mix_cfg_file = self._create_mix_cfg()
+
+        outfile = "%s/outfile" % self.out_folder
         infile = "%s/infile" % self.out_folder
         abundance_file = "%s/test.abundance" % self.out_folder
-        write_seqs_to_phy(
-                processed_seqs,
-                event_dicts,
-                infile,
-                abundance_file,
-                encode_hidden=encode_hidden,
-                use_cell_state=use_cell_state)
-        outfile = "%s/outfile" % self.out_folder
-        cmd = ["rm -f %s && %s < %s" % (
-            outfile,
-            self.mix_path,
-            new_mix_cfg_file)]
-        res = subprocess.call(cmd, shell=True)
-        # Check that mix ran properly
-        assert res == 0, "Mix failed to run"
+        trees = []
+        for seed_i in range(num_mix_runs):
+            new_mix_cfg_file = self._create_mix_cfg(seed_i)
+            write_seqs_to_phy(
+                    processed_seqs,
+                    event_dicts,
+                    infile,
+                    abundance_file,
+                    encode_hidden=encode_hidden,
+                    use_cell_state=use_cell_state)
+            cmd = ["rm -f %s && %s < %s" % (
+                outfile,
+                self.mix_path,
+                new_mix_cfg_file)]
+            res = subprocess.call(cmd, shell=True)
+            # Check that mix ran properly
+            assert res == 0, "Mix failed to run"
 
-        # Parse the outfile -- these are still regular Tree, not CellLineageTrees
-        # In the future, we can simultaneously build a cell lineage tree while parsing the
-        # output, rather than parsing output and later converting.
-        trees = phylip_parse.parse_outfile(outfile, abundance_file)
+            # Parse the outfile -- these are still regular Tree, not CellLineageTrees
+            # In the future, we can simultaneously build a cell lineage tree while parsing the
+            # output, rather than parsing output and later converting.
+            pars_trees = phylip_parse.parse_outfile(outfile, abundance_file)
+            trees += pars_trees
+
         # If we are only going to take a subset of these trees, let's shuffle them first
         random.shuffle(trees)
         trees = trees[:max_trees]
