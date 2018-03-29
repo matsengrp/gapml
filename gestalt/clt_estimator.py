@@ -2,6 +2,7 @@ from typing import List, Dict, Tuple
 import subprocess
 import re
 import logging
+import random
 
 from ete3 import Tree, TreeNode
 
@@ -127,6 +128,8 @@ class CLTParsimonyEstimator(CLTEstimator):
                     self.bcode_meta),
                 cell_state=None)
         self._do_convert(clt, tree, event_list, processed_obs, processed_abund)
+        for node in clt.traverse():
+            node.add_feature("observed", node.is_leaf())
         return clt
 
     def _create_mix_cfg(self):
@@ -147,7 +150,7 @@ class CLTParsimonyEstimator(CLTEstimator):
             observations: List[ObservedAlignedSeq],
             encode_hidden: bool = True,
             use_cell_state: bool = False,
-            max_uniq_trees: int = None):
+            max_trees: int = -1):
         """
         @return a list of unique cell lineage tree estimates
                 calls out to mix on the command line
@@ -180,42 +183,18 @@ class CLTParsimonyEstimator(CLTEstimator):
         # In the future, we can simultaneously build a cell lineage tree while parsing the
         # output, rather than parsing output and later converting.
         trees = phylip_parse.parse_outfile(outfile, abundance_file)
-
-        # Only return unique trees, so check if trees are equivalent by first
-        # collapsing them to get multifurcating trees
-        # TODO: make this much more efficient - right now checks all other trees
-        #       to see if there is an equiv tree.
-        uniq_trees = []
-        for t in trees:
-            raise NotImplementedError("not done yet")
-            collapsed_est_tree = collapsed_tree.collapse_zero_lens(t)
-            if len(uniq_trees) == 0:
-                uniq_trees.append(collapsed_est_tree)
-            else:
-                # We are going to use the unrooted tree assuming that the collapsed tree output
-                # does not have multifurcating branches...
-                dists = [
-                    collapsed_est_tree.robinson_foulds(
-                        uniq_t,
-                        unrooted_trees=True)[0]
-                    for uniq_t in uniq_trees]
-                if min(dists) > 0:
-                    uniq_trees.append(collapsed_est_tree)
-                    if max_uniq_trees is not None and len(uniq_trees) > max_uniq_trees:
-                        break
-                    else:
-                        continue
-
-        # print('trees post-collapse: {}'.format(len(uniq_trees)))
+        # If we are only going to take a subset of these trees, let's shuffle them first
+        random.shuffle(trees)
+        trees = trees[:max_trees]
 
         # Get a mapping from cell to cell state
         processed_obs = {k: v[2] for k, v in processed_seqs.items()}
         # Get a mapping from cell to abundance
         processed_abund = {k: v[0] for k, v in processed_seqs.items()}
         # Now convert these trees to CLTs
-        uniq_clts = []
-        for t in uniq_trees:
+        clts = []
+        for t in trees:
             clt_new = self.convert_tree_to_clt(t, event_list, processed_obs, processed_abund)
             clt_new.label_tree_with_strs()
-            uniq_clts.append(clt_new)
-        return uniq_clts
+            clts.append(clt_new)
+        return clts
