@@ -20,3 +20,5 @@ MIX_PATH = "~/phylip-3.697/exe/mix"
 
 UNLIKELY = "unlikely"
 PERTURB_ZERO = 1e-10
+
+NO_EVT_STR = "no_evts"

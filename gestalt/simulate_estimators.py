@@ -120,6 +120,7 @@ def parse_args():
             default=0,
             help="lasso parameter on the branch lengths")
     parser.add_argument('--max-iters', type=int, default=2000)
+    parser.add_argument('--max-depth', type=int, default=10)
     parser.add_argument('--min-leaves', type=int, default=2)
     parser.add_argument('--max-leaves', type=int, default=100)
     parser.add_argument('--max-clt-nodes', type=int, default=8000)
@@ -186,31 +187,37 @@ def create_cell_lineage_tree(args, clt_model):
     obs_leaves = set()
     MAX_TRIES = 10
     num_tries = 0
-    clt = clt_simulator.simulate(
+    sim_time = args.time
+    for i in range(MAX_TRIES):
+        clt = clt_simulator.simulate(
             tree_seed = args.model_seed,
             data_seed = args.data_seed,
-            time = args.time,
+            time = sim_time,
             max_nodes = args.max_clt_nodes)
-    sampling_rate = args.sampling_rate
-    while (len(obs_leaves) < args.min_leaves or len(obs_leaves) >= args.max_leaves) and sampling_rate <= 1:
-        # Now sample the leaves and create the true topology
-        obs_leaves, true_tree = observer.observe_leaves(
-                sampling_rate,
-                clt,
-                seed=args.model_seed,
-                observe_cell_state=args.use_cell_state)
-        logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
-        num_tries += 1
-        if len(obs_leaves) < args.min_leaves:
-            sampling_rate += 0.025
-        elif len(obs_leaves) >= args.max_leaves:
-            sampling_rate = max(1e-3, sampling_rate - 0.05)
+        sampling_rate = args.sampling_rate
+        while (len(obs_leaves) < args.min_leaves or len(obs_leaves) >= args.max_leaves) and sampling_rate <= 1:
+            # Now sample the leaves and create the true topology
+            obs_leaves, true_tree = observer.observe_leaves(
+                    sampling_rate,
+                    clt,
+                    seed=args.model_seed,
+                    observe_cell_state=args.use_cell_state)
+
+            if true_tree.get_max_depth() > args.max_depth:
+                sim_time *= 0.8
+                break
+            
+            logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
+            num_tries += 1
+            if len(obs_leaves) < args.min_leaves:
+                sampling_rate += 0.025
+            elif len(obs_leaves) >= args.max_leaves:
+                sampling_rate = max(1e-3, sampling_rate - 0.05)
 
     if len(obs_leaves) < args.min_leaves:
         raise Exception("Could not manage to get enough leaves")
     true_tree.label_tree_with_strs()
     logging.info(true_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-
     # Check all leaves unique because rf distance code requires leaves to be unique
     # The only reason leaves wouldn't be unique is if we are observing cell state OR
     # we happen to have the same allele arise spontaneously in different parts of the tree.
@@ -269,17 +276,18 @@ def compare_lengths(length_dict1, length_dict2, subset, branch_plot_file, label)
     @param branch_plot_file: name of file to save the scatter plot to
     @param label: the label for logging/plotting
     """
-    logging.info("Compare lengths %s", label)
     length_list1 = []
     length_list2 = []
     for k in subset:
         length_list1.append(length_dict1[k])
         length_list2.append(length_dict2[k])
+    logging.info("Compare lengths %s", label)
     logging.info("pearson %s %s", label, pearsonr(length_list1, length_list2))
+    logging.info("pearson (log) %s %s", label, pearsonr(np.log(length_list1), np.log(length_list2)))
     logging.info("spearman %s %s", label, spearmanr(length_list1, length_list2))
     logging.info(length_list1)
     logging.info(length_list2)
-    plt.scatter(length_list1, length_list2)
+    plt.scatter(np.log(length_list1), np.log(length_list2))
     plt.savefig(branch_plot_file)
 
 def main(args=sys.argv[1:]):

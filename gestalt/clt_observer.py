@@ -7,7 +7,7 @@ from allele_events import AlleleEvents
 from cell_state import CellState
 from cell_lineage_tree import CellLineageTree
 from alignment import Aligner
-from collapsed_tree import CollapsedTree
+import collapsed_tree
 
 class ObservedAlignedSeq:
     def __init__(self,
@@ -114,19 +114,16 @@ class CLTObserver:
 
         if give_pruned_clt:
             # Collapse the tree
-            clt = CollapsedTree.collapse_ultrametric(clt)
+            clt = collapsed_tree.collapse_ultrametric(clt)
             obs_evts_list = []
             tree_evts = []
             for o in observations.values():
                 obs_evts_list.append(str(o))
-            print("ooo", len(set(obs_evts_list)))
             for node in clt.traverse():
                 if node.observed:
                     tree_evts.append(node.allele_events_list_str)
             logging.info("diff events? %s", str(set(obs_evts_list) - set(tree_evts)))
-            print(clt.get_ascii(attributes=["observed"], show_internal=True))
-            print(set(tree_evts) - set(obs_evts_list))
-            print(set(obs_evts_list) - set(tree_evts))
+            logging.info("diff events? %s", str(set(tree_evts) - set(obs_evts_list)))
             assert set(tree_evts) == set(obs_evts_list), "the two sets are not equal"
             return list(observations.values()), clt
         else:
