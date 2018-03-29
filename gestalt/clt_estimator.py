@@ -127,6 +127,8 @@ class CLTParsimonyEstimator(CLTEstimator):
                     self.bcode_meta),
                 cell_state=None)
         self._do_convert(clt, tree, event_list, processed_obs, processed_abund)
+        for node in clt.traverse():
+            node.add_feature("observed", node.is_leaf())
         return clt
 
     def _create_mix_cfg(self):
@@ -185,26 +187,26 @@ class CLTParsimonyEstimator(CLTEstimator):
         # collapsing them to get multifurcating trees
         # TODO: make this much more efficient - right now checks all other trees
         #       to see if there is an equiv tree.
-        uniq_trees = []
-        for t in trees:
-            raise NotImplementedError("not done yet")
-            collapsed_est_tree = collapsed_tree.collapse_zero_lens(t)
-            if len(uniq_trees) == 0:
-                uniq_trees.append(collapsed_est_tree)
-            else:
-                # We are going to use the unrooted tree assuming that the collapsed tree output
-                # does not have multifurcating branches...
-                dists = [
-                    collapsed_est_tree.robinson_foulds(
-                        uniq_t,
-                        unrooted_trees=True)[0]
-                    for uniq_t in uniq_trees]
-                if min(dists) > 0:
-                    uniq_trees.append(collapsed_est_tree)
-                    if max_uniq_trees is not None and len(uniq_trees) > max_uniq_trees:
-                        break
-                    else:
-                        continue
+        uniq_trees = trees #[]
+        #for t in trees:
+        #    raise NotImplementedError("not done yet")
+        #    collapsed_est_tree = collapsed_tree.collapse_zero_lens(t)
+        #    if len(uniq_trees) == 0:
+        #        uniq_trees.append(collapsed_est_tree)
+        #    else:
+        #        # We are going to use the unrooted tree assuming that the collapsed tree output
+        #        # does not have multifurcating branches...
+        #        dists = [
+        #            collapsed_est_tree.robinson_foulds(
+        #                uniq_t,
+        #                unrooted_trees=True)[0]
+        #            for uniq_t in uniq_trees]
+        #        if min(dists) > 0:
+        #            uniq_trees.append(collapsed_est_tree)
+        #            if max_uniq_trees is not None and len(uniq_trees) > max_uniq_trees:
+        #                break
+        #            else:
+        #                continue
 
         # print('trees post-collapse: {}'.format(len(uniq_trees)))
 

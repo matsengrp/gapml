@@ -14,6 +14,7 @@ from tensorflow.python import debug as tf_debug
 from scipy.stats import pearsonr, spearmanr, kendalltau
 import logging
 import pickle
+from pathlib import Path
 
 from cell_state import CellState, CellTypeTree
 from cell_state_simulator import CellTypeSimulator
@@ -143,6 +144,12 @@ def parse_args():
     if args.use_parsimony and args.use_cell_state:
         raise ValueError("Cannot use parsimony while observing cell state...")
 
+    if args.use_parsimony:
+        # check that there is no infile in the current folder -- this will
+        # screw up mix because it will use the wrong input file
+        my_file = Path("infile")
+        assert not my_file.exists()
+
     return args
 
 def create_cell_type_tree(args):
@@ -248,18 +255,24 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=
     # Sort the parsimony trees into their robinson foulds distance from the truth
     parsimony_tree_dict = {}
     for tree in parsimony_trees:
-        rf_dist, rf_dist_max = true_tree.get_robinson_foulds_collapsed(
+        print("PARSIM")
+        print(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+        rf_res = true_tree.robinson_foulds(
                 tree,
-                attr1="allele_events_list_str",
-                attr2="allele_events_list_str")
+                attr_t1="allele_events_list_str",
+                attr_t2="allele_events_list_str",
+                expand_polytomies=False,
+                unrooted_trees=False)
+        rf_dist = rf_res[0]
+        rf_dist_max = rf_res[1]
         logging.info("full barcode tree: rf dist %d (max %d)", rf_dist, rf_dist_max)
-        if bcode_meta.num_barcodes > 1:
-            rf_dist, rf_dist_max = true_tree.get_robinson_foulds_collapsed(
-                    tree,
-                    attr1="allele_events_list_str",
-                    attr2="allele_events_list_str",
-                    idxs = [0])
-            logging.info("first barcode tree: rf dist %d (max %d)", rf_dist, rf_dist_max)
+        #if bcode_meta.num_barcodes > 1:
+        #    rf_dist, rf_dist_max = true_tree.get_robinson_foulds_collapsed(
+        #            tree,
+        #            attr1="allele_events_list_str",
+        #            attr2="allele_events_list_str",
+        #            idxs = [0])
+        #    logging.info("first barcode tree: rf dist %d (max %d)", rf_dist, rf_dist_max)
         logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
         logging.info(tree.get_ascii(attributes=["observed"], show_internal=True))
         if rf_dist not in parsimony_tree_dict:
@@ -348,12 +361,12 @@ def main(args=sys.argv[1:]):
         logging.info(true_tree.get_ascii(attributes=["observed"], show_internal=True))
         logging.info("Number of uniq obs alleles %d", len(obs_leaves))
 
-        ## Get the parsimony-estimated topologies
-        #parsimony_tree_dict = get_parsimony_trees(
-        #        obs_leaves,
-        #        args,
-        #        bcode_meta,
-        #        true_tree) if args.use_parsimony else {}
+        # Get the parsimony-estimated topologies
+        parsimony_tree_dict = get_parsimony_trees(
+                obs_leaves,
+                args,
+                bcode_meta,
+                true_tree) if args.use_parsimony else {}
         if args.topology_only:
             print("Done! You only wanted topology estimation")
             return
@@ -388,41 +401,42 @@ def main(args=sys.argv[1:]):
 
         # Fit parsimony trees -- only look at a couple trees per RF distance
         fitting_results = {}
-        #for rf_dist, pars_trees in parsimony_tree_dict.items():
-        #    fitting_results[rf_dist] = []
-        #    logging.info("There are %d trees with RF %d", len(pars_trees), rf_dist)
-        #    for tree in pars_trees[:2]:
-        #        pen_log_lik, res_model = fit_pen_likelihood(tree)
-        #        fitting_results[rf_dist].append((
-        #            pen_log_lik,
-        #            res_model))
+        for rf_dist, pars_trees in parsimony_tree_dict.items():
+            fitting_results[rf_dist] = []
+            logging.info("There are %d trees with RF %d", len(pars_trees), rf_dist)
+            for tree in pars_trees[:10]:
+                pen_log_lik, res_model = fit_pen_likelihood(tree)
+                fitting_results[rf_dist].append((
+                    pen_log_lik,
+                    res_model))
 
-        #        # Print some summaries
-        #        logging.info("Mix pen log lik %f RF %d", pen_log_lik, rf_dist)
-        #        # Compare root to leaf distances
-        #        est_branch_lens = res_model.get_branch_lens()
-        #        est_root_to_observed, est_stupid_root_to_observed = tree.get_root_to_observed_lens(
-        #                est_branch_lens)
-        #        compare_lengths(
-        #                est_root_to_observed,
-        #                true_root_to_observed,
-        #                label="parsimony est vs true root to observed, RF %d" % rf_dist)
-        #        compare_lengths(
-        #                est_stupid_root_to_observed,
-        #                true_root_to_observed,
-        #                label="parsimony stupid est vs true root to observed, RF %d" % rf_dist)
+                # Print some summaries
+                logging.info("Mix pen log lik %f RF %d", pen_log_lik, rf_dist)
+                # Compare root to leaf distances
+                #est_branch_lens = res_model.get_branch_lens()
+                #compare_lengths(
+                #        est_root_to_observed,
+                #        true_root_to_observed,
+                #        label="parsimony est vs true root to observed, RF %d" % rf_dist)
+                #compare_lengths(
+                #        est_stupid_root_to_observed,
+                #        true_root_to_observed,
+                #        label="parsimony stupid est vs true root to observed, RF %d" % rf_dist)
 
         # Correlation between RF dist and likelihood among parsimony trees
-        #rf_dists = []
-        #pen_log_liks = []
-        #for rf_dist, res in fitting_results.items():
-        #    for r in res:
-        #        rf_dists.append(rf_dist)
-        #        pen_log_liks.append(r[0][0])
-        #logging.info("rf_dists %s", str(rf_dists))
-        #logging.info("pen log liks %s", str(pen_log_liks))
-        #logging.info("pearson rf to log lik %s", pearsonr(rf_dists, pen_log_liks))
-        #logging.info("spearman rf to log lik %s", spearmanr(rf_dists, pen_log_liks))
+        if fitting_results:
+            rf_dists = []
+            pen_log_liks = []
+            for rf_dist, res in fitting_results.items():
+                for r in res:
+                    rf_dists.append(rf_dist)
+                    pen_log_liks.append(r[0][0])
+            logging.info("rf_dists %s", str(rf_dists))
+            logging.info("pen log liks %s", str(pen_log_liks))
+            logging.info("pearson rf to log lik %s", pearsonr(rf_dists, pen_log_liks))
+            logging.info("spearman rf to log lik %s", spearmanr(rf_dists, pen_log_liks))
+            plt.scatter(rf_dists, pen_log_liks)
+            plt.savefig("%s/rf_dist_to_ll.png" % args.out_folder)
 
         # Fit oracle tree
         pen_log_lik, oracle_model = fit_pen_likelihood(true_tree)
