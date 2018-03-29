@@ -7,6 +7,7 @@ import numpy as np
 import argparse
 import matplotlib
 matplotlib.use('agg')
+from matplotlib import pyplot as plt
 import time
 import tensorflow as tf
 from tensorflow.python import debug as tf_debug
@@ -82,7 +83,7 @@ def parse_args():
         default=1,
         help='poisson parameter for distribution of insertion in cut site(s)')
     parser.add_argument(
-        '--birth-lambda', type=float, default=1, help='birth rate')
+        '--birth-lambda', type=float, default=2, help='birth rate')
     parser.add_argument(
         '--death-lambda', type=float, default=0.001, help='death rate')
     parser.add_argument(
@@ -109,16 +110,17 @@ def parse_args():
             default=0,
             help="Seed for generating data")
     parser.add_argument(
-            '--ridge-param',
+            '--log-barr',
             type=float,
             default=0.2,
-            help="ridge parameter on the branch lengths")
+            help="log barrier parameter on the branch lengths")
     parser.add_argument(
             '--lasso-param',
             type=float,
-            default=0.1,
+            default=0,
             help="lasso parameter on the branch lengths")
-    parser.add_argument('--max-iters', type=int, default=1000)
+    parser.add_argument('--max-iters', type=int, default=2000)
+    parser.add_argument('--max-depth', type=int, default=10)
     parser.add_argument('--min-leaves', type=int, default=2)
     parser.add_argument('--max-leaves', type=int, default=100)
     parser.add_argument('--max-clt-nodes', type=int, default=8000)
@@ -136,6 +138,7 @@ def parse_args():
     print("Log file", args.log_file)
     args.model_data_file = "%s/model_data.pkl" % args.out_folder
     args.fitted_models_file = "%s/fitted.pkl" % args.out_folder
+    args.branch_plot_file = "%s/branch_lens.png" % args.out_folder
 
     if args.use_parsimony and args.use_cell_state:
         raise ValueError("Cannot use parsimony while observing cell state...")
@@ -184,31 +187,37 @@ def create_cell_lineage_tree(args, clt_model):
     obs_leaves = set()
     MAX_TRIES = 10
     num_tries = 0
-    clt = clt_simulator.simulate(
+    sim_time = args.time
+    for i in range(MAX_TRIES):
+        clt = clt_simulator.simulate(
             tree_seed = args.model_seed,
             data_seed = args.data_seed,
-            time = args.time,
+            time = sim_time,
             max_nodes = args.max_clt_nodes)
-    sampling_rate = args.sampling_rate
-    while (len(obs_leaves) < args.min_leaves or len(obs_leaves) >= args.max_leaves) and sampling_rate <= 1:
-        # Now sample the leaves and create the true topology
-        obs_leaves, true_tree = observer.observe_leaves(
-                sampling_rate,
-                clt,
-                seed=args.model_seed,
-                observe_cell_state=args.use_cell_state)
-        logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
-        num_tries += 1
-        if len(obs_leaves) < args.min_leaves:
-            sampling_rate += 0.025
-        elif len(obs_leaves) >= args.max_leaves:
-            sampling_rate = max(1e-3, sampling_rate - 0.05)
+        sampling_rate = args.sampling_rate
+        while (len(obs_leaves) < args.min_leaves or len(obs_leaves) >= args.max_leaves) and sampling_rate <= 1:
+            # Now sample the leaves and create the true topology
+            obs_leaves, true_tree = observer.observe_leaves(
+                    sampling_rate,
+                    clt,
+                    seed=args.model_seed,
+                    observe_cell_state=args.use_cell_state)
+
+            if true_tree.get_max_depth() > args.max_depth:
+                sim_time *= 0.8
+                break
+            
+            logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
+            num_tries += 1
+            if len(obs_leaves) < args.min_leaves:
+                sampling_rate += 0.025
+            elif len(obs_leaves) >= args.max_leaves:
+                sampling_rate = max(1e-3, sampling_rate - 0.05)
 
     if len(obs_leaves) < args.min_leaves:
         raise Exception("Could not manage to get enough leaves")
     true_tree.label_tree_with_strs()
     logging.info(true_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-
     # Check all leaves unique because rf distance code requires leaves to be unique
     # The only reason leaves wouldn't be unique is if we are observing cell state OR
     # we happen to have the same allele arise spontaneously in different parts of the tree.
@@ -259,16 +268,27 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=
             parsimony_tree_dict[rf_dist].append(tree)
     return parsimony_tree_dict
 
-def compare_lengths(length_dict1, length_dict2, label):
-    logging.info("compare lengths %s", label)
+def compare_lengths(length_dict1, length_dict2, subset, branch_plot_file, label):
+    """
+    Compares branch lengths, logs the results as well as plots them
+
+    @param subset: the subset of keys in the length dicts to use for the comparison
+    @param branch_plot_file: name of file to save the scatter plot to
+    @param label: the label for logging/plotting
+    """
     length_list1 = []
     length_list2 = []
-    for k in length_dict1.keys():
+    for k in subset:
         length_list1.append(length_dict1[k])
         length_list2.append(length_dict2[k])
-        logging.info("%f %f", length_dict1[k], length_dict2[k])
+    logging.info("Compare lengths %s", label)
     logging.info("pearson %s %s", label, pearsonr(length_list1, length_list2))
+    logging.info("pearson (log) %s %s", label, pearsonr(np.log(length_list1), np.log(length_list2)))
     logging.info("spearman %s %s", label, spearmanr(length_list1, length_list2))
+    logging.info(length_list1)
+    logging.info(length_list2)
+    plt.scatter(np.log(length_list1), np.log(length_list2))
+    plt.savefig(branch_plot_file)
 
 def main(args=sys.argv[1:]):
     args = parse_args()
@@ -301,6 +321,7 @@ def main(args=sys.argv[1:]):
                 insert_zero_prob = args.repair_indel_probability,
                 insert_poisson = args.repair_insertion_lambda,
                 cell_type_tree = cell_type_tree)
+        clt_model.set_tot_time(args.time)
         tf.global_variables_initializer().run()
 
         clt, obs_leaves, true_tree = create_cell_lineage_tree(args, clt_model)
@@ -310,12 +331,6 @@ def main(args=sys.argv[1:]):
         for node in true_tree.traverse(CLTLikelihoodModel.NODE_ORDER):
             if not node.is_root():
                 true_branch_lens[node.node_id] = node.dist
-        true_root_to_observed, stupid_root_to_observed = true_tree.get_root_to_observed_lens(
-                true_branch_lens)
-        compare_lengths(
-                stupid_root_to_observed,
-                true_root_to_observed,
-                label="const branch vs true root to observed")
 
         # Save the data
         save_model_data(
@@ -333,12 +348,12 @@ def main(args=sys.argv[1:]):
         logging.info(true_tree.get_ascii(attributes=["observed"], show_internal=True))
         logging.info("Number of uniq obs alleles %d", len(obs_leaves))
 
-        # Get the parsimony-estimated topologies
-        parsimony_tree_dict = get_parsimony_trees(
-                obs_leaves,
-                args,
-                bcode_meta,
-                true_tree) if args.use_parsimony else {}
+        ## Get the parsimony-estimated topologies
+        #parsimony_tree_dict = get_parsimony_trees(
+        #        obs_leaves,
+        #        args,
+        #        bcode_meta,
+        #        true_tree) if args.use_parsimony else {}
         if args.topology_only:
             print("Done! You only wanted topology estimation")
             return
@@ -354,27 +369,18 @@ def main(args=sys.argv[1:]):
                 target_lams = 0.3 * np.ones(args.target_lambdas.size) + np.random.uniform(size=args.num_targets) * 0.08
 
             res_model = CLTLikelihoodModel(
-                    tree,
-                    bcode_meta,
-                    sess,
-                    target_lams = target_lams,
-                    target_lams_known=args.know_target_lambdas,
-                    #trim_long_probs = np.array(args.repair_long_probability),
-                #trim_zero_prob = args.repair_indel_probability,
-                #trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
-                #insert_zero_prob = args.repair_indel_probability,
-                #insert_poisson = args.repair_insertion_lambda,
-                group_branch_lens = np.ones(num_nodes) * 0.3,
-                group_branch_lens_known = args.const_branch_len,
-                #branch_len_perturbs = np.array([n.dist for n in tree.traverse("preorder")]) - 0.3,
-                branch_len_perturbs = np.random.randn(num_nodes) * 0.05 if not args.const_branch_len else np.zeros(num_nodes),
+                tree,
+                bcode_meta,
+                sess,
+                target_lams = target_lams,
+                target_lams_known=args.know_target_lambdas,
+                branch_len_inners = np.random.rand(num_nodes) * 0.1,
                 cell_type_tree = cell_type_tree if args.use_cell_state else None,
                 cell_lambdas_known = args.know_cell_lambdas)
             estimator = CLTPenalizedEstimator(
                     res_model,
                     approximator,
-                    args.ridge_param,
-                    args.lasso_param)
+                    args.log_barr)
             pen_log_lik = estimator.fit(
                     args.num_inits,
                     args.max_iters)
@@ -382,41 +388,41 @@ def main(args=sys.argv[1:]):
 
         # Fit parsimony trees -- only look at a couple trees per RF distance
         fitting_results = {}
-        for rf_dist, pars_trees in parsimony_tree_dict.items():
-            fitting_results[rf_dist] = []
-            logging.info("There are %d trees with RF %d", len(pars_trees), rf_dist)
-            for tree in pars_trees[:2]:
-                pen_log_lik, res_model = fit_pen_likelihood(tree)
-                fitting_results[rf_dist].append((
-                    pen_log_lik,
-                    res_model))
+        #for rf_dist, pars_trees in parsimony_tree_dict.items():
+        #    fitting_results[rf_dist] = []
+        #    logging.info("There are %d trees with RF %d", len(pars_trees), rf_dist)
+        #    for tree in pars_trees[:2]:
+        #        pen_log_lik, res_model = fit_pen_likelihood(tree)
+        #        fitting_results[rf_dist].append((
+        #            pen_log_lik,
+        #            res_model))
 
-                # Print some summaries
-                logging.info("Mix pen log lik %f RF %d", pen_log_lik, rf_dist)
-                # Compare root to leaf distances
-                est_branch_lens = res_model.get_branch_lens()
-                est_root_to_observed, est_stupid_root_to_observed = tree.get_root_to_observed_lens(
-                        est_branch_lens)
-                compare_lengths(
-                        est_root_to_observed,
-                        true_root_to_observed,
-                        label="parsimony est vs true root to observed, RF %d" % rf_dist)
-                compare_lengths(
-                        est_stupid_root_to_observed,
-                        true_root_to_observed,
-                        label="parsimony stupid est vs true root to observed, RF %d" % rf_dist)
+        #        # Print some summaries
+        #        logging.info("Mix pen log lik %f RF %d", pen_log_lik, rf_dist)
+        #        # Compare root to leaf distances
+        #        est_branch_lens = res_model.get_branch_lens()
+        #        est_root_to_observed, est_stupid_root_to_observed = tree.get_root_to_observed_lens(
+        #                est_branch_lens)
+        #        compare_lengths(
+        #                est_root_to_observed,
+        #                true_root_to_observed,
+        #                label="parsimony est vs true root to observed, RF %d" % rf_dist)
+        #        compare_lengths(
+        #                est_stupid_root_to_observed,
+        #                true_root_to_observed,
+        #                label="parsimony stupid est vs true root to observed, RF %d" % rf_dist)
 
         # Correlation between RF dist and likelihood among parsimony trees
-        rf_dists = []
-        pen_log_liks = []
-        for rf_dist, res in fitting_results.items():
-            for r in res:
-                rf_dists.append(rf_dist)
-                pen_log_liks.append(r[0][0])
-        logging.info("rf_dists %s", str(rf_dists))
-        logging.info("pen log liks %s", str(pen_log_liks))
-        logging.info("pearson rf to log lik %s", pearsonr(rf_dists, pen_log_liks))
-        logging.info("spearman rf to log lik %s", spearmanr(rf_dists, pen_log_liks))
+        #rf_dists = []
+        #pen_log_liks = []
+        #for rf_dist, res in fitting_results.items():
+        #    for r in res:
+        #        rf_dists.append(rf_dist)
+        #        pen_log_liks.append(r[0][0])
+        #logging.info("rf_dists %s", str(rf_dists))
+        #logging.info("pen log liks %s", str(pen_log_liks))
+        #logging.info("pearson rf to log lik %s", pearsonr(rf_dists, pen_log_liks))
+        #logging.info("spearman rf to log lik %s", spearmanr(rf_dists, pen_log_liks))
 
         # Fit oracle tree
         pen_log_lik, oracle_model = fit_pen_likelihood(true_tree)
@@ -437,14 +443,16 @@ def main(args=sys.argv[1:]):
         logging.info(args.cell_rates)
 
         # Compare branch lengths
+        subset = [
+                node.node_id for node in true_tree.traverse()
+                if not node.is_leaf() and not node.is_root()]
         est_branch_lens = oracle_model.get_branch_lens()
-        compare_lengths(true_branch_lens, est_branch_lens, label="oracle est vs true branches")
-        # Compare root to leaf dists
-        est_root_to_observed, _ = true_tree.get_root_to_observed_lens(est_branch_lens)
         compare_lengths(
-                est_root_to_observed,
-                true_root_to_observed,
-                label="oracle est vs true root to observed")
+                true_branch_lens,
+                est_branch_lens,
+                subset,
+                branch_plot_file=args.branch_plot_file,
+                label="oracle est vs true branches")
 
         # Also compare target estimates
         fitted_vars = oracle_model.get_vars()

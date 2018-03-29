@@ -107,7 +107,7 @@ class BirthDeathTreeSimulator:
         self._simulate_tree(tree, time)
         return tree
 
-    def _run_race(self, time:float):
+    def _run_race(self):
         """
         Run the race to determine branch length and event at end of branch
         Does not take into account the maximum observation time!
@@ -115,13 +115,13 @@ class BirthDeathTreeSimulator:
                 branch_length: time til the next event
         """
         # Birth rate very high initially?
-        t_birth = expon.rvs(scale=self.birth_scale * sigmoid(-1 + time))
+        t_birth = expon.rvs(scale=self.birth_scale)
         t_death = expon.rvs(scale=self.death_scale)
         division_happens = t_birth < t_death
         branch_length = np.min([t_birth, t_death])
         return division_happens, branch_length
 
-    def _simulate_tree(self, tree: CellLineageTree, time: float):
+    def _simulate_tree(self, tree: CellLineageTree, remain_time: float):
         """
         The recursive function that actually makes the tree
 
@@ -131,16 +131,17 @@ class BirthDeathTreeSimulator:
         self.curr_nodes += 1
         if self.curr_nodes > self.max_nodes:
             print("too many nodes")
+            1/0
             return
 
-        if time == 0:
+        if remain_time == 0:
             print("time out")
             return
 
         # Determine branch length and event at end of branch
-        division_happens, branch_length = self._run_race(time)
-        obs_branch_length = min(branch_length, time)
-        remain_time = time - obs_branch_length
+        division_happens, branch_length = self._run_race()
+        obs_branch_length = min(branch_length, remain_time)
+        remain_time = remain_time - obs_branch_length
 
         # Keep allele/cell state constant
         branch_end_cell_state = tree.cell_state

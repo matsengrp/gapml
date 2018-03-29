@@ -40,9 +40,7 @@ class CLTLikelihoodModel:
             insert_zero_prob: float = 0.5,
             insert_poisson: float = 0.2,
             double_cut_weight: float = 1.0,
-            group_branch_lens: ndarray = np.array([]),
-            group_branch_lens_known: bool = False,
-            branch_len_perturbs: ndarray = np.array([]),
+            branch_len_inners: ndarray = np.array([]),
             cell_type_tree: CellTypeTree = None,
             cell_lambdas_known: bool = False):
         """
@@ -57,6 +55,7 @@ class CLTLikelihoodModel:
         self.num_nodes = 0
         if self.topology:
             self.root_node_id, self.num_nodes = topology.label_node_ids(self.NODE_ORDER)
+            assert self.root_node_id == 0
         self.bcode_meta = bcode_meta
         self.num_targets = bcode_meta.n_targets
         self.double_cut_weight = double_cut_weight
@@ -81,7 +80,10 @@ class CLTLikelihoodModel:
 
         self.target_lams_known = target_lams_known
         self.cell_lambdas_known = cell_lambdas_known
-        self.group_branch_lens_known = group_branch_lens_known
+
+        # Stores the penalty parameter
+        self.log_barr_ph = tf.placeholder(tf.float64)
+        self.tot_time_ph = tf.placeholder(tf.float64)
 
         # Create all the variables
         self._create_parameters(
@@ -91,17 +93,12 @@ class CLTLikelihoodModel:
                 trim_poissons,
                 [insert_zero_prob],
                 [insert_poisson],
-                group_branch_lens,
-                branch_len_perturbs,
+                branch_len_inners,
                 cell_type_lams)
-
-        # Stores the penalty parameter
-        self.lasso_param_ph = tf.placeholder(tf.float64)
-        self.ridge_param_ph = tf.placeholder(tf.float64)
 
         self._create_hazard_node_for_simulation()
 
-        self.adam_opt = tf.train.AdamOptimizer(learning_rate=0.01)
+        self.adam_opt = tf.train.AdamOptimizer(learning_rate=0.005)
 
     def _create_parameters(self,
             target_lams: ndarray,
@@ -110,8 +107,7 @@ class CLTLikelihoodModel:
             trim_poissons: ndarray,
             insert_zero_prob: float,
             insert_poisson: float,
-            group_branch_lens: ndarray,
-            branch_len_perturbs: ndarray,
+            branch_len_inners: ndarray,
             cell_type_lams: ndarray):
         # Fix the first target value -- not for optimization
         model_params = np.concatenate([
@@ -121,8 +117,7 @@ class CLTLikelihoodModel:
                     np.log(trim_poissons),
                     inv_sigmoid(insert_zero_prob),
                     np.log(insert_poisson),
-                    [] if self.group_branch_lens_known else np.log(group_branch_lens),
-                    branch_len_perturbs,
+                    np.log(branch_len_inners),
                     [] if self.cell_lambdas_known else np.log(cell_type_lams)])
         self.all_vars = tf.Variable(model_params, dtype=tf.float64)
         self.all_vars_ph = tf.placeholder(tf.float64, shape=self.all_vars.shape)
@@ -156,16 +151,8 @@ class CLTLikelihoodModel:
         up_to_size += 1
         self.insert_poisson = tf.exp(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
-        if self.group_branch_lens_known:
-            self.group_branch_lens = tf.constant(group_branch_lens, dtype=tf.float64)
-        else:
-            up_to_size += group_branch_lens.size
-            self.group_branch_lens = tf.exp(self.all_vars[prev_size: up_to_size])
-            prev_size = up_to_size
-        up_to_size += branch_len_perturbs.size
-        # Helper indices to know which values to apply lasso to
-        self.lasso_idx = np.arange(prev_size, up_to_size)
-        self.branch_len_perturbs = self.all_vars[prev_size: up_to_size]
+        up_to_size += branch_len_inners.size
+        self.branch_len_inners = tf.exp(self.all_vars[prev_size: up_to_size])
         if self.cell_type_tree:
             if self.cell_lambdas_known:
                 self.cell_type_lams = tf.constant(cell_type_lams, dtype=tf.float64)
@@ -182,15 +169,21 @@ class CLTLikelihoodModel:
         # Get branch lengths
         if self.topology:
             branch_lens_dict = []
-            # tree traversal order doesnt matter
+            dist_to_root = {self.root_node_id: 0}
             for node in self.topology.traverse("preorder"):
-                if not node.is_root():
+                if not node.is_root() and not node.is_leaf():
                     branch_lens_dict.append([
                         [node.node_id],
-                        self.group_branch_lens[node.up.node_id] + self.branch_len_perturbs[node.node_id]])
+                        self.branch_len_inners[node.node_id]])
+                    dist_to_root[node.node_id] = dist_to_root[node.up.node_id] + self.branch_len_inners[node.node_id]
+                elif node.is_leaf():
+                    branch_lens_dict.append([
+                        [node.node_id],
+                        self.tot_time_ph - dist_to_root[node.up.node_id]])
+
             self.branch_lens = tf_common.scatter_nd(
                     branch_lens_dict,
-                    output_shape=self.branch_len_perturbs.shape,
+                    output_shape=self.branch_len_inners.shape,
                     name="branch_lengths")
 
     def set_params(self,
@@ -200,12 +193,14 @@ class CLTLikelihoodModel:
             trim_poissons: ndarray,
             insert_zero_prob: float,
             insert_poisson: float,
-            group_branch_lens: ndarray,
-            branch_len_perturbs: ndarray,
-            cell_type_lams: ndarray):
+            branch_len_inners: ndarray,
+            cell_type_lams: ndarray,
+            tot_time: float):
         """
         Set model params
+        Should be very similar code to _create_parameters
         """
+        self.tot_time = tot_time
         if self.cell_type_tree is None:
             cell_type_lams = np.array([])
 
@@ -216,8 +211,7 @@ class CLTLikelihoodModel:
             np.log(trim_poissons),
             inv_sigmoid(insert_zero_prob),
             np.log(insert_poisson),
-            [] if self.group_branch_lens_known else np.log(group_branch_lens),
-            branch_len_perturbs,
+            np.log(branch_len_inners),
             [] if self.cell_lambdas_known else np.log(cell_type_lams)])
         self.sess.run(self.assign_op, feed_dict={self.all_vars_ph: init_val})
 
@@ -232,9 +226,8 @@ class CLTLikelihoodModel:
             self.trim_poissons,
             self.insert_zero_prob,
             self.insert_poisson,
-            self.group_branch_lens,
-            self.branch_len_perturbs,
-            self.cell_type_lams])
+            self.branch_len_inners,
+            self.cell_type_lams]) + [self.tot_time]
 
     def get_vars_as_dict(self):
         """
@@ -248,16 +241,21 @@ class CLTLikelihoodModel:
             "trim_poissons",
             "insert_zero_prob",
             "insert_poisson",
-            "group_branch_lens",
-            "branch_len_perturbs",
+            "branch_len_inners",
             "cell_type_lams"]
-        return {lab: val for lab, val in zip(var_labels, var_vals)}
+        var_dict = {lab: val for lab, val in zip(var_labels, var_vals)}
+        var_dict["tot_time"] = self.tot_time
+        return var_dict
+
+    def set_tot_time(self, tot_time):
+        self.tot_time = tot_time
 
     def get_branch_lens(self):
         """
         @return dictionary of branch length (node id to branch length)
         """
-        return self.sess.run(self.branch_lens)
+        return self.sess.run(self.branch_lens, feed_dict={
+            self.tot_time_ph: self.tot_time})
 
     def _create_hazard_node_for_simulation(self):
         """
@@ -770,20 +768,15 @@ class CLTLikelihoodModel:
             self.create_cell_type_log_lik()
             self.log_lik = self.log_lik_cell_type + self.log_lik_alleles
 
+        self.branch_log_barr = tf.reduce_sum(tf.log(
+            self.branch_lens[self.root_node_id + 1:]))
         self.smooth_log_lik = tf.add(
                 self.log_lik,
-                -self.ridge_param_ph * (
-                    tf.reduce_sum(tf.pow(self.group_branch_lens, 2))
-                    + tf.reduce_sum(tf.pow(self.branch_len_perturbs, 2))))
+                self.log_barr_ph * self.branch_log_barr)
         self.smooth_log_lik_grad = self.adam_opt.compute_gradients(
             self.smooth_log_lik,
             var_list=[self.all_vars])
         self.adam_train_op = self.adam_opt.minimize(-self.smooth_log_lik, var_list=self.all_vars)
-
-        self.lasso_log_lik = tf.add(
-                self.smooth_log_lik,
-                -self.lasso_param_ph * tf.reduce_sum(tf.abs(self.branch_len_perturbs)),
-                name="final_pen_log_lik")
 
     def _create_transition_matrix(self,
             matrix_wrapper: TransitionMatrixWrapper,

@@ -8,7 +8,7 @@ from ete3 import Tree, TreeNode
 from clt_observer import ObservedAlignedSeq
 from fastq_to_phylip import write_seqs_to_phy
 import phylip_parse
-from collapsed_tree import CollapsedTree
+import collapsed_tree
 from cell_lineage_tree import CellLineageTree
 from allele import Allele, AlleleList
 from allele_events import Event
@@ -187,7 +187,8 @@ class CLTParsimonyEstimator(CLTEstimator):
         #       to see if there is an equiv tree.
         uniq_trees = []
         for t in trees:
-            collapsed_est_tree = CollapsedTree.collapse_zero_lens(t)
+            raise NotImplementedError("not done yet")
+            collapsed_est_tree = collapsed_tree.collapse_zero_lens(t)
             if len(uniq_trees) == 0:
                 uniq_trees.append(collapsed_est_tree)
             else:

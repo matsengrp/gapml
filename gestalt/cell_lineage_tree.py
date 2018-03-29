@@ -19,8 +19,8 @@ from Bio import AlignIO, SeqIO
 from allele import Allele, AlleleList
 from allele_events import AlleleEvents
 from cell_state import CellState
-from collapsed_tree import CollapsedTree
 from common import get_color
+from constants import NO_EVT_STR
 
 
 class CellLineageTree(TreeNode):
@@ -72,10 +72,23 @@ class CellLineageTree(TreeNode):
     def _allele_list_to_str(allele_evts_list):
         return_str = "||".join([str(a) for a in allele_evts_list])
         if return_str == "":
-            return "no_evts"
+            return NO_EVT_STR
         else:
             return return_str
 
+    def get_max_depth(self):
+        """
+        @return maximum number of nodes between leaf and root
+        """
+        max_depth = 0
+        for leaf in self:
+            node = leaf
+            depth = 0
+            while node.up is not None:
+                node = node.up
+                depth += 1
+            max_depth = max(depth, max_depth)
+        return max_depth
 
     def _create_sequences(self):
         """
@@ -304,35 +317,35 @@ class CellLineageTree(TreeNode):
                 new_node.add_feature(k, getattr(node, k))
         return new_node
 
-    def get_robinson_foulds_collapsed(self, coll_tree2, attr1, attr2, idxs=None):
-        def make_fake_leaves(tree, attr):
-            for node in tree.traverse():
-                if getattr(node, attr) and not node.is_leaf():
-                    new_child = CellLineageTree.convert(
-                            node,
-                            node.allele_list,
-                            node.allele_events_list,
-                            node.cell_state,
-                            0)
-                    node.add_child(new_child)
+    #def get_robinson_foulds_collapsed(self, coll_tree2, attr1, attr2, idxs=None):
+    #    def make_fake_leaves(tree, attr):
+    #        for node in tree.traverse():
+    #            if getattr(node, attr) and not node.is_leaf():
+    #                new_child = CellLineageTree.convert(
+    #                        node,
+    #                        node.allele_list,
+    #                        node.allele_events_list,
+    #                        node.cell_state,
+    #                        0)
+    #                node.add_child(new_child)
 
-        tree1 = self.copy()
-        tree2 = coll_tree2.copy()
-        if idxs is not None:
-            tree1 = CollapsedTree.collapse_same_ancestral(tree1, idxs=idxs)
-            tree2 = CollapsedTree.collapse_same_ancestral(tree2, idxs=idxs)
+    #    tree1 = self.copy()
+    #    tree2 = coll_tree2.copy()
+    #    if idxs is not None:
+    #        tree1 = CollapsedTree.collapse_same_ancestral(tree1, idxs=idxs)
+    #        tree2 = CollapsedTree.collapse_same_ancestral(tree2, idxs=idxs)
 
-        make_fake_leaves(tree1, attr1)
-        make_fake_leaves(tree2, attr2)
-        rf_dist_res = tree1.robinson_foulds(
-                tree2,
-                attr_t1=attr1,
-                attr_t2=attr2,
-                # The expand_polytomies option is buggy.
-                # Also, I think we actually want the unrooted calculation.
-                expand_polytomies=False,
-                unrooted_trees=True)
-        return rf_dist_res[0], rf_dist_res[1]
+    #    make_fake_leaves(tree1, attr1)
+    #    make_fake_leaves(tree2, attr2)
+    #    rf_dist_res = tree1.robinson_foulds(
+    #            tree2,
+    #            attr_t1=attr1,
+    #            attr_t2=attr2,
+    #            # The expand_polytomies option is buggy.
+    #            # Also, I think we actually want the unrooted calculation.
+    #            expand_polytomies=False,
+    #            unrooted_trees=True)
+    #    return rf_dist_res[0], rf_dist_res[1]
 
     def get_root_to_observed_lens(self, est_branch_lens = None):
         use_dist = est_branch_lens is None

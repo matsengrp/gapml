@@ -3,7 +3,7 @@ from typing import Dict
 import numpy as np
 
 from cell_state import CellTypeTree
-from constants import NUM_BARCODE_V7_TARGETS
+from constants import NUM_BARCODE_V7_TARGETS, NO_EVT_STR
 
 """
 Objects for representing a allele using an event-encoded format
@@ -111,4 +111,4 @@ class AlleleEvents:
         if self.events:
             return "=".join(["_".join([str(e) for e in evts]) for evts in self.events])
         else:
-            return "no_events"
+            return NO_EVT_STR
