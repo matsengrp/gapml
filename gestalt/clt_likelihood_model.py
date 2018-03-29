@@ -56,6 +56,7 @@ class CLTLikelihoodModel:
         self.num_nodes = 0
         if self.topology:
             self.root_node_id, self.num_nodes = topology.label_node_ids(self.NODE_ORDER)
+            assert self.root_node_id == 0
         self.bcode_meta = bcode_meta
         self.num_targets = bcode_meta.n_targets
         self.double_cut_weight = double_cut_weight
@@ -94,12 +95,11 @@ class CLTLikelihoodModel:
                 cell_type_lams)
 
         # Stores the penalty parameter
-        self.lasso_param_ph = tf.placeholder(tf.float64)
-        self.ridge_param_ph = tf.placeholder(tf.float64)
+        self.log_barr_ph = tf.placeholder(tf.float64)
 
         self._create_hazard_node_for_simulation()
 
-        self.adam_opt = tf.train.AdamOptimizer(learning_rate=0.001)
+        self.adam_opt = tf.train.AdamOptimizer(learning_rate=0.005)
 
     def _create_parameters(self,
             target_lams: ndarray,
@@ -171,7 +171,6 @@ class CLTLikelihoodModel:
         if self.topology:
             branch_lens_dict = []
             dist_to_root = {self.root_node_id: 0}
-            # tree traversal order doesnt matter
             for node in self.topology.traverse("preorder"):
                 if not node.is_root() and not node.is_leaf():
                     branch_lens_dict.append([
@@ -762,20 +761,15 @@ class CLTLikelihoodModel:
             self.create_cell_type_log_lik()
             self.log_lik = self.log_lik_cell_type + self.log_lik_alleles
 
-        print("root id", self.root_node_id)
         self.branch_log_barr = tf.reduce_sum(tf.log(
             self.branch_lens[self.root_node_id + 1:]))
         self.smooth_log_lik = tf.add(
                 self.log_lik,
-                self.ridge_param_ph * self.branch_log_barr)
-                #-self.ridge_param_ph * (
-                #    tf.reduce_sum(tf.pow(self.branch_len_inners, 2))))
+                self.log_barr_ph * self.branch_log_barr)
         self.smooth_log_lik_grad = self.adam_opt.compute_gradients(
             self.smooth_log_lik,
             var_list=[self.all_vars])
         self.adam_train_op = self.adam_opt.minimize(-self.smooth_log_lik, var_list=self.all_vars)
-
-        self.lasso_log_lik = self.smooth_log_lik
 
     def _create_transition_matrix(self,
             matrix_wrapper: TransitionMatrixWrapper,

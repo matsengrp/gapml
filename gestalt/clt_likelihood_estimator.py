@@ -23,16 +23,13 @@ class CLTPenalizedEstimator(CLTEstimator):
         self,
         model: CLTLikelihoodModel,
         approximator: ApproximatorLB,
-        ridge_param: float,
-        lasso_param: float):
+        log_barr: float):
         """
-        @param penalty_param: lasso penalty parameter
         @param model: initial CLT model params
         """
         self.model = model
         self.approximator = approximator
-        self.ridge_param = ridge_param
-        self.lasso_param = lasso_param
+        self.log_barr = log_barr
 
         # Create the skeletons for the transition matrices -- via state sum approximation
         self.transition_mat_wrappers = self.approximator.create_transition_matrix_wrappers(model)
@@ -53,18 +50,9 @@ class CLTPenalizedEstimator(CLTEstimator):
         """
         Finds the best model parameters over `num_inits` initializations
         """
-        # Random branch length checks
+        # Before starting, check that branch lengths are all positive
         br_lens = self.model.get_branch_lens()
-        for b in br_lens:
-            print(b)
-        #assert all([b > 0 for b in br_lens])
-        for node in self.model.topology:
-            tot_len = br_lens[node.node_id]
-            up_node = node.up
-            while up_node is not None:
-                tot_len += br_lens[up_node.node_id]
-                up_node = up_node.up
-            print(tot_len)
+        assert all([b > 0 for b in br_lens[1:]])
 
         best_pen_log_lik = self._fit(max_iters, print_iter)
         best_vars = self.model.get_vars()
@@ -100,77 +88,18 @@ class CLTPenalizedEstimator(CLTEstimator):
         Fits for a single initialization -- runs proximal gradient descent
         """
         for i in range(max_iters):
-            if self.lasso_param > 0:
-                1/0
-                # We are actually trying to use the lasso
-                log_lik, log_lik_alleles, log_lik_cell_type, prev_pen_log_lik, grad = self.model.sess.run(
-                        [
-                            self.model.log_lik,
-                            self.model.log_lik_alleles,
-                            self.model.log_lik_cell_type,
-                            self.model.lasso_log_lik,
-                            self.model.smooth_log_lik_grad],
-                        feed_dict={
-                            self.model.lasso_param_ph: self.lasso_param,
-                            self.model.ridge_param_ph: self.ridge_param
-                        })
+            _, log_lik, pen_log_lik, log_lik_alleles, log_lik_cell_type = self.model.sess.run(
+                    [
+                        self.model.adam_train_op,
+                        self.model.log_lik,
+                        self.model.smooth_log_lik,
+                        self.model.log_lik_alleles,
+                        self.model.log_lik_cell_type],
+                    feed_dict={
+                        self.model.log_barr_ph: self.log_barr
+                    })
+            assert pen_log_lik != -np.inf
 
-                neg_mask = None
-                while True:
-                    # Try tentative step
-                    grad_val = grad[0][0]
-                    # Gradient step on the smooth part
-                    var_val = grad[0][1] + grad_val * step_size
-                    val_to_lasso = var_val[self.model.lasso_idx]
-                    # soft threshold
-                    val_soft_thres = np.multiply(
-                            np.sign(val_to_lasso),
-                            np.clip(np.abs(val_to_lasso) - step_size * self.lasso_param, a_min=0, a_max=None))
-                    if neg_mask is not None:
-                        # If things are negative, here is a last-ditch effort
-                        val_soft_thres[neg_mask] = -branch_lens[neg_mask] + 1e-6
-                    var_val[self.model.lasso_idx] = val_soft_thres
-                    self.model.sess.run(
-                            self.model.assign_op,
-                            feed_dict={self.model.all_vars_ph: var_val})
-
-                    # figure out if this updated variable helped
-                    pen_log_lik, branch_lens = self.model.sess.run(
-                        [self.model.lasso_log_lik, self.model.branch_lens],
-                        feed_dict={
-                            self.model.lasso_param_ph: self.lasso_param,
-                            self.model.ridge_param_ph: self.ridge_param})
-                    if pen_log_lik > prev_pen_log_lik * 1.01 and np.all(branch_lens[1:] > 0):
-                        # Ensure the penalized log likelihood is increasing
-                        # and the branch length (excluding the root) are all positive
-                        break
-                    else:
-                        if np.any(branch_lens[1:] < 0):
-                            logging.info('BRANCH LENGTH NEGATIVE %s', str(branch_lens))
-                            neg_mask = branch_lens < 0
-                        logging.info("pen_log_lik %f prev_pen_log_lik %f", pen_log_lik, prev_pen_log_lik)
-                        step_size *= 0.5
-                        if step_size < 1e-10:
-                            logging.info("step size too small")
-                            return pen_log_lik
-            else:
-                # Not using the lasso -- use Adam since it's probably faster
-                # Be careful! This could take really bad step sizes since our thing is quite... sensitive
-                _, log_barr, log_lik, pen_log_lik, log_lik_alleles, log_lik_cell_type = self.model.sess.run(
-                        [
-                            self.model.adam_train_op,
-                            self.model.branch_log_barr,
-                            self.model.log_lik,
-                            self.model.smooth_log_lik,
-                            self.model.log_lik_alleles,
-                            self.model.log_lik_cell_type],
-                        feed_dict={
-                            self.model.ridge_param_ph: self.ridge_param
-                        })
-                print("log barrr", log_barr)
-                print("br", self.model.get_branch_lens())
-                if log_barr == -np.inf:
-                    1/0
             prev_pen_log_lik = pen_log_lik
             if i % print_iter == print_iter - 1:
                 logging.info(

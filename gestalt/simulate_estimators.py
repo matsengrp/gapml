@@ -109,16 +109,16 @@ def parse_args():
             default=0,
             help="Seed for generating data")
     parser.add_argument(
-            '--ridge-param',
+            '--log-barr',
             type=float,
             default=0.2,
-            help="ridge parameter on the branch lengths")
+            help="log barrier parameter on the branch lengths")
     parser.add_argument(
             '--lasso-param',
             type=float,
             default=0,
             help="lasso parameter on the branch lengths")
-    parser.add_argument('--max-iters', type=int, default=1000)
+    parser.add_argument('--max-iters', type=int, default=2000)
     parser.add_argument('--min-leaves', type=int, default=2)
     parser.add_argument('--max-leaves', type=int, default=100)
     parser.add_argument('--max-clt-nodes', type=int, default=8000)
@@ -259,14 +259,14 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=
             parsimony_tree_dict[rf_dist].append(tree)
     return parsimony_tree_dict
 
-def compare_lengths(length_dict1, length_dict2, label):
+def compare_lengths(length_dict1, length_dict2, subset, label):
     logging.info("compare lengths %s", label)
     length_list1 = []
     length_list2 = []
-    for k in length_dict1.keys():
+    for k in subset: #length_dict1.keys():
         length_list1.append(length_dict1[k])
         length_list2.append(length_dict2[k])
-        logging.info("%f %f", length_dict1[k], length_dict2[k])
+    #    logging.info("%f %f", length_dict1[k], length_dict2[k])
     logging.info("pearson %s %s", label, pearsonr(length_list1, length_list2))
     logging.info("spearman %s %s", label, spearmanr(length_list1, length_list2))
 
@@ -364,8 +364,7 @@ def main(args=sys.argv[1:]):
             estimator = CLTPenalizedEstimator(
                     res_model,
                     approximator,
-                    args.ridge_param,
-                    args.lasso_param)
+                    args.log_barr)
             pen_log_lik = estimator.fit(
                     args.num_inits,
                     args.max_iters)
@@ -408,6 +407,29 @@ def main(args=sys.argv[1:]):
         #logging.info("pen log liks %s", str(pen_log_liks))
         #logging.info("pearson rf to log lik %s", pearsonr(rf_dists, pen_log_liks))
         #logging.info("spearman rf to log lik %s", spearmanr(rf_dists, pen_log_liks))
+        stupid_tree = true_tree.copy()
+        max_dist = 0
+        for node in stupid_tree.traverse("preorder"):
+            if not node.is_root():
+                node.dist = 1
+                node.add_feature("dist_to_root", node.up.dist_to_root + 1)
+            else:
+                node.dist = 0
+            if node.is_leaf():
+                max_dist = max(node.dist_to_root, max_dist)
+        
+        for node in stupid_tree:
+            node.dist = max_dist - node.up.dist_to_root
+        stupid_br_lens = {}
+        for node in stupid_tree.traverse():
+            stupid_br_lens[node.node_id] = node.dist
+        subset = []
+        for node in stupid_tree.traverse():
+            if node.is_leaf() or node.is_root():
+                continue
+            else:
+                subset.append(node.node_id)
+        compare_lengths(true_branch_lens, stupid_br_lens, subset, label="oracle est vs stupid branches")
 
         # Fit oracle tree
         pen_log_lik, oracle_model = fit_pen_likelihood(true_tree)
@@ -429,7 +451,8 @@ def main(args=sys.argv[1:]):
 
         # Compare branch lengths
         est_branch_lens = oracle_model.get_branch_lens()
-        compare_lengths(true_branch_lens, est_branch_lens, label="oracle est vs true branches")
+        compare_lengths(true_branch_lens, est_branch_lens, subset, label="oracle est vs true branches")
+        compare_lengths(true_branch_lens, stupid_br_lens, subset, label="oracle est vs stupid branches")
 
         # Also compare target estimates
         fitted_vars = oracle_model.get_vars()
