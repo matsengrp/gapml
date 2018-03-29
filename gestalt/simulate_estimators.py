@@ -131,6 +131,9 @@ def parse_args():
             type=str,
             default=MIX_PATH)
     parser.add_argument('--use-cell-state', action='store_true')
+    parser.add_argument('--max-trees',
+            type=int,
+            default=1000)
     parser.add_argument('--use-parsimony', action='store_true', help="use mix (CS parsimony) to estimate tree topologies")
     parser.add_argument('--topology-only', action='store_true', help="topology only")
     args = parser.parse_args()
@@ -241,7 +244,7 @@ def create_cell_lineage_tree(args, clt_model):
 
     return clt, obs_leaves, true_tree
 
-def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=100):
+def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_trees):
     parsimony_estimator = CLTParsimonyEstimator(
             bcode_meta,
             args.out_folder,
@@ -249,14 +252,12 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=
     #TODO: DOESN'T USE CELL STATE
     parsimony_trees = parsimony_estimator.estimate(
             obs_leaves,
-            max_uniq_trees=max_uniq_trees)
+            max_trees=max_trees)
     logging.info("Total parsimony trees %d", len(parsimony_trees))
 
     # Sort the parsimony trees into their robinson foulds distance from the truth
     parsimony_tree_dict = {}
     for tree in parsimony_trees:
-        print("PARSIM")
-        print(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
         rf_res = true_tree.robinson_foulds(
                 tree,
                 attr_t1="allele_events_list_str",
@@ -266,13 +267,6 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=
         rf_dist = rf_res[0]
         rf_dist_max = rf_res[1]
         logging.info("full barcode tree: rf dist %d (max %d)", rf_dist, rf_dist_max)
-        #if bcode_meta.num_barcodes > 1:
-        #    rf_dist, rf_dist_max = true_tree.get_robinson_foulds_collapsed(
-        #            tree,
-        #            attr1="allele_events_list_str",
-        #            attr2="allele_events_list_str",
-        #            idxs = [0])
-        #    logging.info("first barcode tree: rf dist %d (max %d)", rf_dist, rf_dist_max)
         logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
         logging.info(tree.get_ascii(attributes=["observed"], show_internal=True))
         if rf_dist not in parsimony_tree_dict:
@@ -366,7 +360,8 @@ def main(args=sys.argv[1:]):
                 obs_leaves,
                 args,
                 bcode_meta,
-                true_tree) if args.use_parsimony else {}
+                true_tree,
+                args.max_trees) if args.use_parsimony else {}
         if args.topology_only:
             print("Done! You only wanted topology estimation")
             return
@@ -412,16 +407,6 @@ def main(args=sys.argv[1:]):
 
                 # Print some summaries
                 logging.info("Mix pen log lik %f RF %d", pen_log_lik, rf_dist)
-                # Compare root to leaf distances
-                #est_branch_lens = res_model.get_branch_lens()
-                #compare_lengths(
-                #        est_root_to_observed,
-                #        true_root_to_observed,
-                #        label="parsimony est vs true root to observed, RF %d" % rf_dist)
-                #compare_lengths(
-                #        est_stupid_root_to_observed,
-                #        true_root_to_observed,
-                #        label="parsimony stupid est vs true root to observed, RF %d" % rf_dist)
 
         # Correlation between RF dist and likelihood among parsimony trees
         if fitting_results:
