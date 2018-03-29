@@ -7,6 +7,7 @@ import numpy as np
 import argparse
 import matplotlib
 matplotlib.use('agg')
+from matplotlib import pyplot as plt
 import time
 import tensorflow as tf
 from tensorflow.python import debug as tf_debug
@@ -82,7 +83,7 @@ def parse_args():
         default=1,
         help='poisson parameter for distribution of insertion in cut site(s)')
     parser.add_argument(
-        '--birth-lambda', type=float, default=1, help='birth rate')
+        '--birth-lambda', type=float, default=2, help='birth rate')
     parser.add_argument(
         '--death-lambda', type=float, default=0.001, help='death rate')
     parser.add_argument(
@@ -136,6 +137,7 @@ def parse_args():
     print("Log file", args.log_file)
     args.model_data_file = "%s/model_data.pkl" % args.out_folder
     args.fitted_models_file = "%s/fitted.pkl" % args.out_folder
+    args.branch_plot_file = "%s/branch_lens.png" % args.out_folder
 
     if args.use_parsimony and args.use_cell_state:
         raise ValueError("Cannot use parsimony while observing cell state...")
@@ -259,16 +261,26 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_uniq_trees=
             parsimony_tree_dict[rf_dist].append(tree)
     return parsimony_tree_dict
 
-def compare_lengths(length_dict1, length_dict2, subset, label):
-    logging.info("compare lengths %s", label)
+def compare_lengths(length_dict1, length_dict2, subset, branch_plot_file, label):
+    """
+    Compares branch lengths, logs the results as well as plots them
+
+    @param subset: the subset of keys in the length dicts to use for the comparison
+    @param branch_plot_file: name of file to save the scatter plot to
+    @param label: the label for logging/plotting
+    """
+    logging.info("Compare lengths %s", label)
     length_list1 = []
     length_list2 = []
-    for k in subset: #length_dict1.keys():
+    for k in subset:
         length_list1.append(length_dict1[k])
         length_list2.append(length_dict2[k])
-    #    logging.info("%f %f", length_dict1[k], length_dict2[k])
     logging.info("pearson %s %s", label, pearsonr(length_list1, length_list2))
     logging.info("spearman %s %s", label, spearmanr(length_list1, length_list2))
+    logging.info(length_list1)
+    logging.info(length_list2)
+    plt.scatter(length_list1, length_list2)
+    plt.savefig(branch_plot_file)
 
 def main(args=sys.argv[1:]):
     args = parse_args()
@@ -301,6 +313,7 @@ def main(args=sys.argv[1:]):
                 insert_zero_prob = args.repair_indel_probability,
                 insert_poisson = args.repair_insertion_lambda,
                 cell_type_tree = cell_type_tree)
+        clt_model.set_tot_time(args.time)
         tf.global_variables_initializer().run()
 
         clt, obs_leaves, true_tree = create_cell_lineage_tree(args, clt_model)
@@ -348,16 +361,11 @@ def main(args=sys.argv[1:]):
                 target_lams = 0.3 * np.ones(args.target_lambdas.size) + np.random.uniform(size=args.num_targets) * 0.08
 
             res_model = CLTLikelihoodModel(
-                    tree,
-                    bcode_meta,
-                    sess,
-                    target_lams = target_lams,
-                    target_lams_known=args.know_target_lambdas,
-                    #trim_long_probs = np.array(args.repair_long_probability),
-                #trim_zero_prob = args.repair_indel_probability,
-                #trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
-                #insert_zero_prob = args.repair_indel_probability,
-                #insert_poisson = args.repair_insertion_lambda,
+                tree,
+                bcode_meta,
+                sess,
+                target_lams = target_lams,
+                target_lams_known=args.know_target_lambdas,
                 branch_len_inners = np.random.rand(num_nodes) * 0.1,
                 cell_type_tree = cell_type_tree if args.use_cell_state else None,
                 cell_lambdas_known = args.know_cell_lambdas)
@@ -407,29 +415,6 @@ def main(args=sys.argv[1:]):
         #logging.info("pen log liks %s", str(pen_log_liks))
         #logging.info("pearson rf to log lik %s", pearsonr(rf_dists, pen_log_liks))
         #logging.info("spearman rf to log lik %s", spearmanr(rf_dists, pen_log_liks))
-        stupid_tree = true_tree.copy()
-        max_dist = 0
-        for node in stupid_tree.traverse("preorder"):
-            if not node.is_root():
-                node.dist = 1
-                node.add_feature("dist_to_root", node.up.dist_to_root + 1)
-            else:
-                node.dist = 0
-            if node.is_leaf():
-                max_dist = max(node.dist_to_root, max_dist)
-        
-        for node in stupid_tree:
-            node.dist = max_dist - node.up.dist_to_root
-        stupid_br_lens = {}
-        for node in stupid_tree.traverse():
-            stupid_br_lens[node.node_id] = node.dist
-        subset = []
-        for node in stupid_tree.traverse():
-            if node.is_leaf() or node.is_root():
-                continue
-            else:
-                subset.append(node.node_id)
-        compare_lengths(true_branch_lens, stupid_br_lens, subset, label="oracle est vs stupid branches")
 
         # Fit oracle tree
         pen_log_lik, oracle_model = fit_pen_likelihood(true_tree)
@@ -450,9 +435,16 @@ def main(args=sys.argv[1:]):
         logging.info(args.cell_rates)
 
         # Compare branch lengths
+        subset = [
+                node.node_id for node in true_tree.traverse()
+                if not node.is_leaf() and not node.is_root()]
         est_branch_lens = oracle_model.get_branch_lens()
-        compare_lengths(true_branch_lens, est_branch_lens, subset, label="oracle est vs true branches")
-        compare_lengths(true_branch_lens, stupid_br_lens, subset, label="oracle est vs stupid branches")
+        compare_lengths(
+                true_branch_lens,
+                est_branch_lens,
+                subset,
+                branch_plot_file=args.branch_plot_file,
+                label="oracle est vs true branches")
 
         # Also compare target estimates
         fitted_vars = oracle_model.get_vars()

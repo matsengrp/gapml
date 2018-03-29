@@ -50,9 +50,6 @@ class CLTPenalizedEstimator(CLTEstimator):
         """
         Finds the best model parameters over `num_inits` initializations
         """
-        # Before starting, check that branch lengths are all positive
-        br_lens = self.model.get_branch_lens()
-        assert all([b > 0 for b in br_lens[1:]])
 
         best_pen_log_lik = self._fit(max_iters, print_iter)
         best_vars = self.model.get_vars()
@@ -87,6 +84,19 @@ class CLTPenalizedEstimator(CLTEstimator):
         """
         Fits for a single initialization -- runs proximal gradient descent
         """
+        # Determine a total time for the entire tree -- Just pick a
+        # sufficiently large number so that no initial branch lengths
+        # are negative.
+        tot_time = 1
+        for i in range(10):
+            # Before starting, check that branch lengths are all positive
+            self.model.set_tot_time(tot_time)
+            br_lens = self.model.get_branch_lens()
+            if all([b > 0 for b in br_lens[1:]]):
+                break
+            else:
+                tot_time *= 2
+
         for i in range(max_iters):
             _, log_lik, pen_log_lik, log_lik_alleles, log_lik_cell_type = self.model.sess.run(
                     [
@@ -96,7 +106,8 @@ class CLTPenalizedEstimator(CLTEstimator):
                         self.model.log_lik_alleles,
                         self.model.log_lik_cell_type],
                     feed_dict={
-                        self.model.log_barr_ph: self.log_barr
+                        self.model.log_barr_ph: self.log_barr,
+                        self.model.tot_time_ph: tot_time
                     })
             assert pen_log_lik != -np.inf
 

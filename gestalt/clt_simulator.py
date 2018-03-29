@@ -115,7 +115,7 @@ class BirthDeathTreeSimulator:
                 branch_length: time til the next event
         """
         # Birth rate very high initially?
-        t_birth = expon.rvs(scale=self.birth_scale * sigmoid(-1 + time))
+        t_birth = expon.rvs(scale=self.birth_scale)
         t_death = expon.rvs(scale=self.death_scale)
         division_happens = t_birth < t_death
         branch_length = np.min([t_birth, t_death])
@@ -131,6 +131,7 @@ class BirthDeathTreeSimulator:
         self.curr_nodes += 1
         if self.curr_nodes > self.max_nodes:
             print("too many nodes")
+            1/0
             return
 
         if time == 0:
