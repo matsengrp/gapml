@@ -38,7 +38,6 @@ def _get_earliest_uniq_branches(tree: TreeNode):
     uniq_allele_branches = dict()
     for node in tree.traverse():
         allele_id = node.allele_events_list_str
-        allele_up_id = None if node.is_root() else node.up.allele_events_list_str
         node_up_dist = 0 if node.is_root() else node.up.dist_to_root
         if allele_id in uniq_allele_branches:
             shortest_dist = uniq_allele_branches[allele_id][1]
@@ -47,13 +46,13 @@ def _get_earliest_uniq_branches(tree: TreeNode):
                 uniq_allele_branches[allele_id] = [
                         node,
                         node_up_dist,
-                        allele_up_id,
+                        node.up,
                         is_observed]
         else:
             uniq_allele_branches[allele_id] = [
                     node,
                     node_up_dist,
-                    allele_up_id,
+                    node.up,
                     False]
         # An allele is observed if the allele ever appears at a leaf
         uniq_allele_branches[allele_id][-1] |= node.is_leaf()
@@ -73,10 +72,11 @@ def _regrow_collapsed_tree(tree: TreeNode, uniq_allele_branches: Dict):
     sorted_branches = sorted(list(uniq_allele_branches.values()), key=lambda br: br[1])
     # Useful dictionary to tracking what nodes we have created so far
     existing_nodes_dict = {tree.allele_events_list_str: {0: tree}}
-    for node, dist_to_root, parent_allele_str, is_obs in sorted_branches:
-        print(parent_allele_str, "=>", node.allele_events_list_str, dist_to_root)
+    for node, dist_to_root, old_parent_node, is_obs in sorted_branches:
         # Check if this node is not the root
         if node.allele_events_list_str != NO_EVT_STR:
+            parent_allele_str = old_parent_node.allele_events_list_str
+            print(parent_allele_str, "=>", node.allele_events_list_str, dist_to_root)
             if parent_allele_str in existing_nodes_dict:
                 if dist_to_root in existing_nodes_dict[parent_allele_str]:
                     # There already exists a node with the parent allele that is exactly this distance
@@ -93,8 +93,8 @@ def _regrow_collapsed_tree(tree: TreeNode, uniq_allele_branches: Dict):
                     assert dist_to_root > max_dist_to_root
                     # Use the grandpa node as a template for creating a new parent node
                     par_node = CellLineageTree(
-                            allele_list = grandpa_node.allele_list,
-                            cell_state = grandpa_node.cell_state,
+                            allele_list = old_parent_node.allele_list,
+                            cell_state = old_parent_node.cell_state,
                             dist = dist_to_root - max_dist_to_root)
                     par_node.add_feature("dist_to_root", dist_to_root)
                     grandpa_node.add_child(par_node)

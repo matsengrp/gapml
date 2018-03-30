@@ -174,16 +174,16 @@ class CLTParsimonyEstimator(CLTEstimator):
         outfile = "%s/outfile" % self.out_folder
         infile = "%s/infile" % self.out_folder
         abundance_file = "%s/test.abundance" % self.out_folder
+        write_seqs_to_phy(
+                processed_seqs,
+                event_dicts,
+                infile,
+                abundance_file,
+                encode_hidden=encode_hidden,
+                use_cell_state=use_cell_state)
         trees = []
         for seed_i in range(num_mix_runs):
             new_mix_cfg_file = self._create_mix_cfg(seed_i)
-            write_seqs_to_phy(
-                    processed_seqs,
-                    event_dicts,
-                    infile,
-                    abundance_file,
-                    encode_hidden=encode_hidden,
-                    use_cell_state=use_cell_state)
             cmd = ["rm -f %s && %s < %s" % (
                 outfile,
                 self.mix_path,
@@ -196,11 +196,16 @@ class CLTParsimonyEstimator(CLTEstimator):
             # In the future, we can simultaneously build a cell lineage tree while parsing the
             # output, rather than parsing output and later converting.
             pars_trees = phylip_parse.parse_outfile(outfile, abundance_file)
+
+            cmd = ["rm -f %s" % outfile]
+            res = subprocess.call(cmd, shell=True)
+            # Check that clean up happened
+            assert res == 0, "clean up happened"
             trees += pars_trees
 
-        # If we are only going to take a subset of these trees, let's shuffle them first
-        random.shuffle(trees)
-        trees = trees[:max_trees]
+        ## If we are only going to take a subset of these trees, let's shuffle them first
+        #random.shuffle(trees)
+        #trees = trees[:max_trees]
 
         # Get a mapping from cell to cell state
         processed_obs = {k: v[2] for k, v in processed_seqs.items()}

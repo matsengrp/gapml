@@ -219,7 +219,7 @@ def create_cell_lineage_tree(args, clt_model):
             if true_tree.get_max_depth() > args.max_depth:
                 sim_time *= 0.8
                 break
-            
+
             logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
             num_tries += 1
             if len(obs_leaves) < args.min_leaves:
@@ -343,6 +343,10 @@ def main(args=sys.argv[1:]):
             if not node.is_root():
                 true_branch_lens[node.node_id] = node.dist
 
+        # Get parsimony score of tree?
+        pars_score = true_tree.get_parsimony_score()
+        logging.info("Oracle tree parsimony score %d", pars_score)
+
         # Save the data
         save_model_data(
                 args.model_data_file,
@@ -400,10 +404,17 @@ def main(args=sys.argv[1:]):
 
         # Fit parsimony trees -- only look at a couple trees per RF distance
         fitting_results = {}
+        parsimony_score = None
         for rf_dist, pars_trees in parsimony_tree_dict.items():
             fitting_results[rf_dist] = []
-            logging.info("There are %d trees with RF %d", len(pars_trees), rf_dist)
-            for tree in pars_trees[:10]:
+            if parsimony_score is None:
+                parsimony_score = pars_trees[0].get_parsimony_score()
+            logging.info(
+                    "There are %d trees with RF %d, pars score %d",
+                    len(pars_trees),
+                    rf_dist,
+                    parsimony_score)
+            for tree in pars_trees[:2]:
                 pen_log_lik, res_model = fit_pen_likelihood(tree)
                 fitting_results[rf_dist].append((
                     pen_log_lik,

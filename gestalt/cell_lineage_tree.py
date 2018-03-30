@@ -64,6 +64,17 @@ class CellLineageTree(TreeNode):
         self.add_feature("id", n_id)
         self.add_feature("abundance", abundance)
 
+    def get_parsimony_score(self):
+        pars_score = 0
+        for node in self.traverse("preorder"):
+            if not node.is_root():
+                node_evts = [set(allele_evts.events) for allele_evts in node.allele_events_list]
+                node_up_evts = [set(allele_evts.events) for allele_evts in node.up.allele_events_list]
+                num_evts = sum([
+                    len(n_evts - n_up_evts) for n_evts, n_up_evts in zip(node_evts, node_up_evts)])
+                pars_score += num_evts
+        return pars_score
+
     def label_tree_with_strs(self):
         for node in self.traverse("preorder"):
             node.allele_events_list_str = CellLineageTree._allele_list_to_str(node.allele_events_list)
