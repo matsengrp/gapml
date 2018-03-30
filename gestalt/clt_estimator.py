@@ -33,6 +33,9 @@ class CLTParsimonyEstimator(CLTEstimator):
         self.bcode_meta = bcode_meta
         self.out_folder = out_folder
         self.mix_path = mix_path
+        self.outfile = "%s/outfile" % self.out_folder
+        self.infile = "%s/infile" % self.out_folder
+        self.abundance_file = "%s/test.abundance" % self.out_folder
 
     def _process_observations(self, observations: List[ObservedAlignedSeq]):
         """
@@ -134,9 +137,9 @@ class CLTParsimonyEstimator(CLTEstimator):
 
     def _create_mix_cfg(self, seed_num, num_jumbles=5):
         mix_cfg_lines = [
-                "%s/infile" % self.out_folder,
+                self.infile,
                 "F",
-                "%s/outfile" % self.out_folder,
+                self.outfile,
                 "1",
                 "4",
                 "5",
@@ -159,9 +162,10 @@ class CLTParsimonyEstimator(CLTEstimator):
             observations: List[ObservedAlignedSeq],
             encode_hidden: bool = True,
             use_cell_state: bool = False,
-            max_trees: int = -1,
             num_mix_runs: int = 2):
         """
+        @param num_mix_runs: number of mix runs with different seeds
+
         @return a list of unique cell lineage tree estimates
                 calls out to mix on the command line
                 writes files: infile, test.abundance, outfile
@@ -171,41 +175,26 @@ class CLTParsimonyEstimator(CLTEstimator):
         processed_seqs, event_dicts, event_list = self._process_observations(
             observations)
 
-        outfile = "%s/outfile" % self.out_folder
-        infile = "%s/infile" % self.out_folder
-        abundance_file = "%s/test.abundance" % self.out_folder
         write_seqs_to_phy(
                 processed_seqs,
                 event_dicts,
-                infile,
-                abundance_file,
+                self.infile,
+                self.abundance_file,
                 encode_hidden=encode_hidden,
                 use_cell_state=use_cell_state)
-        trees = []
+
+        # Now run mix many times
+        tree_lists = []
         for seed_i in range(num_mix_runs):
             new_mix_cfg_file = self._create_mix_cfg(seed_i)
-            cmd = ["rm -f %s && %s < %s" % (
-                outfile,
-                self.mix_path,
-                new_mix_cfg_file)]
-            res = subprocess.call(cmd, shell=True)
-            # Check that mix ran properly
-            assert res == 0, "Mix failed to run"
+            pars_trees = self.run_mix(new_mix_cfg_file)
+            # Note: These trees aren't necessarily unique
+            tree_lists.append(pars_trees)
 
-            # Parse the outfile -- these are still regular Tree, not CellLineageTrees
-            # In the future, we can simultaneously build a cell lineage tree while parsing the
-            # output, rather than parsing output and later converting.
-            pars_trees = phylip_parse.parse_outfile(outfile, abundance_file)
-
-            cmd = ["rm -f %s" % outfile]
-            res = subprocess.call(cmd, shell=True)
-            # Check that clean up happened
-            assert res == 0, "clean up happened"
-            trees += pars_trees
-
-        ## If we are only going to take a subset of these trees, let's shuffle them first
-        #random.shuffle(trees)
-        #trees = trees[:max_trees]
+        uniq_trees = [t for trees in tree_lists for t in trees]
+        ## Let's make sure the trees are unique
+        ## This part can be quite slow if we ran mix a lot of times...
+        #uniq_trees = CLTParsimonyEstimator.get_uniq_trees(tree_lists)
 
         # Get a mapping from cell to cell state
         processed_obs = {k: v[2] for k, v in processed_seqs.items()}
@@ -213,8 +202,64 @@ class CLTParsimonyEstimator(CLTEstimator):
         processed_abund = {k: v[0] for k, v in processed_seqs.items()}
         # Now convert these trees to CLTs
         clts = []
-        for t in trees:
+        for t in uniq_trees:
             clt_new = self.convert_tree_to_clt(t, event_list, processed_obs, processed_abund)
             clt_new.label_tree_with_strs()
             clts.append(clt_new)
         return clts
+
+    def run_mix(self, new_mix_cfg_file):
+        """
+        Run mix once with the mix config file
+        @return trees from mix
+        """
+        # Clean up the outfile (and potentially other files)
+        # because mix may get confused otherwise
+        cmd = ["rm -f %s && %s < %s" % (
+            self.outfile,
+            self.mix_path,
+            new_mix_cfg_file)]
+        res = subprocess.call(cmd, shell=True)
+        # Check that mix ran properly
+        assert res == 0, "Mix failed to run"
+
+        # Parse the outfile -- these are still regular Tree, not CellLineageTrees
+        # In the future, we can simultaneously build a cell lineage tree while parsing the
+        # output, rather than parsing output and later converting.
+        pars_trees = phylip_parse.parse_outfile(self.outfile, self.abundance_file)
+
+        # Clean up the outfile because it is really big and takes up
+        # disk space
+        cmd = ["rm -f %s" % self.outfile]
+        res = subprocess.call(cmd, shell=True)
+        # Check that clean up happened
+        assert res == 0, "clean up happened"
+        return pars_trees
+
+    @staticmethod
+    def get_uniq_trees(trees, max_trees=None):
+        """
+        @param max_trees: find this many uniq trees at most
+        """
+        num_trees = 1
+        uniq_trees = [trees[0]]
+        for t in trees[1:]:
+            # We are going to use the unrooted tree assuming that the collapsed tree output
+            # does not have multifurcating branches...
+            rf_dist = 1
+            for uniq_t in uniq_trees:
+                rf_dist = t.robinson_foulds(
+                    uniq_t,
+                    attr_t1="allele_events_list_str",
+                    attr_t2="allele_events_list_str",
+                    expand_polytomies=False,
+                    unrooted_trees=False)[0]
+                if rf_dist == 0:
+                    break
+            if rf_dist > 0:
+                # Everything was nonzero
+                uniq_trees.append(t)
+                num_trees += 1
+                if num_trees == max_trees:
+                    break
+        return uniq_trees

@@ -133,10 +133,10 @@ def parse_args():
     parser.add_argument('--use-cell-state', action='store_true')
     parser.add_argument('--max-trees',
             type=int,
-            default=1000)
+            default=2)
     parser.add_argument('--num-jumbles',
             type=int,
-            default=2)
+            default=10)
     parser.add_argument('--use-parsimony', action='store_true', help="use mix (CS parsimony) to estimate tree topologies")
     parser.add_argument('--topology-only', action='store_true', help="topology only")
     args = parser.parse_args()
@@ -255,13 +255,15 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_trees):
     #TODO: DOESN'T USE CELL STATE
     parsimony_trees = parsimony_estimator.estimate(
             obs_leaves,
-            max_trees=max_trees,
             num_mix_runs=args.num_jumbles)
     logging.info("Total parsimony trees %d", len(parsimony_trees))
 
     # Sort the parsimony trees into their robinson foulds distance from the truth
     parsimony_tree_dict = {}
+    parsimony_score = None
     for tree in parsimony_trees:
+        if parsimony_score is None:
+            parsimony_score = tree.get_parsimony_score()
         rf_res = true_tree.robinson_foulds(
                 tree,
                 attr_t1="allele_events_list_str",
@@ -270,13 +272,22 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_trees):
                 unrooted_trees=False)
         rf_dist = rf_res[0]
         rf_dist_max = rf_res[1]
-        logging.info("full barcode tree: rf dist %d (max %d)", rf_dist, rf_dist_max)
+        logging.info(
+                "full barcode tree: rf dist %d (max %d) pars %d",
+                rf_dist,
+                rf_dist_max,
+                parsimony_score)
         logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-        logging.info(tree.get_ascii(attributes=["observed"], show_internal=True))
         if rf_dist not in parsimony_tree_dict:
             parsimony_tree_dict[rf_dist] = [tree]
         else:
             parsimony_tree_dict[rf_dist].append(tree)
+
+    # make each set of trees for each rf distance uniq
+    for k, v in parsimony_tree_dict.items():
+        parsimony_tree_dict[k] = CLTParsimonyEstimator.get_uniq_trees(
+                v,
+                max_trees=args.max_trees)
     return parsimony_tree_dict
 
 def compare_lengths(length_dict1, length_dict2, subset, branch_plot_file, label):
@@ -404,17 +415,13 @@ def main(args=sys.argv[1:]):
 
         # Fit parsimony trees -- only look at a couple trees per RF distance
         fitting_results = {}
-        parsimony_score = None
         for rf_dist, pars_trees in parsimony_tree_dict.items():
             fitting_results[rf_dist] = []
-            if parsimony_score is None:
-                parsimony_score = pars_trees[0].get_parsimony_score()
             logging.info(
-                    "There are %d trees with RF %d, pars score %d",
+                    "There are %d trees with RF %d",
                     len(pars_trees),
-                    rf_dist,
-                    parsimony_score)
-            for tree in pars_trees[:2]:
+                    rf_dist)
+            for tree in pars_trees:
                 pen_log_lik, res_model = fit_pen_likelihood(tree)
                 fitting_results[rf_dist].append((
                     pen_log_lik,
