@@ -24,6 +24,7 @@ from allele_simulator_simult import AlleleSimulatorSimultaneous
 from allele import Allele
 from clt_observer import CLTObserver
 from clt_estimator import CLTParsimonyEstimator
+from clt_topology_estimator import CLTTopologyEstimator
 from clt_likelihood_estimator import *
 from alignment import AlignerNW
 from barcode_metadata import BarcodeMetadata
@@ -92,7 +93,7 @@ def parse_args():
     parser.add_argument(
         '--sampling-rate',
         type=float,
-        default=0.9,
+        default=0.1,
         help='proportion cells sampled/alleles successfully sequenced')
     parser.add_argument(
         '--debug', action='store_true', help='debug tensorflow')
@@ -136,7 +137,7 @@ def parse_args():
             default=2)
     parser.add_argument('--num-jumbles',
             type=int,
-            default=10)
+            default=1)
     parser.add_argument('--use-parsimony', action='store_true', help="use mix (CS parsimony) to estimate tree topologies")
     parser.add_argument('--topology-only', action='store_true', help="topology only")
     args = parser.parse_args()
@@ -375,6 +376,34 @@ def main(args=sys.argv[1:]):
         logging.info("Number of uniq obs alleles %d", len(obs_leaves))
 
         # Get the parsimony-estimated topologies
+
+        # TODO : TESTINGGGGG
+        parsimony_estimator = CLTParsimonyEstimator(
+                bcode_meta,
+                args.out_folder,
+                args.mix_path)
+        collapsed_parsimony_trees = parsimony_estimator.estimate(
+                obs_leaves,
+                num_mix_runs=args.num_jumbles)
+        approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
+        top_estimator = CLTTopologyEstimator(
+            approximator,
+            bcode_meta,
+            sess,
+            collapsed_parsimony_trees[0])
+        top_score, top_tree = top_estimator.estimate(
+                topology_iters=10,
+                max_iters=args.max_iters)
+        rf_top = true_tree.robinson_foulds(
+                top_tree,
+                attr_t1="allele_events_list_str",
+                attr_t2="allele_events_list_str",
+                expand_polytomies=False,
+                unrooted_trees=False)
+        logging.info("RF DIST FOR TOPOLOGY SEARCH %d (max %d)", rf_top[0], rf_top[1])
+
+
+        # END TESTINGGGGGG
         parsimony_tree_dict = get_parsimony_trees(
                 obs_leaves,
                 args,

@@ -191,10 +191,13 @@ class CLTParsimonyEstimator(CLTEstimator):
             # Note: These trees aren't necessarily unique
             tree_lists.append(pars_trees)
 
-        uniq_trees = [t for trees in tree_lists for t in trees]
+        bifurcating_trees = [t for trees in tree_lists for t in trees]
+        logging.info("num bifurcating trees %d", len(bifurcating_trees))
+        collapsed_trees = [collapsed_tree.collapse_zero_lens(t) for t in bifurcating_trees]
         ## Let's make sure the trees are unique
         ## This part can be quite slow if we ran mix a lot of times...
-        #uniq_trees = CLTParsimonyEstimator.get_uniq_trees(tree_lists)
+        uniq_collapsed_trees = CLTParsimonyEstimator.get_uniq_trees(collapsed_trees)
+        logging.info("num uniq collapsed trees %d", len(uniq_collapsed_trees))
 
         # Get a mapping from cell to cell state
         processed_obs = {k: v[2] for k, v in processed_seqs.items()}
@@ -202,10 +205,12 @@ class CLTParsimonyEstimator(CLTEstimator):
         processed_abund = {k: v[0] for k, v in processed_seqs.items()}
         # Now convert these trees to CLTs
         clts = []
-        for t in uniq_trees:
+        for t in uniq_collapsed_trees:
             clt_new = self.convert_tree_to_clt(t, event_list, processed_obs, processed_abund)
             clt_new.label_tree_with_strs()
             clts.append(clt_new)
+        print('parsimony tree.... collapsed')
+        print(clts[0].get_ascii(attributes=["allele_events_list_str"], show_internal=True))
         return clts
 
     def run_mix(self, new_mix_cfg_file):
@@ -237,11 +242,12 @@ class CLTParsimonyEstimator(CLTEstimator):
         return pars_trees
 
     @staticmethod
-    def get_uniq_trees(trees, max_trees=None):
+    def get_uniq_trees(trees: List[TreeNode], attr_str:str=None,  max_trees:int=None):
         """
         @param max_trees: find this many uniq trees at most
         """
         num_trees = 1
+        attr_str = attr_str if attr_str is not None else "name"
         uniq_trees = [trees[0]]
         for t in trees[1:]:
             # We are going to use the unrooted tree assuming that the collapsed tree output
@@ -250,16 +256,16 @@ class CLTParsimonyEstimator(CLTEstimator):
             for uniq_t in uniq_trees:
                 rf_dist = t.robinson_foulds(
                     uniq_t,
-                    attr_t1="allele_events_list_str",
-                    attr_t2="allele_events_list_str",
+                    attr_t1=attr_str,
+                    attr_t2=attr_str,
                     expand_polytomies=False,
-                    unrooted_trees=False)[0]
+                    unrooted_trees=True)[0]
                 if rf_dist == 0:
                     break
             if rf_dist > 0:
                 # Everything was nonzero
                 uniq_trees.append(t)
                 num_trees += 1
-                if num_trees == max_trees:
+                if max_trees is not None and num_trees == max_trees:
                     break
         return uniq_trees

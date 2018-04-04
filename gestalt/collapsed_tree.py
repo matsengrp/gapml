@@ -158,3 +158,30 @@ def collapse_ultrametric(raw_tree: TreeNode):
     print(tree.get_ascii(attributes=["observed"], show_internal=True))
     print(tree)
     return tree
+
+def collapse_zero_lens(raw_tree: TreeNode):
+    tree = _preprocess(raw_tree)
+    # remove zero-length edges
+    removed_children_dict = {}
+    for node in tree.traverse(strategy='postorder'):
+        if not hasattr(node, "observed"):
+            node.add_feature("observed", node.is_leaf())
+        if node.dist == 0 and not node.is_root():
+            up_node = node.up
+            up_node.name = node.name
+            up_node.add_feature("observed", node.observed)
+            node.delete(prevent_nondicotomic=False)
+            removed_children_dict[up_node.name] = node
+
+    for node in tree.get_descendants(strategy="postorder"):
+        if len(node.get_children()) == 1 and not node.observed:
+            logging.info("WARNING: There was an inner node with only one child!")
+            node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
+
+    for node in tree.traverse():
+        if node.observed and not node.is_leaf():
+            new_child = removed_children_dict[node.name]
+            node.add_child(new_child)
+            new_child.observed = True
+
+    return tree
