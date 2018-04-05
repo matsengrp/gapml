@@ -160,6 +160,7 @@ class CLTParsimonyEstimator(CLTEstimator):
 
     def estimate(self,
             observations: List[ObservedAlignedSeq],
+            do_collapse: bool=False,
             encode_hidden: bool = True,
             use_cell_state: bool = False,
             num_mix_runs: int = 2):
@@ -192,12 +193,16 @@ class CLTParsimonyEstimator(CLTEstimator):
             tree_lists.append(pars_trees)
 
         bifurcating_trees = [t for trees in tree_lists for t in trees]
-        logging.info("num bifurcating trees %d", len(bifurcating_trees))
-        collapsed_trees = [collapsed_tree.collapse_zero_lens(t) for t in bifurcating_trees]
-        ## Let's make sure the trees are unique
-        ## This part can be quite slow if we ran mix a lot of times...
-        uniq_collapsed_trees = CLTParsimonyEstimator.get_uniq_trees(collapsed_trees)
-        logging.info("num uniq collapsed trees %d", len(uniq_collapsed_trees))
+        if do_collapse:
+            logging.info("num bifurcating trees %d", len(bifurcating_trees))
+            collapsed_trees = [collapsed_tree.collapse_zero_lens(t) for t in bifurcating_trees]
+            ## Let's make sure the trees are unique
+            ## This part can be quite slow if we ran mix a lot of times...
+            print("collapsed?")
+            uniq_collapsed_trees = CLTParsimonyEstimator.get_uniq_trees(collapsed_trees)
+            logging.info("num uniq collapsed trees %d", len(uniq_collapsed_trees))
+        else:
+            uniq_collapsed_trees = bifurcating_trees
 
         # Get a mapping from cell to cell state
         processed_obs = {k: v[2] for k, v in processed_seqs.items()}

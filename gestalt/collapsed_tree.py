@@ -161,6 +161,7 @@ def collapse_ultrametric(raw_tree: TreeNode):
 
 def collapse_zero_lens(raw_tree: TreeNode):
     tree = _preprocess(raw_tree)
+    print(tree.get_ascii(attributes=["name"], show_internal=True))
     # remove zero-length edges
     removed_children_dict = {}
     for node in tree.traverse(strategy='postorder'):
@@ -171,17 +172,29 @@ def collapse_zero_lens(raw_tree: TreeNode):
             up_node.name = node.name
             up_node.add_feature("observed", node.observed)
             node.delete(prevent_nondicotomic=False)
-            removed_children_dict[up_node.name] = node
+            print("deleting and stuff", up_node.name)
+            print(tree.get_ascii(attributes=["name"], show_internal=True))
+            if up_node.name not in removed_children_dict:
+                removed_children_dict[up_node.name] = node
 
     for node in tree.get_descendants(strategy="postorder"):
         if len(node.get_children()) == 1 and not node.observed:
             logging.info("WARNING: There was an inner node with only one child!")
             node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
 
+    print(tree)
     for node in tree.traverse():
+        print(tree)
         if node.observed and not node.is_leaf():
-            new_child = removed_children_dict[node.name]
+            child_template = removed_children_dict[node.name]
+            print(child_template.__dict__)
+            new_child = TreeNode(name=child_template.name)
+            for feat in child_template.features:
+                new_child.add_feature(feat, getattr(child_template, feat))
+            print("adding stuff", node.name)
+            print("new", new_child.__dict__)
             node.add_child(new_child)
             new_child.observed = True
+            node.observed = False
 
     return tree

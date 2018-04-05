@@ -256,6 +256,7 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_trees):
     #TODO: DOESN'T USE CELL STATE
     parsimony_trees = parsimony_estimator.estimate(
             obs_leaves,
+            do_collapse=False,
             num_mix_runs=args.num_jumbles)
     logging.info("Total parsimony trees %d", len(parsimony_trees))
 
@@ -285,10 +286,10 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_trees):
             parsimony_tree_dict[rf_dist].append(tree)
 
     # make each set of trees for each rf distance uniq
-    for k, v in parsimony_tree_dict.items():
-        parsimony_tree_dict[k] = CLTParsimonyEstimator.get_uniq_trees(
-                v,
-                max_trees=args.max_trees)
+    #for k, v in parsimony_tree_dict.items():
+    #    parsimony_tree_dict[k] = CLTParsimonyEstimator.get_uniq_trees(
+    #            v,
+    #            max_trees=args.max_trees)
     return parsimony_tree_dict
 
 def compare_lengths(length_dict1, length_dict2, subset, branch_plot_file, label):
@@ -384,6 +385,7 @@ def main(args=sys.argv[1:]):
                 args.mix_path)
         collapsed_parsimony_trees = parsimony_estimator.estimate(
                 obs_leaves,
+                do_collapse=True,
                 num_mix_runs=args.num_jumbles)
         approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
         top_estimator = CLTTopologyEstimator(
@@ -392,8 +394,8 @@ def main(args=sys.argv[1:]):
             sess,
             collapsed_parsimony_trees[0])
         top_score, top_tree = top_estimator.estimate(
-                topology_iters=10,
-                max_iters=args.max_iters)
+                topology_iters=10)
+                #max_iters=args.max_iters)
         rf_top = true_tree.robinson_foulds(
                 top_tree,
                 attr_t1="allele_events_list_str",
