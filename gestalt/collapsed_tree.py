@@ -152,9 +152,21 @@ def collapse_ultrametric(raw_tree: TreeNode):
     for node in tree.traverse():
         # Any node that has distance to root equal to max dist is observed
         node.add_feature("observed", node.dist_to_root == max_dist)
+    
+    while len(tree.get_children()) == 1 and not tree.observed:
+        child_node = tree.get_children()[0]
+        child_node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
+    assert(tree.is_root())
+
+    for node in tree.get_descendants(strategy="postorder"):
+        if len(node.get_children()) == 1 and not node.observed:
+            print("asdjfkalsdjflasjdkflasdf")
+            logging.info("WARNING: There was an inner node with only one child!")
+            node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
 
     print(tree.get_ascii(attributes=["dist"], show_internal=True))
     print(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
     print(tree.get_ascii(attributes=["observed"], show_internal=True))
     print(tree)
+
     return tree

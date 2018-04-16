@@ -330,7 +330,12 @@ def main(args=sys.argv[1:]):
                     args.max_iters)
             return pen_log_lik, res_model
 
-        nearby_tree_dict = search_nearby_trees(true_tree, max_search_dist=10)
+        nearby_trees = []
+        for _ in range(3):
+            nearby_trees += search_nearby_trees(true_tree, max_search_dist=10)
+        nearby_tree_dict = get_rf_dist_dict(
+                nearby_trees,
+                true_tree)
 
         # Fit trees
         fitting_results = {}
@@ -347,7 +352,7 @@ def main(args=sys.argv[1:]):
                     res_model))
 
                 # Print some summaries
-                logging.info("Mix pen log lik %f RF %d", pen_log_lik, rf_dist)
+                logging.info("pen log lik %f RF %d", pen_log_lik, rf_dist)
 
         # Correlation between RF dist and likelihood among parsimony trees
         pen_log_lik, oracle_model = fit_pen_likelihood(true_tree)

@@ -14,13 +14,24 @@ def NNI(node):
         xchild = node.get_sisters()[0]
         parent = node.up
         ychild = node.children[neighboor]
-        xchild.detach()
-        ychild.detach()
-        parent.add_child(ychild)
-        node.add_child(xchild)
+        if parent.allele_events_list_str == node.allele_events_list_str:
+            # This is currently a jenky NNI check
+            # Checks if oracle ancestor state is the same.
+            # Then NNI move is allowed.
+            # Preserves the parsimony score
+            xchild.detach()
+            ychild.detach()
+            parent.add_child(ychild)
+            node.add_child(xchild)
+            return True
+        else:
+            return False
 
 def search_nearby_trees(true_tree, max_search_dist=10):
     """
+    Searches nearby trees, but makes sure that the gestalt rules
+    are obeyed and parsimony score is preserved
+
     @param max_search_dist: perform this many NNI moves
     """
     # Make sure we don't change the original tree
@@ -38,29 +49,15 @@ def search_nearby_trees(true_tree, max_search_dist=10):
     curr_tree = scratch_tree
     trees = []
     for i in range(max_search_dist):
-        # Pick the random node
-        rand_node_index = np.random.randint(0, num_interior_nodes)
-        rand_node = node_dict[rand_node_index]
-        # Perform the actual move
-        NNI(rand_node)
+        nni_success = False
+        while not nni_success:
+            # Pick the random node
+            rand_node_index = np.random.randint(0, num_interior_nodes)
+            rand_node = node_dict[rand_node_index]
+            # Perform the actual move
+            nni_success = NNI(rand_node)
+
         # Make a copy of this tree and store!
         trees.append(copy.deepcopy(scratch_tree))
-
-    # Now calculate the rf distances of each random tree
-    rf_tree_dict = {}
-    for tree in trees:
-        rf_res = true_tree.robinson_foulds(
-                tree,
-                attr_t1="allele_events_list_str",
-                attr_t2="allele_events_list_str",
-                expand_polytomies=False,
-                unrooted_trees=False)
-        print("rf dist", rf_res[0])
-        rf_dist = rf_res[0]
-        if rf_dist in rf_tree_dict:
-            rf_tree_dict[rf_dist].append(tree)
-        else:
-            rf_tree_dict[rf_dist] = [tree]
-
-    return rf_tree_dict
+    return trees
 
