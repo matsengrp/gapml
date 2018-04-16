@@ -394,7 +394,7 @@ def main(args=sys.argv[1:]):
             sess,
             collapsed_parsimony_trees[0])
         top_score, top_tree = top_estimator.estimate(
-                topology_iters=10)
+                topology_iters=20)
                 #max_iters=args.max_iters)
         rf_top = true_tree.robinson_foulds(
                 top_tree,

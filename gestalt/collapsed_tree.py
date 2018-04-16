@@ -157,11 +157,18 @@ def collapse_ultrametric(raw_tree: TreeNode):
     print(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
     print(tree.get_ascii(attributes=["observed"], show_internal=True))
     print(tree)
+
+    for node in tree.get_descendants(strategy="postorder"):
+        if len(node.get_children()) == 1 and not node.observed:
+            logging.info("WARNING: There was an inner node with only one child!")
+            node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
     return tree
 
 def collapse_zero_lens(raw_tree: TreeNode):
     tree = _preprocess(raw_tree)
+    print("collll")
     print(tree.get_ascii(attributes=["name"], show_internal=True))
+    print(tree.get_ascii(attributes=["dist"], show_internal=True))
     # remove zero-length edges
     removed_children_dict = {}
     for node in tree.traverse(strategy='postorder'):
@@ -169,11 +176,15 @@ def collapse_zero_lens(raw_tree: TreeNode):
             node.add_feature("observed", node.is_leaf())
         if node.dist == 0 and not node.is_root():
             up_node = node.up
-            up_node.name = node.name
-            up_node.add_feature("observed", node.observed)
+            if hasattr(up_node, "observed"):
+                if not up_node.observed:
+                    up_node.add_feature("observed",
+                        node.observed)
+                    up_node.name = node.name
+            else:
+                up_node.add_feature("observed", node.observed)
+                up_node.name = node.name
             node.delete(prevent_nondicotomic=False)
-            print("deleting and stuff", up_node.name)
-            print(tree.get_ascii(attributes=["name"], show_internal=True))
             if up_node.name not in removed_children_dict:
                 removed_children_dict[up_node.name] = node
 
@@ -182,19 +193,19 @@ def collapse_zero_lens(raw_tree: TreeNode):
             logging.info("WARNING: There was an inner node with only one child!")
             node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
 
-    print(tree)
+    print("almost done")
+    print(tree.get_ascii(attributes=["observed"], show_internal=True))
     for node in tree.traverse():
-        print(tree)
         if node.observed and not node.is_leaf():
             child_template = removed_children_dict[node.name]
-            print(child_template.__dict__)
             new_child = TreeNode(name=child_template.name)
             for feat in child_template.features:
                 new_child.add_feature(feat, getattr(child_template, feat))
-            print("adding stuff", node.name)
-            print("new", new_child.__dict__)
             node.add_child(new_child)
             new_child.observed = True
             node.observed = False
 
+    print("finalle")
+    print(tree.get_ascii(attributes=["observed"], show_internal=True))
+    print(tree.get_ascii(attributes=["name"], show_internal=True))
     return tree
