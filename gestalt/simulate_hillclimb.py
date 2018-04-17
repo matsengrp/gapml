@@ -292,13 +292,14 @@ def main(args=sys.argv[1:]):
             # TODO: distribute
             worker_list = [
                 LikelihoodScorer(
-                        tree,
+                        i,
                         args,
+                        tree,
                         bcode_meta,
                         cell_type_tree,
                         approximator,
                         curr_model_vars)
-                for tree in nearby_trees]
+                for i, tree in enumerate(nearby_trees)]
             shared_obj = None
             if args.num_jobs > 1:
                 batch_manager = BatchSubmissionManager(
