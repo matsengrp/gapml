@@ -1,5 +1,5 @@
 """
-A simulation engine to see how well cell lineage estimation performs
+A simulation engine to test our hillclimbing
 """
 from __future__ import division, print_function
 import sys
@@ -35,6 +35,8 @@ from constants import *
 from common import *
 from summary_util import *
 from simulate_common import *
+from parallel_worker import BatchSubmissionManager
+from likelihood_scorer import LikelihoodScorer
 
 def parse_args():
     parser = argparse.ArgumentParser(description='simulate GESTALT')
@@ -44,9 +46,14 @@ def parse_args():
         default="_output",
         help='folder to put output in')
     parser.add_argument(
+        '--num-jobs',
+        type=int,
+        default=1,
+        help="number of jobs")
+    parser.add_argument(
         '--max-nni-steps',
         type=int,
-        default=3,
+        default=1,
         help="number of nni steps to take to explore around for hill climbing")
     parser.add_argument(
         '--num-nni-restarts',
@@ -283,17 +290,27 @@ def main(args=sys.argv[1:]):
                 logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
             # TODO: distribute
-            # Now let's compare their pen log liks
-            nni_results = [
-                fit_pen_likelihood(
+            worker_list = [
+                LikelihoodScorer(
                         tree,
                         args,
                         bcode_meta,
                         cell_type_tree,
                         approximator,
-                        sess,
-                        warm_start=curr_model_vars)
+                        curr_model_vars)
                 for tree in nearby_trees]
+            shared_obj = None
+            if args.num_jobs > 1:
+                batch_manager = BatchSubmissionManager(
+                        worker_list,
+                        shared_obj,
+                        self.num_jobs,
+                        os.path.join(self.out_dir, "likelihood"))
+                nni_results = batch_manager.run()
+            else:
+                nni_results = [worker.run(shared_obj) for worker in worker_list]
+
+            # Now let's compare their pen log liks
             pen_lls = [r[0] for r in nni_results]
             best_index = np.argmax(pen_lls)
             if pen_lls[best_index] < curr_pen_ll:
@@ -310,15 +327,21 @@ def main(args=sys.argv[1:]):
             assign_branch_lens(curr_model, curr_tree)
 
             # Calculate RF distance to understand if our hillclimbing is working
-            rf_res = true_tree.robinson_foulds(
+            root_rf_res = true_tree.robinson_foulds(
                     curr_tree,
                     attr_t1="allele_events_list_str",
                     attr_t2="allele_events_list_str",
                     expand_polytomies=False,
                     unrooted_trees=False)
-            logging.info("curr tree distance %d, pen_ll %f", rf_res[0], curr_pen_ll)
+            unroot_rf_res = true_tree.robinson_foulds(
+                    curr_tree,
+                    attr_t1="allele_events_list_str",
+                    attr_t2="allele_events_list_str",
+                    expand_polytomies=False,
+                    unrooted_trees=False)
+            logging.info("curr tree distance root %d, unroot %d, pen_ll %f", root_rf_res[0], unroot_rf_res[0], curr_pen_ll)
 
-        logging.info("final tree distance %d, pen_ll %f", rf_res[0], curr_pen_ll)
+        logging.info("final tree distance, root %d, unroot %d, pen_ll %f", root_rf_res[0], unroot_rf_res[0], curr_pen_ll)
         logging.info(curr_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
 if __name__ == "__main__":

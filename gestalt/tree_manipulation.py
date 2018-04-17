@@ -26,6 +26,9 @@ def NNI(node, xchild, ychild):
         xchild.dist = y_dist
 
 def get_parsimony_edge_score(node):
+    """
+    Get the parsimony score for that edge
+    """
     score = 0
     for anc_state, par_anc_state in zip(node.anc_state_list, node.up.anc_state_list):
         node_singletons = set(anc_state.get_singleton_wcs())
@@ -34,6 +37,9 @@ def get_parsimony_edge_score(node):
     return score
 
 def get_parsimony_score_nearest_neighbors(node, redo_ancestral_states=True):
+    """
+    Get the parsimony score summing over this node, its children, and its sisters.
+    """
     if redo_ancestral_states:
         node.anc_state_list = anc_evt_finder.get_possible_anc_states(node)
         node.up.anc_state_list = anc_evt_finder.get_possible_anc_states(node.up)
@@ -74,8 +80,7 @@ def search_nearby_trees(init_tree, max_search_dist=10):
             if rand_node.is_leaf() or rand_node.is_root():
                 continue
             else:
-                # preserve ultrametric by swapping branch lengths
-                # TODO: Assume bifurcating for now...
+                # Propose an NNI move
                 sisters = rand_node.get_sisters()
                 sister_idx = np.random.randint(len(sisters))
                 xchild = sisters[sister_idx]
@@ -84,11 +89,16 @@ def search_nearby_trees(init_tree, max_search_dist=10):
                 child_idx = np.random.randint(len(children))
                 ychild = rand_node.children[child_idx]
 
+                # Get the orig parsimony score of this region
                 orig_score = get_parsimony_score_nearest_neighbors(rand_node)
 
+                # Do the NNI
                 NNI(rand_node, xchild, ychild)
+                # Calculate the new parismony score of this region
                 proposed_score = get_parsimony_score_nearest_neighbors(rand_node)
                 if proposed_score > orig_score:
+                    # If we increase the parsimony score, then undo the NNI
+                    # This just requires swapping the inputs to the NNI function
                     NNI(rand_node, ychild, xchild)
                 else:
                     break
