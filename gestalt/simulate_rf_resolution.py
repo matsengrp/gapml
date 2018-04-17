@@ -33,6 +33,7 @@ from tree_manipulation import search_nearby_trees
 from constants import *
 from common import *
 from summary_util import *
+from simulate_common import *
 
 def parse_args():
     parser = argparse.ArgumentParser(description='simulate GESTALT')
@@ -41,6 +42,16 @@ def parse_args():
         type=str,
         default="_output",
         help='folder to put output in')
+    parser.add_argument(
+        '--num-moves',
+        type=int,
+        default=20,
+        help="number of trees to consider per rf dist")
+    parser.add_argument(
+        '--num-explore-trees',
+        type=int,
+        default=5,
+        help="number of trees to consider per rf dist")
     parser.add_argument(
         '--num-barcodes',
         type=int,
@@ -149,117 +160,6 @@ def parse_args():
 
     return args
 
-def create_cell_type_tree(args):
-    # This first rate means nothing!
-    cell_type_tree = CellTypeTree(cell_type=0, rate=0.1)
-    args.cell_rates = [0.20, 0.25, 0.15, 0.15]
-    cell1 = CellTypeTree(cell_type=1, rate=args.cell_rates[0])
-    cell2 = CellTypeTree(cell_type=2, rate=args.cell_rates[1])
-    cell3 = CellTypeTree(cell_type=3, rate=args.cell_rates[2])
-    cell4 = CellTypeTree(cell_type=4, rate=args.cell_rates[3])
-    cell_type_tree.add_child(cell1)
-    cell_type_tree.add_child(cell2)
-    cell2.add_child(cell3)
-    cell1.add_child(cell4)
-    return cell_type_tree
-
-def create_simulators(args, clt_model):
-    allele_simulator = AlleleSimulatorSimultaneous(clt_model)
-    # TODO: merge cell type simulator into allele simulator
-    cell_type_simulator = CellTypeSimulator(clt_model.cell_type_tree)
-    if args.single_layer:
-        clt_simulator = CLTSimulatorOneLayer(
-                cell_type_simulator,
-                allele_simulator)
-    elif args.two_layers:
-        clt_simulator = CLTSimulatorTwoLayers(
-                cell_type_simulator,
-                allele_simulator)
-    else:
-        clt_simulator = CLTSimulatorBifurcating(
-                args.birth_lambda,
-                args.death_lambda,
-                cell_type_simulator,
-                allele_simulator)
-    observer = CLTObserver()
-    return clt_simulator, observer
-
-def create_cell_lineage_tree(args, clt_model):
-    clt_simulator, observer = create_simulators(args, clt_model)
-
-    # Keep trying to make CLT until enough leaves in observed tree
-    obs_leaves = set()
-    MAX_TRIES = 10
-    num_tries = 0
-    sim_time = args.time
-    for i in range(MAX_TRIES):
-        clt = clt_simulator.simulate(
-            tree_seed = args.model_seed,
-            data_seed = args.data_seed,
-            time = sim_time,
-            max_nodes = args.max_clt_nodes)
-        sampling_rate = args.sampling_rate
-        while (len(obs_leaves) < args.min_leaves or len(obs_leaves) >= args.max_leaves) and sampling_rate <= 1:
-            # Now sample the leaves and create the true topology
-            obs_leaves, true_tree = observer.observe_leaves(
-                    sampling_rate,
-                    clt,
-                    seed=args.model_seed,
-                    observe_cell_state=args.use_cell_state)
-
-            if true_tree.get_max_depth() > args.max_depth:
-                sim_time *= 0.8
-                break
-
-            logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
-            num_tries += 1
-            if len(obs_leaves) < args.min_leaves:
-                sampling_rate += 0.025
-            elif len(obs_leaves) >= args.max_leaves:
-                sampling_rate = max(1e-3, sampling_rate - 0.05)
-
-    if len(obs_leaves) < args.min_leaves:
-        raise Exception("Could not manage to get enough leaves")
-    true_tree.label_tree_with_strs()
-    logging.info(true_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-    # Check all leaves unique because rf distance code requires leaves to be unique
-    # The only reason leaves wouldn't be unique is if we are observing cell state OR
-    # we happen to have the same allele arise spontaneously in different parts of the tree.
-    if not args.use_cell_state:
-        uniq_leaves = set()
-        for n in true_tree:
-            if n.allele_events_list_str in uniq_leaves:
-                logging.info("repeated leaf %s", n.allele_events_list_str)
-                clt.label_tree_with_strs()
-                logging.info(clt.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-            else:
-                uniq_leaves.add(n.allele_events_list_str)
-        assert len(set([n.allele_events_list_str for n in true_tree])) == len(true_tree), "leaves must be unique"
-
-    return clt, obs_leaves, true_tree
-
-def compare_lengths(length_dict1, length_dict2, subset, branch_plot_file, label):
-    """
-    Compares branch lengths, logs the results as well as plots them
-
-    @param subset: the subset of keys in the length dicts to use for the comparison
-    @param branch_plot_file: name of file to save the scatter plot to
-    @param label: the label for logging/plotting
-    """
-    length_list1 = []
-    length_list2 = []
-    for k in subset:
-        length_list1.append(length_dict1[k])
-        length_list2.append(length_dict2[k])
-    logging.info("Compare lengths %s", label)
-    logging.info("pearson %s %s", label, pearsonr(length_list1, length_list2))
-    logging.info("pearson (log) %s %s", label, pearsonr(np.log(length_list1), np.log(length_list2)))
-    logging.info("spearman %s %s", label, spearmanr(length_list1, length_list2))
-    logging.info(length_list1)
-    logging.info(length_list2)
-    plt.scatter(np.log(length_list1), np.log(length_list2))
-    plt.savefig(branch_plot_file)
-
 def main(args=sys.argv[1:]):
     args = parse_args()
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
@@ -304,104 +204,69 @@ def main(args=sys.argv[1:]):
 
         # Instantiate approximator used by our penalized MLE
         approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
-        def fit_pen_likelihood(tree):
-            num_nodes = len([t for t in tree.traverse()])
-
-            if args.know_target_lambdas:
-                target_lams = np.array(args.target_lambdas)
-            else:
-                target_lams = 0.3 * np.ones(args.target_lambdas.size) + np.random.uniform(size=args.num_targets) * 0.08
-
-            res_model = CLTLikelihoodModel(
-                tree,
-                bcode_meta,
-                sess,
-                target_lams = target_lams,
-                target_lams_known=args.know_target_lambdas,
-                branch_len_inners = np.random.rand(num_nodes) * 0.1,
-                cell_type_tree = cell_type_tree if args.use_cell_state else None,
-                cell_lambdas_known = args.know_cell_lambdas)
-            estimator = CLTPenalizedEstimator(
-                    res_model,
-                    approximator,
-                    args.log_barr)
-            pen_log_lik = estimator.fit(
-                    args.num_inits,
-                    args.max_iters)
-            return pen_log_lik, res_model
-
         nearby_trees = []
         for _ in range(3):
-            nearby_trees += search_nearby_trees(true_tree, max_search_dist=10)
+            nearby_trees += search_nearby_trees(true_tree, max_search_dist=args.num_moves)
         nearby_tree_dict = get_rf_dist_dict(
                 nearby_trees,
                 true_tree)
 
         # Fit trees
-        fitting_results = {}
+        fitting_results = []
         for rf_dist, trees in nearby_tree_dict.items():
-            fitting_results[rf_dist] = []
             logging.info(
                     "There are %d trees with RF %d",
                     len(trees),
                     rf_dist)
-            for tree in trees:
-                pen_log_lik, res_model = fit_pen_likelihood(tree)
-                fitting_results[rf_dist].append((
+            for tree, rooted_rf, unrooted_rf in trees[:args.num_explore_trees]:
+                pen_log_lik, res_model = fit_pen_likelihood(
+                        tree,
+                        args,
+                        bcode_meta,
+                        cell_type_tree,
+                        approximator,
+                        sess)
+                fitting_results.append((
                     pen_log_lik,
+                    rooted_rf,
+                    unrooted_rf,
                     res_model))
 
                 # Print some summaries
                 logging.info("pen log lik %f RF %d", pen_log_lik, rf_dist)
 
         # Correlation between RF dist and likelihood among parsimony trees
-        pen_log_lik, oracle_model = fit_pen_likelihood(true_tree)
-        fitting_results[0] = [(pen_log_lik, oracle_model)]
-        if fitting_results:
-            rf_dists = []
-            pen_log_liks = []
-            for rf_dist, res in fitting_results.items():
-                for r in res:
-                    rf_dists.append(rf_dist)
-                    pen_log_liks.append(r[0][0])
-            logging.info("rf_dists %s", str(rf_dists))
-            logging.info("pen log liks %s", str(pen_log_liks))
-            logging.info("pearson rf to log lik %s", pearsonr(rf_dists, pen_log_liks))
-            logging.info("spearman rf to log lik %s", spearmanr(rf_dists, pen_log_liks))
-            plt.scatter(rf_dists, pen_log_liks)
-            plt.savefig("%s/rf_dist_to_ll.png" % args.out_folder)
+        pen_log_lik, oracle_model = fit_pen_likelihood(
+                true_tree,
+                args,
+                bcode_meta,
+                cell_type_tree,
+                approximator,
+                sess)
+        logging.info("True tree score %f", pen_log_lik)
+        fitting_results.append((pen_log_lik, 0, 0, oracle_model))
+
+        unrooted_rf_dists = []
+        rooted_rf_dists = []
+        pen_log_liks = []
+        for pen_ll, rooted_rf, unrooted_rf, _ in fitting_results:
+            unrooted_rf_dists.append(unrooted_rf)
+            rooted_rf_dists.append(rooted_rf)
+            pen_log_liks.append(pen_ll[0])
+        logging.info("unroot rf_dists %s", str(unrooted_rf_dists))
+        logging.info("root rf_dists %s", str(rooted_rf_dists))
+        logging.info("pen log liks %s", str(pen_log_liks))
+        logging.info("unroot pearson rf to log lik %s", pearsonr(unrooted_rf_dists, pen_log_liks))
+        logging.info("unroot spearman rf to log lik %s", spearmanr(unrooted_rf_dists, pen_log_liks))
+        plt.scatter(unrooted_rf_dists, pen_log_liks)
+        plt.savefig("%s/unroot_rf_dist_to_ll.png" % args.out_folder)
+        logging.info("root pearson rf to log lik %s", pearsonr(rooted_rf_dists, pen_log_liks))
+        logging.info("root spearman rf to log lik %s", spearmanr(rooted_rf_dists, pen_log_liks))
+        plt.scatter(rooted_rf_dists, pen_log_liks)
+        plt.savefig("%s/root_rf_dist_to_ll.png" % args.out_folder)
 
         # Fit oracle tree
         save_fitted_models(args.fitted_models_file, fitting_results)
-        logging.info("True tree score %f", pen_log_lik)
-
-        logging.info("---- ORACLE -----")
-        for v in oracle_model.get_vars():
-            logging.info(v)
-        logging.info("---- TRUTH -----")
-        logging.info(args.target_lambdas)
-        logging.info(args.repair_long_probability)
-        logging.info(args.repair_indel_probability)
-        logging.info([args.repair_deletion_lambda, args.repair_deletion_lambda])
-        logging.info(args.repair_indel_probability)
-        logging.info(args.repair_insertion_lambda)
-        logging.info(args.cell_rates)
-
-        # Compare branch lengths
-        subset = [
-                node.node_id for node in true_tree.traverse()
-                if not node.is_leaf() and not node.is_root()]
-        est_branch_lens = oracle_model.get_branch_lens()
-        compare_lengths(
-                true_branch_lens,
-                est_branch_lens,
-                subset,
-                branch_plot_file=args.branch_plot_file,
-                label="oracle est vs true branches")
-
-        # Also compare target estimates
-        fitted_vars = oracle_model.get_vars()
-        logging.info("pearson target %s", pearsonr(args.target_lambdas, fitted_vars[0]))
 
 if __name__ == "__main__":
     main()
