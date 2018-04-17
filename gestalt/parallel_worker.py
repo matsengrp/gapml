@@ -1,7 +1,7 @@
 import sys
 import os
 import traceback
-import pickle
+import six
 import custom_utils
 from custom_utils import CustomCommand
 import numpy as np
@@ -157,12 +157,12 @@ class BatchSubmissionManager(ParallelWorkerManager):
             input_file_name = "%s/in.pkl" % worker_batch_folder
             output_file_name = "%s/out.pkl" % worker_batch_folder
             self.output_files.append(output_file_name)
-            with open(input_file_name, "w") as cmd_input_file:
+            with open(input_file_name, "wb") as cmd_input_file:
                 # Pickle the worker as input to the job
-                pickle.dump(
+                six.moves.cPickle.dump(
                     BatchParallelWorkers(batched_workers, shared_obj),
                     cmd_input_file,
-                    protocol=pickle.HIGHEST_PROTOCOL,
+                    protocol=2,
                 )
                 cmd_str = "python run_worker.py --input-file %s --output-file %s" % (input_file_name, output_file_name)
                 batch_cmd = CustomCommand(
@@ -180,8 +180,8 @@ class BatchSubmissionManager(ParallelWorkerManager):
         worker_results = []
         for i, f in enumerate(self.output_files):
             try:
-                with open(f, "r") as output_f:
-                    res = pickle.load(output_f)
+                with open(f, "rb") as output_f:
+                    res = six.moves.cPickle.load(output_f)
             except Exception as e:
                 # Probably the file doesn't exist and the job failed?
                 traceback.print_exc()

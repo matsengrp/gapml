@@ -5,7 +5,7 @@ Pickles results to an output file
 """
 import sys
 import argparse
-import pickle
+import six
 
 def parse_args():
     ''' parse command line arguments '''
@@ -26,15 +26,15 @@ def parse_args():
 
 def main(args=sys.argv[1:]):
     args = parse_args()
-    with open(args.input_file, "r") as input_file:
-        batched_workers = pickle.load(input_file)
+    with open(args.input_file, "rb") as input_file:
+        batched_workers = six.moves.cPickle.load(input_file)
 
     results = []
     for worker in batched_workers.workers:
         results.append(worker.run(batched_workers.shared_obj))
 
-    with open(args.output_file, "w") as output_file:
-        pickle.dump(results, output_file, protocol=pickle.HIGHEST_PROTOCOL)
+    with open(args.output_file, "wb") as output_file:
+        six.moves.cPickle.dump(results, output_file, protocol=2)
 
 if __name__ == "__main__":
     main(sys.argv[1:])

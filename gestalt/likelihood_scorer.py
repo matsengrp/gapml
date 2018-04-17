@@ -1,4 +1,5 @@
 from parallel_worker import ParallelWorker
+import tensorflow as tf
 
 from simulate_common import fit_pen_likelihood
 
@@ -23,5 +24,5 @@ class LikelihoodScorer(ParallelWorker):
                 self.cell_type_tree,
                 self.approximator,
                 sess,
-                warm_start=self.curr_model_vars)
-        return pen_ll, res_model
+                warm_start=self.init_model_vars)
+            return pen_ll, res_model.get_vars_as_dict(), res_model.get_branch_lens()

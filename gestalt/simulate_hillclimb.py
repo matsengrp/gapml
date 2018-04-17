@@ -2,6 +2,7 @@
 A simulation engine to test our hillclimbing
 """
 from __future__ import division, print_function
+import os
 import sys
 import numpy as np
 import argparse
@@ -15,6 +16,7 @@ from scipy.stats import pearsonr, spearmanr, kendalltau
 import logging
 import pickle
 from pathlib import Path
+from ete3 import Tree
 
 import ancestral_events_finder as anc_evt_finder
 from cell_state import CellState, CellTypeTree
@@ -166,19 +168,20 @@ def parse_args():
     args = parser.parse_args()
     args.num_targets = len(args.target_lambdas)
     args.log_file = "%s/fit_log.txt" % args.out_folder
-    print("Log file", args.log_file)
     args.model_data_file = "%s/model_data.pkl" % args.out_folder
     args.fitted_models_file = "%s/fitted.pkl" % args.out_folder
     args.branch_plot_file = "%s/branch_lens.png" % args.out_folder
+    args.scratch_dir = os.path.join(args.out_folder, "likelihood%s" % int(time.time()))
+    print("Log file", args.log_file)
+    print("Scratch dir", args.scratch_dir)
 
     return args
 
-def assign_branch_lens(clt_model, tree):
+def assign_branch_lens(br_len_dict, tree):
     # Assign branch lengths to this current tree
-    curr_br_lens = clt_model.get_branch_lens()
     for node in tree.traverse():
         if not node.is_root():
-            node.dist = curr_br_lens[node.node_id]
+            node.dist = br_len_dict[node.node_id]
 
 def main(args=sys.argv[1:]):
     args = parse_args()
@@ -233,28 +236,25 @@ def main(args=sys.argv[1:]):
                 num_mix_runs=args.num_jumbles)
         # Just take the first parsimony tree for now?
         parsimony_tree = parsimony_trees[0]
-        rf_res = true_tree.robinson_foulds(
+        root_rf, unroot_rf = get_rf_dist_root_unroot(
                 parsimony_tree,
-                attr_t1="allele_events_list_str",
-                attr_t2="allele_events_list_str",
-                expand_polytomies=False,
-                unrooted_trees=False)
-        assert rf_res[0] > 0
+                true_tree)
+        assert root_rf > 0
 
         # Instantiate approximator used by our penalized MLE
         approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
         anc_evt_finder.annotate_ancestral_states(parsimony_tree, bcode_meta)
-            
+
         # Oracle tree
-        oracle_pen_ll, oracle_model = fit_pen_likelihood(
-                true_tree,
-                args,
-                bcode_meta,
-                cell_type_tree,
-                approximator,
-                sess)
-        # Use this as a reference
-        logging.info("oracle %f", oracle_pen_ll)
+        #oracle_pen_ll, oracle_model = fit_pen_likelihood(
+        #        true_tree,
+        #        args,
+        #        bcode_meta,
+        #        cell_type_tree,
+        #        approximator,
+        #        sess)
+        ## Use this as a reference
+        #logging.info("oracle %f", oracle_pen_ll)
 
         # Now start exploring the sapce with NNI moves
         curr_tree = parsimony_tree
@@ -266,14 +266,14 @@ def main(args=sys.argv[1:]):
                 approximator,
                 sess)
         # Assign branch lengths to this current tree
-        assign_branch_lens(curr_model, curr_tree)
+        assign_branch_lens(curr_model.get_branch_lens(), curr_tree)
         curr_model_vars = curr_model.get_vars_as_dict()
 
         # Begin our hillclimbing search!
         print("Parsimony tree")
         print(parsimony_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
-        logging.info("parsimony init distance %d, init pen_ll %f", rf_res[0], curr_pen_ll)
+        logging.info("parsimony init root rf %d, unroot rf %d, init pen_ll %f", root_rf, unroot_rf, curr_pen_ll)
         for i in range(args.max_tree_search_iters):
             logging.info("curr treeeee....")
             logging.info(curr_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
@@ -289,7 +289,7 @@ def main(args=sys.argv[1:]):
                 logging.info("considering...")
                 logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
-            # TODO: distribute
+            # Calculate the likelihoods
             worker_list = [
                 LikelihoodScorer(
                         i,
@@ -302,11 +302,12 @@ def main(args=sys.argv[1:]):
                 for i, tree in enumerate(nearby_trees)]
             shared_obj = None
             if args.num_jobs > 1:
+                # Submit jobs to slurm
                 batch_manager = BatchSubmissionManager(
                         worker_list,
                         shared_obj,
-                        self.num_jobs,
-                        os.path.join(self.out_dir, "likelihood"))
+                        len(worker_list),
+                        args.scratch_dir)
                 nni_results = batch_manager.run()
             else:
                 nni_results = [worker.run(shared_obj) for worker in worker_list]
@@ -321,28 +322,17 @@ def main(args=sys.argv[1:]):
             # We found a tree with higher pen log lik than current tree
             curr_pen_ll = pen_lls[best_index]
             curr_tree = nearby_trees[best_index]
-            curr_model = nni_results[best_index][1]
+            curr_model_vars = nni_results[best_index][1]
+            curr_br_lens = nni_results[best_index][2]
 
             # Store info about our best current tree for warm starting later on
-            curr_model_vars = curr_model.get_vars_as_dict()
-            assign_branch_lens(curr_model, curr_tree)
+            assign_branch_lens(curr_br_lens, curr_tree)
 
             # Calculate RF distance to understand if our hillclimbing is working
-            root_rf_res = true_tree.robinson_foulds(
-                    curr_tree,
-                    attr_t1="allele_events_list_str",
-                    attr_t2="allele_events_list_str",
-                    expand_polytomies=False,
-                    unrooted_trees=False)
-            unroot_rf_res = true_tree.robinson_foulds(
-                    curr_tree,
-                    attr_t1="allele_events_list_str",
-                    attr_t2="allele_events_list_str",
-                    expand_polytomies=False,
-                    unrooted_trees=False)
-            logging.info("curr tree distance root %d, unroot %d, pen_ll %f", root_rf_res[0], unroot_rf_res[0], curr_pen_ll)
+            root_rf, unroot_rf = get_rf_dist_root_unroot(curr_tree, true_tree)
+            logging.info("curr tree distance root %d, unroot %d, pen_ll %f", root_rf, unroot_rf, curr_pen_ll)
 
-        logging.info("final tree distance, root %d, unroot %d, pen_ll %f", root_rf_res[0], unroot_rf_res[0], curr_pen_ll)
+        logging.info("final tree distance, root %d, unroot %d, pen_ll %f", root_rf, unroot_rf, curr_pen_ll)
         logging.info(curr_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
 if __name__ == "__main__":
