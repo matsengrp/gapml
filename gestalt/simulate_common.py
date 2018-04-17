@@ -145,9 +145,9 @@ def compare_lengths(length_dict1, length_dict2, subset, branch_plot_file, label)
     plt.scatter(np.log(length_list1), np.log(length_list2))
     plt.savefig(branch_plot_file)
 
-def fit_pen_likelihood(tree, args, bcode_meta, cell_type_tree, approximator, sess):
+def fit_pen_likelihood(tree, args, bcode_meta, cell_type_tree, approximator, sess, warm_start=None):
     num_nodes = len([t for t in tree.traverse()])
-
+    branch_len_inners = np.random.rand(num_nodes) * 0.1
     if args.know_target_lambdas:
         target_lams = np.array(args.target_lambdas)
     else:
@@ -159,14 +159,33 @@ def fit_pen_likelihood(tree, args, bcode_meta, cell_type_tree, approximator, ses
         sess,
         target_lams = target_lams,
         target_lams_known=args.know_target_lambdas,
-        branch_len_inners = np.random.rand(num_nodes) * 0.1,
+        branch_len_inners = branch_len_inners,
         cell_type_tree = cell_type_tree if args.use_cell_state else None,
         cell_lambdas_known = args.know_cell_lambdas)
     estimator = CLTPenalizedEstimator(
             res_model,
             approximator,
             args.log_barr)
+
+    if warm_start is not None:
+        # calculate branch length from tree
+        for node in tree.traverse():
+            if not node.is_root() and not node.is_leaf():
+                branch_len_inners[node.node_id] = node.dist
+
+        res_model.set_params(
+                warm_start["target_lams"],
+                warm_start["trim_long_probs"],
+                warm_start["trim_zero_prob"],
+                warm_start["trim_poissons"],
+                warm_start["insert_zero_prob"],
+                warm_start["insert_poisson"],
+                branch_len_inners,
+                warm_start["cell_type_lams"],
+                warm_start["tot_time"])
+
     pen_log_lik = estimator.fit(
-            args.num_inits,
+            args.num_inits if warm_start is None else 1,
             args.max_iters)
+
     return pen_log_lik, res_model

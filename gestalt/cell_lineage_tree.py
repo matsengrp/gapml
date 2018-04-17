@@ -65,6 +65,9 @@ class CellLineageTree(TreeNode):
         self.add_feature("abundance", abundance)
 
     def get_parsimony_score(self):
+        """
+        This only makes sense if all internal nodes are labeled with allele events!
+        """
         pars_score = 0
         for node in self.traverse("preorder"):
             if not node.is_root():

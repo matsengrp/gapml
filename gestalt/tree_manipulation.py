@@ -1,7 +1,10 @@
 import copy
 import numpy as np
 
-def NNI(node):
+from indel_sets import SingletonWC
+import ancestral_events_finder as anc_evt_finder
+
+def NNI(node, xchild, ychild):
     """
     NNI move code copied from phyloinfer.
     assumes a bifurcating tree
@@ -10,24 +13,39 @@ def NNI(node):
     if node.is_root() or node.is_leaf():
         raise ValueError("Can not perform NNI on root or leaf branches!")
     else:
-        neighboor = np.random.randint(2)
-        xchild = node.get_sisters()[0]
+        x_dist = xchild.dist
         parent = node.up
-        ychild = node.children[neighboor]
-        if parent.allele_events_list_str == node.allele_events_list_str:
-            # This is currently a jenky NNI check
-            # Checks if oracle ancestor state is the same.
-            # Then NNI move is allowed.
-            # Preserves the parsimony score
-            xchild.detach()
-            ychild.detach()
-            parent.add_child(ychild)
-            node.add_child(xchild)
-            return True
-        else:
-            return False
+        y_dist = ychild.dist
+        # Preserves the parsimony score
+        xchild.detach()
+        ychild.detach()
+        parent.add_child(ychild)
+        # preserve ultrametric by swapping branch lengths
+        ychild.dist = x_dist
+        node.add_child(xchild)
+        xchild.dist = y_dist
 
-def search_nearby_trees(true_tree, max_search_dist=10):
+def get_parsimony_edge_score(node):
+    score = 0
+    for anc_state, par_anc_state in zip(node.anc_state_list, node.up.anc_state_list):
+        node_singletons = set(anc_state.get_singleton_wcs())
+        par_singletons = set(par_anc_state.get_singleton_wcs())
+        score += len(node_singletons - par_singletons)
+    return score
+
+def get_parsimony_score_nearest_neighbors(node, redo_ancestral_states=True):
+    if redo_ancestral_states:
+        node.anc_state_list = anc_evt_finder.get_possible_anc_states(node)
+        node.up.anc_state_list = anc_evt_finder.get_possible_anc_states(node.up)
+
+    score = get_parsimony_edge_score(node)
+    for child in node.children:
+        score += get_parsimony_edge_score(child)
+    for sister in node.get_sisters():
+        score += get_parsimony_edge_score(sister)
+    return score
+
+def search_nearby_trees(init_tree, max_search_dist=10):
     """
     Searches nearby trees, but makes sure that the gestalt rules
     are obeyed and parsimony score is preserved
@@ -35,7 +53,7 @@ def search_nearby_trees(true_tree, max_search_dist=10):
     @param max_search_dist: perform this many NNI moves
     """
     # Make sure we don't change the original tree
-    scratch_tree = copy.deepcopy(true_tree)
+    scratch_tree = copy.deepcopy(init_tree)
 
     # First label the nodes in the tree
     node_dict = []
@@ -49,13 +67,31 @@ def search_nearby_trees(true_tree, max_search_dist=10):
     curr_tree = scratch_tree
     trees = []
     for i in range(max_search_dist):
-        nni_success = False
-        while not nni_success:
+        while True:
             # Pick the random node
             rand_node_index = np.random.randint(0, num_interior_nodes)
             rand_node = node_dict[rand_node_index]
-            # Perform the actual move
-            nni_success = NNI(rand_node)
+            if rand_node.is_leaf() or rand_node.is_root():
+                continue
+            else:
+                # preserve ultrametric by swapping branch lengths
+                # TODO: Assume bifurcating for now...
+                sisters = rand_node.get_sisters()
+                sister_idx = np.random.randint(len(sisters))
+                xchild = sisters[sister_idx]
+
+                children = rand_node.get_children()
+                child_idx = np.random.randint(len(children))
+                ychild = rand_node.children[child_idx]
+
+                orig_score = get_parsimony_score_nearest_neighbors(rand_node)
+
+                NNI(rand_node, xchild, ychild)
+                proposed_score = get_parsimony_score_nearest_neighbors(rand_node)
+                if proposed_score > orig_score:
+                    NNI(rand_node, ychild, xchild)
+                else:
+                    break
 
         # Make a copy of this tree and store!
         trees.append(copy.deepcopy(scratch_tree))

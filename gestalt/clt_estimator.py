@@ -26,6 +26,34 @@ class CLTEstimator:
         """
         raise NotImplementedError()
 
+    @staticmethod
+    def get_uniq_trees(trees, max_trees=None):
+        """
+        @param max_trees: find this many uniq trees at most
+        """
+        num_trees = 1
+        uniq_trees = [trees[0]]
+        for t in trees[1:]:
+            # We are going to use the unrooted tree assuming that the collapsed tree output
+            # does not have multifurcating branches...
+            rf_dist = 1
+            for uniq_t in uniq_trees:
+                rf_dist = t.robinson_foulds(
+                    uniq_t,
+                    attr_t1="allele_events_list_str",
+                    attr_t2="allele_events_list_str",
+                    expand_polytomies=False,
+                    unrooted_trees=False)[0]
+                if rf_dist == 0:
+                    break
+            if rf_dist > 0:
+                # Everything was nonzero
+                uniq_trees.append(t)
+                num_trees += 1
+                if num_trees == max_trees:
+                    break
+        return uniq_trees
+
 
 class CLTParsimonyEstimator(CLTEstimator):
     def __init__(self, bcode_meta: BarcodeMetadata, out_folder: str, mix_path: str = MIX_PATH):
@@ -133,6 +161,12 @@ class CLTParsimonyEstimator(CLTEstimator):
         self._do_convert(clt, tree, event_list, processed_obs, processed_abund)
         for node in clt.traverse():
             node.add_feature("observed", node.is_leaf())
+
+        while len(clt.get_children()) == 1:
+            child_node = clt.get_children()[0]
+            child_node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
+        assert(clt.is_root())
+
         return clt
 
     def _create_mix_cfg(self, seed_num, num_jumbles=5):
@@ -235,31 +269,3 @@ class CLTParsimonyEstimator(CLTEstimator):
         # Check that clean up happened
         assert res == 0, "clean up happened"
         return pars_trees
-
-    @staticmethod
-    def get_uniq_trees(trees, max_trees=None):
-        """
-        @param max_trees: find this many uniq trees at most
-        """
-        num_trees = 1
-        uniq_trees = [trees[0]]
-        for t in trees[1:]:
-            # We are going to use the unrooted tree assuming that the collapsed tree output
-            # does not have multifurcating branches...
-            rf_dist = 1
-            for uniq_t in uniq_trees:
-                rf_dist = t.robinson_foulds(
-                    uniq_t,
-                    attr_t1="allele_events_list_str",
-                    attr_t2="allele_events_list_str",
-                    expand_polytomies=False,
-                    unrooted_trees=False)[0]
-                if rf_dist == 0:
-                    break
-            if rf_dist > 0:
-                # Everything was nonzero
-                uniq_trees.append(t)
-                num_trees += 1
-                if num_trees == max_trees:
-                    break
-        return uniq_trees

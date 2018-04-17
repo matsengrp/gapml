@@ -54,6 +54,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         best_pen_log_lik = self._fit(max_iters, print_iter)
         best_vars = self.model.get_vars()
         for i in range(num_inits - 1):
+            raise ValueError("i thought we try to warm start")
             # Initialization -- only perturbing branch lengths and target lams for now...
             branch_lens = np.random.gamma(
                     self.gamma_prior[0],
