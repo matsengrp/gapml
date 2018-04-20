@@ -1,4 +1,5 @@
 import copy
+import typing
 import numpy as np
 
 from indel_sets import SingletonWC
@@ -9,12 +10,20 @@ from cell_lineage_tree import CellLineageTree
 TODO: add types to the arguments!
 """
 
-def resolve_multifurc(node, c_index):
+def _resolve_multifurc(node: CellLineageTree, c_index: int):
+    """
+    Resolve the multifurcation at this node by adding a bifurcation
+    with child `c_index` as the first one to split off
+    @param node: node to resolve multifurcation for
+    @param c_index: the child to peel off
+
+    @return whether or not we successfully resolve this multifurcation
+    """
     node_str = node.allele_events_list_str
     # reconstruct the tree
     child = node.get_children()[c_index]
     if child.allele_events_list_str == node_str:
-        # Cannot resolve by setting the parent ancestral allele to a child
+        # Cannot resolve if the request was to set the parent ancestral allele to a child
         return False
 
     new_inner_node = CellLineageTree(
@@ -30,7 +39,10 @@ def resolve_multifurc(node, c_index):
     node.add_child(new_inner_node)
     return True
 
-def resolve_all_multifurcs(tree):
+def resolve_all_multifurcs(tree: CellLineageTree):
+    """
+    resolve all the multifurcations in this tree
+    """
     no_multifurcs = False
     while not no_multifurcs:
         # TODO: worlds most ineffecieint resolver. oh well
@@ -41,15 +53,19 @@ def resolve_all_multifurcs(tree):
             if num_children > 2:
                 # This is a multifurc
                 rand_child_idx = np.random.randint(low=0, high=num_children)
-                did_rearrange = resolve_multifurc(node, rand_child_idx)
+                did_rearrange = _resolve_multifurc(node, rand_child_idx)
                 no_multifurcs = False
                 break
 
-def NNI(node, xchild, ychild):
+def NNI(node: CellLineageTree, xchild: CellLineageTree, ychild: CellLineageTree):
     """
     NNI move code copied from phyloinfer.
     assumes a bifurcating tree
     only performs NNI on interior branches
+
+    @param node: the node to do NNI around
+    @param xchild: sister of `node`. swap with ychild
+    @param ychild: child of `node`. swap with xchild
     """
     if node.is_root() or node.is_leaf():
         raise ValueError("Can not perform NNI on root or leaf branches!")
@@ -71,7 +87,7 @@ def NNI(node, xchild, ychild):
         node.anc_state_list = anc_evt_finder.get_possible_anc_states(node)
         node.up.anc_state_list = anc_evt_finder.get_possible_anc_states(node.up)
 
-def get_parsimony_edge_score(node):
+def get_parsimony_edge_score(node: CellLineageTree):
     """
     Get the parsimony score for that edge
     """
@@ -82,7 +98,7 @@ def get_parsimony_edge_score(node):
         score += len(node_singletons - par_singletons)
     return score
 
-def get_parsimony_score_nearest_neighbors(node):
+def get_parsimony_score_nearest_neighbors(node: CellLineageTree):
     """
     Get the parsimony score summing over this node, its children, and its sisters.
     """
@@ -93,7 +109,7 @@ def get_parsimony_score_nearest_neighbors(node):
         score += get_parsimony_edge_score(sister)
     return score
 
-def search_nearby_trees(init_tree, max_search_dist=10):
+def search_nearby_trees(init_tree: CellLineageTree, max_search_dist: int =10):
     """
     Searches nearby trees, but makes sure that the gestalt rules
     are obeyed and parsimony score is preserved
@@ -162,4 +178,3 @@ def search_nearby_trees(init_tree, max_search_dist=10):
         # Make a copy of this tree and store!
         trees.append(scratch_tree.copy("deepcopy"))
     return trees
-

@@ -231,7 +231,7 @@ class TargetTract(Tract, DeactEvt):
         return tuple.__new__(cls, (min_deact_targ, min_targ, max_targ, max_deact_targ))
 
     def __getnewargs__(self):
-        return self#(self.min_deact_targ, self.min_targ, self.max_targ, self.max_deact_targ)
+        return self
 
     @property
     def min_target(self):

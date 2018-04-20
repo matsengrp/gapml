@@ -246,9 +246,12 @@ def main(args=sys.argv[1:]):
             for tree in pars_trees:
                 pen_log_lik, res_model = fit_pen_likelihood(
                         tree,
-                        args,
                         bcode_meta,
                         cell_type_tree if args.use_cell_state else None,
+                        args.know_cell_lambdas,
+                        np.array(args.target_lambdas) if args.know_target_lambdas else None,
+                        args.log_barr,
+                        args.max_iters,
                         approximator,
                         sess)
                 fitting_results[rf_dist].append((
