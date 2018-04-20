@@ -3,6 +3,47 @@ import numpy as np
 
 from indel_sets import SingletonWC
 import ancestral_events_finder as anc_evt_finder
+from cell_lineage_tree import CellLineageTree
+
+"""
+TODO: add types to the arguments!
+"""
+
+def resolve_multifurc(node, c_index):
+    node_str = node.allele_events_list_str
+    # reconstruct the tree
+    child = node.get_children()[c_index]
+    if child.allele_events_list_str == node_str:
+        # Cannot resolve by setting the parent ancestral allele to a child
+        return False
+
+    new_inner_node = CellLineageTree(
+            allele_list=node.allele_list,
+            allele_events_list=node.allele_events_list,
+            cell_state=node.cell_state)
+    new_inner_node.add_feature("observed", node.observed)
+
+    sisters = child.get_sisters()
+    for s in sisters:
+        s.detach()
+        new_inner_node.add_child(s)
+    node.add_child(new_inner_node)
+    return True
+
+def resolve_all_multifurcs(tree):
+    no_multifurcs = False
+    while not no_multifurcs:
+        # TODO: worlds most ineffecieint resolver. oh well
+        no_multifurcs = True
+        for node in tree.traverse():
+            children = node.get_children()
+            num_children = len(children)
+            if num_children > 2:
+                # This is a multifurc
+                rand_child_idx = np.random.randint(low=0, high=num_children)
+                did_rearrange = resolve_multifurc(node, rand_child_idx)
+                no_multifurcs = False
+                break
 
 def NNI(node, xchild, ychild):
     """
@@ -25,6 +66,11 @@ def NNI(node, xchild, ychild):
         node.add_child(xchild)
         xchild.dist = y_dist
 
+        # Redo ancestral state calculations because of NNI moves
+        # TODO: reset the strings that are printed too.
+        node.anc_state_list = anc_evt_finder.get_possible_anc_states(node)
+        node.up.anc_state_list = anc_evt_finder.get_possible_anc_states(node.up)
+
 def get_parsimony_edge_score(node):
     """
     Get the parsimony score for that edge
@@ -36,14 +82,10 @@ def get_parsimony_edge_score(node):
         score += len(node_singletons - par_singletons)
     return score
 
-def get_parsimony_score_nearest_neighbors(node, redo_ancestral_states=True):
+def get_parsimony_score_nearest_neighbors(node):
     """
     Get the parsimony score summing over this node, its children, and its sisters.
     """
-    if redo_ancestral_states:
-        node.anc_state_list = anc_evt_finder.get_possible_anc_states(node)
-        node.up.anc_state_list = anc_evt_finder.get_possible_anc_states(node.up)
-
     score = get_parsimony_edge_score(node)
     for child in node.children:
         score += get_parsimony_edge_score(child)
@@ -59,7 +101,7 @@ def search_nearby_trees(init_tree, max_search_dist=10):
     @param max_search_dist: perform this many NNI moves
     """
     # Make sure we don't change the original tree
-    scratch_tree = copy.deepcopy(init_tree)
+    scratch_tree = init_tree.copy("deepcopy")
 
     # First label the nodes in the tree
     node_dict = []
@@ -84,10 +126,24 @@ def search_nearby_trees(init_tree, max_search_dist=10):
                 sisters = rand_node.get_sisters()
                 sister_idx = np.random.randint(len(sisters))
                 xchild = sisters[sister_idx]
+                if get_parsimony_edge_score(xchild) == 0:
+                    if len(sisters) == 1:
+                        xchild = rand_node
+                        rand_node = sisters[sister_idx]
+                        if rand_node.is_leaf() or rand_node.is_root():
+                            continue
+                    else:
+                        while get_parsimony_edge_score(xchild) == 0:
+                            sister_idx = np.random.randint(len(sisters))
+                            xchild = sisters[sister_idx]
+                assert get_parsimony_edge_score(xchild) > 0
 
                 children = rand_node.get_children()
                 child_idx = np.random.randint(len(children))
                 ychild = rand_node.children[child_idx]
+                while get_parsimony_edge_score(ychild) == 0:
+                    child_idx = np.random.randint(len(children))
+                    ychild = rand_node.children[child_idx]
 
                 # Get the orig parsimony score of this region
                 orig_score = get_parsimony_score_nearest_neighbors(rand_node)
@@ -104,6 +160,6 @@ def search_nearby_trees(init_tree, max_search_dist=10):
                     break
 
         # Make a copy of this tree and store!
-        trees.append(copy.deepcopy(scratch_tree))
+        trees.append(scratch_tree.copy("deepcopy"))
     return trees
 

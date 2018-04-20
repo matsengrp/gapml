@@ -112,6 +112,19 @@ def _regrow_collapsed_tree(tree: TreeNode, uniq_allele_branches: Dict):
                         dist_to_root: par_node}
     return existing_nodes_dict
 
+def _remove_single_child_unobs_nodes(tree: TreeNode):
+    """
+    Remove unobserved nodes that only have a single child
+    """
+    while len(tree.get_children()) == 1 and not tree.observed:
+        child_node = tree.get_children()[0]
+        child_node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
+    assert(tree.is_root())
+
+    for node in tree.get_descendants(strategy="postorder"):
+        if len(node.get_children()) == 1 and not node.observed:
+            node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
+
 def collapse_ultrametric(raw_tree: TreeNode):
     tree = _preprocess(raw_tree)
     tree.label_tree_with_strs()
@@ -152,21 +165,63 @@ def collapse_ultrametric(raw_tree: TreeNode):
     for node in tree.traverse():
         # Any node that has distance to root equal to max dist is observed
         node.add_feature("observed", node.dist_to_root == max_dist)
-    
-    while len(tree.get_children()) == 1 and not tree.observed:
-        child_node = tree.get_children()[0]
-        child_node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
-    assert(tree.is_root())
 
-    for node in tree.get_descendants(strategy="postorder"):
-        if len(node.get_children()) == 1 and not node.observed:
-            print("asdjfkalsdjflasjdkflasdf")
-            logging.info("WARNING: There was an inner node with only one child!")
-            node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
+    _remove_single_child_unobs_nodes(tree)
 
     print(tree.get_ascii(attributes=["dist"], show_internal=True))
     print(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
     print(tree.get_ascii(attributes=["observed"], show_internal=True))
     print(tree)
+
+    return tree
+
+def collapse_zero_lens(raw_tree: TreeNode):
+    """
+    Remove zero-length edges from the tree, but leave one leaf node for each observed node.
+    """
+    tree = _preprocess(raw_tree)
+    # dictionary maps node name to a node that was removed because it was a "duplicate"
+    # (i.e. zero length away). We use this dictionary later to add nodes back in
+    removed_children_dict = {}
+
+    # Step 1: just collapse all zero length edges. So if an observed node was a parent
+    # of another node, it will no longer be a leaf node after this procedure.
+    for node in tree.traverse(strategy='postorder'):
+        if not hasattr(node, "observed"):
+            # All leaf nodes are observed
+            node.add_feature("observed", node.is_leaf())
+
+        if node.dist == 0 and not node.is_root():
+            # Need to remove this node and propogate the observed status
+            # up to the parent node (if parent observed already, dont update
+            # the parent)
+            up_node = node.up
+            if hasattr(up_node, "observed"):
+                if not up_node.observed:
+                    up_node.add_feature("observed", node.observed)
+                    up_node.name = node.name
+            else:
+                up_node.add_feature("observed", node.observed)
+                up_node.name = node.name
+            node.delete(prevent_nondicotomic=False)
+            if up_node.name not in removed_children_dict:
+                removed_children_dict[up_node.name] = node
+
+    # Step 2: Clean up the tree so that all nodes have at least two children
+    _remove_single_child_unobs_nodes(tree)
+
+    # Step 3: add nodes that were observed but were collapsed away.
+    # This ensures only one leaf node for each observed allele.
+    for node in tree.traverse():
+        if node.observed and not node.is_leaf():
+            # Use a node from the dictionary as a template
+            child_template = removed_children_dict[node.name]
+            # Copy this node and its features... don't use the original one just in case
+            new_child = TreeNode(name=child_template.name)
+            for feat in child_template.features:
+                new_child.add_feature(feat, getattr(child_template, feat))
+            node.add_child(new_child)
+            new_child.observed = True
+            node.observed = False
 
     return tree

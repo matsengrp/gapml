@@ -27,10 +27,11 @@ class CLTEstimator:
         raise NotImplementedError()
 
     @staticmethod
-    def get_uniq_trees(trees, max_trees=None):
+    def get_uniq_trees(trees: List[TreeNode], attr_str: str=None, max_trees: int=None, unrooted: bool=False):
         """
         @param max_trees: find this many uniq trees at most
         """
+        attr_str = attr_str if attr_str is not None else "name"
         num_trees = 1
         uniq_trees = [trees[0]]
         for t in trees[1:]:
@@ -40,17 +41,17 @@ class CLTEstimator:
             for uniq_t in uniq_trees:
                 rf_dist = t.robinson_foulds(
                     uniq_t,
-                    attr_t1="allele_events_list_str",
-                    attr_t2="allele_events_list_str",
+                    attr_t1=attr_str,
+                    attr_t2=attr_str,
                     expand_polytomies=False,
-                    unrooted_trees=False)[0]
+                    unrooted_trees=unrooted)[0]
                 if rf_dist == 0:
                     break
             if rf_dist > 0:
                 # Everything was nonzero
                 uniq_trees.append(t)
                 num_trees += 1
-                if num_trees == max_trees:
+                if max_trees is not None and num_trees == max_trees:
                     break
         return uniq_trees
 
@@ -196,9 +197,14 @@ class CLTParsimonyEstimator(CLTEstimator):
             observations: List[ObservedAlignedSeq],
             encode_hidden: bool = True,
             use_cell_state: bool = False,
+            do_collapse: bool = False,
             num_mix_runs: int = 2):
         """
+        @param observations: the observations to run MIX on
+        @param encode_hidden: indicate hidden states to MIX
+        @param use_cell_state: ignored -- this is always false
         @param num_mix_runs: number of mix runs with different seeds
+        @param do_collapse: return collapsed trees instead of bifurcating trees
 
         @return a list of unique cell lineage tree estimates
                 calls out to mix on the command line
@@ -225,10 +231,16 @@ class CLTParsimonyEstimator(CLTEstimator):
             # Note: These trees aren't necessarily unique
             tree_lists.append(pars_trees)
 
-        uniq_trees = [t for trees in tree_lists for t in trees]
-        ## Let's make sure the trees are unique
-        ## This part can be quite slow if we ran mix a lot of times...
-        #uniq_trees = CLTParsimonyEstimator.get_uniq_trees(tree_lists)
+        # Read out the results
+        bifurcating_trees = [t for trees in tree_lists for t in trees]
+        logging.info("num bifurcating trees %d", len(bifurcating_trees))
+        if do_collapse:
+            # Collapse trees
+            collapsed_trees = [collapsed_tree.collapse_zero_lens(t) for t in bifurcating_trees]
+            # Get the unique collapsed trees
+            mix_trees = CLTEstimator.get_uniq_trees(collapsed_trees, unrooted=True)
+        else:
+            mix_trees = bifurcating_trees
 
         # Get a mapping from cell to cell state
         processed_obs = {k: v[2] for k, v in processed_seqs.items()}
@@ -236,7 +248,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         processed_abund = {k: v[0] for k, v in processed_seqs.items()}
         # Now convert these trees to CLTs
         clts = []
-        for t in uniq_trees:
+        for t in mix_trees:
             clt_new = self.convert_tree_to_clt(t, event_list, processed_obs, processed_abund)
             clt_new.label_tree_with_strs()
             clts.append(clt_new)

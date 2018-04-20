@@ -55,7 +55,7 @@ def run_cmd(cmdfo, batch_system=None, batch_options=None):
     prefix = None
     if batch_system is not None:
         if batch_system == 'slurm':
-            prefix = 'srun -p restart,matsen_e,campus'  # --exclude=data/gizmod.txt'
+            prefix = 'srun -p restart,matsen_e,campus --exclude=data/gizmod.txt'
             if cmdfo.threads is not None:
                 prefix += ' --cpus-per-task %d' % cmdfo.threads
         elif batch_system == 'sge':

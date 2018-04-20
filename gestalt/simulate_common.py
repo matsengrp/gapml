@@ -10,12 +10,15 @@ matplotlib.use('agg')
 from matplotlib import pyplot as plt
 import time
 import tensorflow as tf
+from tensorflow import Session
 from tensorflow.python import debug as tf_debug
 from scipy.stats import pearsonr, spearmanr, kendalltau
 import logging
 import pickle
 from pathlib import Path
+from numpy import ndarray
 
+from cell_lineage_tree import CellLineageTree
 from cell_state import CellState, CellTypeTree
 from cell_state_simulator import CellTypeSimulator
 from clt_simulator import CLTSimulatorBifurcating
@@ -28,7 +31,6 @@ from clt_likelihood_estimator import *
 from alignment import AlignerNW
 from barcode_metadata import BarcodeMetadata
 from approximator import ApproximatorLB
-from tree_manipulation import search_nearby_trees
 
 from constants import *
 from common import *
@@ -145,27 +147,41 @@ def compare_lengths(length_dict1, length_dict2, subset, branch_plot_file, label)
     plt.scatter(np.log(length_list1), np.log(length_list2))
     plt.savefig(branch_plot_file)
 
-def fit_pen_likelihood(tree, args, bcode_meta, cell_type_tree, approximator, sess, warm_start=None):
+def fit_pen_likelihood(
+        tree: CellLineageTree,
+        bcode_meta: BarcodeMetadata,
+        cell_type_tree: CellTypeTree,
+        know_cell_lams: bool,
+        target_lams: ndarray, # set to None if it is not known
+        log_barr: float,
+        max_iters: int,
+        approximator: ApproximatorLB,
+        sess: Session,
+        warm_start: Dict[str, ndarray] =None):
+    """
+    Fit the model for the given tree topology
+    @param warm_start: use the given variables to initialize the model
+                        If None, then start from scratch
+    """
     num_nodes = len([t for t in tree.traverse()])
     branch_len_inners = np.random.rand(num_nodes) * 0.1
-    if args.know_target_lambdas:
-        target_lams = np.array(args.target_lambdas)
-    else:
-        target_lams = 0.3 * np.ones(args.target_lambdas.size) + np.random.uniform(size=args.num_targets) * 0.08
+    target_lams_known = target_lams is not None
+    if not target_lams_known:
+        target_lams = 0.3 * np.ones(bcode_meta.n_targets) + np.random.uniform(size=bcode_meta.n_targets) * 0.08
 
     res_model = CLTLikelihoodModel(
         tree,
         bcode_meta,
         sess,
         target_lams = target_lams,
-        target_lams_known=args.know_target_lambdas,
+        target_lams_known=target_lams_known,
         branch_len_inners = branch_len_inners,
-        cell_type_tree = cell_type_tree if args.use_cell_state else None,
-        cell_lambdas_known = args.know_cell_lambdas)
+        cell_type_tree = cell_type_tree,
+        cell_lambdas_known = know_cell_lams)
     estimator = CLTPenalizedEstimator(
             res_model,
             approximator,
-            args.log_barr)
+            log_barr)
 
     if warm_start is not None:
         # calculate branch length from tree
@@ -184,8 +200,6 @@ def fit_pen_likelihood(tree, args, bcode_meta, cell_type_tree, approximator, ses
                 warm_start["cell_type_lams"],
                 warm_start["tot_time"])
 
-    pen_log_lik = estimator.fit(
-            args.num_inits if warm_start is None else 1,
-            args.max_iters)
+    pen_log_lik = estimator.fit(num_inits=1, max_iters=max_iters)
 
     return pen_log_lik, res_model

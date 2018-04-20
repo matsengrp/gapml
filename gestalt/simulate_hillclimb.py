@@ -21,8 +21,6 @@ from ete3 import Tree
 import ancestral_events_finder as anc_evt_finder
 from cell_state import CellState, CellTypeTree
 from cell_state_simulator import CellTypeSimulator
-from clt_simulator import CLTSimulatorBifurcating
-from clt_simulator_simple import CLTSimulatorOneLayer, CLTSimulatorTwoLayers
 from allele_simulator_simult import AlleleSimulatorSimultaneous
 from allele import Allele
 from clt_observer import CLTObserver
@@ -31,14 +29,13 @@ from clt_likelihood_estimator import *
 from alignment import AlignerNW
 from barcode_metadata import BarcodeMetadata
 from approximator import ApproximatorLB
-from tree_manipulation import search_nearby_trees
+from tree_manipulation import resolve_all_multifurcs
+from clt_likelihood_topology import CLTLikelihoodTopologySearcher
 
 from constants import *
 from common import *
 from summary_util import *
 from simulate_common import *
-from parallel_worker import BatchSubmissionManager
-from likelihood_scorer import LikelihoodScorer
 
 def parse_args():
     parser = argparse.ArgumentParser(description='simulate GESTALT')
@@ -170,18 +167,11 @@ def parse_args():
     args.log_file = "%s/fit_log.txt" % args.out_folder
     args.model_data_file = "%s/model_data.pkl" % args.out_folder
     args.fitted_models_file = "%s/fitted.pkl" % args.out_folder
-    args.branch_plot_file = "%s/branch_lens.png" % args.out_folder
     args.scratch_dir = os.path.join(args.out_folder, "likelihood%s" % int(time.time()))
     print("Log file", args.log_file)
     print("Scratch dir", args.scratch_dir)
 
     return args
-
-def assign_branch_lens(br_len_dict, tree):
-    # Assign branch lengths to this current tree
-    for node in tree.traverse():
-        if not node.is_root():
-            node.dist = br_len_dict[node.node_id]
 
 def main(args=sys.argv[1:]):
     args = parse_args()
@@ -216,34 +206,10 @@ def main(args=sys.argv[1:]):
                 cell_type_tree = cell_type_tree)
         clt_model.set_tot_time(args.time)
         tf.global_variables_initializer().run()
-
         clt, obs_leaves, true_tree = create_cell_lineage_tree(args, clt_model)
-        # Gather true branch lengths
-        true_tree.label_node_ids(CLTLikelihoodModel.NODE_ORDER)
-        true_branch_lens = {}
-        for node in true_tree.traverse(CLTLikelihoodModel.NODE_ORDER):
-            if not node.is_root():
-                true_branch_lens[node.node_id] = node.dist
-
-        # Get the parsimony-estimated topologies
-        parsimony_estimator = CLTParsimonyEstimator(
-                bcode_meta,
-                args.out_folder,
-                args.mix_path)
-        #TODO: DOESN'T USE CELL STATE
-        parsimony_trees = parsimony_estimator.estimate(
-                obs_leaves,
-                num_mix_runs=args.num_jumbles)
-        # Just take the first parsimony tree for now?
-        parsimony_tree = parsimony_trees[0]
-        root_rf, unroot_rf = get_rf_dist_root_unroot(
-                parsimony_tree,
-                true_tree)
-        assert root_rf > 0
 
         # Instantiate approximator used by our penalized MLE
         approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
-        anc_evt_finder.annotate_ancestral_states(parsimony_tree, bcode_meta)
 
         # Oracle tree
         #oracle_pen_ll, oracle_model = fit_pen_likelihood(
@@ -256,84 +222,43 @@ def main(args=sys.argv[1:]):
         ## Use this as a reference
         #logging.info("oracle %f", oracle_pen_ll)
 
-        # Now start exploring the sapce with NNI moves
-        curr_tree = parsimony_tree
-        curr_pen_ll, curr_model = fit_pen_likelihood(
-                parsimony_tree,
-                args,
-                bcode_meta,
-                cell_type_tree,
-                approximator,
-                sess)
-        # Assign branch lengths to this current tree
-        assign_branch_lens(curr_model.get_branch_lens(), curr_tree)
-        curr_model_vars = curr_model.get_vars_as_dict()
-
         # Begin our hillclimbing search!
-        print("Parsimony tree")
-        print(parsimony_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+        # Get the parsimony-estimated topologies
+        parsimony_estimator = CLTParsimonyEstimator(
+                bcode_meta,
+                args.out_folder,
+                args.mix_path)
+        #TODO: DOESN'T USE CELL STATE
+        parsimony_trees = parsimony_estimator.estimate(
+                obs_leaves,
+                num_mix_runs = args.num_jumbles,
+                do_collapse = True)
+        # Just take the first parsimony tree for now
+        parsimony_tree = parsimony_trees[0]
+        # Make the parsimony tree a bifurcating tree to initialize our topology search
+        resolve_all_multifurcs(parsimony_tree)
+        logging.info("Parsimony tree")
+        logging.info(parsimony_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+        logging.info(parsimony_tree.get_ascii(attributes=["observed"], show_internal=True))
+        logging.info(parsimony_tree.get_ascii(attributes=["anc_state_list_str"], show_internal=True))
 
-        logging.info("parsimony init root rf %d, unroot rf %d, init pen_ll %f", root_rf, unroot_rf, curr_pen_ll)
-        for i in range(args.max_tree_search_iters):
-            logging.info("curr treeeee....")
-            logging.info(curr_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-
-            # Search around with NNI
-            nearby_trees = []
-            for _ in range(args.num_nni_restarts):
-                nearby_trees += search_nearby_trees(curr_tree, max_search_dist=args.max_nni_steps)
-            # uniq ones please
-            nearby_trees = CLTEstimator.get_uniq_trees(nearby_trees)
-
-            for tree in nearby_trees:
-                logging.info("considering...")
-                logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-
-            # Calculate the likelihoods
-            worker_list = [
-                LikelihoodScorer(
-                        i,
-                        args,
-                        tree,
-                        bcode_meta,
-                        cell_type_tree,
-                        approximator,
-                        curr_model_vars)
-                for i, tree in enumerate(nearby_trees)]
-            shared_obj = None
-            if args.num_jobs > 1:
-                # Submit jobs to slurm
-                batch_manager = BatchSubmissionManager(
-                        worker_list,
-                        shared_obj,
-                        len(worker_list),
-                        args.scratch_dir)
-                nni_results = batch_manager.run()
-            else:
-                nni_results = [worker.run(shared_obj) for worker in worker_list]
-
-            # Now let's compare their pen log liks
-            pen_lls = [r[0] for r in nni_results]
-            best_index = np.argmax(pen_lls)
-            if pen_lls[best_index] < curr_pen_ll:
-                # None of these are better than the current tree.
-                continue
-
-            # We found a tree with higher pen log lik than current tree
-            curr_pen_ll = pen_lls[best_index]
-            curr_tree = nearby_trees[best_index]
-            curr_model_vars = nni_results[best_index][1]
-            curr_br_lens = nni_results[best_index][2]
-
-            # Store info about our best current tree for warm starting later on
-            assign_branch_lens(curr_br_lens, curr_tree)
-
-            # Calculate RF distance to understand if our hillclimbing is working
-            root_rf, unroot_rf = get_rf_dist_root_unroot(curr_tree, true_tree)
-            logging.info("curr tree distance root %d, unroot %d, pen_ll %f", root_rf, unroot_rf, curr_pen_ll)
-
-        logging.info("final tree distance, root %d, unroot %d, pen_ll %f", root_rf, unroot_rf, curr_pen_ll)
-        logging.info(curr_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+        topo_searcher = CLTLikelihoodTopologySearcher(
+                bcode_meta,
+                cell_type_tree if args.use_cell_state else None,
+                args.know_cell_lambdas,
+                np.array(args.target_lambdas) if args.know_target_lambdas else None,
+                args.log_barr,
+                args.max_iters,
+                approximator,
+                sess,
+                args.scratch_dir,
+                true_tree = true_tree,
+                do_distributed = args.num_jobs > 1)
+        topo_searcher.search(
+                parsimony_tree,
+                max_iters=args.max_tree_search_iters,
+                num_nni_restarts=args.num_nni_restarts,
+                max_nni_steps=args.max_nni_steps)
 
 if __name__ == "__main__":
     main()

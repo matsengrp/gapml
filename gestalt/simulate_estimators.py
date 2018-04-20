@@ -248,7 +248,7 @@ def main(args=sys.argv[1:]):
                         tree,
                         args,
                         bcode_meta,
-                        cell_type_tree,
+                        cell_type_tree if args.use_cell_state else None,
                         approximator,
                         sess)
                 fitting_results[rf_dist].append((
@@ -278,7 +278,7 @@ def main(args=sys.argv[1:]):
                 true_tree,
                 args,
                 bcode_meta,
-                cell_type_tree,
+                cell_type_tree if args.use_cell_state else None,
                 approximator,
                 sess)
         pen_log_lik, oracle_model = fit_pen_likelihood(true_tree)

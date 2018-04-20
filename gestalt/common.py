@@ -55,31 +55,23 @@ def save_fitted_models(
     with open(file_name, "wb") as f:
         pickle.dump(res_dict, f, protocol=-1)
 
-def get_rf_dist_root_unroot(tree, ref_tree):
-    rooted_rf_res = ref_tree.robinson_foulds(
+def get_rf_dist_allele_str(tree, ref_tree, unroot=False):
+    rf_res = ref_tree.robinson_foulds(
             tree,
             attr_t1="allele_events_list_str",
             attr_t2="allele_events_list_str",
             expand_polytomies=False,
-            unrooted_trees=False)
-    unrooted_rf_res = ref_tree.robinson_foulds(
-            tree,
-            attr_t1="allele_events_list_str",
-            attr_t2="allele_events_list_str",
-            expand_polytomies=False,
-            unrooted_trees=True)
-    return rooted_rf_res[0], unrooted_rf_res[0]
+            unrooted_trees=unroot)
+    return rf_res[0]
 
 def get_rf_dist_dict(trees, true_tree):
     # Now calculate the rf distances of each random tree
     rf_tree_dict = {}
     for tree in trees:
-        rooted_rf, unrooted_rf = get_rf_dist_root_unroot(
-                tree,
-                true_tree)
-        logging.info("rf dist root=%d, unroot=%d", rooted_rf, unrooted_rf)
-        rf_results = (tree, rooted_rf, unrooted_rf)
-        rf_dist = rooted_rf
+        unrooted_rf = get_rf_dist_allele_str(tree, true_tree, unroot=True)
+        logging.info("rf dist unroot=%d", unrooted_rf)
+        rf_results = (tree, unrooted_rf)
+        rf_dist = unrooted_rf
         if rf_dist in rf_tree_dict:
             rf_tree_dict[rf_dist].append(rf_results)
         else:

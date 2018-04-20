@@ -50,6 +50,8 @@ class CLTPenalizedEstimator(CLTEstimator):
         """
         Finds the best model parameters over `num_inits` initializations
         """
+        # TODO lets just suppose one init for now...
+        assert num_inits == 1
 
         best_pen_log_lik = self._fit(max_iters, print_iter)
         best_vars = self.model.get_vars()
