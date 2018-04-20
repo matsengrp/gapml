@@ -17,6 +17,7 @@ import logging
 import pickle
 from pathlib import Path
 from numpy import ndarray
+import copy
 
 from cell_lineage_tree import CellLineageTree
 from cell_state import CellState, CellTypeTree
@@ -232,6 +233,7 @@ def fit_pen_likelihood(
         # Initialize with parameters such that the branch lengths are positive
         all_branch_lens_positive = all([b > 0 for b in res_model.get_branch_lens()[1:]])
         for _ in range(10):
+            # Keep initializing branch lengths until they are all positive
             model_vars = res_model.get_vars_as_dict()
             br_len_scale *= br_len_shrink
             model_vars["branch_len_inners"] = np.random.rand(num_nodes) * br_len_scale
