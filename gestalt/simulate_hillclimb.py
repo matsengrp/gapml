@@ -1,7 +1,8 @@
 """
-A simulation engine to see how well cell lineage estimation performs
+A simulation engine to test our hillclimbing
 """
 from __future__ import division, print_function
+import os
 import sys
 import numpy as np
 import argparse
@@ -15,11 +16,11 @@ from scipy.stats import pearsonr, spearmanr, kendalltau
 import logging
 import pickle
 from pathlib import Path
+from ete3 import Tree
 
+import ancestral_events_finder as anc_evt_finder
 from cell_state import CellState, CellTypeTree
 from cell_state_simulator import CellTypeSimulator
-from clt_simulator import CLTSimulatorBifurcating
-from clt_simulator_simple import CLTSimulatorOneLayer, CLTSimulatorTwoLayers
 from allele_simulator_simult import AlleleSimulatorSimultaneous
 from allele import Allele
 from clt_observer import CLTObserver
@@ -28,6 +29,8 @@ from clt_likelihood_estimator import *
 from alignment import AlignerNW
 from barcode_metadata import BarcodeMetadata
 from approximator import ApproximatorLB
+from tree_manipulation import resolve_all_multifurcs
+from clt_likelihood_topology import CLTLikelihoodTopologySearcher
 
 from constants import *
 from common import *
@@ -41,6 +44,26 @@ def parse_args():
         type=str,
         default="_output",
         help='folder to put output in')
+    parser.add_argument(
+        '--num-jobs',
+        type=int,
+        default=1,
+        help="number of jobs")
+    parser.add_argument(
+        '--max-nni-steps',
+        type=int,
+        default=1,
+        help="number of nni steps to take to explore around for hill climbing")
+    parser.add_argument(
+        '--num-nni-restarts',
+        type=int,
+        default=5,
+        help="number of times we restart the nni local search for candidate trees")
+    parser.add_argument(
+        '--max-tree-search-iters',
+        type=int,
+        default=30,
+        help="number of iterations for tree search")
     parser.add_argument(
         '--num-barcodes',
         type=int,
@@ -137,25 +160,16 @@ def parse_args():
             default=2)
     parser.add_argument('--num-jumbles',
             type=int,
-            default=10)
-    parser.add_argument('--use-parsimony', action='store_true', help="use mix (CS parsimony) to estimate tree topologies")
+            default=1)
     parser.add_argument('--topology-only', action='store_true', help="topology only")
     args = parser.parse_args()
     args.num_targets = len(args.target_lambdas)
     args.log_file = "%s/fit_log.txt" % args.out_folder
-    print("Log file", args.log_file)
     args.model_data_file = "%s/model_data.pkl" % args.out_folder
     args.fitted_models_file = "%s/fitted.pkl" % args.out_folder
-    args.branch_plot_file = "%s/branch_lens.png" % args.out_folder
-
-    if args.use_parsimony and args.use_cell_state:
-        raise ValueError("Cannot use parsimony while observing cell state...")
-
-    if args.use_parsimony:
-        # check that there is no infile in the current folder -- this will
-        # screw up mix because it will use the wrong input file
-        my_file = Path("infile")
-        assert not my_file.exists()
+    args.scratch_dir = os.path.join(args.out_folder, "likelihood%s" % int(time.time()))
+    print("Log file", args.log_file)
+    print("Scratch dir", args.scratch_dir)
 
     return args
 
@@ -192,130 +206,59 @@ def main(args=sys.argv[1:]):
                 cell_type_tree = cell_type_tree)
         clt_model.set_tot_time(args.time)
         tf.global_variables_initializer().run()
-
         clt, obs_leaves, true_tree = create_cell_lineage_tree(args, clt_model)
-        # Gather true branch lengths
-        true_tree.label_node_ids(CLTLikelihoodModel.NODE_ORDER)
-        true_branch_lens = {}
-        for node in true_tree.traverse(CLTLikelihoodModel.NODE_ORDER):
-            if not node.is_root():
-                true_branch_lens[node.node_id] = node.dist
-
-        # Get parsimony score of tree?
-        pars_score = true_tree.get_parsimony_score()
-        logging.info("Oracle tree parsimony score %d", pars_score)
-
-        # Save the data
-        save_model_data(
-                args.model_data_file,
-                clt_model.get_vars_as_dict(),
-                cell_type_tree,
-                obs_leaves,
-                true_tree,
-                clt)
-        # Print fun facts about the data
-        logging.info("Full clt leaves %d" % len(clt))
-        logging.info("True tree topology, num leaves %d", len(true_tree))
-        logging.info(true_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-        logging.info(true_tree.get_ascii(attributes=["cell_state"], show_internal=True))
-        logging.info(true_tree.get_ascii(attributes=["observed"], show_internal=True))
-        logging.info("Number of uniq obs alleles %d", len(obs_leaves))
-
-        # Get the parsimony-estimated topologies
-        parsimony_tree_dict = get_parsimony_trees(
-                obs_leaves,
-                args,
-                bcode_meta,
-                true_tree,
-                args.max_trees) if args.use_parsimony else {}
-        if args.topology_only:
-            print("Done! You only wanted topology estimation")
-            return
 
         # Instantiate approximator used by our penalized MLE
         approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
 
-        # Fit parsimony trees -- only look at a couple trees per RF distance
-        fitting_results = {}
-        for rf_dist, pars_trees in parsimony_tree_dict.items():
-            fitting_results[rf_dist] = []
-            logging.info(
-                    "There are %d trees with RF %d",
-                    len(pars_trees),
-                    rf_dist)
-            for tree in pars_trees:
-                pen_log_lik, res_model = fit_pen_likelihood(
-                        tree,
-                        bcode_meta,
-                        cell_type_tree if args.use_cell_state else None,
-                        args.know_cell_lambdas,
-                        np.array(args.target_lambdas) if args.know_target_lambdas else None,
-                        args.log_barr,
-                        args.max_iters,
-                        approximator,
-                        sess)
-                fitting_results[rf_dist].append((
-                    pen_log_lik,
-                    res_model))
-
-                # Print some summaries
-                logging.info("Mix pen log lik %f RF %d", pen_log_lik, rf_dist)
-
-        # Correlation between RF dist and likelihood among parsimony trees
-        if fitting_results:
-            rf_dists = []
-            pen_log_liks = []
-            for rf_dist, res in fitting_results.items():
-                for r in res:
-                    rf_dists.append(rf_dist)
-                    pen_log_liks.append(r[0][0])
-            logging.info("rf_dists %s", str(rf_dists))
-            logging.info("pen log liks %s", str(pen_log_liks))
-            logging.info("pearson rf to log lik %s", pearsonr(rf_dists, pen_log_liks))
-            logging.info("spearman rf to log lik %s", spearmanr(rf_dists, pen_log_liks))
-            plt.scatter(rf_dists, pen_log_liks)
-            plt.savefig("%s/rf_dist_to_ll.png" % args.out_folder)
-
-        # Fit oracle tree
-        pen_log_lik, oracle_model = fit_pen_likelihood(
+        # Oracle tree
+        oracle_pen_ll, oracle_model = fit_pen_likelihood(
                 true_tree,
                 args,
                 bcode_meta,
-                cell_type_tree if args.use_cell_state else None,
+                cell_type_tree,
                 approximator,
                 sess)
-        pen_log_lik, oracle_model = fit_pen_likelihood(true_tree)
-        fitting_results["oracle"] = [(pen_log_lik, oracle_model)]
-        save_fitted_models(args.fitted_models_file, fitting_results)
-        logging.info("True tree score %f", pen_log_lik)
+        # Use this as a reference
+        logging.info("oracle %f", oracle_pen_ll)
 
-        logging.info("---- ORACLE -----")
-        for v in oracle_model.get_vars():
-            logging.info(v)
-        logging.info("---- TRUTH -----")
-        logging.info(args.target_lambdas)
-        logging.info(args.repair_long_probability)
-        logging.info(args.repair_indel_probability)
-        logging.info([args.repair_deletion_lambda, args.repair_deletion_lambda])
-        logging.info(args.repair_indel_probability)
-        logging.info(args.repair_insertion_lambda)
-        logging.info(args.cell_rates)
+        # Begin our hillclimbing search!
+        # Get the parsimony-estimated topologies
+        parsimony_estimator = CLTParsimonyEstimator(
+                bcode_meta,
+                args.out_folder,
+                args.mix_path)
+        #TODO: DOESN'T USE CELL STATE
+        parsimony_trees = parsimony_estimator.estimate(
+                obs_leaves,
+                num_mix_runs = args.num_jumbles,
+                do_collapse = True)
+        # Just take the first parsimony tree for now
+        parsimony_tree = parsimony_trees[0]
+        # Make the parsimony tree a bifurcating tree to initialize our topology search
+        resolve_all_multifurcs(parsimony_tree)
+        logging.info("Parsimony tree")
+        logging.info(parsimony_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+        logging.info(parsimony_tree.get_ascii(attributes=["observed"], show_internal=True))
+        logging.info(parsimony_tree.get_ascii(attributes=["anc_state_list_str"], show_internal=True))
 
-        # Compare branch lengths
-        subset = [
-                node.node_id for node in true_tree.traverse()
-                if not node.is_leaf() and not node.is_root()]
-        est_branch_lens = oracle_model.get_branch_lens()
-        compare_lengths(
-                true_branch_lens,
-                est_branch_lens,
-                subset,
-                branch_plot_file=args.branch_plot_file,
-                label="oracle est vs true branches")
-
-        # Also compare target estimates
-        fitted_vars = oracle_model.get_vars()
-        logging.info("pearson target %s", pearsonr(args.target_lambdas, fitted_vars[0]))
+        topo_searcher = CLTLikelihoodTopologySearcher(
+                bcode_meta,
+                cell_type_tree if args.use_cell_state else None,
+                args.know_cell_lambdas,
+                np.array(args.target_lambdas) if args.know_target_lambdas else None,
+                args.log_barr,
+                args.max_iters,
+                approximator,
+                sess,
+                args.scratch_dir,
+                true_tree = true_tree,
+                do_distributed = args.num_jobs > 1)
+        topo_searcher.search(
+                parsimony_tree,
+                max_iters=args.max_tree_search_iters,
+                num_nni_restarts=args.num_nni_restarts,
+                max_nni_steps=args.max_nni_steps)
 
 if __name__ == "__main__":
     main()

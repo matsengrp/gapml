@@ -231,7 +231,7 @@ class TargetTract(Tract, DeactEvt):
         return tuple.__new__(cls, (min_deact_targ, min_targ, max_targ, max_deact_targ))
 
     def __getnewargs__(self):
-        return (self.min_deact_targ, self.min_targ, self.max_targ, self.max_deact_targ)
+        return self
 
     @property
     def min_target(self):
@@ -355,6 +355,9 @@ class AncState:
                 idx2 += 1
 
         return AncState(intersect_list)
+
+    def get_singleton_wcs(self):
+        return [indel_set for indel_set in self.indel_set_list if indel_set.__class__ == SingletonWC]
 
 class TractRepr(tuple):
     def __new__(cls, *args):
