@@ -212,15 +212,15 @@ def main(args=sys.argv[1:]):
         approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
 
         # Oracle tree
-        #oracle_pen_ll, oracle_model = fit_pen_likelihood(
-        #        true_tree,
-        #        args,
-        #        bcode_meta,
-        #        cell_type_tree,
-        #        approximator,
-        #        sess)
-        ## Use this as a reference
-        #logging.info("oracle %f", oracle_pen_ll)
+        oracle_pen_ll, oracle_model = fit_pen_likelihood(
+                true_tree,
+                args,
+                bcode_meta,
+                cell_type_tree,
+                approximator,
+                sess)
+        # Use this as a reference
+        logging.info("oracle %f", oracle_pen_ll)
 
         # Begin our hillclimbing search!
         # Get the parsimony-estimated topologies

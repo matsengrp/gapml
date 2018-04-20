@@ -1,3 +1,6 @@
+"""
+Tree manipulations
+"""
 import copy
 import typing
 import numpy as np
@@ -5,10 +8,6 @@ import numpy as np
 from indel_sets import SingletonWC
 import ancestral_events_finder as anc_evt_finder
 from cell_lineage_tree import CellLineageTree
-
-"""
-TODO: add types to the arguments!
-"""
 
 def _resolve_multifurc(node: CellLineageTree, c_index: int):
     """

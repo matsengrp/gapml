@@ -31,7 +31,7 @@ class CLTLikelihoodTopologySearcher:
             bcode_meta: BarcodeMetadata,
             cell_type_tree: CellTypeTree,
             know_cell_lams: bool,
-            target_lams: ndarray, # set to None if this is not known
+            target_lams: ndarray,
             log_barr: float,
             max_inner_iters: int,
             approximator: ApproximatorLB,
@@ -39,6 +39,11 @@ class CLTLikelihoodTopologySearcher:
             scratch_dir: str,
             true_tree: CellLineageTree = None,
             do_distributed: bool = False):
+        """
+        @param max_inner_iters: number of iters for optimizing model parameters (not topology search iters)
+        @param cell_type_tree: set to none if not using cell type tree
+        @param target_lams: set to None if this is not known
+        """
         self.bcode_meta = bcode_meta
         self.cell_type_tree = cell_type_tree
         self.know_cell_lams = know_cell_lams

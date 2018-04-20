@@ -150,7 +150,7 @@ def compare_lengths(length_dict1, length_dict2, subset, branch_plot_file, label)
 def fit_pen_likelihood(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
-        cell_type_tree: CellTypeTree,
+        cell_type_tree: CellTypeTree, # set to none if not using cell type tre
         know_cell_lams: bool,
         target_lams: ndarray, # set to None if it is not known
         log_barr: float,
