@@ -46,60 +46,10 @@ class CLTPenalizedEstimator(CLTEstimator):
 
         #self.model.check_grad(self.transition_mat_wrappers)
 
-    def fit(self, num_inits, max_iters, print_iter=50):
+    def fit(self, max_iters: int, print_iter: int=50, step_size: float = 0.01):
         """
-        Finds the best model parameters over `num_inits` initializations
+        Finds the best model parameters
         """
-        # TODO lets just suppose one init for now...
-        assert num_inits == 1
-
-        best_pen_log_lik = self._fit(max_iters, print_iter)
-        best_vars = self.model.get_vars()
-        for i in range(num_inits - 1):
-            raise ValueError("i thought we try to warm start")
-            # Initialization -- only perturbing branch lengths and target lams for now...
-            branch_lens = np.random.gamma(
-                    self.gamma_prior[0],
-                    self.gamma_prior[1],
-                    self.model.num_nodes)
-            # initialize the target lambdas with some perturbation to ensure we
-            # don't have eigenvalues that are exactly equal
-            target_lams = 0.1 * np.ones(self.model.num_targets) + np.random.uniform(size=self.model.num_targets) * 0.1
-            self.model.set_params(
-                    target_lams = target_lams,
-                    trim_long_probs = best_vars[1],
-                    trim_zero_prob = best_vars[2],
-                    trim_poissons = best_vars[3],
-                    insert_zero_prob = best_vars[4],
-                    insert_poisson = best_vars[5],
-                    branch_lens = branch_lens,
-                    cell_type_lams = best_vars[7])
-
-            pen_log_lik = self._fit(max_iters, print_iter)
-            if pen_log_lik > best_pen_log_lik:
-                best_vars = self.model.get_vars()
-                best_pen_log_lik = pen_log_lik
-
-        self.model.set_params(*best_vars)
-        return best_pen_log_lik
-
-    def _fit(self, max_iters, print_iter = 1, step_size = 0.01):
-        """
-        Fits for a single initialization -- runs proximal gradient descent
-        """
-        # Determine a total time for the entire tree -- Just pick a
-        # sufficiently large number so that no initial branch lengths
-        # are negative.
-        tot_time = 1
-        for i in range(10):
-            # Before starting, check that branch lengths are all positive
-            self.model.set_tot_time(tot_time)
-            br_lens = self.model.get_branch_lens()
-            if all([b > 0 for b in br_lens[1:]]):
-                break
-            else:
-                tot_time *= 2
-
         for i in range(max_iters):
             _, log_lik, pen_log_lik, log_lik_alleles, log_lik_cell_type = self.model.sess.run(
                     [
@@ -110,7 +60,7 @@ class CLTPenalizedEstimator(CLTEstimator):
                         self.model.log_lik_cell_type],
                     feed_dict={
                         self.model.log_barr_ph: self.log_barr,
-                        self.model.tot_time_ph: tot_time
+                        self.model.tot_time_ph: self.model.tot_time
                     })
             assert pen_log_lik != -np.inf
 

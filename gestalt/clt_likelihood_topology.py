@@ -69,7 +69,8 @@ class CLTLikelihoodTopologySearcher:
             curr_tree: CellLineageTree,
             max_iters: int,
             num_nni_restarts: int,
-            max_nni_steps: int):
+            max_nni_steps: int,
+            do_warm_starts: bool = True):
         # Double check that we aren't starting with the true tree
         if self.true_tree is not None:
             unroot_rf = get_rf_dist_allele_str(
@@ -120,7 +121,7 @@ class CLTLikelihoodTopologySearcher:
                         self.log_barr,
                         self.max_inner_iters,
                         self.approximator,
-                        curr_model_vars)
+                        init_model_vars = curr_model_vars if do_warm_starts else None)
                 for i, tree in enumerate(nearby_trees)]
             if self.do_distributed and len(worker_list) > 1:
                 # Submit jobs to slurm
@@ -143,6 +144,7 @@ class CLTLikelihoodTopologySearcher:
             best_index = np.argmax(pen_lls)
             if pen_lls[best_index] < curr_pen_ll:
                 # None of these are better than the current tree.
+                logging.info("None of these are better")
                 continue
 
             # We found a tree with higher pen log lik than current tree
@@ -153,15 +155,15 @@ class CLTLikelihoodTopologySearcher:
             logging.info("curr tree pen_ll %f", curr_pen_ll)
 
             # Store info about our best current tree for warm starting later on
-            assign_branch_lens(curr_br_lens, curr_tree)
+            CLTLikelihoodTopologySearcher._assign_branch_lens(curr_br_lens, curr_tree)
 
             # Calculate RF distance to understand if our hillclimbing is working
-            if self.true_tree:
+            if self.true_tree is not None:
                 unroot_rf = get_rf_dist_allele_str(curr_tree, self.true_tree, unroot=True)
-                logging.info("curr tree distance unroot %d", curr_pen_ll)
+                logging.info("curr tree distance unroot %d", unroot_rf)
 
         logging.info("final tree pen_ll %f", curr_pen_ll)
         logging.info(curr_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-        if self.true_tree:
+        if self.true_tree is not None:
             logging.info("final tree distance, unroot %d", unroot_rf)
         return curr_tree, curr_model_vars

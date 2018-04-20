@@ -23,7 +23,7 @@ class LikelihoodScorer(ParallelWorker):
             log_barr: float,
             max_iters: int,
             approximator: ApproximatorLB,
-            init_model_vars: Dict[str, ndarray]):
+            init_model_vars: Dict[str, ndarray] = None):
         """
         @param seed: required to set the seed of each parallel worker
         @param args: arguments that provide settings for how to fit the model
@@ -48,7 +48,7 @@ class LikelihoodScorer(ParallelWorker):
         sess = tf.Session()
         with sess.as_default():
             tf.global_variables_initializer().run()
-            return self._work_with_sess(sess)
+            return self.do_work_directly(sess)
 
     def do_work_directly(self, sess):
         """

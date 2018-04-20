@@ -42,7 +42,8 @@ class CLTLikelihoodModel:
             double_cut_weight: float = 1.0,
             branch_len_inners: ndarray = np.array([]),
             cell_type_tree: CellTypeTree = None,
-            cell_lambdas_known: bool = False):
+            cell_lambdas_known: bool = False,
+            tot_time: float = 1):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
         @param group_branch_lens: array with length = number of tree nodes (not all of these parameters will be used)
@@ -84,6 +85,7 @@ class CLTLikelihoodModel:
         # Stores the penalty parameter
         self.log_barr_ph = tf.placeholder(tf.float64)
         self.tot_time_ph = tf.placeholder(tf.float64)
+        self.tot_time = tot_time
 
         # Create all the variables
         self._create_parameters(
@@ -186,6 +188,18 @@ class CLTLikelihoodModel:
                     output_shape=self.branch_len_inners.shape,
                     name="branch_lengths")
 
+    def set_params_from_dict(self, param_dict: Dict[str, ndarray]):
+        self.set_params(
+                param_dict["target_lams"],
+                param_dict["trim_long_probs"],
+                param_dict["trim_zero_prob"],
+                param_dict["trim_poissons"],
+                param_dict["insert_zero_prob"],
+                param_dict["insert_poisson"],
+                param_dict["branch_len_inners"],
+                param_dict["cell_type_lams"],
+                param_dict["tot_time"])
+
     def set_params(self,
             target_lams: ndarray,
             trim_long_probs: ndarray,
@@ -246,9 +260,6 @@ class CLTLikelihoodModel:
         var_dict = {lab: val for lab, val in zip(var_labels, var_vals)}
         var_dict["tot_time"] = self.tot_time
         return var_dict
-
-    def set_tot_time(self, tot_time):
-        self.tot_time = tot_time
 
     def get_branch_lens(self):
         """

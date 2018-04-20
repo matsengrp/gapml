@@ -17,6 +17,7 @@ import logging
 import pickle
 from pathlib import Path
 from numpy import ndarray
+import copy
 
 from cell_lineage_tree import CellLineageTree
 from cell_state import CellState, CellTypeTree
@@ -200,14 +201,16 @@ def fit_pen_likelihood(
         max_iters: int,
         approximator: ApproximatorLB,
         sess: Session,
-        warm_start: Dict[str, ndarray] =None):
+        warm_start: Dict[str, ndarray] = None,
+        br_len_scale: float = 0.1,
+        br_len_shrink: float = 0.8):
     """
     Fit the model for the given tree topology
     @param warm_start: use the given variables to initialize the model
                         If None, then start from scratch
     """
     num_nodes = len([t for t in tree.traverse()])
-    branch_len_inners = np.random.rand(num_nodes) * 0.1
+    branch_len_inners = np.random.rand(num_nodes) * br_len_scale
     target_lams_known = target_lams is not None
     if not target_lams_known:
         target_lams = 0.3 * np.ones(bcode_meta.n_targets) + np.random.uniform(size=bcode_meta.n_targets) * 0.08
@@ -226,23 +229,29 @@ def fit_pen_likelihood(
             approximator,
             log_barr)
 
-    if warm_start is not None:
+    if warm_start is None:
+        # Initialize with parameters such that the branch lengths are positive
+        all_branch_lens_positive = all([b > 0 for b in res_model.get_branch_lens()[1:]])
+        for _ in range(10):
+            # Keep initializing branch lengths until they are all positive
+            model_vars = res_model.get_vars_as_dict()
+            br_len_scale *= br_len_shrink
+            model_vars["branch_len_inners"] = np.random.rand(num_nodes) * br_len_scale
+            res_model.set_params_from_dict(model_vars)
+            all_branch_lens_positive = all([b > 0 for b in res_model.get_branch_lens()[1:]])
+            if all_branch_lens_positive:
+                break
+        assert all_branch_lens_positive
+    else:
         # calculate branch length from tree
         for node in tree.traverse():
             if not node.is_root() and not node.is_leaf():
                 branch_len_inners[node.node_id] = node.dist
 
-        res_model.set_params(
-                warm_start["target_lams"],
-                warm_start["trim_long_probs"],
-                warm_start["trim_zero_prob"],
-                warm_start["trim_poissons"],
-                warm_start["insert_zero_prob"],
-                warm_start["insert_poisson"],
-                branch_len_inners,
-                warm_start["cell_type_lams"],
-                warm_start["tot_time"])
+        model_vars = copy.deepcopy(warm_start)
+        model_vars["branch_len_inners"] = branch_len_inners
+        res_model.set_params_from_dict(model_vars)
 
-    pen_log_lik = estimator.fit(num_inits=1, max_iters=max_iters)
+    pen_log_lik = estimator.fit(max_iters)
 
     return pen_log_lik, res_model

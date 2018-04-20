@@ -204,7 +204,7 @@ def main(args=sys.argv[1:]):
                 insert_zero_prob = args.repair_indel_probability,
                 insert_poisson = args.repair_insertion_lambda,
                 cell_type_tree = cell_type_tree)
-        clt_model.set_tot_time(args.time)
+        clt_model.tot_time = args.time
         tf.global_variables_initializer().run()
         clt, obs_leaves, true_tree = create_cell_lineage_tree(args, clt_model)
 
@@ -212,15 +212,18 @@ def main(args=sys.argv[1:]):
         approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
 
         # Oracle tree
-        oracle_pen_ll, oracle_model = fit_pen_likelihood(
-                true_tree,
-                args,
-                bcode_meta,
-                cell_type_tree,
-                approximator,
-                sess)
-        # Use this as a reference
-        logging.info("oracle %f", oracle_pen_ll)
+        #oracle_pen_ll, oracle_model = fit_pen_likelihood(
+        #        true_tree,
+        #        bcode_meta,
+        #        cell_type_tree,
+        #        args.know_cell_lambdas,
+        #        np.array(args.target_lambdas) if args.know_target_lambdas else None,
+        #        args.log_barr,
+        #        args.max_iters,
+        #        approximator,
+        #        sess)
+        ## Use this as a reference
+        #logging.info("oracle %f", oracle_pen_ll)
 
         # Begin our hillclimbing search!
         # Get the parsimony-estimated topologies
@@ -258,7 +261,8 @@ def main(args=sys.argv[1:]):
                 parsimony_tree,
                 max_iters=args.max_tree_search_iters,
                 num_nni_restarts=args.num_nni_restarts,
-                max_nni_steps=args.max_nni_steps)
+                max_nni_steps=args.max_nni_steps,
+                do_warm_starts=False)
 
 if __name__ == "__main__":
     main()

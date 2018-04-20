@@ -279,12 +279,14 @@ def main(args=sys.argv[1:]):
         # Fit oracle tree
         pen_log_lik, oracle_model = fit_pen_likelihood(
                 true_tree,
-                args,
                 bcode_meta,
                 cell_type_tree if args.use_cell_state else None,
+                args.know_cell_lambdas,
+                np.array(args.target_lambdas) if args.know_target_lambdas else None,
+                args.log_barr,
+                args.max_iters,
                 approximator,
                 sess)
-        pen_log_lik, oracle_model = fit_pen_likelihood(true_tree)
         fitting_results["oracle"] = [(pen_log_lik, oracle_model)]
         save_fitted_models(args.fitted_models_file, fitting_results)
         logging.info("True tree score %f", pen_log_lik)
