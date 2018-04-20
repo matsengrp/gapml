@@ -160,7 +160,7 @@ class CLTLikelihoodTopologySearcher:
             # Calculate RF distance to understand if our hillclimbing is working
             if self.true_tree is not None:
                 unroot_rf = get_rf_dist_allele_str(curr_tree, self.true_tree, unroot=True)
-                logging.info("curr tree distance unroot %d", curr_pen_ll)
+                logging.info("curr tree distance unroot %d", unroot_rf)
 
         logging.info("final tree pen_ll %f", curr_pen_ll)
         logging.info(curr_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
