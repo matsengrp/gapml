@@ -64,14 +64,13 @@ def get_rf_dist_allele_str(tree, ref_tree, unroot=False):
             unrooted_trees=unroot)
     return rf_res[0]
 
-def get_rf_dist_dict(trees, true_tree):
+def get_rf_dist_dict(trees, true_tree, unroot=True):
     # Now calculate the rf distances of each random tree
     rf_tree_dict = {}
     for tree in trees:
-        unrooted_rf = get_rf_dist_allele_str(tree, true_tree, unroot=True)
-        logging.info("rf dist unroot=%d", unrooted_rf)
-        rf_results = (tree, unrooted_rf)
-        rf_dist = unrooted_rf
+        rf_dist = get_rf_dist_allele_str(tree, true_tree, unroot=unroot)
+        logging.info("rf dist %d", rf_dist)
+        rf_results = (tree, rf_dist)
         if rf_dist in rf_tree_dict:
             rf_tree_dict[rf_dist].append(rf_results)
         else:

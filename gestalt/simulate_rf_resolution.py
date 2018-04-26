@@ -1,7 +1,8 @@
 """
-A simulation engine to see how well cell lineage estimation performs
+A simulation engine to see how log likelihood correlates with rf distances
 """
 from __future__ import division, print_function
+import os
 import sys
 import numpy as np
 import argparse
@@ -11,24 +12,16 @@ from matplotlib import pyplot as plt
 import time
 import tensorflow as tf
 from tensorflow.python import debug as tf_debug
-from scipy.stats import pearsonr, spearmanr, kendalltau
+from scipy.stats import pearsonr, spearmanr
 import logging
 import pickle
-from pathlib import Path
 
-from cell_state import CellState, CellTypeTree
-from cell_state_simulator import CellTypeSimulator
-from clt_simulator import CLTSimulatorBifurcating
-from clt_simulator_simple import CLTSimulatorOneLayer, CLTSimulatorTwoLayers
-from allele_simulator_simult import AlleleSimulatorSimultaneous
-from allele import Allele
-from clt_observer import CLTObserver
-from clt_estimator import CLTParsimonyEstimator
-from clt_likelihood_estimator import *
-from alignment import AlignerNW
+from clt_estimator import CLTEstimator
 from barcode_metadata import BarcodeMetadata
 from approximator import ApproximatorLB
 from tree_manipulation import search_nearby_trees
+import ancestral_events_finder as anc_evt_finder
+from likelihood_scorer import LikelihoodScorer
 
 from constants import *
 from common import *
@@ -45,12 +38,17 @@ def parse_args():
     parser.add_argument(
         '--num-moves',
         type=int,
-        default=20,
-        help="number of trees to consider per rf dist")
+        default=2,
+        help="number of steps to perturb away from the true tree")
+    parser.add_argument(
+        '--num-searches',
+        type=int,
+        default=1,
+        help="number of times to restart the tree perturbations")
     parser.add_argument(
         '--num-explore-trees',
         type=int,
-        default=5,
+        default=2,
         help="number of trees to consider per rf dist")
     parser.add_argument(
         '--num-barcodes',
@@ -109,10 +107,6 @@ def parse_args():
     parser.add_argument(
         '--debug', action='store_true', help='debug tensorflow')
     parser.add_argument(
-        '--single-layer', action='store_true', help='single layer tree')
-    parser.add_argument(
-        '--two-layers', action='store_true', help='two layer tree')
-    parser.add_argument(
             '--model-seed',
             type=int,
             default=0,
@@ -133,30 +127,21 @@ def parse_args():
             default=0,
             help="lasso parameter on the branch lengths")
     parser.add_argument('--max-iters', type=int, default=2000)
-    parser.add_argument('--max-depth', type=int, default=10)
     parser.add_argument('--min-leaves', type=int, default=2)
     parser.add_argument('--max-leaves', type=int, default=100)
     parser.add_argument('--max-clt-nodes', type=int, default=8000)
-    parser.add_argument('--num-inits', type=int, default=1)
-    parser.add_argument(
-            '--mix-path',
-            type=str,
-            default=MIX_PATH)
     parser.add_argument('--use-cell-state', action='store_true')
-    parser.add_argument('--max-trees',
-            type=int,
-            default=2)
-    parser.add_argument('--num-jumbles',
-            type=int,
-            default=10)
-    parser.add_argument('--topology-only', action='store_true', help="topology only")
+    parser.add_argument('--do-distributed', action='store_true', help="submit slurm jobs")
+
+    parser.set_defaults(single_layer=False, two_layers=False)
     args = parser.parse_args()
+
     args.num_targets = len(args.target_lambdas)
-    args.log_file = "%s/fit_log.txt" % args.out_folder
+    args.log_file = "%s/rf_resolution_log.txt" % args.out_folder
+    args.fitted_models_file = "%s/rf_resolution_results.pkl" % args.out_folder
+    args.scratch_dir = os.path.join(args.out_folder, "likelihood%s" % int(time.time()))
     print("Log file", args.log_file)
-    args.model_data_file = "%s/model_data.pkl" % args.out_folder
-    args.fitted_models_file = "%s/fitted.pkl" % args.out_folder
-    args.branch_plot_file = "%s/branch_lens.png" % args.out_folder
+    print("scratch dir", args.scratch_dir)
 
     return args
 
@@ -191,82 +176,105 @@ def main(args=sys.argv[1:]):
                 insert_zero_prob = args.repair_indel_probability,
                 insert_poisson = args.repair_insertion_lambda,
                 cell_type_tree = cell_type_tree)
-        clt_model.set_tot_time(args.time)
+        clt_model.tot_time = args.time
         tf.global_variables_initializer().run()
 
+        # Simulate data
         clt, obs_leaves, true_tree = create_cell_lineage_tree(args, clt_model)
-        # Gather true branch lengths
+        # Process tree by labeling nodes in the tree
+        anc_evt_finder.annotate_ancestral_states(true_tree, bcode_meta)
         true_tree.label_node_ids(CLTLikelihoodModel.NODE_ORDER)
-        true_branch_lens = {}
-        for node in true_tree.traverse(CLTLikelihoodModel.NODE_ORDER):
-            if not node.is_root():
-                true_branch_lens[node.node_id] = node.dist
+
+        # Perform NNI moves to find nearby trees
+        nearby_trees = []
+        for i in range(args.num_searches):
+            logging.info("Searching nearby trees, search %d", i)
+            nearby_trees += search_nearby_trees(true_tree, max_search_dist=args.num_moves)
+        assert len(nearby_trees) > 0
+        nearby_tree_dict = get_rf_dist_dict(nearby_trees, true_tree, unroot=False)
 
         # Instantiate approximator used by our penalized MLE
         approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
-        nearby_trees = []
-        for _ in range(3):
-            nearby_trees += search_nearby_trees(true_tree, max_search_dist=args.num_moves)
-        nearby_tree_dict = get_rf_dist_dict(
-                nearby_trees,
-                true_tree)
 
         # Fit trees
-        fitting_results = []
-        for rf_dist, trees in nearby_tree_dict.items():
-            logging.info(
-                    "There are %d trees with RF %d",
-                    len(trees),
-                    rf_dist)
-            for tree, rooted_rf, unrooted_rf in trees[:args.num_explore_trees]:
-                pen_log_lik, res_model = fit_pen_likelihood(
+        worker_list = []
+        rf_dists = []
+        seed = 0
+        for rf_dist, tree_tuples in nearby_tree_dict.items():
+            uniq_trees = CLTEstimator.get_uniq_trees(
+                    [t[0] for t in tree_tuples],
+                    attr_str="allele_events_list_str",
+                    max_trees=args.num_explore_trees,
+                    unrooted=False)
+            logging.info("There are %d trees with RF %d", len(uniq_trees), rf_dist)
+            for tree in uniq_trees:
+                seed += 1
+                lik_scorer = LikelihoodScorer(
+                        seed,
                         tree,
-                        args,
                         bcode_meta,
                         cell_type_tree,
+                        args.know_cell_lambdas,
+                        np.array(args.target_lambdas) if args.know_target_lambdas else None,
+                        args.log_barr,
+                        args.max_iters,
                         approximator,
-                        sess)
-                fitting_results.append((
-                    pen_log_lik,
-                    rooted_rf,
-                    unrooted_rf,
-                    res_model))
+                        tot_time = args.time)
+                worker_list.append(lik_scorer)
+                rf_dists.append(rf_dist)
+        assert len(rf_dists) > 2
 
-                # Print some summaries
-                logging.info("pen log lik %f RF %d", pen_log_lik, rf_dist)
+        if args.do_distributed and len(worker_list) > 1:
+            # Submit jobs to slurm
+            batch_manager = BatchSubmissionManager(
+                    worker_list=worker_list,
+                    shared_obj=None,
+                    # Each tree is its separate slurm job
+                    num_approx_batches=len(worker_list),
+                    worker_folder=args.scratch_dir)
+            fitting_results = batch_manager.run()
+        else:
+            # Run jobs locally
+            fitting_results = [worker.do_work_directly(sess) for worker in worker_list]
 
-        # Correlation between RF dist and likelihood among parsimony trees
-        pen_log_lik, oracle_model = fit_pen_likelihood(
+        # Print some summaries
+        pen_log_liks = []
+        for res, rf_dist in zip(fitting_results, rf_dists):
+            pen_ll = res[0][0]
+            pen_log_liks.append(pen_ll)
+            logging.info("pen log lik %f RF %d", pen_ll, rf_dist)
+
+        # Add in the oracle tree
+        oracle_scorer = LikelihoodScorer(
+                0, # seed
                 true_tree,
-                args,
                 bcode_meta,
                 cell_type_tree,
+                args.know_cell_lambdas,
+                np.array(args.target_lambdas) if args.know_target_lambdas else None,
+                args.log_barr,
+                args.max_iters,
                 approximator,
-                sess)
-        logging.info("True tree score %f", pen_log_lik)
-        fitting_results.append((pen_log_lik, 0, 0, oracle_model))
+                tot_time = args.time)
+        oracle_res = oracle_scorer.do_work_directly(sess)
+        logging.info("True tree score %f", oracle_res[0])
+        fitting_results.append(oracle_res)
+        pen_log_liks.append(oracle_res[0][0])
+        rf_dists.append(0)
 
-        unrooted_rf_dists = []
-        rooted_rf_dists = []
-        pen_log_liks = []
-        for pen_ll, rooted_rf, unrooted_rf, _ in fitting_results:
-            unrooted_rf_dists.append(unrooted_rf)
-            rooted_rf_dists.append(rooted_rf)
-            pen_log_liks.append(pen_ll[0])
-        logging.info("unroot rf_dists %s", str(unrooted_rf_dists))
-        logging.info("root rf_dists %s", str(rooted_rf_dists))
+        # Correlation between RF dist and likelihood among parsimony trees
+        logging.info("rooted rf_dists %s", str(rf_dists))
         logging.info("pen log liks %s", str(pen_log_liks))
-        logging.info("unroot pearson rf to log lik %s", pearsonr(unrooted_rf_dists, pen_log_liks))
-        logging.info("unroot spearman rf to log lik %s", spearmanr(unrooted_rf_dists, pen_log_liks))
-        plt.scatter(unrooted_rf_dists, pen_log_liks)
-        plt.savefig("%s/unroot_rf_dist_to_ll.png" % args.out_folder)
-        logging.info("root pearson rf to log lik %s", pearsonr(rooted_rf_dists, pen_log_liks))
-        logging.info("root spearman rf to log lik %s", spearmanr(rooted_rf_dists, pen_log_liks))
-        plt.scatter(rooted_rf_dists, pen_log_liks)
-        plt.savefig("%s/root_rf_dist_to_ll.png" % args.out_folder)
+        logging.info("pearson rf to log lik %s", pearsonr(rf_dists, pen_log_liks))
+        logging.info("spearman rf to log lik %s", spearmanr(rf_dists, pen_log_liks))
+        plt.scatter(rf_dists, pen_log_liks)
+        plt.savefig("%s/rf_dist_to_ll.png" % args.out_folder)
 
-        # Fit oracle tree
-        save_fitted_models(args.fitted_models_file, fitting_results)
+        with open(args.fitted_models_file, "wb"):
+            pickle.dumps({
+                "fitting_results": fitting_results,
+                "rf_dists": rf_dists,
+                "pen_ll": pen_ll})
 
 if __name__ == "__main__":
     main()

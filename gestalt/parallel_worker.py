@@ -170,6 +170,7 @@ class BatchSubmissionManager(ParallelWorkerManager):
                     outfname=output_file_name,
                     logdir=worker_batch_folder,
                     env=os.environ.copy(),
+                    threads=3
                 )
                 self.batch_worker_cmds.append(batch_cmd)
 

@@ -37,6 +37,7 @@ class CLTLikelihoodTopologySearcher:
             approximator: ApproximatorLB,
             sess: Session,
             scratch_dir: str,
+            tot_time: float = 1,
             true_tree: CellLineageTree = None,
             do_distributed: bool = False):
         """
@@ -49,6 +50,7 @@ class CLTLikelihoodTopologySearcher:
         self.know_cell_lams = know_cell_lams
         self.target_lams = target_lams
         self.log_barr = log_barr
+        self.tot_time = tot_time
         self.max_inner_iters = max_inner_iters
         self.approximator = approximator
         self.sess = sess
@@ -92,7 +94,8 @@ class CLTLikelihoodTopologySearcher:
                 self.log_barr,
                 self.max_inner_iters,
                 self.approximator,
-                self.sess)
+                self.sess,
+                tot_time = self.tot_time)
         # Assign branch lengths to this current tree
         CLTLikelihoodTopologySearcher._assign_branch_lens(curr_model.get_branch_lens(), curr_tree)
         curr_model_vars = curr_model.get_vars_as_dict()
@@ -121,6 +124,7 @@ class CLTLikelihoodTopologySearcher:
                         self.log_barr,
                         self.max_inner_iters,
                         self.approximator,
+                        tot_time = self.tot_time,
                         init_model_vars = curr_model_vars if do_warm_starts else None)
                 for i, tree in enumerate(nearby_trees)]
             if self.do_distributed and len(worker_list) > 1:

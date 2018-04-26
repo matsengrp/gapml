@@ -4,6 +4,7 @@ Tree manipulations
 import copy
 import typing
 import numpy as np
+import logging
 
 from indel_sets import SingletonWC
 import ancestral_events_finder as anc_evt_finder
@@ -108,7 +109,7 @@ def get_parsimony_score_nearest_neighbors(node: CellLineageTree):
         score += get_parsimony_edge_score(sister)
     return score
 
-def search_nearby_trees(init_tree: CellLineageTree, max_search_dist: int =10):
+def search_nearby_trees(init_tree: CellLineageTree, max_search_dist: int =10, max_attempts: int = 14):
     """
     Searches nearby trees, but makes sure that the gestalt rules
     are obeyed and parsimony score is preserved
@@ -127,10 +128,11 @@ def search_nearby_trees(init_tree: CellLineageTree, max_search_dist: int =10):
     num_interior_nodes = len(node_dict)
 
     # Now perform NNI moves on random nodes
-    curr_tree = scratch_tree
     trees = []
     for i in range(max_search_dist):
-        while True:
+        logging.info("Search step %d", i)
+        tree_found = False
+        for j in range(max_attempts):
             # Pick the random node
             rand_node_index = np.random.randint(0, num_interior_nodes)
             rand_node = node_dict[rand_node_index]
@@ -172,8 +174,10 @@ def search_nearby_trees(init_tree: CellLineageTree, max_search_dist: int =10):
                     # This just requires swapping the inputs to the NNI function
                     NNI(rand_node, ychild, xchild)
                 else:
+                    tree_found = True
                     break
 
         # Make a copy of this tree and store!
-        trees.append(scratch_tree.copy("deepcopy"))
+        if tree_found:
+            trees.append(scratch_tree.copy("deepcopy"))
     return trees
