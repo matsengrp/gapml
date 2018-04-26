@@ -161,7 +161,7 @@ def parse_args():
     parser.add_argument('--num-jumbles',
             type=int,
             default=1)
-    parser.add_argument('--topology-only', action='store_true', help="topology only")
+    parser.add_argument('--warm-starts', action='store_true', help="do warm starts")
     args = parser.parse_args()
     args.num_targets = len(args.target_lambdas)
     args.log_file = "%s/fit_log.txt" % args.out_folder
@@ -262,7 +262,7 @@ def main(args=sys.argv[1:]):
                 max_iters=args.max_tree_search_iters,
                 num_nni_restarts=args.num_nni_restarts,
                 max_nni_steps=args.max_nni_steps,
-                do_warm_starts=False)
+                do_warm_starts=args.warm_starts)
 
 if __name__ == "__main__":
     main()
