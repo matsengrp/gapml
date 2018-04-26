@@ -15,7 +15,6 @@ from tensorflow.python import debug as tf_debug
 from scipy.stats import pearsonr, spearmanr, kendalltau
 import logging
 import pickle
-from pathlib import Path
 from ete3 import Tree
 
 import ancestral_events_finder as anc_evt_finder
@@ -116,7 +115,7 @@ def parse_args():
     parser.add_argument(
         '--sampling-rate',
         type=float,
-        default=0.9,
+        default=0.2,
         help='proportion cells sampled/alleles successfully sequenced')
     parser.add_argument(
         '--debug', action='store_true', help='debug tensorflow')
@@ -145,10 +144,9 @@ def parse_args():
             default=0,
             help="lasso parameter on the branch lengths")
     parser.add_argument('--max-iters', type=int, default=2000)
-    parser.add_argument('--max-depth', type=int, default=10)
-    parser.add_argument('--min-leaves', type=int, default=2)
-    parser.add_argument('--max-leaves', type=int, default=100)
-    parser.add_argument('--max-clt-nodes', type=int, default=8000)
+    parser.add_argument('--min-leaves', type=int, default=3)
+    parser.add_argument('--max-leaves', type=int, default=800)
+    parser.add_argument('--max-clt-nodes', type=int, default=100000)
     parser.add_argument('--num-inits', type=int, default=1)
     parser.add_argument(
             '--mix-path',
@@ -207,23 +205,25 @@ def main(args=sys.argv[1:]):
         clt_model.tot_time = args.time
         tf.global_variables_initializer().run()
         clt, obs_leaves, true_tree = create_cell_lineage_tree(args, clt_model)
+        logging.info("Created cell lineage tree")
 
         # Instantiate approximator used by our penalized MLE
         approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
 
         # Oracle tree
-        #oracle_pen_ll, oracle_model = fit_pen_likelihood(
-        #        true_tree,
-        #        bcode_meta,
-        #        cell_type_tree,
-        #        args.know_cell_lambdas,
-        #        np.array(args.target_lambdas) if args.know_target_lambdas else None,
-        #        args.log_barr,
-        #        args.max_iters,
-        #        approximator,
-        #        sess)
-        ## Use this as a reference
-        #logging.info("oracle %f", oracle_pen_ll)
+        oracle_pen_ll, oracle_model = fit_pen_likelihood(
+                true_tree,
+                bcode_meta,
+                cell_type_tree,
+                args.know_cell_lambdas,
+                np.array(args.target_lambdas) if args.know_target_lambdas else None,
+                args.log_barr,
+                args.max_iters,
+                approximator,
+                sess,
+                tot_time = args.time)
+        # Use this as a reference
+        logging.info("oracle %f", oracle_pen_ll)
 
         # Begin our hillclimbing search!
         # Get the parsimony-estimated topologies

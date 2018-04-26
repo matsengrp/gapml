@@ -33,7 +33,9 @@ class CLTPenalizedEstimator(CLTEstimator):
 
         # Create the skeletons for the transition matrices -- via state sum approximation
         self.transition_mat_wrappers = self.approximator.create_transition_matrix_wrappers(model)
+        logging.info("Done creating transition matrices")
         self.model.create_log_lik(self.transition_mat_wrappers)
+        logging.info("Done creating tensorflow graph")
         tf.global_variables_initializer().run()
 
         # Anything after this is just for testing
@@ -46,7 +48,7 @@ class CLTPenalizedEstimator(CLTEstimator):
 
         #self.model.check_grad(self.transition_mat_wrappers)
 
-    def fit(self, max_iters: int, print_iter: int=50, step_size: float = 0.01):
+    def fit(self, max_iters: int, print_iter: int=1, step_size: float = 0.01):
         """
         Finds the best model parameters
         """
@@ -65,7 +67,7 @@ class CLTPenalizedEstimator(CLTEstimator):
             assert pen_log_lik != -np.inf
 
             prev_pen_log_lik = pen_log_lik
-            if i % print_iter == print_iter - 1:
+            if i % print_iter == (print_iter - 1):
                 logging.info(
                     "iter %d pen log lik %f log lik %f alleles %f cell type %f",
                     i, pen_log_lik, log_lik, log_lik_alleles, log_lik_cell_type)

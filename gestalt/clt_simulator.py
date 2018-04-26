@@ -130,8 +130,7 @@ class BirthDeathTreeSimulator:
         """
         self.curr_nodes += 1
         if self.curr_nodes > self.max_nodes:
-            print("too many nodes")
-            1/0
+            raise ValueError("too many nodes")
             return
 
         if remain_time == 0:

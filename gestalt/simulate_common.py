@@ -132,15 +132,12 @@ def create_cell_lineage_tree(args, clt_model):
         sampling_rate = args.sampling_rate
         while (len(obs_leaves) < args.min_leaves or len(obs_leaves) >= args.max_leaves) and sampling_rate <= 1:
             # Now sample the leaves and create the true topology
+            # Keep changing the sampling rate if we can't get the right number of leaves
             obs_leaves, true_tree = observer.observe_leaves(
                     sampling_rate,
                     clt,
                     seed=args.model_seed,
                     observe_cell_state=args.use_cell_state)
-
-            if true_tree.get_max_depth() > args.max_depth:
-                sim_time *= 0.8
-                break
 
             logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
             num_tries += 1
@@ -148,6 +145,13 @@ def create_cell_lineage_tree(args, clt_model):
                 sampling_rate += 0.025
             elif len(obs_leaves) >= args.max_leaves:
                 sampling_rate = max(1e-3, sampling_rate - 0.05)
+            else:
+                break
+
+        logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
+        if len(obs_leaves) >= args.min_leaves or len(obs_leaves) <= args.max_leaves:
+            # Done creating the tree
+            break
 
     if len(obs_leaves) < args.min_leaves:
         raise Exception("Could not manage to get enough leaves")
@@ -203,7 +207,9 @@ def fit_pen_likelihood(
         sess: Session,
         warm_start: Dict[str, ndarray] = None,
         br_len_scale: float = 0.1,
-        br_len_shrink: float = 0.8):
+        br_len_shrink: float = 0.8,
+        tot_time: float = 1,
+        max_branch_attempts: int = 10):
     """
     Fit the model for the given tree topology
     @param warm_start: use the given variables to initialize the model
@@ -223,7 +229,8 @@ def fit_pen_likelihood(
         target_lams_known=target_lams_known,
         branch_len_inners = branch_len_inners,
         cell_type_tree = cell_type_tree,
-        cell_lambdas_known = know_cell_lams)
+        cell_lambdas_known = know_cell_lams,
+        tot_time = tot_time)
     estimator = CLTPenalizedEstimator(
             res_model,
             approximator,
@@ -232,7 +239,8 @@ def fit_pen_likelihood(
     if warm_start is None:
         # Initialize with parameters such that the branch lengths are positive
         all_branch_lens_positive = all([b > 0 for b in res_model.get_branch_lens()[1:]])
-        for _ in range(10):
+        for j in range(max_branch_attempts):
+            print("attempt %d to make br lens all positive" % j)
             # Keep initializing branch lengths until they are all positive
             model_vars = res_model.get_vars_as_dict()
             br_len_scale *= br_len_shrink
