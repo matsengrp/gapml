@@ -52,6 +52,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         """
         Finds the best model parameters
         """
+        train_history = []
         for i in range(max_iters):
             _, log_lik, pen_log_lik, log_lik_alleles, log_lik_cell_type = self.model.sess.run(
                     [
@@ -66,13 +67,14 @@ class CLTPenalizedEstimator(CLTEstimator):
                     })
             assert pen_log_lik != -np.inf
 
+            train_history.append(pen_log_lik)
             prev_pen_log_lik = pen_log_lik
             if i % print_iter == (print_iter - 1):
                 logging.info(
                     "iter %d pen log lik %f log lik %f alleles %f cell type %f",
                     i, pen_log_lik, log_lik, log_lik_alleles, log_lik_cell_type)
 
-        return pen_log_lik
+        return pen_log_lik, train_history
 
     def create_logger(self):
         self.model.create_logger()

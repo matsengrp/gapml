@@ -130,7 +130,6 @@ def search_nearby_trees(init_tree: CellLineageTree, max_search_dist: int =10, ma
     # Now perform NNI moves on random nodes
     trees = []
     for i in range(max_search_dist):
-        logging.info("Search step %d", i)
         tree_found = False
         for j in range(max_attempts):
             # Pick the random node
@@ -178,6 +177,7 @@ def search_nearby_trees(init_tree: CellLineageTree, max_search_dist: int =10, ma
                     break
 
         # Make a copy of this tree and store!
+        logging.info("Search step %d, tree found %d", i, tree_found)
         if tree_found:
             trees.append(scratch_tree.copy("deepcopy"))
     return trees

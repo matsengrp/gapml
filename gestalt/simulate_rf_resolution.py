@@ -15,6 +15,7 @@ from tensorflow.python import debug as tf_debug
 from scipy.stats import pearsonr, spearmanr
 import logging
 import pickle
+import random
 
 from clt_estimator import CLTEstimator
 from barcode_metadata import BarcodeMetadata
@@ -22,6 +23,7 @@ from approximator import ApproximatorLB
 from tree_manipulation import search_nearby_trees
 import ancestral_events_finder as anc_evt_finder
 from likelihood_scorer import LikelihoodScorer
+from parallel_worker import BatchSubmissionManager
 
 from constants import *
 from common import *
@@ -126,10 +128,10 @@ def parse_args():
             type=float,
             default=0,
             help="lasso parameter on the branch lengths")
-    parser.add_argument('--max-iters', type=int, default=2000)
+    parser.add_argument('--max-iters', type=int, default=5000)
     parser.add_argument('--min-leaves', type=int, default=2)
     parser.add_argument('--max-leaves', type=int, default=100)
-    parser.add_argument('--max-clt-nodes', type=int, default=8000)
+    parser.add_argument('--max-clt-nodes', type=int, default=10000)
     parser.add_argument('--use-cell-state', action='store_true')
     parser.add_argument('--do-distributed', action='store_true', help="submit slurm jobs")
 
@@ -201,8 +203,10 @@ def main(args=sys.argv[1:]):
         rf_dists = []
         seed = 0
         for rf_dist, tree_tuples in nearby_tree_dict.items():
+            trees = [t[0] for t in tree_tuples]
+            random.shuffle(trees)
             uniq_trees = CLTEstimator.get_uniq_trees(
-                    [t[0] for t in tree_tuples],
+                    trees,
                     attr_str="allele_events_list_str",
                     max_trees=args.num_explore_trees,
                     unrooted=False)
@@ -238,11 +242,17 @@ def main(args=sys.argv[1:]):
             fitting_results = [worker.do_work_directly(sess) for worker in worker_list]
 
         # Print some summaries
+        assert len(fitting_results) == len(rf_dists)
         pen_log_liks = []
+        final_rf_dists = []
         for res, rf_dist in zip(fitting_results, rf_dists):
+            if res is None:
+                continue
             pen_ll = res[0][0]
             pen_log_liks.append(pen_ll)
+            final_rf_dists.append(rf_dist)
             logging.info("pen log lik %f RF %d", pen_ll, rf_dist)
+            logging.info("train hist %s", res[-1])
 
         # Add in the oracle tree
         oracle_scorer = LikelihoodScorer(
@@ -258,23 +268,26 @@ def main(args=sys.argv[1:]):
                 tot_time = args.time)
         oracle_res = oracle_scorer.do_work_directly(sess)
         logging.info("True tree score %f", oracle_res[0])
+        logging.info("oracle train hist %s", oracle_res[-1])
         fitting_results.append(oracle_res)
         pen_log_liks.append(oracle_res[0][0])
-        rf_dists.append(0)
-
-        # Correlation between RF dist and likelihood among parsimony trees
-        logging.info("rooted rf_dists %s", str(rf_dists))
-        logging.info("pen log liks %s", str(pen_log_liks))
-        logging.info("pearson rf to log lik %s", pearsonr(rf_dists, pen_log_liks))
-        logging.info("spearman rf to log lik %s", spearmanr(rf_dists, pen_log_liks))
-        plt.scatter(rf_dists, pen_log_liks)
-        plt.savefig("%s/rf_dist_to_ll.png" % args.out_folder)
+        final_rf_dists.append(0)
 
         with open(args.fitted_models_file, "wb"):
             pickle.dumps({
                 "fitting_results": fitting_results,
-                "rf_dists": rf_dists,
-                "pen_ll": pen_ll})
+                "rf_dists": final_rf_dists,
+                "pen_ll": pen_log_liks})
+
+        # Correlation between RF dist and likelihood among parsimony trees
+        logging.info("rooted rf_dists %s", str(final_rf_dists))
+        logging.info("pen log liks %s", str(pen_log_liks))
+        logging.info("pearson rf to log lik %s", pearsonr(final_rf_dists, pen_log_liks))
+        logging.info("spearman rf to log lik %s", spearmanr(final_rf_dists, pen_log_liks))
+        plt.scatter(final_rf_dists, pen_log_liks)
+        plt.xlabel("rf distance")
+        plt.ylabel("pen log lik")
+        plt.savefig("%s/rf_dist_to_ll.png" % args.out_folder)
 
 if __name__ == "__main__":
     main()

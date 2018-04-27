@@ -260,6 +260,6 @@ def fit_pen_likelihood(
         model_vars["branch_len_inners"] = branch_len_inners
         res_model.set_params_from_dict(model_vars)
 
-    pen_log_lik = estimator.fit(max_iters)
+    pen_log_lik, history = estimator.fit(max_iters)
 
-    return pen_log_lik, res_model
+    return pen_log_lik, history, res_model

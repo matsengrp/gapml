@@ -95,7 +95,8 @@ class MultiprocessingManager(ParallelWorkerManager):
         results = []
         for i, r in enumerate(results_raw):
             if r is None:
-                print("WARNING: multiprocessing worker for this worker failed %s" % self.batched_workers_list[i])
+                print("WARNING: multiprocessing worker for this worker failed %s (%d)" % self.batched_workers_list[i], len(self.batched_workers_list[i].workers))
+                results += ([None] * len(self.batched_workers_list[i].workers))
             else:
                 results += r
         return results
@@ -192,7 +193,8 @@ class BatchSubmissionManager(ParallelWorkerManager):
 
             for j, r in enumerate(res):
                 if r is None:
-                    print("WARNING: multiprocessing worker for this worker failed %s" % self.batched_workers[i][j])
+                    print("WARNING: batch submission manager, worker failed %s" % self.batched_workers[i][j])
+                    worker_results.append(None)
                 else:
                     worker_results.append(r)
 

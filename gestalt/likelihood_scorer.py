@@ -60,7 +60,7 @@ class LikelihoodScorer(ParallelWorker):
         Used when we aren't submitting jobs
         @param sess: tensorflow session
         """
-        pen_ll, res_model = fit_pen_likelihood(
+        pen_ll, train_history, res_model = fit_pen_likelihood(
             self.tree,
             self.bcode_meta,
             self.cell_type_tree,
@@ -72,4 +72,7 @@ class LikelihoodScorer(ParallelWorker):
             sess,
             warm_start=self.init_model_vars,
             tot_time=self.tot_time)
-        return pen_ll, res_model.get_vars_as_dict(), res_model.get_branch_lens()
+        return pen_ll, res_model.get_vars_as_dict(), res_model.get_branch_lens(), train_history
+
+    def __str__(self):
+        return str(self.seed)
