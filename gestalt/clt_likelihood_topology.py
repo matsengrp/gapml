@@ -14,6 +14,7 @@ from parallel_worker import BatchSubmissionManager
 from likelihood_scorer import LikelihoodScorer
 from common import get_rf_dist_allele_str
 from simulate_common import fit_pen_likelihood
+from tree_distance import UnrootRFDistanceMeasurer
 
 class CLTLikelihoodTopologySearcher:
     """
@@ -110,7 +111,7 @@ class CLTLikelihoodTopologySearcher:
             for _ in range(num_nni_restarts):
                 nearby_trees += search_nearby_trees(curr_tree, max_search_dist=max_nni_steps)
             # uniq ones please
-            nearby_trees = CLTEstimator.get_uniq_trees(nearby_trees, attr_str="allele_events_list_str")
+            nearby_trees = UnrootRFDistanceMeasurer.get_uniq_trees(nearby_trees)
 
             # Calculate the likelihoods
             worker_list = [

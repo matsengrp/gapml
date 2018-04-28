@@ -32,6 +32,7 @@ from clt_likelihood_estimator import *
 from alignment import AlignerNW
 from barcode_metadata import BarcodeMetadata
 from approximator import ApproximatorLB
+from tree_distances import UnrootRfDistanceMeasurer
 
 from constants import *
 from common import *
@@ -48,36 +49,18 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_trees):
             num_mix_runs=args.num_jumbles)
     logging.info("Total parsimony trees %d", len(parsimony_trees))
 
-    # Sort the parsimony trees into their robinson foulds distance from the truth
-    parsimony_tree_dict = {}
-    parsimony_score = None
-    for tree in parsimony_trees:
-        if parsimony_score is None:
-            parsimony_score = tree.get_parsimony_score()
-        rf_res = true_tree.robinson_foulds(
-                tree,
-                attr_t1="allele_events_list_str",
-                attr_t2="allele_events_list_str",
-                expand_polytomies=False,
-                unrooted_trees=False)
-        rf_dist = rf_res[0]
-        rf_dist_max = rf_res[1]
-        logging.info(
-                "full barcode tree: rf dist %d (max %d) pars %d",
-                rf_dist,
-                rf_dist_max,
-                parsimony_score)
-        logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-        if rf_dist not in parsimony_tree_dict:
-            parsimony_tree_dict[rf_dist] = [tree]
-        else:
-            parsimony_tree_dict[rf_dist].append(tree)
+    parsimony_score = parsimony_trees[0].get_parsimony_score()
+    logging.info("parsimony scores %d", parsimony_score)
 
-    # make each set of trees for each rf distance uniq
-    for k, v in parsimony_tree_dict.items():
-        parsimony_tree_dict[k] = CLTParsimonyEstimator.get_uniq_trees(
-                v,
-                max_trees=args.max_trees)
+    # Group the trees together by RF distance
+    measurer = UnrootRFDistanceMeasurer(true_tree)
+    parsimony_tree_dict = measurer.group_trees_by_dist(parsimony_trees, max_trees)
+
+    # Print details
+    for dist, tree_group in parsimony_tree_dict.items():
+        logging.info("rf dist %d, num %d", dist, len(tree_group))
+        for tree in tree_group:
+            logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
     return parsimony_tree_dict
 
 def create_cell_type_tree(args):
@@ -142,7 +125,7 @@ def create_cell_lineage_tree(args, clt_model):
             logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
             num_tries += 1
             if len(obs_leaves) < args.min_leaves:
-                sampling_rate += 0.025
+                sampling_rate += 0.01
             elif len(obs_leaves) >= args.max_leaves:
                 sampling_rate = max(1e-3, sampling_rate - 0.05)
             else:

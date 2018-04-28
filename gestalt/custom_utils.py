@@ -151,8 +151,8 @@ def finish_process(iproc, procs, n_tries, cmdfo, batch_system=None, batch_option
         for strtype in ['out.txt', 'err.txt']:
             if os.path.exists(cmdfo.logdir + '/' + strtype) and os.stat(cmdfo.logdir + '/' + strtype).st_size > 0:
                 print('        %s tail:' % strtype)
-                logstr = check_output(['tail', cmdfo.logdir + '/' + strtype])
-                print('\n'.join(['            ' + l for l in logstr.split('\n')]))
+                #logstr = check_output(['tail', cmdfo.logdir + '/' + strtype])
+                #print('\n'.join(['            ' + l for l in logstr.split('\n')]))
         if batch_system is not None and os.path.exists(cmdfo.logdir + '/err.txt'):  # cmdfo.cmd_str.split()[0] == 'srun' and
             jobid = ''
             try:

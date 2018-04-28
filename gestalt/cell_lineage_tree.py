@@ -1,4 +1,6 @@
 import re
+import copy
+import six
 import scipy
 import pandas as pd
 from ete3 import TreeNode #, NodeStyle, SeqMotifFace, TreeStyle, TextFace, RectFace
@@ -331,35 +333,36 @@ class CellLineageTree(TreeNode):
                 new_node.add_feature(k, getattr(node, k))
         return new_node
 
-    #def get_robinson_foulds_collapsed(self, coll_tree2, attr1, attr2, idxs=None):
-    #    def make_fake_leaves(tree, attr):
-    #        for node in tree.traverse():
-    #            if getattr(node, attr) and not node.is_leaf():
-    #                new_child = CellLineageTree.convert(
-    #                        node,
-    #                        node.allele_list,
-    #                        node.allele_events_list,
-    #                        node.cell_state,
-    #                        0)
-    #                node.add_child(new_child)
+    def get_custom_rf(self, t2, attr_t1, attr_t2):
+        ref_t = self
+        target_t = t2
+        attrs_t1 = set([getattr(n, attr_t1) for n in ref_t.iter_leaves() if hasattr(n, attr_t1)])
+        attrs_t2 = set([getattr(n, attr_t2) for n in target_t.iter_leaves() if hasattr(n, attr_t2)])
+        common_attrs = attrs_t1 & attrs_t2
+        attrs_t1, attrs_t2 = None, None
 
-    #    tree1 = self.copy()
-    #    tree2 = coll_tree2.copy()
-    #    if idxs is not None:
-    #        tree1 = CollapsedTree.collapse_same_ancestral(tree1, idxs=idxs)
-    #        tree2 = CollapsedTree.collapse_same_ancestral(tree2, idxs=idxs)
+        def get_subtrees(t_content, attr_t):
+            subtrees = [
+                set([getattr(n, attr_t) for n in content if hasattr(n, attr_t) and getattr(n, attr_t) in common_attrs])
+                for content in six.itervalues(t_content) if len(content) > 1]
+            all_subsets = copy.deepcopy(subtrees)
+            for s1 in subtrees:
+                for s2 in subtrees:
+                    if s2 <= s1:
+                        all_subsets.append(s1 - s2)
+            return set([tuple(sorted(s)) for s in all_subsets])
 
-    #    make_fake_leaves(tree1, attr1)
-    #    make_fake_leaves(tree2, attr2)
-    #    rf_dist_res = tree1.robinson_foulds(
-    #            tree2,
-    #            attr_t1=attr1,
-    #            attr_t2=attr2,
-    #            # The expand_polytomies option is buggy.
-    #            # Also, I think we actually want the unrooted calculation.
-    #            expand_polytomies=False,
-    #            unrooted_trees=True)
-    #    return rf_dist_res[0], rf_dist_res[1]
+        t1 = ref_t
+        t1_content = t1.get_cached_content()
+        t1_leaves = t1_content[t1]
+        edges1 = get_subtrees(t1_content, attr_t1)
+
+        t2_content = t2.get_cached_content()
+        t2_leaves = t2_content[t2]
+        edges2 = get_subtrees(t2_content, attr_t2)
+
+        rf = len(edges1 ^ edges2)
+        return rf
 
     def get_root_to_observed_lens(self, est_branch_lens = None):
         use_dist = est_branch_lens is None
@@ -378,11 +381,13 @@ class CellLineageTree(TreeNode):
                 stupid_dist_to_root[node.allele_events_list_str] = stupid_dist
         return est_dist_to_root, stupid_dist_to_root
 
-    def label_node_ids(self, order):
+    def label_node_ids(self, order="preorder"):
+        assert order == "preorder"
         node_id = 0
         for node in self.traverse(order):
             node.add_feature("node_id", node_id)
             if node.is_root():
                 root_node_id = node_id
             node_id += 1
+        assert root_node_id == 0
         return root_node_id, node_id
