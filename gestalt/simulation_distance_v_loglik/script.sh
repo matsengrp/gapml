@@ -12,7 +12,7 @@ if [ ! -f "$FILE" ] || [ "$OVERWRITE" = "1" ]; then
         --model-seed {model_seed} \
         --data-seed {data_seed} \
         --time {time} \
-	--min-leaves 5 \
+	--min-leaves 40 \
 	--max-leaves {max_leaves} \
         --variance-target-lam {variance} \
 	--num-moves 20 \

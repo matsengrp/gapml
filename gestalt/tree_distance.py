@@ -194,15 +194,15 @@ class MRCADistanceMeasurer(TreeDistanceMeasurer):
                 leaf1_idx = self.leaf_dict[leaf1.allele_events_list_str]
                 leaf2_idx = self.leaf_dict[leaf2.allele_events_list_str]
                 if leaf1_idx == leaf2_idx:
-                    # Distance to itself is zero
+                    # Instead of distance to itself, set this to be pendant edge length
+                    mrca_matrix[leaf1_idx, leaf2_idx] = leaf1.dist
                     continue
-                elif mrca_matrix[leaf1_idx, leaf2_idx] > 0:
+                elif (mrca_matrix[leaf1_idx, leaf2_idx] + mrca_matrix[leaf2_idx, leaf1_idx]) > 0:
                     # We already filled this distance out
                     continue
                 mrca = leaf1.get_common_ancestor(leaf2)
                 mrca_dist = leaf1.get_distance(mrca)
-                mrca_matrix[leaf1_idx, leaf2_idx] = mrca_dist
-                mrca_matrix[leaf2_idx, leaf1_idx] = mrca_dist
+                mrca_matrix[min(leaf1_idx, leaf2_idx), max(leaf1_idx, leaf2_idx)] = mrca_dist
         return mrca_matrix
 
     def get_dist(self, tree):
