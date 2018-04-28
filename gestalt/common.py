@@ -54,16 +54,3 @@ def save_fitted_models(
 
     with open(file_name, "wb") as f:
         pickle.dump(res_dict, f, protocol=-1)
-
-def get_rf_dist_allele_str(tree, ref_tree, unroot=False):
-    """
-    For calling ete3's RF distance calculator
-    TODO: move this somewhere
-    """
-    rf_res = ref_tree.robinson_foulds(
-            tree,
-            attr_t1="allele_events_list_str",
-            attr_t2="allele_events_list_str",
-            expand_polytomies=False,
-            unrooted_trees=unroot)
-    return rf_res[0]

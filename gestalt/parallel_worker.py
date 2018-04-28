@@ -71,6 +71,7 @@ class BatchSubmissionManager(ParallelWorkerManager):
         @param shared_obj: object shared across parallel workers - useful to minimize disk space usage
         @param num_approx_batches: number of batches to make approximately (might be a bit more)
         @param worker_folder: the folder to make all the results from the workers
+        @param retry: whether to retry the jobs locally if they fail
         """
         self.retry = retry
         self.batch_worker_cmds = []
@@ -82,6 +83,11 @@ class BatchSubmissionManager(ParallelWorkerManager):
         self.create_batch_worker_cmds(worker_list, shared_obj, num_approx_batches, worker_folder)
 
     def run(self, successful_only=False):
+        """
+        @param successful_only: whether to return successful jobs only
+                                unsuccessful jobs have None as their result
+        @return list of tuples (result, worker)
+        """
         custom_utils.run_cmds(self.batch_worker_cmds)
         res = self.read_batch_worker_results()
         self.clean_outputs()

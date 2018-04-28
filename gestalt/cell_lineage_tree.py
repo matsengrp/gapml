@@ -333,37 +333,6 @@ class CellLineageTree(TreeNode):
                 new_node.add_feature(k, getattr(node, k))
         return new_node
 
-    def get_custom_rf(self, t2, attr_t1, attr_t2):
-        ref_t = self
-        target_t = t2
-        attrs_t1 = set([getattr(n, attr_t1) for n in ref_t.iter_leaves() if hasattr(n, attr_t1)])
-        attrs_t2 = set([getattr(n, attr_t2) for n in target_t.iter_leaves() if hasattr(n, attr_t2)])
-        common_attrs = attrs_t1 & attrs_t2
-        attrs_t1, attrs_t2 = None, None
-
-        def get_subtrees(t_content, attr_t):
-            subtrees = [
-                set([getattr(n, attr_t) for n in content if hasattr(n, attr_t) and getattr(n, attr_t) in common_attrs])
-                for content in six.itervalues(t_content) if len(content) > 1]
-            all_subsets = copy.deepcopy(subtrees)
-            for s1 in subtrees:
-                for s2 in subtrees:
-                    if s2 <= s1:
-                        all_subsets.append(s1 - s2)
-            return set([tuple(sorted(s)) for s in all_subsets])
-
-        t1 = ref_t
-        t1_content = t1.get_cached_content()
-        t1_leaves = t1_content[t1]
-        edges1 = get_subtrees(t1_content, attr_t1)
-
-        t2_content = t2.get_cached_content()
-        t2_leaves = t2_content[t2]
-        edges2 = get_subtrees(t2_content, attr_t2)
-
-        rf = len(edges1 ^ edges2)
-        return rf
-
     def get_root_to_observed_lens(self, est_branch_lens = None):
         use_dist = est_branch_lens is None
         est_dist_to_root = {}

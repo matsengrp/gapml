@@ -15,6 +15,13 @@ class TreeDistanceMeasurerAgg:
         measurer_classes: List,
         ref_tree: CellLineageTree,
         scratch_dir: str):
+        """
+        @param measurer_classes: list of classes (subclasses of TreeDistanceMeasurer)
+                                to instantiate for tree distance measurements
+                                ex. [SPRDistanceMeasurer]
+        @param ref_tree: the reference tree to measure distances from
+        @param scratch_dir: a scratch directory used by TreeDistanceMeasurer
+        """
         self.measurers = [meas_cls(ref_tree, scratch_dir) for meas_cls in measurer_classes]
 
     def get_tree_dists(self, trees: List[CellLineageTree]):
@@ -35,6 +42,11 @@ class TreeDistanceMeasurer:
     Class that measures distances btw trees -- subclass this!
     """
     def __init__(self, ref_tree: CellLineageTree, scratch_dir: str):
+        """
+        @param ref_tree: tree to measure dsitances from
+        @param scratch_dir: a directory where files can be written to if needed
+                            (not used by all subclasses)
+        """
         self.ref_tree = ref_tree
         self.scratch_dir = scratch_dir
 
@@ -90,6 +102,9 @@ class TreeDistanceMeasurer:
         return uniq_trees
 
 class UnrootRFDistanceMeasurer(TreeDistanceMeasurer):
+    """
+    Robinson foulds distance, unrooted trees
+    """
     name = "ete_rf_unroot"
     def get_dist(self, tree):
         rf_res = self.ref_tree.robinson_foulds(
@@ -101,6 +116,9 @@ class UnrootRFDistanceMeasurer(TreeDistanceMeasurer):
         return rf_res[0]
 
 class RootRFDistanceMeasurer(TreeDistanceMeasurer):
+    """
+    Robinson foulds distance, rooted trees
+    """
     name = "ete_rf_root"
     def get_dist(self, tree):
         rf_res = self.ref_tree.robinson_foulds(
@@ -112,6 +130,9 @@ class RootRFDistanceMeasurer(TreeDistanceMeasurer):
         return rf_res[0]
 
 class SPRDistanceMeasurer(TreeDistanceMeasurer):
+    """
+    SPR distance
+    """
     name = "spr"
     def get_dist(self, tree):
         """

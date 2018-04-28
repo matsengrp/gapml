@@ -683,7 +683,6 @@ class CLTLikelihoodModel:
             self.Ddiags_list.append(Ddiags)
         self.log_lik_alleles = tf.add_n(self.log_lik_alleles_list)
 
-    #@profile
     def _create_topology_log_lik_barcode(self,
             transition_matrix_wrappers: Dict[int, List[TransitionMatrixWrapper]],
             bcode_idx: int):
