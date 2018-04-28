@@ -118,7 +118,8 @@ class BatchSubmissionManager(ParallelWorkerManager):
 
             # Create the folder for the output from this batch worker
             worker_batch_folder = "%s/batch_%d" % (worker_folder, batch_idx)
-            os.makedirs(worker_batch_folder)
+            if not os.path.exists(worker_batch_folder):
+                os.makedirs(worker_batch_folder)
             self.output_folders.append(worker_batch_folder)
 
             # Create the command for this batch worker

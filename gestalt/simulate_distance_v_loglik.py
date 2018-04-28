@@ -211,6 +211,8 @@ def main(args=sys.argv[1:]):
         # Process tree by labeling nodes in the tree
         anc_evt_finder.annotate_ancestral_states(true_tree, bcode_meta)
         true_tree.label_node_ids(CLTLikelihoodModel.NODE_ORDER)
+        logging.info("TRUE TREE")
+        logging.info(true_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
         # Perform NNI moves to find nearby trees
         nearby_trees = [true_tree]
@@ -220,7 +222,7 @@ def main(args=sys.argv[1:]):
         assert len(nearby_trees) > 0
 
         # Now group trees by distance
-        dist_key_measurer = SPRDistanceMeasurer(true_tree, args.scratch_dir)
+        dist_key_measurer = RootRFDistanceMeasurer(true_tree, args.scratch_dir)
         # Group nearby trees by the distance measure
         nearby_tree_dict = dist_key_measurer.group_trees_by_dist(nearby_trees, args.max_explore_trees)
 
