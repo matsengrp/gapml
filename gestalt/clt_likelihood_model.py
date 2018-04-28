@@ -55,8 +55,7 @@ class CLTLikelihoodModel:
         self.topology = topology
         self.num_nodes = 0
         if self.topology:
-            self.root_node_id, self.num_nodes = topology.label_node_ids(self.NODE_ORDER)
-            assert self.root_node_id == 0
+            self.root_node_id, self.num_nodes = topology.label_node_ids()
         self.bcode_meta = bcode_meta
         self.num_targets = bcode_meta.n_targets
         self.double_cut_weight = double_cut_weight

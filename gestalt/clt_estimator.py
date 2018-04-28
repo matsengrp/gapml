@@ -26,36 +26,6 @@ class CLTEstimator:
         """
         raise NotImplementedError()
 
-    @staticmethod
-    def get_uniq_trees(trees: List[TreeNode], attr_str: str=None, max_trees: int=None, unrooted: bool=False):
-        """
-        @param max_trees: find this many uniq trees at most
-        """
-        attr_str = attr_str if attr_str is not None else "name"
-        num_trees = 1
-        uniq_trees = [trees[0]]
-        for t in trees[1:]:
-            # We are going to use the unrooted tree assuming that the collapsed tree output
-            # does not have multifurcating branches...
-            rf_dist = 1
-            for uniq_t in uniq_trees:
-                rf_dist = t.robinson_foulds(
-                    uniq_t,
-                    attr_t1=attr_str,
-                    attr_t2=attr_str,
-                    expand_polytomies=False,
-                    unrooted_trees=unrooted)[0]
-                if rf_dist == 0:
-                    break
-            if rf_dist > 0:
-                # Everything was nonzero
-                uniq_trees.append(t)
-                num_trees += 1
-                if max_trees is not None and num_trees == max_trees:
-                    break
-        return uniq_trees
-
-
 class CLTParsimonyEstimator(CLTEstimator):
     def __init__(self, bcode_meta: BarcodeMetadata, out_folder: str, mix_path: str = MIX_PATH):
         self.orig_barcode = bcode_meta.unedited_barcode
@@ -65,6 +35,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         self.outfile = "%s/outfile" % self.out_folder
         self.infile = "%s/infile" % self.out_folder
         self.abundance_file = "%s/test.abundance" % self.out_folder
+        self.dist_measurer = UnrootRFDistanceMeasurer(None, None)
 
     def _process_observations(self, observations: List[ObservedAlignedSeq]):
         """
@@ -238,7 +209,7 @@ class CLTParsimonyEstimator(CLTEstimator):
             # Collapse trees
             collapsed_trees = [collapsed_tree.collapse_zero_lens(t) for t in bifurcating_trees]
             # Get the unique collapsed trees
-            mix_trees = CLTEstimator.get_uniq_trees(collapsed_trees, unrooted=True)
+            mix_trees = self.dist_measurer.get_uniq_trees(collapsed_trees)
         else:
             mix_trees = bifurcating_trees
 

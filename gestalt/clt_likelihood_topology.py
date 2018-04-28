@@ -12,8 +12,8 @@ from clt_estimator import CLTEstimator
 
 from parallel_worker import BatchSubmissionManager
 from likelihood_scorer import LikelihoodScorer
-from common import get_rf_dist_allele_str
 from simulate_common import fit_pen_likelihood
+from tree_distance import UnrootRFDistanceMeasurer
 
 class CLTLikelihoodTopologySearcher:
     """
@@ -58,6 +58,9 @@ class CLTLikelihoodTopologySearcher:
         self.true_tree = true_tree
         self.do_distributed = do_distributed
 
+        if true_tree is not None:
+            self.tree_dist_measurer = UnrootRFDistanceMeasurer(true_tree, None)
+
     @staticmethod
     def _assign_branch_lens(br_len_dict, tree):
         """
@@ -75,10 +78,7 @@ class CLTLikelihoodTopologySearcher:
             do_warm_starts: bool = True):
         # Double check that we aren't starting with the true tree
         if self.true_tree is not None:
-            unroot_rf = get_rf_dist_allele_str(
-                    curr_tree,
-                    self.true_tree,
-                    unroot=True)
+            unroot_rf = self.tree_dist_measurer.get_dist(curr_tree)
             logging.info("Current tree")
             logging.info(curr_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
             logging.info("True tree")
@@ -110,7 +110,7 @@ class CLTLikelihoodTopologySearcher:
             for _ in range(num_nni_restarts):
                 nearby_trees += search_nearby_trees(curr_tree, max_search_dist=max_nni_steps)
             # uniq ones please
-            nearby_trees = CLTEstimator.get_uniq_trees(nearby_trees, attr_str="allele_events_list_str")
+            nearby_trees = UnrootRFDistanceMeasurer.get_uniq_trees(nearby_trees)
 
             # Calculate the likelihoods
             worker_list = [
@@ -163,7 +163,7 @@ class CLTLikelihoodTopologySearcher:
 
             # Calculate RF distance to understand if our hillclimbing is working
             if self.true_tree is not None:
-                unroot_rf = get_rf_dist_allele_str(curr_tree, self.true_tree, unroot=True)
+                unroot_rf = self.tree_dist_measurer.get_dist(curr_tree)
                 logging.info("curr tree distance unroot %d", unroot_rf)
 
         logging.info("final tree pen_ll %f", curr_pen_ll)

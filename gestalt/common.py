@@ -54,26 +54,3 @@ def save_fitted_models(
 
     with open(file_name, "wb") as f:
         pickle.dump(res_dict, f, protocol=-1)
-
-def get_rf_dist_allele_str(tree, ref_tree, unroot=False):
-    rf_res = ref_tree.robinson_foulds(
-            tree,
-            attr_t1="allele_events_list_str",
-            attr_t2="allele_events_list_str",
-            expand_polytomies=False,
-            unrooted_trees=unroot)
-    return rf_res[0]
-
-def get_rf_dist_dict(trees, true_tree, unroot=True):
-    # Now calculate the rf distances of each random tree
-    rf_tree_dict = {}
-    for tree in trees:
-        rf_dist = get_rf_dist_allele_str(tree, true_tree, unroot=unroot)
-        logging.info("rf dist %d", rf_dist)
-        rf_results = (tree, rf_dist)
-        if rf_dist in rf_tree_dict:
-            rf_tree_dict[rf_dist].append(rf_results)
-        else:
-            rf_tree_dict[rf_dist] = [rf_results]
-
-    return rf_tree_dict
