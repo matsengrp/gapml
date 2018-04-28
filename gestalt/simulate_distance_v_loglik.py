@@ -53,13 +53,7 @@ def parse_args():
         '--max-explore-trees',
         type=int,
         default=2,
-        help="number of trees to consider per distance as measured by --uniq-dist-key")
-    parser.add_argument(
-        '--uniq-dist-key',
-        type=str,
-        default="spr",
-        choices=["ete_rf_unroot", "ete_rf_root", "jean_rf", "spr"],
-        help="distance measure to cluster trees by")
+        help="number of trees to consider per distance")
     parser.add_argument(
         '--num-barcodes',
         type=int,
@@ -225,9 +219,9 @@ def main(args=sys.argv[1:]):
             nearby_trees += search_nearby_trees(true_tree, max_search_dist=args.num_moves)
         assert len(nearby_trees) > 0
 
-        # Now group trees by distance measure `uniq_dist_key`
+        # Now group trees by distance
         dist_key_measurer = SPRDistanceMeasurer(true_tree, args.scratch_dir)
-        # Group nearby trees by the distance measure `uniq_dist_key`
+        # Group nearby trees by the distance measure
         nearby_tree_dict = dist_key_measurer.group_trees_by_dist(nearby_trees, args.max_explore_trees)
 
         # Random debug check

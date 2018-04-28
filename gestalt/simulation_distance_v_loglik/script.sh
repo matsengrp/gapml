@@ -17,7 +17,7 @@ if [ ! -f "$FILE" ] || [ "$OVERWRITE" = "1" ]; then
         --variance-target-lam {variance} \
 	--num-moves 20 \
 	--num-searches 6 \
-	--num-explore-trees 6 \
+	--max-explore-trees 6 \
 	--max-iters 2000 \
 	--do-distribute \
         --out-folder simulation_distance_v_loglik/_output/{OUTDIR}

@@ -1,5 +1,6 @@
 import sys
 import os
+import shutil
 import traceback
 import six
 import custom_utils
@@ -74,12 +75,13 @@ class BatchSubmissionManager(ParallelWorkerManager):
         self.retry = retry
         self.batch_worker_cmds = []
         self.batched_workers = [] # Tracks the batched workers if something fails
+        self.output_folders = []
         self.output_files = []
         self.worker_list = worker_list
+        self.worker_folder = worker_folder
         self.create_batch_worker_cmds(worker_list, shared_obj, num_approx_batches, worker_folder)
 
     def run(self, successful_only=False):
-        self.clean_outputs()
         custom_utils.run_cmds(self.batch_worker_cmds)
         res = self.read_batch_worker_results()
         self.clean_outputs()
@@ -116,8 +118,8 @@ class BatchSubmissionManager(ParallelWorkerManager):
 
             # Create the folder for the output from this batch worker
             worker_batch_folder = "%s/batch_%d" % (worker_folder, batch_idx)
-            if not os.path.exists(worker_batch_folder):
-                os.makedirs(worker_batch_folder)
+            os.makedirs(worker_batch_folder)
+            self.output_folders.append(worker_batch_folder)
 
             # Create the command for this batch worker
             input_file_name = "%s/in.pkl" % worker_batch_folder
@@ -167,6 +169,6 @@ class BatchSubmissionManager(ParallelWorkerManager):
         return worker_results
 
     def clean_outputs(self):
-        for fname in self.output_files:
+        for fname in self.output_folders:
             if os.path.exists(fname):
-                os.remove(fname)
+                shutil.rmtree(fname)
