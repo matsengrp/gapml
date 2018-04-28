@@ -35,6 +35,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         self.outfile = "%s/outfile" % self.out_folder
         self.infile = "%s/infile" % self.out_folder
         self.abundance_file = "%s/test.abundance" % self.out_folder
+        self.dist_measurer = UnrootRFDistanceMeasurer(None, None)
 
     def _process_observations(self, observations: List[ObservedAlignedSeq]):
         """
@@ -208,7 +209,7 @@ class CLTParsimonyEstimator(CLTEstimator):
             # Collapse trees
             collapsed_trees = [collapsed_tree.collapse_zero_lens(t) for t in bifurcating_trees]
             # Get the unique collapsed trees
-            mix_trees = UnrootRFDistanceMeasurer.get_uniq_trees(collapsed_trees)
+            mix_trees = self.dist_measurer.get_uniq_trees(collapsed_trees)
         else:
             mix_trees = bifurcating_trees
 

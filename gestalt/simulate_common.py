@@ -32,7 +32,7 @@ from clt_likelihood_estimator import *
 from alignment import AlignerNW
 from barcode_metadata import BarcodeMetadata
 from approximator import ApproximatorLB
-from tree_distances import UnrootRfDistanceMeasurer
+from tree_distance import UnrootRFDistanceMeasurer
 
 from constants import *
 from common import *

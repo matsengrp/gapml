@@ -5,7 +5,6 @@ import logging
 import itertools
 from typing import List, Tuple, Dict
 
-from tree_distance import get_spr_dist, MRCADistMeasurer
 from constants import COLORS
 
 def get_color(cell_type):
@@ -59,6 +58,7 @@ def save_fitted_models(
 def get_rf_dist_allele_str(tree, ref_tree, unroot=False):
     """
     For calling ete3's RF distance calculator
+    TODO: move this somewhere
     """
     rf_res = ref_tree.robinson_foulds(
             tree,

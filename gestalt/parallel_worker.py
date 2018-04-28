@@ -6,18 +6,6 @@ import custom_utils
 from custom_utils import CustomCommand
 import numpy as np
 
-def get_successful_jobs(results, workers):
-    """
-    filters our the results that were not successful
-    @return list of tuples with (result, worker)
-    """
-    successful_res_workers = []
-    for res, worker in zip(results, workers):
-        if res is None:
-            continue
-        successful_res_workers.append((res, worker))
-    return successful_res_workers
-
 class BatchParallelWorkers:
     def __init__(self, workers, shared_obj):
         self.workers = workers
@@ -87,14 +75,30 @@ class BatchSubmissionManager(ParallelWorkerManager):
         self.batch_worker_cmds = []
         self.batched_workers = [] # Tracks the batched workers if something fails
         self.output_files = []
+        self.worker_list = worker_list
         self.create_batch_worker_cmds(worker_list, shared_obj, num_approx_batches, worker_folder)
 
-    def run(self):
+    def run(self, successful_only=False):
         self.clean_outputs()
         custom_utils.run_cmds(self.batch_worker_cmds)
         res = self.read_batch_worker_results()
         self.clean_outputs()
-        return res
+        if successful_only:
+            return self._get_successful_jobs(res, self.worker_list)
+        else:
+            return [(r, w) for r, w in zip(res, self.worker_list)]
+
+    def _get_successful_jobs(self, results, workers):
+        """
+        filters our the results that were not successful
+        @return list of tuples with (result, worker)
+        """
+        successful_res_workers = []
+        for res, worker in zip(results, workers):
+            if res is None:
+                continue
+            successful_res_workers.append((res, worker))
+        return successful_res_workers
 
     def create_batch_worker_cmds(self, worker_list, shared_obj, num_approx_batches, worker_folder):
         """

@@ -113,7 +113,7 @@ def parse_args():
     parser.add_argument(
         '--death-lambda', type=float, default=0.001, help='death rate')
     parser.add_argument(
-        '--time', type=float, default=1.2, help='how much time to simulate')
+        '--time', type=float, default=1.6, help='how much time to simulate')
     parser.add_argument(
         '--sampling-rate',
         type=float,
@@ -152,9 +152,9 @@ def parse_args():
     args = parser.parse_args()
 
     args.num_targets = len(args.target_lambdas)
-    args.log_file = "%s/rf_resolution_log.txt" % args.out_folder
-    args.fitted_models_file = "%s/rf_resolution_results.pkl" % args.out_folder
-    args.scratch_dir = os.path.join(args.out_folder, "scratch") #%s" % int(time.time()))
+    args.log_file = "%s/distance_v_loglik.log" % args.out_folder
+    args.fitted_models_file = "%s/distance_v_loglik_results.pkl" % args.out_folder
+    args.scratch_dir = os.path.join(args.out_folder, "scratch")
     if not os.path.exists(args.scratch_dir):
         os.makedirs(args.scratch_dir)
     print("Log file", args.log_file)
@@ -219,7 +219,7 @@ def main(args=sys.argv[1:]):
         true_tree.label_node_ids(CLTLikelihoodModel.NODE_ORDER)
 
         # Perform NNI moves to find nearby trees
-        nearby_trees = []
+        nearby_trees = [true_tree]
         for i in range(args.num_searches):
             logging.info("Searching nearby trees, search %d", i)
             nearby_trees += search_nearby_trees(true_tree, max_search_dist=args.num_moves)
@@ -230,6 +230,10 @@ def main(args=sys.argv[1:]):
         # Group nearby trees by the distance measure `uniq_dist_key`
         nearby_tree_dict = dist_key_measurer.group_trees_by_dist(nearby_trees, args.max_explore_trees)
 
+        # Random debug check
+        oracle_dist = dist_key_measurer.get_dist(true_tree)
+        assert oracle_dist == 0
+
         # Instantiate approximator used by our penalized MLE
         approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
 
@@ -238,7 +242,7 @@ def main(args=sys.argv[1:]):
         seed = 0
         for rf_dist, uniq_trees in nearby_tree_dict.items():
             logging.info("There are %d trees with RF %d", len(uniq_trees), rf_dist)
-            for tree, tree_idx in zip(uniq_trees, tree_indices):
+            for tree in uniq_trees:
                 seed += 1
                 lik_scorer = LikelihoodScorer(
                         seed,
@@ -253,21 +257,6 @@ def main(args=sys.argv[1:]):
                         tot_time = args.time)
                 worker_list.append(lik_scorer)
 
-        # Also add a worker for the oracle tree
-        oracle_scorer = LikelihoodScorer(
-                0, # seed
-                true_tree,
-                bcode_meta,
-                cell_type_tree,
-                args.know_cell_lambdas,
-                np.array(args.target_lambdas) if args.know_target_lambdas else None,
-                args.log_barr,
-                args.max_iters,
-                approximator,
-                tot_time = args.time)
-        oracle_dist = get_tree_dists([true_tree], true_tree, args.scratch_dir)
-        worker_list.append(oracle_scorer)
-
         if args.do_distributed and len(worker_list) > 1:
             # Submit jobs to slurm
             batch_manager = BatchSubmissionManager(
@@ -276,21 +265,18 @@ def main(args=sys.argv[1:]):
                     # Each tree is its separate slurm job
                     num_approx_batches=len(worker_list),
                     worker_folder=args.scratch_dir)
-            fitting_results = batch_manager.run()
+            successful_res_workers = batch_manager.run(successful_only=True)
         else:
             # Run jobs locally
-            fitting_results = [worker.do_work_directly(sess) for worker in worker_list]
+            successful_res_workers = [(worker.do_work_directly(sess), worker) for worker in worker_list]
 
         # Process worker results
-        # Drop out the trees where the job didn't complete successfully
-        final_trees = []
-        successful_res_workers = get_successful_jobs(fitting_results, worker_list):
+        final_trees = [worker.tree for _, worker in successful_res_workers]
+        pen_log_liks = [res[0][0] for res, _ in successful_res_workers]
         for res, worker in successful_res_workers:
             # Set the branch lengths in the tree
             br_len_vec = res[2]
             set_branch_lens(worker.tree, br_len_vec)
-            final_trees.append(worker.tree)
-            logging.info("pen log lik %f", res[0])
             logging.info("train hist %s", res[-1][:50])
 
         # Do final tree distance measurements
@@ -305,23 +291,23 @@ def main(args=sys.argv[1:]):
 
         with open(args.fitted_models_file, "wb"):
             pickle.dumps({
-                "fitting_results": fitting_results,
+                "results": successful_res_workers,
                 "dist_dicts": final_dist_dicts,
                 "pen_ll": pen_log_liks})
 
-        # Correlation between RF dist and likelihood among parsimony trees
+        # Correlation between dist and likelihood among nearby max parsimony trees
         pen_log_liks = np.array(pen_log_liks)
-        for dist_meas in ["ete_rf_unroot", "ete_rf_root", "jean_rf", "spr"]:
-            final_rf_dists = np.array([d[dist_meas] for d in final_dist_dicts])
-            logging.info("%s: rf_dists %s", dist_meas, str(final_rf_dists))
-            logging.info("%s:pen log liks %s", dist_meas, str(pen_log_liks))
-            logging.info("%s:pearson rf to log lik %s", dist_meas, pearsonr(final_rf_dists, pen_log_liks))
-            logging.info("%s:spearman rf to log lik %s", dist_meas, spearmanr(final_rf_dists, pen_log_liks))
+        for dist_name in [measurer.name for measurer in tree_dist_measurers.measurers]:
+            final_dists = np.array([d[dist_name] for d in final_dist_dicts])
+            logging.info("%s:dists %s", dist_name, str(final_dists))
+            logging.info("%s:pen log liks %s", dist_name, str(pen_log_liks))
+            logging.info("%s:pearson %s", dist_name, pearsonr(final_dists, pen_log_liks))
+            logging.info("%s:spearman %s", dist_name, spearmanr(final_dists, pen_log_liks))
             plt.clf()
-            sns.regplot(final_rf_dists, pen_log_liks)
-            plt.xlabel(dist_meas)
+            sns.regplot(final_dists, pen_log_liks)
+            plt.xlabel(dist_name)
             plt.ylabel("pen log lik")
-            plt.savefig("%s/dist_vs_ll_%s.png" % (args.out_folder, dist_meas))
+            plt.savefig("%s/dist_vs_ll_%s.png" % (args.out_folder, dist_name))
 
 if __name__ == "__main__":
     main()
