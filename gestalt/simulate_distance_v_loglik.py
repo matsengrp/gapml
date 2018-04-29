@@ -14,7 +14,7 @@ import tensorflow as tf
 from tensorflow.python import debug as tf_debug
 from scipy.stats import pearsonr, spearmanr
 import logging
-import pickle
+import six
 import random
 import seaborn as sns
 
@@ -54,6 +54,10 @@ def parse_args():
         type=int,
         default=2,
         help="number of trees to consider per distance")
+    parser.add_argument(
+        '--do-distributed',
+        action='store_true',
+        help="submit slurm jobs")
     parser.add_argument(
         '--num-barcodes',
         type=int,
@@ -135,14 +139,12 @@ def parse_args():
             type=float,
             default=0,
             help="lasso parameter on the branch lengths")
-    parser.add_argument('--max-iters', type=int, default=5000)
+    parser.add_argument('--max-iters', type=int, default=1)
     parser.add_argument('--min-leaves', type=int, default=2)
     parser.add_argument('--max-leaves', type=int, default=10)
     parser.add_argument('--max-clt-nodes', type=int, default=10000)
-    parser.add_argument('--use-cell-state', action='store_true')
-    parser.add_argument('--do-distributed', action='store_true', help="submit slurm jobs")
 
-    parser.set_defaults(single_layer=False, two_layers=False)
+    parser.set_defaults(single_layer=False, two_layers=False, use_cell_state=False)
     args = parser.parse_args()
 
     args.num_targets = len(args.target_lambdas)
@@ -178,9 +180,15 @@ def main(args=sys.argv[1:]):
 
     # initialize the target lambdas with some perturbation to ensure we don't have eigenvalues that are exactly equal
     # Set the variance of the perturbations appropriately
-    perturbations = np.random.uniform(size=args.num_targets)
+    perturbations = np.random.uniform(size=args.num_targets) - 0.5
     perturbations = perturbations / np.sqrt(np.var(perturbations)) * np.sqrt(args.variance_target_lambdas)
     args.target_lambdas = np.array(args.target_lambdas) + perturbations
+    min_lambda = np.min(args.target_lambdas)
+    if min_lambda < 0:
+        boost = 0.00001
+        args.target_lambdas = args.target_lambdas - min_lambda + boost
+        args.birth_lambda += -min_lambda + boost
+        args.death_lambda += -min_lambda + boost
     assert np.isclose(np.var(args.target_lambdas), args.variance_target_lambdas)
     logging.info("args.target_lambdas %s (mean %f, var %f)", args.target_lambdas, np.mean(args.target_lambdas), np.var(args.target_lambdas))
 
@@ -215,14 +223,14 @@ def main(args=sys.argv[1:]):
         logging.info(true_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
         # Perform NNI moves to find nearby trees
-        nearby_trees = [true_tree]
+        nearby_trees = [true_tree.copy("deepcopy")]
         for i in range(args.num_searches):
             logging.info("Searching nearby trees, search %d", i)
             nearby_trees += search_nearby_trees(true_tree, max_search_dist=args.num_moves)
         assert len(nearby_trees) > 0
 
         # Now group trees by distance
-        dist_key_measurer = RootRFDistanceMeasurer(true_tree, args.scratch_dir)
+        dist_key_measurer = UnrootRFDistanceMeasurer(true_tree, args.scratch_dir)
         # Group nearby trees by the distance measure
         nearby_tree_dict = dist_key_measurer.group_trees_by_dist(nearby_trees, args.max_explore_trees)
 
@@ -285,22 +293,31 @@ def main(args=sys.argv[1:]):
                 args.scratch_dir)
         final_dist_dicts = tree_dist_measurers.get_tree_dists(final_trees)
 
-        with open(args.fitted_models_file, "wb"):
-            pickle.dumps({
+        with open(args.fitted_models_file, "wb") as f:
+            six.moves.cPickle.dump({
+                "true_tree": true_tree,
+                "true_model": clt_model.get_vars_as_dict(),
                 "results": successful_res_workers,
                 "dist_dicts": final_dist_dicts,
-                "pen_ll": pen_log_liks})
+                "pen_ll": pen_log_liks},
+                f,
+                protocol=2)
 
         # Correlation between dist and likelihood among nearby max parsimony trees
         pen_log_liks = np.array(pen_log_liks)
         for dist_name in [measurer.name for measurer in tree_dist_measurers.measurers]:
             final_dists = np.array([d[dist_name] for d in final_dist_dicts])
+            final_dists = final_dists[~np.isnan(final_dists)]
+            final_pen_log_liks = pen_log_liks[~np.isnan(final_dists)]
+            if final_dists.size == 0:
+                logging.info("%s:failed", dist_name)
+                continue
             logging.info("%s:dists %s", dist_name, str(final_dists))
-            logging.info("%s:pen log liks %s", dist_name, str(pen_log_liks))
-            logging.info("%s:pearson %s", dist_name, pearsonr(final_dists, pen_log_liks))
-            logging.info("%s:spearman %s", dist_name, spearmanr(final_dists, pen_log_liks))
+            logging.info("%s:pen log liks %s", dist_name, str(final_pen_log_liks))
+            logging.info("%s:pearson %s", dist_name, pearsonr(final_dists, final_pen_log_liks))
+            logging.info("%s:spearman %s", dist_name, spearmanr(final_dists, final_pen_log_liks))
             plt.clf()
-            sns.regplot(final_dists, pen_log_liks)
+            sns.regplot(final_dists, final_pen_log_liks)
             plt.xlabel(dist_name)
             plt.ylabel("pen log lik")
             plt.savefig("%s/dist_vs_ll_%s.png" % (args.out_folder, dist_name))

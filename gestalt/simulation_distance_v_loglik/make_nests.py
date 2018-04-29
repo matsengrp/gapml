@@ -28,7 +28,7 @@ nest.add(
 
 nest.add(
     'variance',
-    [0.005, 0.004, 0.003, 0.002, 0.001],
-    label_func=lambda c: 'var%d' % (c * 1000))
+    [0.035**2, 0.03**2, 0.025**2, 0.02**2, 0.015**2, 0.01**2],
+    label_func=lambda c: 'var%.6f' % c)
 
 nest.build('_output')

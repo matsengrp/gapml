@@ -121,13 +121,17 @@ class RootRFDistanceMeasurer(TreeDistanceMeasurer):
     """
     name = "ete_rf_root"
     def get_dist(self, tree):
-        rf_res = self.ref_tree.robinson_foulds(
-                tree,
-                attr_t1="allele_events_list_str",
-                attr_t2="allele_events_list_str",
-                expand_polytomies=False,
-                unrooted_trees=True)
-        return rf_res[0]
+        try:
+            rf_res = self.ref_tree.robinson_foulds(
+                    tree,
+                    attr_t1="allele_events_list_str",
+                    attr_t2="allele_events_list_str",
+                    expand_polytomies=False,
+                    unrooted_trees=False)
+            return rf_res[0]
+        except Exception as err:
+            logging.info("cannot get root RF distance: %s", str(err))
+            return np.NaN
 
 class SPRDistanceMeasurer(TreeDistanceMeasurer):
     """
