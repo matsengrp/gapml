@@ -105,13 +105,13 @@ def create_cell_lineage_tree(args, clt_model):
     obs_leaves = set()
     MAX_TRIES = 10
     num_tries = 0
-    sim_time = args.time
     for i in range(MAX_TRIES):
         clt = clt_simulator.simulate(
             tree_seed = args.model_seed,
             data_seed = args.data_seed,
-            time = sim_time,
+            time = args.time,
             max_nodes = args.max_clt_nodes)
+
         sampling_rate = args.sampling_rate
         while (len(obs_leaves) < args.min_leaves or len(obs_leaves) >= args.max_leaves) and sampling_rate <= 1:
             # Now sample the leaves and create the true topology

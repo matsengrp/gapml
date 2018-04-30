@@ -18,10 +18,7 @@ def _label_dist_to_root(tree: TreeNode):
     @return maximum distance to root
     """
     for node in tree.traverse():
-        if node.is_root():
-            node.add_feature("dist_to_root", 0)
-        else:
-            node.add_feature("dist_to_root", node.dist + node.up.dist_to_root)
+        node.add_feature("dist_to_root", node.get_distance(tree))
         if node.is_leaf():
             max_dist = node.dist_to_root
     return max_dist
@@ -118,7 +115,11 @@ def _remove_single_child_unobs_nodes(tree: TreeNode):
     """
     while len(tree.get_children()) == 1 and not tree.observed:
         child_node = tree.get_children()[0]
-        child_node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
+        # Preserve branch lengths by propagating down (ete does this wrong)
+        child_node_dist = child_node.dist
+        for grandchild in child_node.children:
+            grandchild.dist += child_node_dist
+        child_node.delete(prevent_nondicotomic=True, preserve_branch_length=False)
     assert(tree.is_root())
 
     for node in tree.get_descendants(strategy="postorder"):
@@ -131,11 +132,6 @@ def collapse_ultrametric(raw_tree: TreeNode):
 
     max_dist = _label_dist_to_root(tree)
 
-    print("BEFOREEE")
-    print(tree.get_ascii(attributes=["dist"], show_internal=True))
-    print(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-    print("BEFOREEE")
-
     uniq_allele_branches = _get_earliest_uniq_branches(tree)
 
     # We break up the whole tree
@@ -144,9 +140,6 @@ def collapse_ultrametric(raw_tree: TreeNode):
 
     # We are ready to reconstruct the collapsed ultrametric tree
     existing_nodes_dict = _regrow_collapsed_tree(tree, uniq_allele_branches)
-
-    print(tree.get_ascii(attributes=["dist"], show_internal=True))
-    print(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
     # Now create leaf nodes that ensure we satisfy the ultrametric assumption
     for node, _, _, is_observed in uniq_allele_branches.values():
@@ -167,6 +160,9 @@ def collapse_ultrametric(raw_tree: TreeNode):
         node.add_feature("observed", node.dist_to_root == max_dist)
 
     _remove_single_child_unobs_nodes(tree)
+
+    for leaf in tree:
+        assert np.isclose(leaf.get_distance(tree), max_dist)
 
     print(tree.get_ascii(attributes=["dist"], show_internal=True))
     print(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))

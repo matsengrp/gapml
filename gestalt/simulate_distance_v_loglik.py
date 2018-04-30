@@ -252,7 +252,7 @@ def main(args=sys.argv[1:]):
                         seed,
                         tree,
                         bcode_meta,
-                        cell_type_tree,
+                        cell_type_tree if args.use_cell_state else None,
                         args.know_cell_lambdas,
                         np.array(args.target_lambdas) if args.know_target_lambdas else None,
                         args.log_barr,
@@ -281,7 +281,7 @@ def main(args=sys.argv[1:]):
             # Set the branch lengths in the tree
             br_len_vec = res[2]
             set_branch_lens(worker.tree, br_len_vec)
-            logging.info("train hist %s", res[-1][:50])
+            logging.info("train hist %s", res[-1][-50:])
 
         # Do final tree distance measurements
         tree_dist_measurers = TreeDistanceMeasurerAgg([
@@ -292,16 +292,6 @@ def main(args=sys.argv[1:]):
                 true_tree,
                 args.scratch_dir)
         final_dist_dicts = tree_dist_measurers.get_tree_dists(final_trees)
-
-        with open(args.fitted_models_file, "wb") as f:
-            six.moves.cPickle.dump({
-                "true_tree": true_tree,
-                "true_model": clt_model.get_vars_as_dict(),
-                "results": successful_res_workers,
-                "dist_dicts": final_dist_dicts,
-                "pen_ll": pen_log_liks},
-                f,
-                protocol=2)
 
         # Correlation between dist and likelihood among nearby max parsimony trees
         pen_log_liks = np.array(pen_log_liks)
@@ -321,6 +311,16 @@ def main(args=sys.argv[1:]):
             plt.xlabel(dist_name)
             plt.ylabel("pen log lik")
             plt.savefig("%s/dist_vs_ll_%s.png" % (args.out_folder, dist_name))
+
+        with open(args.fitted_models_file, "wb") as f:
+            six.moves.cPickle.dump({
+                "true_tree": true_tree,
+                "true_model": clt_model.get_vars_as_dict(),
+                "results": successful_res_workers,
+                "dist_dicts": final_dist_dicts,
+                "pen_ll": pen_log_liks},
+                f,
+                protocol=2)
 
 if __name__ == "__main__":
     main()

@@ -4,6 +4,7 @@ import typing
 from typing import List
 import random
 
+import scipy.stats
 from cell_lineage_tree import CellLineageTree
 from constants import RSPR_PATH
 
