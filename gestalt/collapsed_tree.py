@@ -200,6 +200,7 @@ def collapse_zero_lens(raw_tree: TreeNode):
                 up_node.add_feature("observed", node.observed)
                 up_node.name = node.name
             node.delete(prevent_nondicotomic=False)
+            print("up node name", up_node.name)
             if up_node.name not in removed_children_dict:
                 removed_children_dict[up_node.name] = node
 
@@ -209,14 +210,19 @@ def collapse_zero_lens(raw_tree: TreeNode):
     # Step 3: add nodes that were observed but were collapsed away.
     # This ensures only one leaf node for each observed allele.
     for node in tree.traverse():
+        node.add_feature("is_copy", False)
         if node.observed and not node.is_leaf():
             # Use a node from the dictionary as a template
             child_template = removed_children_dict[node.name]
             # Copy this node and its features... don't use the original one just in case
-            new_child = TreeNode(name=child_template.name)
-            for feat in child_template.features:
-                new_child.add_feature(feat, getattr(child_template, feat))
+            new_child = child_template.copy("deepcopy")
+            for c in new_child.children:
+                new_child.remove_child(c)
+            #TreeNode(name=child_template.name)
+            #for feat in child_template.features:
+            #    new_child.add_feature(feat, getattr(child_template, feat))
             node.add_child(new_child)
+            new_child.add_feature("is_copy", True)
             new_child.observed = True
             node.observed = False
 

@@ -86,6 +86,9 @@ class TreeDistanceMeasurer:
         random.shuffle(trees)
         num_trees = 1
         uniq_trees = [trees[0]]
+        if max_trees is not None and max_trees == 1:
+            return uniq_trees
+
         tree_measurers = [self.__class__(trees[0], self.scratch_dir)]
         for idx, tree in enumerate(trees[1:]):
             has_match = False
@@ -98,7 +101,7 @@ class TreeDistanceMeasurer:
                 uniq_trees.append(tree)
                 tree_measurers.append(self.__class__(tree, self.scratch_dir))
                 num_trees += 1
-                if max_trees is not None and num_trees == max_trees:
+                if max_trees is not None and num_trees > max_trees:
                     break
         return uniq_trees
 

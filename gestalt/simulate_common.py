@@ -32,13 +32,19 @@ from clt_likelihood_estimator import *
 from alignment import AlignerNW
 from barcode_metadata import BarcodeMetadata
 from approximator import ApproximatorLB
-from tree_distance import UnrootRFDistanceMeasurer
+from tree_distance import *
 
 from constants import *
 from common import *
 from summary_util import *
 
-def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_trees):
+def get_parsimony_trees(
+        obs_leaves,
+        args,
+        bcode_meta,
+        true_tree,
+        max_trees:int,
+        do_collapse:bool=False):
     parsimony_estimator = CLTParsimonyEstimator(
             bcode_meta,
             args.out_folder,
@@ -46,22 +52,29 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_trees):
     #TODO: DOESN'T USE CELL STATE
     parsimony_trees = parsimony_estimator.estimate(
             obs_leaves,
-            num_mix_runs=args.num_jumbles)
+            num_mix_runs=args.num_jumbles,
+            do_collapse=do_collapse)
     logging.info("Total parsimony trees %d", len(parsimony_trees))
 
     parsimony_score = parsimony_trees[0].get_parsimony_score()
     logging.info("parsimony scores %d", parsimony_score)
 
-    # Group the trees together by RF distance
-    measurer = UnrootRFDistanceMeasurer(true_tree)
-    parsimony_tree_dict = measurer.group_trees_by_dist(parsimony_trees, max_trees)
+    ## Group the trees together by RF distance
+    #measurer = UnrootRFDistanceMeasurer(true_tree, None)
+    #parsimony_tree_dict = measurer.group_trees_by_dist(parsimony_trees, max_trees)
+    #print(parsimony_tree_dict.keys())
 
-    # Print details
-    for dist, tree_group in parsimony_tree_dict.items():
-        logging.info("rf dist %d, num %d", dist, len(tree_group))
-        for tree in tree_group:
-            logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-    return parsimony_tree_dict
+    measurer = SPRDistanceMeasurer(true_tree, "_output/scratch")
+    dist_dicts = measurer.group_trees_by_dist(parsimony_trees, 1)
+    print(dist_dicts.keys())
+    1/0
+    ## Print details
+    #for dist, tree_group in parsimony_tree_dict.items():
+    #    logging.info("rf dist %d, num %d", dist, len(tree_group))
+    #    for tree in tree_group:
+    #        logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    #return parsimony_tree_dict
+    return parsimony_trees
 
 def create_cell_type_tree(args):
     # This first rate means nothing!
@@ -200,10 +213,12 @@ def fit_pen_likelihood(
     """
     num_nodes = len([t for t in tree.traverse()])
     branch_len_inners = np.random.rand(num_nodes) * br_len_scale
+    branch_len_offsets = np.random.rand(num_nodes) * br_len_scale
     target_lams_known = target_lams is not None
     if not target_lams_known:
         target_lams = 0.3 * np.ones(bcode_meta.n_targets) + np.random.uniform(size=bcode_meta.n_targets) * 0.08
 
+    tree.label_node_ids()
     res_model = CLTLikelihoodModel(
         tree,
         bcode_meta,
@@ -211,6 +226,7 @@ def fit_pen_likelihood(
         target_lams = target_lams,
         target_lams_known=target_lams_known,
         branch_len_inners = branch_len_inners,
+        branch_len_offsets = branch_len_offsets,
         cell_type_tree = cell_type_tree,
         cell_lambdas_known = know_cell_lams,
         tot_time = tot_time)
@@ -228,6 +244,15 @@ def fit_pen_likelihood(
             model_vars = res_model.get_vars_as_dict()
             br_len_scale *= br_len_shrink
             model_vars["branch_len_inners"] = np.random.rand(num_nodes) * br_len_scale
+
+            # Initialize branch length offsets
+            model_vars["branch_len_offsets"] = np.random.rand(num_nodes) * br_len_scale
+            for node in tree.traverse():
+                if node.is_root() or not node.up.is_multifurcating() or node.is_copy:
+                    # Make sure the root or bifurcating nodes don't have offsets
+                    model_vars["branch_len_offsets"][node.node_id] = 1e-20
+            print("start br len off", model_vars["branch_len_offsets"])
+
             res_model.set_params_from_dict(model_vars)
             all_branch_lens_positive = all([b > 0 for b in res_model.get_branch_lens()[1:]])
             if all_branch_lens_positive:

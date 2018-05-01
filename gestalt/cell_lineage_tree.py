@@ -66,6 +66,9 @@ class CellLineageTree(TreeNode):
         self.add_feature("id", n_id)
         self.add_feature("abundance", abundance)
 
+    def is_multifurcating(self):
+        return len(self.get_children()) > 2
+
     def get_parsimony_score(self):
         """
         This only makes sense if all internal nodes are labeled with allele events!
@@ -359,4 +362,5 @@ class CellLineageTree(TreeNode):
                 root_node_id = node_id
             node_id += 1
         assert root_node_id == 0
-        return root_node_id, node_id
+        self.num_nodes = node_id
+        #return root_node_id, node_id
