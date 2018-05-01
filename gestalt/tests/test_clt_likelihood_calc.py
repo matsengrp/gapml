@@ -316,3 +316,6 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         log_lik_approx, _ = model.get_log_lik()
 
         print("log lik approx", log_lik_approx)
+
+    def test_multifurcation_resolution(self):
+        print("hi")

@@ -37,8 +37,8 @@ class CellLineageTree(TreeNode):
                  cell_state: CellState = None,
                  dist: float = 0,
                  dead: bool = False,
-                 n_id: int = None,
-                 abundance: int = 1):
+                 abundance: int = 1,
+                 resolved_multifurcation: bool = False):
         """
         @param allele OR allele_events: the allele at the CLT node.
                             Only one of these two values should be given
@@ -46,7 +46,9 @@ class CellLineageTree(TreeNode):
         @param cell_state: the cell state at the node
         @param dist: branch length from parent node
         @param dead: if the cell at that node is dead
-        @param n_id: a node id -- useful for estimation
+        @param abundance: number of cells this node represents. Always one in this implementation
+        @param resolved_multifurcation: whether this node is actually a multifurcation (as opposed to an unresolved one)
+                                        Basically this is a flag for manually specifying whether or not things are resolved
         """
         super().__init__()
         self.dist = dist
@@ -54,24 +56,36 @@ class CellLineageTree(TreeNode):
             self.add_feature("allele_list", allele_list)
             self.add_feature("allele_events_list", [
                 allele.get_event_encoding() for allele in allele_list.alleles])
-            self.add_feature("allele_events_list_str", CellLineageTree._allele_list_to_str(self.allele_events_list))
         else:
             self.add_feature("allele_events_list", allele_events_list)
-            self.add_feature("allele_events_list_str", CellLineageTree._allele_list_to_str(allele_events_list))
             # Maybe we'll need this conversion someday. For now we leave it empty.
             self.add_feature("allele_list", None)
+        self.sync_allele_events_list_str()
 
         self.add_feature("cell_state", cell_state)
         self.add_feature("dead", dead)
-        self.add_feature("id", n_id)
         self.add_feature("abundance", abundance)
+        self.add_feature("resolved_multifurcation", resolved_multifurcation)
 
-    def is_multifurcating(self):
+    def sync_allele_events_list_str(self):
+        self.add_feature("allele_events_list_str", CellLineageTree._allele_list_to_str(self.allele_events_list))
+
+    def is_many_furcating(self):
         return len(self.get_children()) > 2
+
+    def is_resolved_multifurcation(self):
+        """
+        Is this multifurcation resolved. It is resolved if it is:
+          1. manually set to resolved
+          2. has no more than 2 children
+        """
+        return len(self.get_children()) <= 2 or self.resolved_multifurcation
 
     def get_parsimony_score(self):
         """
+        A very special function
         This only makes sense if all internal nodes are labeled with allele events!
+        @return parsimony score
         """
         pars_score = 0
         for node in self.traverse("preorder"):
@@ -84,16 +98,12 @@ class CellLineageTree(TreeNode):
         return pars_score
 
     def label_tree_with_strs(self):
+        """
+        Updates the `allele_events_list_str` attribute for all nodes in this tree
+        """
+        # note: tree traversal order doesn't matter
         for node in self.traverse("preorder"):
             node.allele_events_list_str = CellLineageTree._allele_list_to_str(node.allele_events_list)
-
-    @staticmethod
-    def _allele_list_to_str(allele_evts_list):
-        return_str = "||".join([str(a) for a in allele_evts_list])
-        if return_str == "":
-            return NO_EVT_STR
-        else:
-            return return_str
 
     def get_max_depth(self):
         """
@@ -109,6 +119,75 @@ class CellLineageTree(TreeNode):
             max_depth = max(depth, max_depth)
         return max_depth
 
+    def up_generations(self, k:int):
+        """
+        @return the ancestor that is `k` generations ago, stops at root
+                ex: k = 0 means it returns itself
+        """
+        anc = self
+        for i in range(k):
+            if anc.is_root():
+                break
+            anc = anc.up
+        return anc
+
+    def label_node_ids(self, order="preorder"):
+        """
+        Label each node with `node_id` attribute.
+        Supposes we are starting from this node, which is the root node
+        Numbers nodes according to order in preorder traversal
+        """
+        assert order == "preorder"
+        assert self.is_root()
+        node_id = 0
+        for node in self.traverse(order):
+            node.add_feature("node_id", node_id)
+            if node.is_root():
+                root_node_id = node_id
+            node_id += 1
+        assert root_node_id == 0
+        self.num_nodes = node_id
+        #return root_node_id, node_id
+
+    @staticmethod
+    def convert(node: TreeNode,
+                 allele_list: AlleleList = None,
+                 allele_events_list: List[AlleleEvents] = None,
+                 cell_state: CellState = None,
+                 dist: float = 0,
+                 dead: bool = False,
+                 abundance: int = 1,
+                 resolved_multifurcation: bool = False):
+        """
+        Converts a TreeNode to a CellLineageTree
+        @return CellLienageTree
+        """
+        new_node = CellLineageTree(
+                 allele_list,
+                 allele_events_list,
+                 cell_state,
+                 dist,
+                 dead,
+                 abundance,
+                 resolved_multifurcation)
+        # Don't override features that were in the new_node already.
+        # Just copy over features that are missing in new_node
+        for k in node.features:
+            if k not in new_node.features:
+                new_node.add_feature(k, getattr(node, k))
+        return new_node
+
+    @staticmethod
+    def _allele_list_to_str(allele_evts_list):
+        return_str = "||".join([str(a) for a in allele_evts_list])
+        if return_str == "":
+            return NO_EVT_STR
+        else:
+            return return_str
+
+    """
+    Functions for writing sequences as fastq output
+    """
     def _create_sequences(self):
         """
         @return sequences for leaf alleles
@@ -134,6 +213,9 @@ class CellLineageTree(TreeNode):
         sequences = self._create_sequences()
         SeqIO.write(sequences, open(file_name, 'w'), 'fastq')
 
+    """
+    Functions below all are related to graphics
+    """
     def savefig(self, file_name: str):
         '''render tree to image file_name'''
         # we make a copy, so face attributes are not retained in self
@@ -301,66 +383,3 @@ class CellLineageTree(TreeNode):
         sns.pairplot(indels)
         plt.tight_layout()
         plt.savefig(file_name)
-
-    def up_generations(self, k:int):
-        """
-        @return the ancestor that is `k` generations ago, stops at root
-                ex: k = 0 means it returns itself
-        """
-        anc = self
-        for i in range(k):
-            if anc.is_root():
-                break
-            anc = anc.up
-        return anc
-
-    @staticmethod
-    def convert(node: TreeNode,
-                 allele_list: AlleleList = None,
-                 allele_events_list: List[AlleleEvents] = None,
-                 cell_state: CellState = None,
-                 dist: float = 0,
-                 dead: bool = False,
-                 n_id: int = None,
-                 abundance: int = 1):
-        new_node = CellLineageTree(
-                 allele_list,
-                 allele_events_list,
-                 cell_state,
-                 dist,
-                 dead,
-                 n_id,
-                 abundance)
-        for k in node.features:
-            if k not in new_node.features:
-                new_node.add_feature(k, getattr(node, k))
-        return new_node
-
-    def get_root_to_observed_lens(self, est_branch_lens = None):
-        use_dist = est_branch_lens is None
-        est_dist_to_root = {}
-        stupid_dist_to_root = {}
-        for node in self.traverse():
-            if node.observed:
-                est_dist = node.dist if use_dist else est_branch_lens[node.node_id]
-                stupid_dist = 1
-                curr_node = node
-                while not curr_node.up.is_root():
-                    est_dist += curr_node.up.dist if use_dist else est_branch_lens[curr_node.up.node_id]
-                    stupid_dist += 1
-                    curr_node = curr_node.up
-                est_dist_to_root[node.allele_events_list_str] = est_dist
-                stupid_dist_to_root[node.allele_events_list_str] = stupid_dist
-        return est_dist_to_root, stupid_dist_to_root
-
-    def label_node_ids(self, order="preorder"):
-        assert order == "preorder"
-        node_id = 0
-        for node in self.traverse(order):
-            node.add_feature("node_id", node_id)
-            if node.is_root():
-                root_node_id = node_id
-            node_id += 1
-        assert root_node_id == 0
-        self.num_nodes = node_id
-        #return root_node_id, node_id

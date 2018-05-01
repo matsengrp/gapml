@@ -19,9 +19,15 @@ class AlleleList:
         self.bcode_meta = bcode_meta
 
     def get_event_encoding(self, aligner: Aligner = None):
+        """
+        @return Tuple of AlleleEvents, each position in tuple for each barcode
+        """
         return tuple(a.get_event_encoding(aligner) for a in self.alleles)
 
     def observe_with_errors(self, error_rate: float):
+        """
+        @return AlleleList where each allele is observed with error
+        """
         alleles_err = [a.observe_with_errors(error_rate) for a in self.alleles]
         return AlleleList(
                 [a.allele for a in alleles_err],
@@ -29,7 +35,8 @@ class AlleleList:
 
     def process_events(self, events_list: List[List[Tuple[int, int, str]]]):
         """
-        Given a list of observed events, rerun the events and recreate the allele
+        Given a list of observed events, reset the Allele object, rerun the events and recreate the allele
+        Updates the Allele object for each barcode
         Assumes all events are NOT overlapping!!!
         """
         for a, evts in zip(self.alleles, events_list):
@@ -195,7 +202,7 @@ class Allele:
 
     def process_events(self, events: List[Tuple[int, int, str]]):
         """
-        Given a list of observed events, rerun the events and recreate the allele
+        Given a list of observed events, resets the allele, rerun the events, and recreate the allele
         Assumes all events are NOT overlapping!!!
         """
         # initialize allele to unedited states

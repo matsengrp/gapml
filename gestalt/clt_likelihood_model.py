@@ -184,7 +184,7 @@ class CLTLikelihoodModel:
                 if node.is_root():
                     continue
 
-                if node.up.is_multifurcating():
+                if False: #node.up.is_multifurcating():
                     if node.is_copy:
                         # Remember that copy nodes must be leaves -- take the max offset to be this node's offset
                         max_offset = tf.reduce_max(tf.stack([
@@ -748,7 +748,7 @@ class CLTLikelihoodModel:
                 Lprob[node.node_id] = tf.constant(1.0, dtype=tf.float64)
                 children = node.get_children()
                 
-                if node.is_multifurcating():
+                if False: #node.is_multifurcating():
                     # Then we need to multiply the probability of the "spine" -- assuming constant ancestral state along the entire spine
                     time_stays_constant = tf.reduce_max(tf.stack([self.branch_len_offsets[child.node_id] for child in children if not child.is_copy]))
                     if not node.is_root():

@@ -18,3 +18,9 @@ class AlleleSimulator:
                     does not modify the allele that got passed in :)
         """
         raise NotImplementedError()
+
+    def get_root(self):
+        """
+        @return the root's AlleleList
+        """
+        raise NotImplementedError()

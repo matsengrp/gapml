@@ -28,7 +28,6 @@ class ObservedAlignedSeq:
     def __str__(self):
         return "||".join([str(allele_evts) for allele_evts in self.allele_events_list])
 
-
 class CLTObserver:
     def __init__(self,
                  error_rate: float = 0,
@@ -39,6 +38,58 @@ class CLTObserver:
         assert (0 <= error_rate <= 1)
         self.error_rate = error_rate
         self.aligner = aligner
+
+    @staticmethod
+    def _sample_leaf_ids(clt: CellLineageTree, sampling_rate: float):
+        """
+        Determine which leaves we observe for that sampling rate in that tree
+        @return set with leaf node ids
+        """
+        # Stores only leaf node ids!
+        observed_leaf_ids = set()
+        # First sample the leaves
+        for leaf in clt:
+            if not leaf.dead:
+                is_sampled = np.random.binomial(1, sampling_rate)
+                if is_sampled:
+                    observed_leaf_ids.add(leaf.node_id)
+        return observed_leaf_ids
+    
+    @staticmethod
+    def _sample_leaves(clt_orig: CellLineageTree, sampling_rate: float):
+        """
+        Makes a copy of the original tree, samples leaves, and returns back a new tree
+        @return CellLineageTree that represents a subsampled `clt_orig`
+        """
+        clt = clt_orig.copy()
+        observed_leaf_ids = CLTObserver._sample_leaf_ids(clt, sampling_rate)
+
+        # Now prune the tree -- custom pruning (cause ete was doing weird things...)
+        # TODO: maybe make this faster
+        for node in clt.iter_descendants():
+            if sum((node2.node_id in observed_leaf_ids) for node2 in node.traverse()) == 0:
+                node.detach()
+
+        return clt
+
+    def _observe_leaf_with_error(self, leaf):
+        """
+        Modifies the leaf node in place
+        Observes its alleles with error, updates the leaf node's attributes per the actually-observed events
+        @return the AlleleList that was observed with errors for this node
+        """
+        allele_list_with_errors = leaf.allele_list.observe_with_errors(self.error_rate)
+        allele_list_with_errors_events = allele_list_with_errors.get_event_encoding(aligner=self.aligner)
+        events_per_bcode = [
+                [(event.start_pos,
+                  event.start_pos + event.del_len,
+                  event.insert_str)
+                for event in a.events]
+            for a in allele_list_with_errors_events]
+        leaf.allele_list.process_events(events_per_bcode)
+        leaf.allele_events_list = allele_list_with_errors_events
+        leaf.sync_allele_events_list_str()
+        return allele_list_with_errors
 
     def observe_leaves(self,
                        sampling_rate: float,
@@ -55,44 +106,21 @@ class CLTObserver:
         @param cell_lineage_tree: tree to sample leaves from
         @param seed: controls how the sampling is performed
 
-        @return a list of the sampled observations (List[ObservedAlignedSeq])
-                a cell lineage tree with pruned leaves
+        @return Tuple with
+                    1. a list of the sampled observations (List[ObservedAlignedSeq])
+                    2. a cell lineage tree with pruned leaves
         """
         assert (0 < sampling_rate <= 1)
         np.random.seed(seed)
-        clt = cell_lineage_tree.copy()
-
-        # Stores only leaf names!
-        observed_leaves = set()
-        # First sample the leaves
-        for leaf in clt:
-            if not leaf.dead:
-                is_sampled = np.random.binomial(1, sampling_rate)
-                if is_sampled:
-                    observed_leaves.add(leaf.name)
-
-        # Now prune the tree -- custom pruning (cause ete was doing weird things...)
-        # TODO: maybe make this faster
-        for node in clt.iter_descendants():
-            if sum((node2.name in observed_leaves) for node2 in node.traverse()) == 0:
-                node.detach()
+        clt = self._sample_leaves(cell_lineage_tree, sampling_rate)
 
         observations = {}
-        # Now gather the observed leaves, calculating abundance
+        # When observing each leaf, observe with specified error rate
+        # Gather observed leaves, calculating abundance
         for leaf in clt:
-            allele_list_with_errors = leaf.allele_list.observe_with_errors(self.error_rate)
-            allele_list_with_errors_events = allele_list_with_errors.get_event_encoding(aligner=self.aligner)
-            events_per_bcode = [
-                    [(event.start_pos,
-                      event.start_pos + event.del_len,
-                      event.insert_str)
-                    for event in a.events]
-                for a in allele_list_with_errors_events]
-            leaf.allele_list.process_events(events_per_bcode)
-            leaf.allele_events_list = allele_list_with_errors_events
-            # TODO: this is a bit tricky -- how does parsimony work if we want to recover
-            #       the collapsed branch length by the other idx?
-            allele_str_id = tuple([str(a) for a in allele_list_with_errors_events])
+            allele_list_with_errors = self._observe_leaf_with_error(leaf)
+
+            allele_str_id = leaf.allele_events_list_str
             if observe_cell_state:
                 cell_id = (allele_str_id, str(leaf.cell_state))
             else:
@@ -103,7 +131,7 @@ class CLTObserver:
             else:
                 observations[cell_id] = ObservedAlignedSeq(
                     allele_list=allele_list_with_errors,
-                    allele_events_list=allele_list_with_errors_events,
+                    allele_events_list=leaf.allele_events_list,
                     # TODO: what if lots of possible cell states?!
                     cell_state=leaf.cell_state,
                     abundance=1,
@@ -113,8 +141,10 @@ class CLTObserver:
             raise RuntimeError('all lineages extinct, nothing to observe')
 
         if give_pruned_clt:
-            # Collapse the tree
+            # Collapse the tree per ultrametric constraints
             clt = collapsed_tree.collapse_ultrametric(clt)
+
+            # This section just checks that the collapsing procedure is correct
             obs_evts_list = []
             tree_evts = []
             for o in observations.values():
@@ -125,6 +155,8 @@ class CLTObserver:
             logging.info("diff events? %s", str(set(obs_evts_list) - set(tree_evts)))
             logging.info("diff events? %s", str(set(tree_evts) - set(obs_evts_list)))
             assert set(tree_evts) == set(obs_evts_list), "the two sets are not equal"
+            # End of checking
+
             return list(observations.values()), clt
         else:
             return list(observations.values())

@@ -117,7 +117,7 @@ def parse_args():
     parser.add_argument(
             '--optim-seed',
             type=int,
-            default=0,
+            default=1,
             help="Seed for generating the model")
     parser.add_argument(
             '--log-barr',
@@ -246,15 +246,15 @@ def main(args=sys.argv[1:]):
         logging.info("Number of uniq obs alleles %d", len(obs_leaves))
 
         # Get the parsimony-estimated topologies
-        parsimony_trees = get_parsimony_trees(
-                obs_leaves,
-                args,
-                bcode_meta,
-                true_tree,
-                args.max_trees) if args.use_parsimony else {}
-        if args.topology_only:
-            print("Done! You only wanted topology estimation")
-            return
+        #parsimony_trees = get_parsimony_trees(
+        #        obs_leaves,
+        #        args,
+        #        bcode_meta,
+        #        true_tree,
+        #        args.max_trees) if args.use_parsimony else {}
+        #if args.topology_only:
+        #    print("Done! You only wanted topology estimation")
+        #    return
 
         # Instantiate approximator used by our penalized MLE
         approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
@@ -301,19 +301,31 @@ def main(args=sys.argv[1:]):
         #    plt.savefig("%s/rf_dist_to_ll.png" % args.out_folder)
 
         # Fit oracle tree
-        coll_tree = true_tree.copy("deepcopy")
-        for n in coll_tree.traverse():
+        #coll_tree = true_tree.copy("deepcopy")
+        #for n in coll_tree.traverse():
+        #    n.name = n.allele_events_list_str
+        #    if not n.is_root():
+        #        if n.allele_events_list_str == n.up.allele_events_list_str:
+        #            n.dist = 0
+        #coll_tree = collapse_zero_lens(coll_tree)
+        #print(coll_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+        #print(coll_tree.get_ascii(attributes=["observed"], show_internal=True))
+
+        # TODO: this is temporary!!!! please remove
+        for n in true_tree.traverse():
             n.name = n.allele_events_list_str
+            n.add_feature("is_copy", False)
             if not n.is_root():
                 if n.allele_events_list_str == n.up.allele_events_list_str:
                     n.dist = 0
-        coll_tree = collapse_zero_lens(coll_tree)
-        print(coll_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-        print(coll_tree.get_ascii(attributes=["observed"], show_internal=True))
+                    n.add_feature("is_copy", True)
+            if n.is_many_furcating():
+                n.resolved_multifurcation = True
 
         np.random.seed(seed=args.optim_seed)
         pen_log_lik, _, oracle_model = fit_pen_likelihood(
-                coll_tree,
+                #coll_tree,
+                true_tree,
                 bcode_meta,
                 cell_type_tree if args.use_cell_state else None,
                 args.know_cell_lambdas,
@@ -344,7 +356,7 @@ def main(args=sys.argv[1:]):
                 true_tree,
                 args.scratch_dir)
         final_dist_dicts = tree_dist_measurers.get_tree_dists([bifurc_tree])
-        print(final_dist_dicts)
+        logging.info(final_dist_dicts)
 
 
 
@@ -375,8 +387,8 @@ def main(args=sys.argv[1:]):
         #        label="oracle est vs true branches")
 
         ## Also compare target estimates
-        #fitted_vars = oracle_model.get_vars()
-        #logging.info("pearson target %s", pearsonr(args.target_lambdas, fitted_vars[0]))
+        fitted_vars = oracle_model.get_vars()
+        logging.info("pearson target %s", pearsonr(args.target_lambdas, fitted_vars[0]))
 
 if __name__ == "__main__":
     main()

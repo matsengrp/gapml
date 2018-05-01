@@ -112,6 +112,9 @@ def create_simulators(args, clt_model):
     return clt_simulator, observer
 
 def create_cell_lineage_tree(args, clt_model):
+    """
+    @return original clt, the set of observed leaves, and the true topology for the observed leaves
+    """
     clt_simulator, observer = create_simulators(args, clt_model)
 
     # Keep trying to make CLT until enough leaves in observed tree
@@ -124,6 +127,7 @@ def create_cell_lineage_tree(args, clt_model):
             data_seed = args.data_seed,
             time = args.time,
             max_nodes = args.max_clt_nodes)
+        clt.label_node_ids()
 
         sampling_rate = args.sampling_rate
         while (len(obs_leaves) < args.min_leaves or len(obs_leaves) >= args.max_leaves) and sampling_rate <= 1:
@@ -257,6 +261,7 @@ def fit_pen_likelihood(
             all_branch_lens_positive = all([b > 0 for b in res_model.get_branch_lens()[1:]])
             if all_branch_lens_positive:
                 break
+        res_model.get_fitted_bifurcating_tree()
         assert all_branch_lens_positive
     else:
         # calculate branch length from tree
