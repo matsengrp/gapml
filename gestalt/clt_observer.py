@@ -96,6 +96,7 @@ class CLTObserver:
                        cell_lineage_tree: CellLineageTree,
                        give_pruned_clt: bool = True,
                        seed: int = None,
+                       bifurcating_only: bool = True,
                        observe_cell_state: bool = True):
         """
         Samples leaves from the cell lineage tree, of those that are not dead
@@ -113,6 +114,19 @@ class CLTObserver:
         assert (0 < sampling_rate <= 1)
         np.random.seed(seed)
         clt = self._sample_leaves(cell_lineage_tree, sampling_rate)
+
+        # Collapse the tree per ultrametric constraints
+        clt = collapsed_tree.collapse_ultrametric(clt)
+
+        if bifurcating_only:
+            if clt.is_many_furcating():
+                raise ValueError("Need root of clt to be bifurcating")
+            for node in clt.traverse():
+                if node.is_many_furcating():
+                    node.detach()
+            for node in clt.get_descendants(strategy="postorder"):
+                if len(node.get_children()) == 1:
+                    node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
 
         observations = {}
         # When observing each leaf, observe with specified error rate
@@ -141,9 +155,6 @@ class CLTObserver:
             raise RuntimeError('all lineages extinct, nothing to observe')
 
         if give_pruned_clt:
-            # Collapse the tree per ultrametric constraints
-            clt = collapsed_tree.collapse_ultrametric(clt)
-
             # This section just checks that the collapsing procedure is correct
             obs_evts_list = []
             tree_evts = []

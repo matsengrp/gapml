@@ -117,19 +117,19 @@ def parse_args():
     parser.add_argument(
             '--optim-seed',
             type=int,
-            default=1,
+            default=40,
             help="Seed for generating the model")
     parser.add_argument(
             '--log-barr',
             type=float,
-            default=0.2,
+            default=0.001,
             help="log barrier parameter on the branch lengths")
     parser.add_argument(
             '--lasso-param',
             type=float,
             default=0,
             help="lasso parameter on the branch lengths")
-    parser.add_argument('--max-iters', type=int, default=2)
+    parser.add_argument('--max-iters', type=int, default=0)
     parser.add_argument('--max-depth', type=int, default=10)
     parser.add_argument('--min-leaves', type=int, default=2)
     parser.add_argument('--max-leaves', type=int, default=10)
@@ -139,7 +139,6 @@ def parse_args():
             '--mix-path',
             type=str,
             default=MIX_PATH)
-    parser.add_argument('--use-cell-state', action='store_true')
     parser.add_argument('--max-trees',
             type=int,
             default=2)
@@ -148,6 +147,8 @@ def parse_args():
             default=1)
     parser.add_argument('--use-parsimony', action='store_true', help="use mix (CS parsimony) to estimate tree topologies")
     parser.add_argument('--topology-only', action='store_true', help="topology only")
+
+    parser.set_defaults(use_cell_state=False)
     args = parser.parse_args()
     args.num_targets = len(args.target_lambdas)
     args.log_file = "%s/fit_log.txt" % args.out_folder
@@ -200,195 +201,143 @@ def main(args=sys.argv[1:]):
 
     logging.info(str(args))
 
-    sess = tf.Session()
-    with sess.as_default():
-        # Create model
-        clt_model = CLTLikelihoodModel(
-                None,
+    sess = tf.InteractiveSession()
+    # Create model
+    clt_model = CLTLikelihoodModel(
+            None,
+            bcode_meta,
+            sess,
+            target_lams = np.array(args.target_lambdas),
+            trim_long_probs = np.array(args.repair_long_probability),
+            trim_zero_prob = args.repair_indel_probability,
+            trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
+            insert_zero_prob = args.repair_indel_probability,
+            insert_poisson = args.repair_insertion_lambda,
+            cell_type_tree = cell_type_tree)
+    clt_model.tot_time = args.time
+    tf.global_variables_initializer().run()
+
+    clt, obs_leaves, true_tree = create_cell_lineage_tree(
+            args,
+            clt_model,
+            bifurcating_only=True)
+
+    tree_dist_measurers = TreeDistanceMeasurerAgg([
+            UnrootRFDistanceMeasurer,
+            RootRFDistanceMeasurer,
+            SPRDistanceMeasurer,
+            MRCADistanceMeasurer],
+            true_tree,
+            args.scratch_dir)
+    
+    # Gather true branch lengths
+    true_tree.label_node_ids(CLTLikelihoodModel.NODE_ORDER)
+    print(true_tree.get_ascii(attributes=["dist"], show_internal=True))
+    
+    for leaf in true_tree:
+        assert np.isclose(leaf.get_distance(true_tree), args.time)
+
+    # Get parsimony score of tree?
+    pars_score = true_tree.get_parsimony_score()
+    logging.info("Oracle tree parsimony score %d", pars_score)
+
+    # Save the data
+    save_model_data(
+            args.model_data_file,
+            clt_model.get_vars_as_dict(),
+            cell_type_tree,
+            obs_leaves,
+            true_tree,
+            clt)
+    # Print fun facts about the data
+    logging.info("Full clt leaves %d" % len(clt))
+    logging.info("True tree topology, num leaves %d", len(true_tree))
+    logging.info(true_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    logging.info(true_tree.get_ascii(attributes=["cell_state"], show_internal=True))
+    logging.info(true_tree.get_ascii(attributes=["observed"], show_internal=True))
+    logging.info("Number of uniq obs alleles %d", len(obs_leaves))
+
+    # Instantiate approximator used by our penalized MLE
+    approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
+
+    # Get the parsimony-estimated topologies
+    if args.use_parsimony:
+        parsimony_trees_grouped = get_parsimony_trees(
+            obs_leaves,
+            args,
+            bcode_meta,
+            true_tree,
+            args.max_trees)
+        logging.info("Parsimony SPR distances: %s ", parsimony_trees_grouped.keys())
+
+        best_spr = sorted(parsimony_trees_grouped.keys())[0]
+        best_parsimony_tree = parsimony_trees_grouped[best_spr][0]
+        parsimony_pen_log_lik, _, parsimony_model = fit_pen_likelihood(
+                best_parsimony_tree,
                 bcode_meta,
-                sess,
-                target_lams = np.array(args.target_lambdas),
-                trim_long_probs = np.array(args.repair_long_probability),
-                trim_zero_prob = args.repair_indel_probability,
-                trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
-                insert_zero_prob = args.repair_indel_probability,
-                insert_poisson = args.repair_insertion_lambda,
-                cell_type_tree = cell_type_tree)
-        clt_model.tot_time = args.time
-        tf.global_variables_initializer().run()
-
-        clt, obs_leaves, true_tree = create_cell_lineage_tree(args, clt_model)
-        # Gather true branch lengths
-        true_tree.label_node_ids(CLTLikelihoodModel.NODE_ORDER)
-        true_branch_lens = {}
-        for node in true_tree.traverse(CLTLikelihoodModel.NODE_ORDER):
-            if not node.is_root():
-                true_branch_lens[node.node_id] = node.dist
-
-        # Get parsimony score of tree?
-        pars_score = true_tree.get_parsimony_score()
-        logging.info("Oracle tree parsimony score %d", pars_score)
-
-        # Save the data
-        save_model_data(
-                args.model_data_file,
-                clt_model.get_vars_as_dict(),
-                cell_type_tree,
-                obs_leaves,
-                true_tree,
-                clt)
-        # Print fun facts about the data
-        logging.info("Full clt leaves %d" % len(clt))
-        logging.info("True tree topology, num leaves %d", len(true_tree))
-        logging.info(true_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-        logging.info(true_tree.get_ascii(attributes=["cell_state"], show_internal=True))
-        logging.info(true_tree.get_ascii(attributes=["observed"], show_internal=True))
-        logging.info("Number of uniq obs alleles %d", len(obs_leaves))
-
-        # Get the parsimony-estimated topologies
-        #parsimony_trees = get_parsimony_trees(
-        #        obs_leaves,
-        #        args,
-        #        bcode_meta,
-        #        true_tree,
-        #        args.max_trees) if args.use_parsimony else {}
-        #if args.topology_only:
-        #    print("Done! You only wanted topology estimation")
-        #    return
-
-        # Instantiate approximator used by our penalized MLE
-        approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
-
-        # Fit parsimony trees -- only look at a couple trees per RF distance
-        #fitting_results = {}
-        #for rf_dist, pars_trees in parsimony_tree_dict.items():
-        #    fitting_results[rf_dist] = []
-        #    logging.info(
-        #            "There are %d trees with RF %d",
-        #            len(pars_trees),
-        #            rf_dist)
-        #    for tree in pars_trees:
-        #        pen_log_lik, _, res_model = fit_pen_likelihood(
-        #                tree,
-        #                bcode_meta,
-        #                cell_type_tree if args.use_cell_state else None,
-        #                args.know_cell_lambdas,
-        #                np.array(args.target_lambdas) if args.know_target_lambdas else None,
-        #                args.log_barr,
-        #                args.max_iters,
-        #                approximator,
-        #                sess)
-        #        fitting_results[rf_dist].append((
-        #            pen_log_lik,
-        #            res_model))
-
-        #        # Print some summaries
-        #        logging.info("Mix pen log lik %f RF %d", pen_log_lik, rf_dist)
-
-        ## Correlation between RF dist and likelihood among parsimony trees
-        #if fitting_results:
-        #    rf_dists = []
-        #    pen_log_liks = []
-        #    for rf_dist, res in fitting_results.items():
-        #        for r in res:
-        #            rf_dists.append(rf_dist)
-        #            pen_log_liks.append(r[0][0])
-        #    logging.info("rf_dists %s", str(rf_dists))
-        #    logging.info("pen log liks %s", str(pen_log_liks))
-        #    logging.info("pearson rf to log lik %s", pearsonr(rf_dists, pen_log_liks))
-        #    logging.info("spearman rf to log lik %s", spearmanr(rf_dists, pen_log_liks))
-        #    plt.scatter(rf_dists, pen_log_liks)
-        #    plt.savefig("%s/rf_dist_to_ll.png" % args.out_folder)
-
-        # Fit oracle tree
-        #coll_tree = true_tree.copy("deepcopy")
-        #for n in coll_tree.traverse():
-        #    n.name = n.allele_events_list_str
-        #    if not n.is_root():
-        #        if n.allele_events_list_str == n.up.allele_events_list_str:
-        #            n.dist = 0
-        #coll_tree = collapse_zero_lens(coll_tree)
-        #print(coll_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-        #print(coll_tree.get_ascii(attributes=["observed"], show_internal=True))
-
-        # TODO: this is temporary!!!! please remove
-        for n in true_tree.traverse():
-            n.name = n.allele_events_list_str
-            n.add_feature("is_copy", False)
-            if not n.is_root():
-                if n.allele_events_list_str == n.up.allele_events_list_str:
-                    n.dist = 0
-                    n.add_feature("is_copy", True)
-            if n.is_many_furcating():
-                n.resolved_multifurcation = True
-
-        np.random.seed(seed=args.optim_seed)
-        pen_log_lik, _, oracle_model = fit_pen_likelihood(
-                #coll_tree,
-                true_tree,
-                bcode_meta,
-                cell_type_tree if args.use_cell_state else None,
+                None, # Do not use cell type info
                 args.know_cell_lambdas,
                 np.array(args.target_lambdas) if args.know_target_lambdas else None,
                 args.log_barr,
                 args.max_iters,
                 approximator,
-                sess)
+                sess,
+                tot_time = args.time)
+        fitted_parsimony_tree = parsimony_model.get_fitted_bifurcating_tree()
 
-        br_lens = oracle_model.get_branch_lens()
-        print("br lens", br_lens)
-        br_len_offsets = oracle_model.get_vars_as_dict()["branch_len_offsets"]
-        print("br len off", br_len_offsets)
-        #set_branch_lens(coll_tree, br_lens + br_len_offsets)
-        #print(coll_tree.get_ascii(attributes=["dist"], show_internal=True))
-        #fitting_results["oracle"] = [(pen_log_lik, oracle_model)]
-        #save_fitted_models(args.fitted_models_file, fitting_results)
+        parsimony_dist_dicts = tree_dist_measurers.get_tree_dists([fitted_parsimony_tree])
+        logging.info("parsimony pen log lik %s", parsimony_pen_log_lik)
+        logging.info("parsimony dist %s", parsimony_dist_dicts)
 
-        bifurc_tree = oracle_model.get_fitted_bifurcating_tree()
-        print(bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
-        print(bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    #######
+    # Fit continuous parameterization of ambiguous multifurcating trees
+    ######
+    multifurc_sess = tf.InteractiveSession()
 
-        tree_dist_measurers = TreeDistanceMeasurerAgg([
-                UnrootRFDistanceMeasurer,
-                RootRFDistanceMeasurer,
-                SPRDistanceMeasurer,
-                MRCADistanceMeasurer],
-                true_tree,
-                args.scratch_dir)
-        final_dist_dicts = tree_dist_measurers.get_tree_dists([bifurc_tree])
-        logging.info(final_dist_dicts)
+    # Collapse the oracle tree
+    coll_tree = true_tree.copy("deepcopy")
+    for n in coll_tree.traverse():
+        n.name = n.allele_events_list_str
+        if not n.is_root():
+            if n.allele_events_list_str == n.up.allele_events_list_str:
+                n.dist = 0
+        n.resolved_multifurcation = False
+    coll_tree = collapse_zero_lens(coll_tree)
+    coll_tree.label_node_ids()
 
+    np.random.seed(seed=args.optim_seed)
+    pen_log_lik, _, multifurc_model = fit_pen_likelihood(
+            coll_tree,
+            bcode_meta,
+            None,
+            args.know_cell_lambdas,
+            np.array(args.target_lambdas) if args.know_target_lambdas else None,
+            args.log_barr,
+            args.max_iters,
+            approximator,
+            multifurc_sess,
+            tot_time = args.time,
+            dist_measurers = tree_dist_measurers)
+    bifurc_tree = multifurc_model.get_fitted_bifurcating_tree()
 
+    final_dist_dicts = tree_dist_measurers.get_tree_dists([bifurc_tree])
+    logging.info(final_dist_dicts)
 
-        #print("True tree score %f", pen_log_lik)
+    logging.info("---- MULTIFURC FITTING -----")
+    for v in multifurc_model.get_vars():
+        logging.info(v)
+    logging.info("---- TRUTH -----")
+    logging.info(args.target_lambdas)
+    logging.info(args.repair_long_probability)
+    logging.info(args.repair_indel_probability)
+    logging.info([args.repair_deletion_lambda, args.repair_deletion_lambda])
+    logging.info(args.repair_indel_probability)
+    logging.info(args.repair_insertion_lambda)
+    logging.info(args.cell_rates)
 
-        logging.info("---- ORACLE -----")
-        for v in oracle_model.get_vars():
-            logging.info(v)
-        logging.info("---- TRUTH -----")
-        logging.info(args.target_lambdas)
-        logging.info(args.repair_long_probability)
-        logging.info(args.repair_indel_probability)
-        logging.info([args.repair_deletion_lambda, args.repair_deletion_lambda])
-        logging.info(args.repair_indel_probability)
-        logging.info(args.repair_insertion_lambda)
-        logging.info(args.cell_rates)
-
-        ## Compare branch lengths
-        #subset = [
-        #        node.node_id for node in true_tree.traverse()
-        #        if not node.is_leaf() and not node.is_root()]
-        #est_branch_lens = oracle_model.get_branch_lens()
-        #compare_lengths(
-        #        true_branch_lens,
-        #        est_branch_lens,
-        #        subset,
-        #        branch_plot_file=args.branch_plot_file,
-        #        label="oracle est vs true branches")
-
-        ## Also compare target estimates
-        fitted_vars = oracle_model.get_vars()
-        logging.info("pearson target %s", pearsonr(args.target_lambdas, fitted_vars[0]))
+    ## Also compare target estimates
+    fitted_vars = multifurc_model.get_vars()
+    logging.info("pearson target %s", pearsonr(args.target_lambdas, fitted_vars[0]))
 
 if __name__ == "__main__":
     main()

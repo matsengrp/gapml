@@ -56,10 +56,12 @@ class CellLineageTree(TreeNode):
             self.add_feature("allele_list", allele_list)
             self.add_feature("allele_events_list", [
                 allele.get_event_encoding() for allele in allele_list.alleles])
-        else:
+        elif allele_events_list is not None:
             self.add_feature("allele_events_list", allele_events_list)
             # Maybe we'll need this conversion someday. For now we leave it empty.
             self.add_feature("allele_list", None)
+        else:
+            raise ValueError("no alleles passed in")
         self.sync_allele_events_list_str()
 
         self.add_feature("cell_state", cell_state)
@@ -68,6 +70,9 @@ class CellLineageTree(TreeNode):
         self.add_feature("resolved_multifurcation", resolved_multifurcation)
 
     def sync_allele_events_list_str(self):
+        """
+        Sync the string attribute with the other allele_events_list attirubte
+        """
         self.add_feature("allele_events_list_str", CellLineageTree._allele_list_to_str(self.allele_events_list))
 
     def is_many_furcating(self):
@@ -146,8 +151,10 @@ class CellLineageTree(TreeNode):
                 root_node_id = node_id
             node_id += 1
         assert root_node_id == 0
-        self.num_nodes = node_id
-        #return root_node_id, node_id
+
+    def get_num_nodes(self):
+        assert self.is_root()
+        return len([_ for _ in self.traverse("preorder")])
 
     @staticmethod
     def convert(node: TreeNode,

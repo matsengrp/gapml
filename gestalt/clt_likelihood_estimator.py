@@ -11,6 +11,7 @@ from clt_estimator import CLTEstimator
 from cell_lineage_tree import CellLineageTree
 from clt_likelihood_model import CLTLikelihoodModel
 from approximator import ApproximatorLB
+from tree_distance import TreeDistanceMeasurerAgg
 
 class CLTPenalizedEstimator(CLTEstimator):
     """
@@ -48,31 +49,43 @@ class CLTPenalizedEstimator(CLTEstimator):
 
         #self.model.check_grad(self.transition_mat_wrappers)
 
-    def fit(self, max_iters: int, print_iter: int=1, step_size: float = 0.01):
+    def fit(self,
+            max_iters: int,
+            print_iter: int=50,
+            step_size: float = 0.01,
+            dist_measurers: TreeDistanceMeasurerAgg = None):
         """
         Finds the best model parameters
         """
+        feed_dict = {
+                    self.model.log_barr_ph: self.log_barr,
+                    self.model.tot_time_ph: self.model.tot_time
+                }
+        pen_log_lik = self.model.sess.run(self.model.smooth_log_lik, feed_dict=feed_dict)
         train_history = []
         for i in range(max_iters):
-            _, log_lik, pen_log_lik, log_lik_alleles, log_lik_cell_type = self.model.sess.run(
+            _, log_lik, pen_log_lik, log_barr, log_lik_alleles, log_lik_cell_type = self.model.sess.run(
                     [
                         self.model.adam_train_op,
                         self.model.log_lik,
                         self.model.smooth_log_lik,
+                        self.model.branch_log_barr,
                         self.model.log_lik_alleles,
                         self.model.log_lik_cell_type],
-                    feed_dict={
-                        self.model.log_barr_ph: self.log_barr,
-                        self.model.tot_time_ph: self.model.tot_time
-                    })
-            assert pen_log_lik != -np.inf
+                    feed_dict=feed_dict)
+            if pen_log_lik == -np.inf:
+                raise ValueError("Penalized log lik not finite, failed on iteration %d" % i)
 
             train_history.append(pen_log_lik)
             prev_pen_log_lik = pen_log_lik
             if i % print_iter == (print_iter - 1):
                 logging.info(
-                    "iter %d pen log lik %f log lik %f alleles %f cell type %f",
-                    i, pen_log_lik, log_lik, log_lik_alleles, log_lik_cell_type)
+                    "iter %d pen log lik %f log lik %f log barr %f alleles %f cell type %f",
+                    i, pen_log_lik, log_lik, log_barr, log_lik_alleles, log_lik_cell_type)
+                if dist_measurers is not None:
+                    tree_dists = dist_measurers.get_tree_dists([
+                        self.model.get_fitted_bifurcating_tree()])
+                    logging.info("iter %d tree dists: %s", i, tree_dists)
 
         return pen_log_lik, train_history
 

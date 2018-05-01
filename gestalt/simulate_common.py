@@ -59,22 +59,9 @@ def get_parsimony_trees(
     parsimony_score = parsimony_trees[0].get_parsimony_score()
     logging.info("parsimony scores %d", parsimony_score)
 
-    ## Group the trees together by RF distance
-    #measurer = UnrootRFDistanceMeasurer(true_tree, None)
-    #parsimony_tree_dict = measurer.group_trees_by_dist(parsimony_trees, max_trees)
-    #print(parsimony_tree_dict.keys())
-
-    measurer = SPRDistanceMeasurer(true_tree, "_output/scratch")
-    dist_dicts = measurer.group_trees_by_dist(parsimony_trees, 1)
-    print(dist_dicts.keys())
-    1/0
-    ## Print details
-    #for dist, tree_group in parsimony_tree_dict.items():
-    #    logging.info("rf dist %d, num %d", dist, len(tree_group))
-    #    for tree in tree_group:
-    #        logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-    #return parsimony_tree_dict
-    return parsimony_trees
+    measurer = SPRDistanceMeasurer(true_tree, args.scratch_dir)
+    parsimony_trees_grouped = measurer.group_trees_by_dist(parsimony_trees, max_trees)
+    return parsimony_trees_grouped
 
 def create_cell_type_tree(args):
     # This first rate means nothing!
@@ -111,8 +98,10 @@ def create_simulators(args, clt_model):
     observer = CLTObserver()
     return clt_simulator, observer
 
-def create_cell_lineage_tree(args, clt_model):
+def create_cell_lineage_tree(args, clt_model, bifurcating_only: bool = False):
     """
+    @param bifurcating_only: return a collapsed clt that is bifurcating (so sample leaves
+                            so that we only get bifurcations)
     @return original clt, the set of observed leaves, and the true topology for the observed leaves
     """
     clt_simulator, observer = create_simulators(args, clt_model)
@@ -137,7 +126,8 @@ def create_cell_lineage_tree(args, clt_model):
                     sampling_rate,
                     clt,
                     seed=args.model_seed,
-                    observe_cell_state=args.use_cell_state)
+                    observe_cell_state=args.use_cell_state,
+                    bifurcating_only=bifurcating_only)
 
             logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
             num_tries += 1
@@ -155,8 +145,9 @@ def create_cell_lineage_tree(args, clt_model):
 
     if len(obs_leaves) < args.min_leaves:
         raise Exception("Could not manage to get enough leaves")
-    true_tree.label_tree_with_strs()
+
     logging.info(true_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+
     # Check all leaves unique because rf distance code requires leaves to be unique
     # The only reason leaves wouldn't be unique is if we are observing cell state OR
     # we happen to have the same allele arise spontaneously in different parts of the tree.
@@ -209,18 +200,23 @@ def fit_pen_likelihood(
         br_len_scale: float = 0.1,
         br_len_shrink: float = 0.8,
         tot_time: float = 1,
-        max_branch_attempts: int = 10):
+        max_branch_attempts: int = 10,
+        branch_len_inners: ndarray = None,
+        branch_len_offsets: ndarray = None,
+        dist_measurers: TreeDistanceMeasurerAgg = None):
     """
     Fit the model for the given tree topology
     @param warm_start: use the given variables to initialize the model
                         If None, then start from scratch
     """
-    num_nodes = len([t for t in tree.traverse()])
-    branch_len_inners = np.random.rand(num_nodes) * br_len_scale
-    branch_len_offsets = np.random.rand(num_nodes) * br_len_scale
+    num_nodes = tree.get_num_nodes()
+    if branch_len_inners is None:
+        branch_len_inners = np.random.rand(num_nodes) * br_len_scale
+    if branch_len_offsets is None:
+        branch_len_offsets = np.random.rand(num_nodes) * br_len_scale
     target_lams_known = target_lams is not None
     if not target_lams_known:
-        target_lams = 0.3 * np.ones(bcode_meta.n_targets) + np.random.uniform(size=bcode_meta.n_targets) * 0.08
+        target_lams = 0.04 * np.ones(bcode_meta.n_targets) + np.random.uniform(size=bcode_meta.n_targets) * 0.02
 
     tree.label_node_ids()
     res_model = CLTLikelihoodModel(
@@ -243,6 +239,8 @@ def fit_pen_likelihood(
         # Initialize with parameters such that the branch lengths are positive
         all_branch_lens_positive = all([b > 0 for b in res_model.get_branch_lens()[1:]])
         for j in range(max_branch_attempts):
+            if all_branch_lens_positive:
+                break
             print("attempt %d to make br lens all positive" % j)
             # Keep initializing branch lengths until they are all positive
             model_vars = res_model.get_vars_as_dict()
@@ -252,19 +250,17 @@ def fit_pen_likelihood(
             # Initialize branch length offsets
             model_vars["branch_len_offsets"] = np.random.rand(num_nodes) * br_len_scale
             for node in tree.traverse():
-                if node.is_root() or not node.up.is_multifurcating() or node.is_copy:
+                if node.is_root() or node.up.is_resolved_multifurcation() or node.is_copy:
                     # Make sure the root or bifurcating nodes don't have offsets
                     model_vars["branch_len_offsets"][node.node_id] = 1e-20
             print("start br len off", model_vars["branch_len_offsets"])
 
             res_model.set_params_from_dict(model_vars)
             all_branch_lens_positive = all([b > 0 for b in res_model.get_branch_lens()[1:]])
-            if all_branch_lens_positive:
-                break
-        res_model.get_fitted_bifurcating_tree()
         assert all_branch_lens_positive
     else:
         # calculate branch length from tree
+        raise NotImplementedError("didnt deal with branch len offsets")
         for node in tree.traverse():
             if not node.is_root() and not node.is_leaf():
                 branch_len_inners[node.node_id] = node.dist
@@ -273,6 +269,9 @@ def fit_pen_likelihood(
         model_vars["branch_len_inners"] = branch_len_inners
         res_model.set_params_from_dict(model_vars)
 
-    pen_log_lik, history = estimator.fit(max_iters)
+    # This line is just to check that the tree is initialized to be ultrametric
+    res_model.get_fitted_bifurcating_tree()
+
+    pen_log_lik, history = estimator.fit(max_iters, dist_measurers = dist_measurers)
 
     return pen_log_lik, history, res_model

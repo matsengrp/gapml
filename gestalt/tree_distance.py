@@ -145,10 +145,14 @@ class SPRDistanceMeasurer(TreeDistanceMeasurer):
     def get_dist(self, tree):
         """
         Run rspr software from Chris Whidden
+        Chris's software requires that the first tree be bifurcating.
+        Second tree can be multifurcating.
         """
         # Set node name to allele_events_list_str
         for n in self.ref_tree.traverse():
             n.name = n.allele_events_list_str
+            if not n.is_leaf() and len(n.get_children()) != 2:
+                raise ValueError("Reference tree is not binary. SPR will not work")
 
         for n in tree.traverse():
             n.name = n.allele_events_list_str
