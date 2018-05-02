@@ -81,18 +81,23 @@ class CLTPenalizedEstimator(CLTEstimator):
             if pen_log_lik == -np.inf:
                 raise ValueError("Penalized log lik not finite, failed on iteration %d" % i)
 
-            train_history.append(pen_log_lik)
+            iter_info = {
+                    "iter": i,
+                    "pen_ll": pen_log_lik,
+                    "log_barr": log_barr,
+                    "log_lik": log_lik}
             prev_pen_log_lik = pen_log_lik
             if i % print_iter == (print_iter - 1):
                 logging.info(
                     "iter %d pen log lik %f log lik %f log barr %f alleles %f cell type %f",
                     i, pen_log_lik, log_lik, log_barr, log_lik_alleles, log_lik_cell_type)
                 if dist_measurers is not None:
-                    tree_dists = dist_measurers.get_tree_dists([
-                        self.model.get_fitted_bifurcating_tree()])
-                    logging.info("iter %d tree dists: %s", i, tree_dists)
+                    tree_dist = dist_measurers.get_tree_dists([self.model.get_fitted_bifurcating_tree()])[0]
+                    logging.info("iter %d tree dists: %s", i, tree_dist)
+                    iter_info["tree_dists"] = tree_dist
+            train_history.append(iter_info)
 
-        return pen_log_lik, train_history
+        return train_history
 
     def create_logger(self):
         self.model.create_logger()

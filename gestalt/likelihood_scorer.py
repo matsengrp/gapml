@@ -8,6 +8,16 @@ from barcode_metadata import BarcodeMetadata
 from approximator import ApproximatorLB
 from parallel_worker import ParallelWorker
 from simulate_common import fit_pen_likelihood
+from tree_distance import TreeDistanceMeasurerAgg
+
+class LikelihoodScorerResult:
+    """
+    Stores results from LikelihoodScorer below
+    """
+    def __init__(self, model_params_dict: Dict, fitted_bifurc_tree: CellLineageTree, train_history: List):
+        self.model_params_dict = model_params_dict
+        self.fitted_bifurc_tree = fitted_bifurc_tree
+        self.train_history = train_history
 
 class LikelihoodScorer(ParallelWorker):
     """
@@ -24,12 +34,15 @@ class LikelihoodScorer(ParallelWorker):
             max_iters: int,
             approximator: ApproximatorLB,
             tot_time: float,
-            init_model_vars: Dict[str, ndarray] = None):
+            init_model_vars: Dict[str, ndarray] = None,
+            dist_measurers: TreeDistanceMeasurerAgg = None,
+            aux : Dict  = None):
         """
         @param seed: required to set the seed of each parallel worker
         @param args: arguments that provide settings for how to fit the model
         @param tree: the cell lineage tree topology to fit the likelihood for
         @param init_model_vars: the model variables to initialize with
+        @param aux: auxiliary info -- any python dict
         """
         self.seed = seed
         self.tree = tree
@@ -42,6 +55,8 @@ class LikelihoodScorer(ParallelWorker):
         self.approximator = approximator
         self.tot_time = tot_time
         self.init_model_vars = init_model_vars
+        self.dist_measurers = dist_measurers
+        self.aux = aux
 
     def run_worker(self, shared_obj):
         """
@@ -60,7 +75,7 @@ class LikelihoodScorer(ParallelWorker):
         Used when we aren't submitting jobs
         @param sess: tensorflow session
         """
-        pen_ll, train_history, res_model = fit_pen_likelihood(
+        train_history, res_model = fit_pen_likelihood(
             self.tree,
             self.bcode_meta,
             self.cell_type_tree,
@@ -71,8 +86,12 @@ class LikelihoodScorer(ParallelWorker):
             self.approximator,
             sess,
             self.tot_time,
-            warm_start=self.init_model_vars)
-        return pen_ll, res_model.get_vars_as_dict(), res_model.get_branch_lens(), train_history
+            warm_start=self.init_model_vars,
+            dist_measurers = self.dist_measurers)
+        return LikelihoodScorerResult(
+                res_model.get_vars_as_dict(),
+                res_model.get_fitted_bifurcating_tree(),
+                train_history)
 
     def __str__(self):
         return str(self.seed)

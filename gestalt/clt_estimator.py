@@ -135,10 +135,12 @@ class CLTParsimonyEstimator(CLTEstimator):
         for node in clt.traverse():
             node.add_feature("observed", node.is_leaf())
 
-        while len(clt.get_children()) == 1:
-            child_node = clt.get_children()[0]
-            child_node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
-        assert(clt.is_root())
+        # Don't do this since we want to ensure that the root node's only possible state
+        # is "not edited"
+        #while len(clt.get_children()) == 1:
+        #    child_node = clt.get_children()[0]
+        #    child_node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
+        #assert(clt.is_root())
 
         return clt
 
@@ -208,9 +210,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         logging.info("num bifurcating trees %d", len(bifurcating_trees))
         if do_collapse:
             # Collapse trees
-            collapsed_trees = [collapsed_tree.collapse_zero_lens(t) for t in bifurcating_trees]
-            # Get the unique collapsed trees
-            mix_trees = self.dist_measurer.get_uniq_trees(collapsed_trees)
+            mix_trees = [collapsed_tree.collapse_zero_lens(t) for t in bifurcating_trees]
         else:
             mix_trees = bifurcating_trees
 
@@ -224,6 +224,11 @@ class CLTParsimonyEstimator(CLTEstimator):
             clt_new = self.convert_tree_to_clt(t, event_list, processed_obs, processed_abund)
             clt_new.label_tree_with_strs()
             clts.append(clt_new)
+
+        if do_collapse:
+            # Get the unique collapsed trees
+            clts = self.dist_measurer.get_uniq_trees(clts)
+
         return clts
 
     def run_mix(self, new_mix_cfg_file):

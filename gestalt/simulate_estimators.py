@@ -4,11 +4,9 @@ A simulation engine to see how well cell lineage estimation performs
 from __future__ import division, print_function
 import os
 import sys
+import csv
 import numpy as np
 import argparse
-import matplotlib
-matplotlib.use('agg')
-from matplotlib import pyplot as plt
 import time
 import tensorflow as tf
 from tensorflow.python import debug as tf_debug
@@ -16,6 +14,7 @@ from scipy.stats import pearsonr, spearmanr, kendalltau
 import logging
 import pickle
 from pathlib import Path
+import six
 
 from cell_state import CellState, CellTypeTree
 from cell_state_simulator import CellTypeSimulator
@@ -31,6 +30,8 @@ from barcode_metadata import BarcodeMetadata
 from approximator import ApproximatorLB
 from collapsed_tree import collapse_zero_lens
 
+from parallel_worker import BatchSubmissionManager
+from likelihood_scorer import LikelihoodScorer
 from tree_distance import *
 from constants import *
 from common import *
@@ -53,7 +54,7 @@ def parse_args():
         '--target-lambdas',
         type=float,
         nargs=2,
-        default=[0.01] * 10,
+        default=[0.02] * 10,
         help='target cut rates -- will get slightly perturbed for the true value')
     parser.add_argument(
         '--variance-target-lambdas',
@@ -93,7 +94,7 @@ def parse_args():
         default=1,
         help='poisson parameter for distribution of insertion in cut site(s)')
     parser.add_argument(
-        '--birth-lambda', type=float, default=2, help='birth rate')
+        '--birth-lambda', type=float, default=1.8, help='birth rate')
     parser.add_argument(
         '--death-lambda', type=float, default=0.001, help='death rate')
     parser.add_argument(
@@ -134,11 +135,11 @@ def parse_args():
             type=float,
             default=0,
             help="lasso parameter on the branch lengths")
-    parser.add_argument('--max-iters', type=int, default=0)
+    parser.add_argument('--max-iters', type=int, default=20)
     parser.add_argument('--max-depth', type=int, default=10)
     parser.add_argument('--min-leaves', type=int, default=2)
     parser.add_argument('--max-leaves', type=int, default=10)
-    parser.add_argument('--max-clt-nodes', type=int, default=8000)
+    parser.add_argument('--max-clt-nodes', type=int, default=40000)
     parser.add_argument('--num-inits', type=int, default=1)
     parser.add_argument(
             '--mix-path',
@@ -151,20 +152,18 @@ def parse_args():
             type=int,
             default=1)
     parser.add_argument('--use-parsimony', action='store_true', help="use mix (CS parsimony) to estimate tree topologies")
-    parser.add_argument('--topology-only', action='store_true', help="topology only")
+    parser.add_argument('--do-distributed', action='store_true')
 
     parser.set_defaults(use_cell_state=False)
     args = parser.parse_args()
     args.num_targets = len(args.target_lambdas)
     args.log_file = "%s/fit_log.txt" % args.out_folder
     print("Log file", args.log_file)
-    args.model_data_file = "%s/model_data.pkl" % args.out_folder
+    args.csv_out = "%s/estimators_multifurc.csv" % args.out_folder
+    args.pickle_out = "%s/estimators_multifurc.pkl" % args.out_folder
     args.scratch_dir = os.path.join(args.out_folder, "scratch")
-    args.fitted_models_file = "%s/fitted.pkl" % args.out_folder
-    args.branch_plot_file = "%s/branch_lens.png" % args.out_folder
-
-    if args.use_parsimony and args.use_cell_state:
-        raise ValueError("Cannot use parsimony while observing cell state...")
+    if not os.path.exists(args.scratch_dir):
+        os.mkdir(args.scratch_dir)
 
     if args.use_parsimony:
         # check that there is no infile in the current folder -- this will
@@ -173,6 +172,18 @@ def parse_args():
         assert not my_file.exists()
 
     return args
+
+def collapse_internally_labelled_tree(tree: CellLineageTree):
+    coll_tree = tree.copy("deepcopy")
+    for n in coll_tree.traverse():
+        n.name = n.allele_events_list_str
+        if not n.is_root():
+            if n.allele_events_list_str == n.up.allele_events_list_str:
+                n.dist = 0
+            else:
+                n.dist = 1
+    coll_tree = collapse_zero_lens(coll_tree)
+    return coll_tree
 
 def main(args=sys.argv[1:]):
     args = parse_args()
@@ -228,10 +239,12 @@ def main(args=sys.argv[1:]):
             MRCADistanceMeasurer],
             true_tree,
             args.scratch_dir)
-    
+
     # Gather true branch lengths
     true_tree.label_node_ids(CLTLikelihoodModel.NODE_ORDER)
-    
+    leaf_strs = [l.allele_events_list_str for l in true_tree]
+    assert len(leaf_strs) == len(set(leaf_strs))
+
     for leaf in true_tree:
         assert np.isclose(leaf.get_distance(true_tree), args.time)
 
@@ -239,17 +252,9 @@ def main(args=sys.argv[1:]):
     pars_score = true_tree.get_parsimony_score()
     logging.info("Oracle tree parsimony score %d", pars_score)
 
-    # Save the data
-    save_model_data(
-            args.model_data_file,
-            clt_model.get_vars_as_dict(),
-            cell_type_tree,
-            obs_leaves,
-            true_tree,
-            clt)
     # Print fun facts about the data
-    logging.info("Full clt leaves %d" % len(clt))
-    logging.info("True tree topology, num leaves %d", len(true_tree))
+    num_leaves = len(true_tree)
+    logging.info("True tree topology, num leaves %d" % num_leaves)
     logging.info(true_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
     logging.info(true_tree.get_ascii(attributes=["cell_state"], show_internal=True))
     logging.info(true_tree.get_ascii(attributes=["observed"], show_internal=True))
@@ -258,22 +263,10 @@ def main(args=sys.argv[1:]):
     # Instantiate approximator used by our penalized MLE
     approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
 
-    # Get the parsimony-estimated topologies
-    if args.use_parsimony:
-        measurer = SPRDistanceMeasurer(true_tree, args.scratch_dir)
-        parsimony_trees_grouped = get_parsimony_trees(
-            obs_leaves,
-            args,
-            bcode_meta,
-            measurer,
-            args.max_trees,
-            do_collapse=False)
-        logging.info("Parsimony SPR distances: %s ", parsimony_trees_grouped.keys())
-
-        best_spr = sorted(parsimony_trees_grouped.keys())[0]
-        best_parsimony_tree = parsimony_trees_grouped[best_spr][0]
-        parsimony_pen_log_lik, _, parsimony_model = fit_pen_likelihood(
-                best_parsimony_tree,
+    def _make_likelihood_scorer(tree, name):
+        return LikelihoodScorer(
+                args.optim_seed,
+                tree,
                 bcode_meta,
                 None, # Do not use cell type info
                 args.know_cell_lambdas,
@@ -281,69 +274,142 @@ def main(args=sys.argv[1:]):
                 args.log_barr,
                 args.max_iters,
                 approximator,
-                sess,
-                tot_time = args.time)
-        fitted_parsimony_tree = parsimony_model.get_fitted_bifurcating_tree()
+                tot_time = args.time,
+                dist_measurers = tree_dist_measurers,
+                # Send in name of the tree as auxiliary information
+                aux = name)
 
-        parsimony_dist_dicts = tree_dist_measurers.get_tree_dists([fitted_parsimony_tree])
-        logging.info("parsimony pen log lik %s", parsimony_pen_log_lik)
-        logging.info("parsimony dist %s", parsimony_dist_dicts)
-        logging.info(fitted_parsimony_tree.get_ascii(attributes=["dist"], show_internal=True))
-        logging.info(fitted_parsimony_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    trees_to_test = {}
+
+    # Get the parsimony-estimated topologies
+    if args.use_parsimony:
+        measurer = UnrootRFDistanceMeasurer(true_tree, args.scratch_dir)
+        parsimony_trees = get_parsimony_trees(
+            obs_leaves,
+            args,
+            bcode_meta,
+            do_collapse=False)
+
+        min_dist = measurer.get_dist(parsimony_trees[0])
+        best_parsimony_tree = parsimony_trees[0]
+        parsimony_dists = [min_dist]
+        for pars_tree in parsimony_trees:
+            tree_dist = measurer.get_dist(pars_tree)
+            parsimony_dists.append(tree_dist)
+            if tree_dist < min_dist:
+                best_parsimony_tree = pars_tree
+                min_dist = tree_dist
+        logging.info("Uniq parsimony %s distances: %s", measurer.name, np.unique(parsimony_dists))
+        logging.info("Mean parsimony %s distance: %f", measurer.name, np.mean(parsimony_dists))
+        logging.info("Min parsimony %s distance: %d", measurer.name, min_dist)
+
+        trees_to_test["best_parsimony"] = best_parsimony_tree
+        logging.info("Best parsimony -- not collapsed")
+        logging.info(best_parsimony_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+
+        best_coll_tree = collapse_internally_labelled_tree(best_parsimony_tree)
+        trees_to_test["best_pars_multifurc"] = best_coll_tree
+        logging.info("Best parsimony -- collapsed")
+        logging.info(best_coll_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+
+        random_parsimony_tree = parsimony_trees[np.random.randint(low=0, high=len(parsimony_trees))]
+        trees_to_test["random_parsimony"] = random_parsimony_tree
+        logging.info("Random parsimony -- not collapsed")
+        logging.info(random_parsimony_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+
+        random_coll_tree = collapse_internally_labelled_tree(random_parsimony_tree)
+        rf_measurer = UnrootRFDistanceMeasurer(random_coll_tree, None)
+        rf_dist = rf_measurer.get_dist(best_coll_tree)
+        logging.info("Random parsimony collapse rf_dist from best parsimony collapse: %d", rf_dist)
+        if rf_dist > 0:
+            trees_to_test["random_multifurc"] = random_coll_tree
+            logging.info("Random parsimony -- collapsed")
+            logging.info(random_coll_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
     #######
     # Fit continuous parameterization of ambiguous multifurcating trees
     ######
+    coll_parsimony_trees = get_parsimony_trees(
+        obs_leaves,
+        args,
+        bcode_meta,
+        do_collapse=True)
+    logging.info("Number of collapsed parsimony trees %d", len(coll_parsimony_trees))
+
     # Collapse the oracle tree
-    coll_tree = true_tree.copy("deepcopy")
-    for n in coll_tree.traverse():
-        n.name = n.allele_events_list_str
-        if not n.is_root():
-            if n.allele_events_list_str == n.up.allele_events_list_str:
-                n.dist = 0
-        n.resolved_multifurcation = False
-    print(coll_tree.get_ascii(attributes=["dist"], show_internal=True))
-    print(coll_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-    coll_tree = collapse_zero_lens(coll_tree)
-    print(coll_tree.get_ascii(attributes=["dist"], show_internal=True))
-    print(coll_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-    coll_tree.label_node_ids()
+    oracle_coll_tree = collapse_internally_labelled_tree(true_tree)
+    trees_to_test["oracle_multifurc"] = oracle_coll_tree
+    logging.info("Oracle collapsed tree")
+    logging.info(oracle_coll_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
-    np.random.seed(seed=args.optim_seed)
-    pen_log_lik, _, multifurc_model = fit_pen_likelihood(
-            coll_tree,
-            bcode_meta,
-            None, # Do not use cell type info
-            args.know_cell_lambdas,
-            np.array(args.target_lambdas) if args.know_target_lambdas else None,
-            args.log_barr,
-            args.max_iters,
-            approximator,
-            sess,
-            tot_time = args.time,
-            dist_measurers = tree_dist_measurers)
-    fitted_bifurc_tree = multifurc_model.get_fitted_bifurcating_tree()
-    logging.info(fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
-    logging.info(fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    # Make workers and run workers
+    worker_list = []
+    for key, tree in trees_to_test.items():
+        worker_list.append(_make_likelihood_scorer(tree, key))
+    if args.do_distributed and len(worker_list) > 1:
+        # Submit jobs to slurm
+        batch_manager = BatchSubmissionManager(
+                worker_list=worker_list,
+                shared_obj=None,
+                # Each tree is its separate slurm job
+                num_approx_batches=len(worker_list),
+                worker_folder=args.scratch_dir)
+        successful_res_workers = batch_manager.run(successful_only=True)
+    else:
+        # Run jobs locally
+        successful_res_workers = [(worker.do_work_directly(sess), worker) for worker in worker_list]
 
-    final_dist_dicts = tree_dist_measurers.get_tree_dists([fitted_bifurc_tree])
-    logging.info(final_dist_dicts)
+    # Process workers
+    all_print_results = []
+    for res, worker in successful_res_workers:
+        result_print_list = tree_dist_measurers.get_tree_dists([res.fitted_bifurc_tree])[0]
+        pearson_target = pearsonr(args.target_lambdas, res.model_params_dict["target_lams"])
+        result_print_list["pearson_target_corr"] = pearson_target[0]
+        result_print_list["pearson_target_pval"] = pearson_target[1]
+        result_print_list["target_lam_dist"] = np.linalg.norm(args.target_lambdas - res.model_params_dict["target_lams"])
+        result_print_list["name"] = worker.aux
+        result_print_list["num_leaves"] = num_leaves
+        result_print_list["model_seed"] = args.model_seed
+        result_print_list["data_seed"] = args.data_seed
+        result_print_list["log_lik"] = res.train_history[-1]["log_lik"]
+        all_print_results.append(result_print_list)
 
-    logging.info("---- MULTIFURC FITTING -----")
-    for v in multifurc_model.get_vars():
-        logging.info(v)
-    logging.info("---- TRUTH -----")
-    logging.info(args.target_lambdas)
-    logging.info(args.repair_long_probability)
-    logging.info(args.repair_indel_probability)
-    logging.info([args.repair_deletion_lambda, args.repair_deletion_lambda])
-    logging.info(args.repair_indel_probability)
-    logging.info(args.repair_insertion_lambda)
-    logging.info(args.cell_rates)
+        logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
+        logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
-    ## Also compare target estimates
-    fitted_vars = multifurc_model.get_vars()
-    logging.info("pearson target %s", pearsonr(args.target_lambdas, fitted_vars[0]))
+    # Save distance data as csv
+    with open(args.csv_out, 'w') as csvfile:
+        fieldnames = [
+                "name",
+                "model_seed",
+                "data_seed",
+                "num_leaves",
+                "log_lik",
+                UnrootRFDistanceMeasurer.name,
+                RootRFDistanceMeasurer.name,
+                SPRDistanceMeasurer.name,
+                MRCADistanceMeasurer.name,
+                "pearson_target_corr",
+                "pearson_target_pval",
+                "target_lam_dist"]
+        writer = csv.DictWriter(csvfile, fieldnames = fieldnames)
+        writer.writeheader()
+        for result_print_list in all_print_results:
+            writer.writerow(result_print_list)
+
+    # Save the data
+    with open(args.pickle_out, "wb") as f:
+        out_dict = {
+            "true_model_params": clt_model.get_vars_as_dict(),
+            "true_tree": true_tree,
+            "res_workers": successful_res_workers,
+            "obs_leaves": obs_leaves,
+            "bcode_meta": bcode_meta,
+            "args": args}
+        if args.use_parsimony:
+            out_dict["parsimony_trees"] = parsimony_trees
+
+        six.moves.cPickle.dump(out_dict, f, protocol = 2)
 
 if __name__ == "__main__":
     main()
