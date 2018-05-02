@@ -23,13 +23,3 @@ def inv_sigmoid(prob: float):
     @return x for prob = 1/(1 + exp(-x))
     """
     return -np.log(np.divide(1.0, prob) - 1.0)
-
-def save_model_data(file_name, model_vars, cell_type_tree, obs_leaves, true_tree, clt):
-    with open(file_name, "wb") as f:
-        pickle.dump({
-            "model_vars": model_vars,
-            "cell_type_tree": cell_type_tree,
-            "obs_leaves": obs_leaves,
-            "true_tree": true_tree,
-            "clt": clt,
-        }, f, protocol=-1)

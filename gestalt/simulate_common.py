@@ -109,7 +109,6 @@ def create_cell_lineage_tree(args, clt_model, bifurcating_only: bool = False):
     for i in range(MAX_TRIES):
         args.model_seed += 1
         try:
-            print("attempt", i)
             clt = clt_simulator.simulate(
                 tree_seed = args.model_seed,
                 data_seed = args.data_seed,
@@ -141,10 +140,10 @@ def create_cell_lineage_tree(args, clt_model, bifurcating_only: bool = False):
                 # Done creating the tree
                 break
         except ValueError as e:
-            print(e)
+            logging.info("ValueError warning.... %s", str(e))
             continue
         except AssertionError as e:
-            print(e)
+            logging.info("AssertionError warning ... %s", str(e))
             continue
 
     if len(obs_leaves) < args.min_leaves:
