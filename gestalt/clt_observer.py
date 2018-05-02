@@ -55,7 +55,7 @@ class CLTObserver:
                 if is_sampled:
                     observed_leaf_ids.add(leaf.node_id)
         return observed_leaf_ids
-    
+
     @staticmethod
     def _sample_leaves(clt_orig: CellLineageTree, sampling_rate: float):
         """
@@ -121,6 +121,7 @@ class CLTObserver:
 
         if bifurcating_only:
             if clt.is_many_furcating():
+                # TODO: deal with this in the future...
                 raise ValueError("Need root of clt to be bifurcating")
             for node in clt.traverse():
                 if node.is_many_furcating():
@@ -170,7 +171,7 @@ class CLTObserver:
             logging.info("diff events? %s", str(set(tree_evts) - set(obs_evts_list)))
             assert set(tree_evts) == set(obs_evts_list), "the two sets are not equal"
             # End of checking
-            
+
             return obs_vals, clt
         else:
             return obs_vals

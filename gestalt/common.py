@@ -23,34 +23,3 @@ def inv_sigmoid(prob: float):
     @return x for prob = 1/(1 + exp(-x))
     """
     return -np.log(np.divide(1.0, prob) - 1.0)
-
-def save_model_data(file_name, model_vars, cell_type_tree, obs_leaves, true_tree, clt):
-    with open(file_name, "wb") as f:
-        pickle.dump({
-            "model_vars": model_vars,
-            "cell_type_tree": cell_type_tree,
-            "obs_leaves": obs_leaves,
-            "true_tree": true_tree,
-            "clt": clt,
-        }, f, protocol=-1)
-
-def save_fitted_models(
-        file_name,
-        fitted_results):
-    """
-    @param file_name: str, file to save to
-    @param fitted_models_dict: dictionary mapping rf distance to a list of
-                tuples. Each tuple has its first elem as the penalized log lik score
-                and the second elem as the CLTLikelihoodEstimator
-
-    Pickles the models (while avoiding tensorflow unhappiness)
-    """
-    res_dict = []
-    for pen_log_lik, rooted_rf, unrooted_rf, res_model in fitted_results:
-        res_dict.append((pen_log_lik,
-                    rooted_rf,
-                    unrooted_rf,
-                    res_model.get_vars_as_dict()))
-
-    with open(file_name, "wb") as f:
-        pickle.dump(res_dict, f, protocol=-1)

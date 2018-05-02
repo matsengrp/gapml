@@ -219,4 +219,6 @@ class MRCADistanceMeasurer(TreeDistanceMeasurer):
 
     def get_dist(self, tree):
         tree_mrca_matrix = self._get_mrca_matrix(tree)
-        return np.linalg.norm(self.ref_tree_mrca_matrix - tree_mrca_matrix, ord="fro")
+        norm_diff = np.linalg.norm(self.ref_tree_mrca_matrix - tree_mrca_matrix, ord="fro")
+        num_entries = (self.num_leaves - 1) * self.num_leaves / 2 + self.num_leaves
+        return norm_diff/np.sqrt(num_entries)

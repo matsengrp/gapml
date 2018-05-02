@@ -44,8 +44,6 @@ def get_parsimony_trees(
         obs_leaves: List[ObservedAlignedSeq],
         args,
         bcode_meta: BarcodeMetadata,
-        measurer: TreeDistanceMeasurer,
-        max_trees: int,
         do_collapse: bool=False):
     parsimony_estimator = CLTParsimonyEstimator(
             bcode_meta,
@@ -60,9 +58,7 @@ def get_parsimony_trees(
 
     parsimony_score = parsimony_trees[0].get_parsimony_score()
     logging.info("parsimony scores %d", parsimony_score)
-
-    parsimony_trees_grouped = measurer.group_trees_by_dist(parsimony_trees, max_trees)
-    return parsimony_trees_grouped
+    return parsimony_trees
 
 def create_cell_type_tree(args):
     # This first rate means nothing!
@@ -109,40 +105,46 @@ def create_cell_lineage_tree(args, clt_model, bifurcating_only: bool = False):
 
     # Keep trying to make CLT until enough leaves in observed tree
     obs_leaves = set()
-    MAX_TRIES = 10
-    num_tries = 0
+    MAX_TRIES = 20
     for i in range(MAX_TRIES):
-        clt = clt_simulator.simulate(
-            tree_seed = args.model_seed,
-            data_seed = args.data_seed,
-            time = args.time,
-            max_nodes = args.max_clt_nodes)
-        clt.label_node_ids()
+        args.model_seed += 1
+        try:
+            clt = clt_simulator.simulate(
+                tree_seed = args.model_seed,
+                data_seed = args.data_seed,
+                time = args.time,
+                max_nodes = args.max_clt_nodes)
+            clt.label_node_ids()
 
-        sampling_rate = args.sampling_rate
-        while (len(obs_leaves) < args.min_leaves or len(obs_leaves) >= args.max_leaves) and sampling_rate <= 1:
-            # Now sample the leaves and create the true topology
-            # Keep changing the sampling rate if we can't get the right number of leaves
-            obs_leaves, true_tree = observer.observe_leaves(
-                    sampling_rate,
-                    clt,
-                    seed=args.model_seed,
-                    observe_cell_state=args.use_cell_state,
-                    bifurcating_only=bifurcating_only)
+            sampling_rate = args.sampling_rate
+            while (len(obs_leaves) < args.min_leaves or len(obs_leaves) >= args.max_leaves) and sampling_rate <= 1:
+                # Now sample the leaves and create the true topology
+                # Keep changing the sampling rate if we can't get the right number of leaves
+                obs_leaves, true_tree = observer.observe_leaves(
+                        sampling_rate,
+                        clt,
+                        seed=args.model_seed,
+                        observe_cell_state=args.use_cell_state,
+                        bifurcating_only=bifurcating_only)
 
-            logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
-            num_tries += 1
-            if len(obs_leaves) < args.min_leaves:
-                sampling_rate += 0.01
-            elif len(obs_leaves) >= args.max_leaves:
-                sampling_rate = max(1e-3, sampling_rate - 0.05)
-            else:
+                logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
+                if len(obs_leaves) < args.min_leaves:
+                    sampling_rate += 0.02
+                elif len(obs_leaves) >= args.max_leaves:
+                    sampling_rate = max(1e-3, sampling_rate - 0.05)
+                else:
+                    break
+
+            logging.info("final? sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
+            if len(obs_leaves) >= args.min_leaves and len(obs_leaves) <= args.max_leaves:
+                # Done creating the tree
                 break
-
-        logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
-        if len(obs_leaves) >= args.min_leaves or len(obs_leaves) <= args.max_leaves:
-            # Done creating the tree
-            break
+        except ValueError as e:
+            logging.info("ValueError warning.... %s", str(e))
+            continue
+        except AssertionError as e:
+            logging.info("AssertionError warning ... %s", str(e))
+            continue
 
     if len(obs_leaves) < args.min_leaves:
         raise Exception("Could not manage to get enough leaves")
@@ -242,6 +244,6 @@ def fit_pen_likelihood(
     # Initialize with parameters such that the branch lengths are positive
     res_model.initialize_branch_lens(br_len_scale=br_len_scale)
 
-    pen_log_lik, history = estimator.fit(max_iters, dist_measurers = dist_measurers)
+    history = estimator.fit(max_iters, dist_measurers = dist_measurers)
 
-    return pen_log_lik, history, res_model
+    return history, res_model

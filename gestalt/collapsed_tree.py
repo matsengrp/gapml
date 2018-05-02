@@ -161,13 +161,11 @@ def collapse_ultrametric(raw_tree: TreeNode):
 
     _remove_single_child_unobs_nodes(tree)
 
-    for leaf in tree:
-        assert np.isclose(leaf.get_distance(tree), max_dist)
-
     print(tree.get_ascii(attributes=["dist"], show_internal=True))
     print(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
     print(tree.get_ascii(attributes=["observed"], show_internal=True))
-    print(tree)
+    for leaf in tree:
+        assert np.isclose(leaf.get_distance(tree), max_dist)
 
     return tree
 
@@ -176,6 +174,8 @@ def collapse_zero_lens(raw_tree: TreeNode):
     Remove zero-length edges from the tree, but leave one leaf node for each observed node.
     """
     tree = _preprocess(raw_tree)
+    # All nodes must have a name!!!
+    assert tree.name != ""
     # dictionary maps node name to a node that was removed because it was a "duplicate"
     # (i.e. zero length away). We use this dictionary later to add nodes back in
     removed_children_dict = {}
@@ -216,12 +216,20 @@ def collapse_zero_lens(raw_tree: TreeNode):
             # Use a node from the dictionary as a template
             child_template = removed_children_dict[node.name]
             # Copy this node and its features... don't use the original one just in case
-            new_child = CellLineageTree.convert(
+            if tree.__class__ == CellLineageTree:
+                new_child = CellLineageTree.convert(
                     child_template,
                     allele_list = child_template.allele_list,
                     allele_events_list = child_template.allele_events_list,
                     cell_state = child_template.cell_state,
                     resolved_multifurcation = False)
+            else:
+                new_child = TreeNode(
+                        name=child_template.name,
+                        dist=child_template.dist)
+                for k in child_template.features:
+                    if k not in new_child.features:
+                        new_child.add_feature(k, getattr(child_template, k))
             node.add_child(new_child)
             new_child.add_feature("is_copy", True)
             new_child.observed = True
