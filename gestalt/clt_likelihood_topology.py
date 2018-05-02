@@ -95,7 +95,7 @@ class CLTLikelihoodTopologySearcher:
                 self.max_inner_iters,
                 self.approximator,
                 self.sess,
-                tot_time = self.tot_time)
+                self.tot_time)
         # Assign branch lengths to this current tree
         CLTLikelihoodTopologySearcher._assign_branch_lens(curr_model.get_branch_lens(), curr_tree)
         curr_model_vars = curr_model.get_vars_as_dict()
@@ -124,7 +124,7 @@ class CLTLikelihoodTopologySearcher:
                         self.log_barr,
                         self.max_inner_iters,
                         self.approximator,
-                        tot_time = self.tot_time,
+                        self.tot_time,
                         init_model_vars = curr_model_vars if do_warm_starts else None)
                 for i, tree in enumerate(nearby_trees)]
             if self.do_distributed and len(worker_list) > 1:

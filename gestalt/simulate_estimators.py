@@ -169,21 +169,6 @@ def parse_args():
 
     return args
 
-def set_branch_lens(tree: CellLineageTree, br_len_vec: ndarray):
-    """
-    Set the branch lengths in this tree according to br_len_vec
-    @param br_len_vec: each element corresponds to a node in the tree, per the node in preorder
-    """
-    tree.label_node_ids()
-    for n in tree.traverse():
-        if n.is_root():
-            n.dist = 0
-        else:
-            n.dist = br_len_vec[n.node_id]
-
-    for leaf in tree:
-        print("leaf to root dist", leaf.get_distance(tree))
-
 def main(args=sys.argv[1:]):
     args = parse_args()
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
@@ -232,7 +217,6 @@ def main(args=sys.argv[1:]):
     
     # Gather true branch lengths
     true_tree.label_node_ids(CLTLikelihoodModel.NODE_ORDER)
-    print(true_tree.get_ascii(attributes=["dist"], show_internal=True))
     
     for leaf in true_tree:
         assert np.isclose(leaf.get_distance(true_tree), args.time)
@@ -262,11 +246,13 @@ def main(args=sys.argv[1:]):
 
     # Get the parsimony-estimated topologies
     if args.use_parsimony:
+        measurer = SPRDistanceMeasurer(true_tree, args.scratch_dir)
         parsimony_trees_grouped = get_parsimony_trees(
             obs_leaves,
             args,
             bcode_meta,
             true_tree,
+            measurer,
             args.max_trees)
         logging.info("Parsimony SPR distances: %s ", parsimony_trees_grouped.keys())
 
@@ -288,12 +274,12 @@ def main(args=sys.argv[1:]):
         parsimony_dist_dicts = tree_dist_measurers.get_tree_dists([fitted_parsimony_tree])
         logging.info("parsimony pen log lik %s", parsimony_pen_log_lik)
         logging.info("parsimony dist %s", parsimony_dist_dicts)
+        logging.info(fitted_parsimony_tree.get_ascii(attributes=["dist"], show_internal=True))
+        logging.info(fitted_parsimony_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
     #######
     # Fit continuous parameterization of ambiguous multifurcating trees
     ######
-    multifurc_sess = tf.InteractiveSession()
-
     # Collapse the oracle tree
     coll_tree = true_tree.copy("deepcopy")
     for n in coll_tree.traverse():
@@ -302,25 +288,31 @@ def main(args=sys.argv[1:]):
             if n.allele_events_list_str == n.up.allele_events_list_str:
                 n.dist = 0
         n.resolved_multifurcation = False
+    print(coll_tree.get_ascii(attributes=["dist"], show_internal=True))
+    print(coll_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
     coll_tree = collapse_zero_lens(coll_tree)
+    print(coll_tree.get_ascii(attributes=["dist"], show_internal=True))
+    print(coll_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
     coll_tree.label_node_ids()
 
     np.random.seed(seed=args.optim_seed)
     pen_log_lik, _, multifurc_model = fit_pen_likelihood(
             coll_tree,
             bcode_meta,
-            None,
+            None, # Do not use cell type info
             args.know_cell_lambdas,
             np.array(args.target_lambdas) if args.know_target_lambdas else None,
             args.log_barr,
             args.max_iters,
             approximator,
-            multifurc_sess,
+            sess,
             tot_time = args.time,
             dist_measurers = tree_dist_measurers)
-    bifurc_tree = multifurc_model.get_fitted_bifurcating_tree()
+    fitted_bifurc_tree = multifurc_model.get_fitted_bifurcating_tree()
+    logging.info(fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
+    logging.info(fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
-    final_dist_dicts = tree_dist_measurers.get_tree_dists([bifurc_tree])
+    final_dist_dicts = tree_dist_measurers.get_tree_dists([fitted_bifurc_tree])
     logging.info(final_dist_dicts)
 
     logging.info("---- MULTIFURC FITTING -----")

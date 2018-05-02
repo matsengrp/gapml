@@ -23,7 +23,7 @@ class LikelihoodScorer(ParallelWorker):
             log_barr: float,
             max_iters: int,
             approximator: ApproximatorLB,
-            tot_time: float = 1,
+            tot_time: float,
             init_model_vars: Dict[str, ndarray] = None):
         """
         @param seed: required to set the seed of each parallel worker
@@ -70,8 +70,8 @@ class LikelihoodScorer(ParallelWorker):
             self.max_iters,
             self.approximator,
             sess,
-            warm_start=self.init_model_vars,
-            tot_time=self.tot_time)
+            self.tot_time,
+            warm_start=self.init_model_vars)
         return pen_ll, res_model.get_vars_as_dict(), res_model.get_branch_lens(), train_history
 
     def __str__(self):

@@ -18,6 +18,8 @@ import pickle
 from pathlib import Path
 from numpy import ndarray
 import copy
+import typing
+from typing import List
 
 from cell_lineage_tree import CellLineageTree
 from cell_state import CellState, CellTypeTree
@@ -26,25 +28,25 @@ from clt_simulator import CLTSimulatorBifurcating
 from clt_simulator_simple import CLTSimulatorOneLayer, CLTSimulatorTwoLayers
 from allele_simulator_simult import AlleleSimulatorSimultaneous
 from allele import Allele
-from clt_observer import CLTObserver
+from clt_observer import CLTObserver, ObservedAlignedSeq
 from clt_estimator import CLTParsimonyEstimator
 from clt_likelihood_estimator import *
 from alignment import AlignerNW
 from barcode_metadata import BarcodeMetadata
 from approximator import ApproximatorLB
-from tree_distance import *
+from tree_distance import TreeDistanceMeasurer, TreeDistanceMeasurerAgg
 
 from constants import *
 from common import *
 from summary_util import *
 
 def get_parsimony_trees(
-        obs_leaves,
+        obs_leaves: List[ObservedAlignedSeq],
         args,
-        bcode_meta,
-        true_tree,
-        max_trees:int,
-        do_collapse:bool=False):
+        bcode_meta: BarcodeMetadata,
+        measurer: TreeDistanceMeasurer,
+        max_trees: int,
+        do_collapse: bool=False):
     parsimony_estimator = CLTParsimonyEstimator(
             bcode_meta,
             args.out_folder,
@@ -59,7 +61,6 @@ def get_parsimony_trees(
     parsimony_score = parsimony_trees[0].get_parsimony_score()
     logging.info("parsimony scores %d", parsimony_score)
 
-    measurer = SPRDistanceMeasurer(true_tree, args.scratch_dir)
     parsimony_trees_grouped = measurer.group_trees_by_dist(parsimony_trees, max_trees)
     return parsimony_trees_grouped
 
@@ -196,19 +197,22 @@ def fit_pen_likelihood(
         max_iters: int,
         approximator: ApproximatorLB,
         sess: Session,
+        tot_time: float,
         warm_start: Dict[str, ndarray] = None,
         br_len_scale: float = 0.1,
-        br_len_shrink: float = 0.8,
-        tot_time: float = 1,
-        max_branch_attempts: int = 10,
-        branch_len_inners: ndarray = None,
-        branch_len_offsets: ndarray = None,
+        branch_len_inners: ndarray = None, # If not given, randomly initialize
+        branch_len_offsets: ndarray = None, # If not given, randomly initialize
         dist_measurers: TreeDistanceMeasurerAgg = None):
     """
     Fit the model for the given tree topology
     @param warm_start: use the given variables to initialize the model
                         If None, then start from scratch
+    @param dist_measurers: if provided, passes it to the Estimator to see
+                        how distance changes thru the training procedure
     """
+    # TODO: didn't implement warm start for this multifurcating case
+    assert warm_start is None
+
     num_nodes = tree.get_num_nodes()
     if branch_len_inners is None:
         branch_len_inners = np.random.rand(num_nodes) * br_len_scale
@@ -235,42 +239,8 @@ def fit_pen_likelihood(
             approximator,
             log_barr)
 
-    if warm_start is None:
-        # Initialize with parameters such that the branch lengths are positive
-        all_branch_lens_positive = all([b > 0 for b in res_model.get_branch_lens()[1:]])
-        for j in range(max_branch_attempts):
-            if all_branch_lens_positive:
-                break
-            print("attempt %d to make br lens all positive" % j)
-            # Keep initializing branch lengths until they are all positive
-            model_vars = res_model.get_vars_as_dict()
-            br_len_scale *= br_len_shrink
-            model_vars["branch_len_inners"] = np.random.rand(num_nodes) * br_len_scale
-
-            # Initialize branch length offsets
-            model_vars["branch_len_offsets"] = np.random.rand(num_nodes) * br_len_scale
-            for node in tree.traverse():
-                if node.is_root() or node.up.is_resolved_multifurcation() or node.is_copy:
-                    # Make sure the root or bifurcating nodes don't have offsets
-                    model_vars["branch_len_offsets"][node.node_id] = 1e-20
-            print("start br len off", model_vars["branch_len_offsets"])
-
-            res_model.set_params_from_dict(model_vars)
-            all_branch_lens_positive = all([b > 0 for b in res_model.get_branch_lens()[1:]])
-        assert all_branch_lens_positive
-    else:
-        # calculate branch length from tree
-        raise NotImplementedError("didnt deal with branch len offsets")
-        for node in tree.traverse():
-            if not node.is_root() and not node.is_leaf():
-                branch_len_inners[node.node_id] = node.dist
-
-        model_vars = copy.deepcopy(warm_start)
-        model_vars["branch_len_inners"] = branch_len_inners
-        res_model.set_params_from_dict(model_vars)
-
-    # This line is just to check that the tree is initialized to be ultrametric
-    res_model.get_fitted_bifurcating_tree()
+    # Initialize with parameters such that the branch lengths are positive
+    res_model.initialize_branch_lens(br_len_scale=br_len_scale)
 
     pen_log_lik, history = estimator.fit(max_iters, dist_measurers = dist_measurers)
 

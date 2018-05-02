@@ -1,6 +1,7 @@
 from typing import List, Dict, Tuple
 import numpy as np
 import logging
+import random
 
 from allele import Allele, AlleleList
 from allele_events import AlleleEvents
@@ -154,6 +155,8 @@ class CLTObserver:
         if len(observations) == 0:
             raise RuntimeError('all lineages extinct, nothing to observe')
 
+        obs_vals = list(observations.values())
+        random.shuffle(obs_vals)
         if give_pruned_clt:
             # This section just checks that the collapsing procedure is correct
             obs_evts_list = []
@@ -167,7 +170,7 @@ class CLTObserver:
             logging.info("diff events? %s", str(set(tree_evts) - set(obs_evts_list)))
             assert set(tree_evts) == set(obs_evts_list), "the two sets are not equal"
             # End of checking
-
-            return list(observations.values()), clt
+            
+            return obs_vals, clt
         else:
-            return list(observations.values())
+            return obs_vals

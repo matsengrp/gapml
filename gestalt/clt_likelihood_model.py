@@ -308,6 +308,39 @@ class CLTLikelihoodModel:
         return self.sess.run(self.branch_lens, feed_dict={
             self.tot_time_ph: self.tot_time})
 
+    def initialize_branch_lens(self,
+            max_attempts: int=10,
+            br_len_scale: float=0.1,
+            br_len_shrink: float=0.8):
+        """
+        Will randomly initialize branch lengths if they are not all positive already
+        @param max_attempts: will try at most 10 times to initialize branch lengths
+        """
+        def _are_all_branch_lens_positive():
+            return all([b > 0 for b in self.get_branch_lens()[1:]])
+
+        for j in range(max_attempts):
+            if _are_all_branch_lens_positive():
+                break
+            print("attempt %d to make br lens all positive" % j)
+            # Keep initializing branch lengths until they are all positive
+            model_vars = self.get_vars_as_dict()
+            br_len_scale *= br_len_shrink
+            model_vars["branch_len_inners"] = np.random.rand(num_nodes) * br_len_scale
+
+            # Initialize branch length offsets
+            model_vars["branch_len_offsets"] = np.random.rand(num_nodes) * br_len_scale
+            for node in self.topology.traverse():
+                if node.is_root() or node.up.is_resolved_multifurcation() or node.is_copy:
+                    # Make sure the root or bifurcating nodes don't have offsets
+                    model_vars["branch_len_offsets"][node.node_id] = 0
+
+            self.set_params_from_dict(model_vars)
+
+        assert _are_all_branch_lens_positive()
+        # This line is just to check that the tree is initialized to be ultrametric
+        self.get_fitted_bifurcating_tree()
+
     def _create_hazard_node_for_simulation(self):
         """
         creates nodes just for calculating the hazard when simulating stuff
@@ -860,11 +893,17 @@ class CLTLikelihoodModel:
             self.create_cell_type_log_lik()
             self.log_lik = self.log_lik_cell_type + self.log_lik_alleles
 
-        self.branch_log_barr = tf.reduce_sum(tf.log(
-            self.branch_lens[self.root_node_id + 1:]))
+        #self.branch_log_barr = tf.reduce_sum(tf.log(
+        #    self.branch_lens[self.root_node_id + 1:]))
+        # penalize the leaf branch lengths if they get too close to zero
+        # (preventing things from going negative)
+        self.branch_log_barr = tf.reduce_sum(tf.log(tf.gather(
+            self.branch_lens,
+            indices = [leaf.node_id for leaf in self.topology])))
         self.smooth_log_lik = tf.add(
                 self.log_lik,
                 self.log_barr_ph * self.branch_log_barr)
+
         self.smooth_log_lik_grad = self.adam_opt.compute_gradients(
             self.smooth_log_lik,
             var_list=[self.all_vars])
