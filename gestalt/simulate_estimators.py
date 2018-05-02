@@ -371,7 +371,7 @@ def main(args=sys.argv[1:]):
         result_print_list["num_leaves"] = num_leaves
         result_print_list["model_seed"] = args.model_seed
         result_print_list["data_seed"] = args.data_seed
-        result_print_list["log_lik"] = res.train_history[-1]["log_lik"]
+        result_print_list["log_lik"] = res.train_history[-1]["log_lik"][0]
         all_print_results.append(result_print_list)
 
         logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
