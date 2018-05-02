@@ -15,6 +15,7 @@ from allele import Allele, AlleleList
 from allele_events import Event
 from cell_state import CellState
 from barcode_metadata import BarcodeMetadata
+from tree_distance import UnrootRFDistanceMeasurer
 
 from constants import MIX_CFG_FILE, MIX_PATH
 

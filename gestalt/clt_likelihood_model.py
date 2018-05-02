@@ -41,21 +41,21 @@ class CLTLikelihoodModel:
             insert_poisson: float = 0.2,
             double_cut_weight: float = 1.0,
             branch_len_inners: ndarray = np.array([]),
+            branch_len_offsets: ndarray = np.array([]),
             cell_type_tree: CellTypeTree = None,
             cell_lambdas_known: bool = False,
             tot_time: float = 1):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
-        @param group_branch_lens: array with length = number of tree nodes (not all of these parameters will be used)
-                                  the value indicates length of branches for children nodes
-        @param branch_len_perturbs: array with length = number of tree nodes (not all of these parameters will be used)
-                                  the value indicates perturbation from length of branches for node
-        Will randomly initialize model parameters
+        @param double_cut_weight: a weight for inter-target indels
+        @param cell_type_tree: CellTypeTree that specifies the initialization of cell type lambdas
         """
         self.topology = topology
         self.num_nodes = 0
         if self.topology:
-            self.root_node_id, self.num_nodes = topology.label_node_ids()
+            self.root_node_id = self.topology.node_id
+            assert self.root_node_id == 0
+            self.num_nodes = self.topology.get_num_nodes()
         self.bcode_meta = bcode_meta
         self.num_targets = bcode_meta.n_targets
         self.double_cut_weight = double_cut_weight
@@ -95,7 +95,10 @@ class CLTLikelihoodModel:
                 [insert_zero_prob],
                 [insert_poisson],
                 branch_len_inners,
+                branch_len_offsets,
                 cell_type_lams)
+        if self.topology:
+            self.branch_lens = self._create_branch_lens()
 
         self._create_hazard_node_for_simulation()
 
@@ -109,6 +112,7 @@ class CLTLikelihoodModel:
             insert_zero_prob: float,
             insert_poisson: float,
             branch_len_inners: ndarray,
+            branch_len_offsets: ndarray,
             cell_type_lams: ndarray):
         # Fix the first target value -- not for optimization
         model_params = np.concatenate([
@@ -119,6 +123,7 @@ class CLTLikelihoodModel:
                     inv_sigmoid(insert_zero_prob),
                     np.log(insert_poisson),
                     np.log(branch_len_inners),
+                    np.log(branch_len_offsets),
                     [] if self.cell_lambdas_known else np.log(cell_type_lams)])
         self.all_vars = tf.Variable(model_params, dtype=tf.float64)
         self.all_vars_ph = tf.placeholder(tf.float64, shape=self.all_vars.shape)
@@ -154,6 +159,9 @@ class CLTLikelihoodModel:
         prev_size = up_to_size
         up_to_size += branch_len_inners.size
         self.branch_len_inners = tf.exp(self.all_vars[prev_size: up_to_size])
+        prev_size = up_to_size
+        up_to_size += branch_len_offsets.size
+        self.branch_len_offsets = tf.exp(self.all_vars[prev_size: up_to_size])
         if self.cell_type_tree:
             if self.cell_lambdas_known:
                 self.cell_type_lams = tf.constant(cell_type_lams, dtype=tf.float64)
@@ -167,25 +175,53 @@ class CLTLikelihoodModel:
         self.poiss_right = tf.contrib.distributions.Poisson(self.trim_poissons[1])
         self.poiss_insert = tf.contrib.distributions.Poisson(self.insert_poisson)
 
-        # Get branch lengths
-        if self.topology:
-            branch_lens_dict = []
-            dist_to_root = {self.root_node_id: 0}
-            for node in self.topology.traverse("preorder"):
-                if not node.is_root() and not node.is_leaf():
+    def _create_branch_lens(self):
+        """
+        Create the branch length variable
+        """
+        branch_lens_dict = []
+        dist_to_root = {self.root_node_id: 0}
+        for node in self.topology.traverse("preorder"):
+            if node.is_root():
+                continue
+
+            if not node.up.is_resolved_multifurcation():
+                if node.is_copy:
+                    # Remember that copy nodes must be leaves -- take the max offset to be this node's offset
+                    max_offset = tf.reduce_max(tf.stack([
+                        self.branch_len_offsets[sister.node_id] for sister in node.get_sisters()]),
+                        name="max_offset")
+                    branch_lens_dict.append([
+                        [node.node_id],
+                        self.tot_time_ph - dist_to_root[node.up.node_id] - max_offset])
+                elif node.is_leaf():
+                    # A leaf node that is not a copy
+                    # Therefore use it's offset to determine branch length
+                    branch_lens_dict.append([
+                        [node.node_id],
+                        self.tot_time_ph - dist_to_root[node.up.node_id] - self.branch_len_offsets[node.node_id]])
+                else:
+                    # Internal node -- use the branch length to specify the branch length
+                    # But use the offset + branch length to determine distance from root
+                    branch_lens_dict.append([
+                        [node.node_id],
+                        self.branch_len_inners[node.node_id]])
+                    dist_to_root[node.node_id] = dist_to_root[node.up.node_id] + self.branch_len_inners[node.node_id] + self.branch_len_offsets[node.node_id]
+            else:
+                if not node.is_leaf():
                     branch_lens_dict.append([
                         [node.node_id],
                         self.branch_len_inners[node.node_id]])
                     dist_to_root[node.node_id] = dist_to_root[node.up.node_id] + self.branch_len_inners[node.node_id]
-                elif node.is_leaf():
+                else:
                     branch_lens_dict.append([
                         [node.node_id],
                         self.tot_time_ph - dist_to_root[node.up.node_id]])
 
-            self.branch_lens = tf_common.scatter_nd(
-                    branch_lens_dict,
-                    output_shape=self.branch_len_inners.shape,
-                    name="branch_lengths")
+        return tf_common.scatter_nd(
+                branch_lens_dict,
+                output_shape=self.branch_len_inners.shape,
+                name="branch_lengths")
 
     def set_params_from_dict(self, param_dict: Dict[str, ndarray]):
         self.set_params(
@@ -196,6 +232,7 @@ class CLTLikelihoodModel:
                 param_dict["insert_zero_prob"],
                 param_dict["insert_poisson"],
                 param_dict["branch_len_inners"],
+                param_dict["branch_len_offsets"],
                 param_dict["cell_type_lams"],
                 param_dict["tot_time"])
 
@@ -207,6 +244,7 @@ class CLTLikelihoodModel:
             insert_zero_prob: float,
             insert_poisson: float,
             branch_len_inners: ndarray,
+            branch_len_offsets: ndarray,
             cell_type_lams: ndarray,
             tot_time: float):
         """
@@ -225,6 +263,7 @@ class CLTLikelihoodModel:
             inv_sigmoid(insert_zero_prob),
             np.log(insert_poisson),
             np.log(branch_len_inners),
+            np.log(branch_len_offsets),
             [] if self.cell_lambdas_known else np.log(cell_type_lams)])
         self.sess.run(self.assign_op, feed_dict={self.all_vars_ph: init_val})
 
@@ -240,6 +279,7 @@ class CLTLikelihoodModel:
             self.insert_zero_prob,
             self.insert_poisson,
             self.branch_len_inners,
+            self.branch_len_offsets,
             self.cell_type_lams]) + [self.tot_time]
 
     def get_vars_as_dict(self):
@@ -255,6 +295,7 @@ class CLTLikelihoodModel:
             "insert_zero_prob",
             "insert_poisson",
             "branch_len_inners",
+            "branch_len_offsets",
             "cell_type_lams"]
         var_dict = {lab: val for lab, val in zip(var_labels, var_vals)}
         var_dict["tot_time"] = self.tot_time
@@ -266,6 +307,39 @@ class CLTLikelihoodModel:
         """
         return self.sess.run(self.branch_lens, feed_dict={
             self.tot_time_ph: self.tot_time})
+
+    def initialize_branch_lens(self,
+            max_attempts: int=10,
+            br_len_scale: float=0.1,
+            br_len_shrink: float=0.8):
+        """
+        Will randomly initialize branch lengths if they are not all positive already
+        @param max_attempts: will try at most 10 times to initialize branch lengths
+        """
+        def _are_all_branch_lens_positive():
+            return all([b > 0 for b in self.get_branch_lens()[1:]])
+
+        for j in range(max_attempts):
+            if _are_all_branch_lens_positive():
+                break
+            print("attempt %d to make br lens all positive" % j)
+            # Keep initializing branch lengths until they are all positive
+            model_vars = self.get_vars_as_dict()
+            br_len_scale *= br_len_shrink
+            model_vars["branch_len_inners"] = np.random.rand(self.num_nodes) * br_len_scale
+
+            # Initialize branch length offsets
+            model_vars["branch_len_offsets"] = np.random.rand(self.num_nodes) * br_len_scale
+            for node in self.topology.traverse():
+                if node.is_root() or node.up.is_resolved_multifurcation() or node.is_copy:
+                    # Make sure the root or bifurcating nodes don't have offsets
+                    model_vars["branch_len_offsets"][node.node_id] = 0
+
+            self.set_params_from_dict(model_vars)
+
+        assert _are_all_branch_lens_positive()
+        # This line is just to check that the tree is initialized to be ultrametric
+        self.get_fitted_bifurcating_tree()
 
     def _create_hazard_node_for_simulation(self):
         """
@@ -534,9 +608,9 @@ class CLTLikelihoodModel:
         """
         @return the log likelihood and the gradient, if requested
         """
+        feed_dict = {self.tot_time_ph: self.tot_time}
         if get_grad and not do_logging:
-            log_lik, grad = self.sess.run(
-                    [self.log_lik, self.log_lik_grad])
+            log_lik, grad = self.sess.run([self.log_lik, self.log_lik_grad], feed_dict=feed_dict)
             return log_lik, grad[0][0]
         elif do_logging:
             # For tensorflow logging
@@ -552,12 +626,14 @@ class CLTLikelihoodModel:
             if get_grad:
                 log_lik, grad, Ds, q_mats, D_types = self.sess.run(
                         [self.log_lik, self.log_lik_grad, D_vals, trans_mats_vals, D_cell_type_vals],
+                        feed_dict = feed_dict,
                         options=run_options,
                         run_metadata=run_metadata)
                 grad = grad[0][0]
             else:
                 log_lik, Ds, q_mats, D_types = self.sess.run(
                         [self.log_lik, D_vals, trans_mats_vals, D_cell_type_vals],
+                        feed_dict = feed_dict,
                         options=run_options,
                         run_metadata=run_metadata)
                 grad = None
@@ -576,7 +652,7 @@ class CLTLikelihoodModel:
 
             return log_lik, grad
         else:
-            return self.sess.run(self.log_lik), None
+            return self.sess.run(self.log_lik, feed_dict = feed_dict), None
 
     def _create_cell_type_instant_matrix(self, haz_away=1e-10):
         num_leaves = tf.constant(len(self.cell_type_tree), dtype=tf.float64)
@@ -683,6 +759,40 @@ class CLTLikelihoodModel:
             self.Ddiags_list.append(Ddiags)
         self.log_lik_alleles = tf.add_n(self.log_lik_alleles_list)
 
+    def _initialize_lower_prob(self,
+            transition_matrix_wrappers: Dict[int, List[TransitionMatrixWrapper]],
+            node: CellLineageTree,
+            bcode_idx: int):
+        """
+        Initialize the Lprob element with the first part of the product
+            For unresolved multifurcs, this is the probability of staying in this same ancestral state (the spine's probability)
+                for root nodes, this returns a scalar.
+                for non-root nodes, this returns a vector with the initial value for all ancestral states under consideration.
+            For resolved multifurcs, this is one
+        """
+        if not node.is_resolved_multifurcation():
+            # Then we need to multiply the probability of the "spine" -- assuming constant ancestral state along the entire spine
+            time_stays_constant = tf.reduce_max(tf.stack([
+                self.branch_len_offsets[child.node_id]
+                for child in node.children if not child.is_copy]))
+            if not node.is_root():
+                # When making this probability, order the elements per the transition matrix of this node
+                trans_mat_w = transition_matrix_wrappers[node.node_id][bcode_idx]
+                index_vals = [[
+                        [trans_mat_w.key_dict[tract_repr], 0],
+                        self.hazard_away_dict[tract_repr]]
+                    for tract_repr in node.state_sum_list[bcode_idx].tract_repr_list]
+                haz_aways = tf_common.scatter_nd(
+                        index_vals,
+                        output_shape=[trans_mat_w.num_likely_states + 1, 1],
+                        name="haz_away.multifurc")
+                return tf.exp(-haz_aways * time_stays_constant)
+            else:
+                root_haz_away = self.hazard_away_dict[TractRepr()] 
+                return tf.exp(-root_haz_away * time_stays_constant)
+        else:
+            return tf.constant(1.0, dtype=tf.float64)
+
     def _create_topology_log_lik_barcode(self,
             transition_matrix_wrappers: Dict[int, List[TransitionMatrixWrapper]],
             bcode_idx: int):
@@ -705,7 +815,11 @@ class CLTLikelihoodModel:
                 # Convert to tensorflow usage
                 Lprob[node.node_id] = tf.constant(Lprob[node.node_id], dtype=tf.float64)
             else:
-                Lprob[node.node_id] = tf.constant(1.0, dtype=tf.float64)
+                Lprob[node.node_id] = self._initialize_lower_prob(
+                        transition_matrix_wrappers,
+                        node,
+                        bcode_idx)
+
                 for child in node.children:
                     ch_trans_mat_w = transition_matrix_wrappers[child.node_id][bcode_idx]
                     with tf.name_scope("Transition_matrix%d" % node.node_id):
@@ -767,6 +881,7 @@ class CLTLikelihoodModel:
                 tf.reduce_sum(tf.log(scaling_terms), name="add_normalizer"),
                 tf.log(Lprob[self.root_node_id]),
                 name="alleles_log_lik")
+
         return log_lik_alleles, Ddiags
 
     def create_log_lik(self, transition_matrix_wrappers: Dict):
@@ -778,11 +893,15 @@ class CLTLikelihoodModel:
             self.create_cell_type_log_lik()
             self.log_lik = self.log_lik_cell_type + self.log_lik_alleles
 
-        self.branch_log_barr = tf.reduce_sum(tf.log(
-            self.branch_lens[self.root_node_id + 1:]))
+        # penalize the leaf branch lengths if they get too close to zero
+        # (preventing things from going negative)
+        self.branch_log_barr = tf.reduce_sum(tf.log(tf.gather(
+            self.branch_lens,
+            indices = [leaf.node_id for leaf in self.topology])))
         self.smooth_log_lik = tf.add(
                 self.log_lik,
                 self.log_barr_ph * self.branch_log_barr)
+
         self.smooth_log_lik_grad = self.adam_opt.compute_gradients(
             self.smooth_log_lik,
             var_list=[self.all_vars])
@@ -1017,6 +1136,63 @@ class CLTLikelihoodModel:
                 tf.reduce_sum(inter_target_hazards, axis=1),
                 name="hazard_away")
         return hazard_away_nodes
+
+    def get_fitted_bifurcating_tree(self):
+        """
+        Recall the model was parameterized as a continuous formulation for a multifurcating tree.
+        This function returns the bifurcating tree topology using the current model parameters.
+        @return CellLineageTree
+        """
+        # Get the current model parameters
+        br_lens, br_len_offsets = self.sess.run(
+                [self.branch_lens, self.branch_len_offsets],
+                feed_dict={self.tot_time_ph: self.tot_time})
+
+        scratch_tree = self.topology.copy("deepcopy")
+        for node in scratch_tree.traverse("preorder"):
+            if not node.is_resolved_multifurcation():
+                copy_child = None
+                for c in node.get_children():
+                    if c.is_copy:
+                        copy_child = c
+
+                # Resolve the multifurcation by creating the spine of "identifcal" nodes
+                children_not_copies = [c for c in node.get_children() if not c.is_copy]
+                children_offsets = [br_len_offsets[c.node_id] for c in children_not_copies]
+                sort_indexes = np.argsort(children_offsets)
+                
+                curr_offset = 0
+                curr_spine_node = node
+                for idx in sort_indexes:
+                    new_spine_node = CellLineageTree(
+                            allele_list = node.allele_list,
+                            allele_events_list = node.allele_events_list,
+                            cell_state = node.cell_state,
+                            dist = children_offsets[idx] - curr_offset)
+                    new_spine_node.node_id = None
+                    curr_spine_node.add_child(new_spine_node)
+
+                    child = children_not_copies[idx]
+                    node.remove_child(child)
+                    new_spine_node.add_child(child)
+
+                    curr_spine_node = new_spine_node
+                    curr_offset = children_offsets[idx]
+
+                # If this node is observed, then create the corresponding leaf last
+                if copy_child is not None:
+                    node.remove_child(copy_child)
+                    curr_spine_node.add_child(copy_child)
+
+            if node.is_root():
+                node.dist = 0
+            elif node.node_id is not None:
+                node.dist = br_lens[node.node_id]
+
+        # Just checking that the tree is ultrametric
+        for leaf in scratch_tree:
+            assert np.isclose(self.tot_time, leaf.get_distance(scratch_tree))
+        return scratch_tree
 
     def create_logger(self):
         self.profile_writer = tf.summary.FileWriter("_output", self.sess.graph)

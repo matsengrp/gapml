@@ -221,7 +221,7 @@ def main(args=sys.argv[1:]):
                 args.max_iters,
                 approximator,
                 sess,
-                tot_time = args.time)
+                args.time)
         # Use this as a reference
         logging.info("oracle %f", oracle_pen_ll)
 

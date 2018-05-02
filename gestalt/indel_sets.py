@@ -6,7 +6,7 @@ from barcode_metadata import BarcodeMetadata
 
 class IndelSet(tuple):
     """
-    A superclass for wildcard and singleton-wildcards
+    A superclass for things that represent sets of Indels
     """
     def __new__(cls):
         # Don't call this by itself
@@ -27,6 +27,9 @@ class IndelSet(tuple):
                 return Wildcard.intersect(wc1, wc2)
 
 class Wildcard(IndelSet):
+    """
+    See definition of Wildcard in the manuscript
+    """
     def __new__(cls,
             min_target: int,
             max_target: int):
@@ -68,8 +71,7 @@ class Wildcard(IndelSet):
 
 class SingletonWC(IndelSet):
     """
-    Actually the same definition as an Event right now....
-    TODO: do not repeat code?
+    See definition of Singleton-wildcard in manuscript
     """
     def __new__(cls,
             start_pos: int,
@@ -133,9 +135,10 @@ class SingletonWC(IndelSet):
 
 class Singleton(IndelSet):
     """
+    This represents an indel set containing a single indel event
+
     Actually the same definition as an Event right now....
-    Actually a singleton now... so same as event?
-    TODO: do not repeat code?
+    Think about not duplicating code?
     """
     def __new__(cls,
             start_pos: int,
@@ -202,6 +205,10 @@ class Singleton(IndelSet):
                 self.max_deact_target)
 
 class DeactEvt(IndelSet):
+    """
+    An event that will deactivate targets
+    Implements a function that specifies what targets are deactivated
+    """
     def __new__(cls):
         # Don't call this by itself
         raise NotImplementedError()
@@ -210,6 +217,9 @@ class DeactEvt(IndelSet):
         raise NotImplementedError()
 
 class Tract(IndelSet):
+    """
+    A tract is an object with a min and max deactivated target
+    """
     def __new__(cls):
         # Don't call this by itself
         raise NotImplementedError()
@@ -223,6 +233,9 @@ class Tract(IndelSet):
         return self[-1]
 
 class TargetTract(Tract, DeactEvt):
+    """
+    See definition in the manuscript
+    """
     def __new__(cls,
             min_deact_targ: int,
             min_targ: int,
@@ -261,6 +274,10 @@ class TargetTract(Tract, DeactEvt):
         return self
 
 class DeactTract(Tract):
+    """
+    Stores min and max deactivated targets
+    Object for easy computation in the code
+    """
     def __new__(cls, min_deact_target, max_deact_target):
         return tuple.__new__(cls, (min_deact_target, max_deact_target))
 
@@ -294,6 +311,9 @@ class DeactTargetsEvt(DeactEvt):
         return DeactTract(self.min_deact_target, self.max_deact_target)
 
 class AncState:
+    """
+    See AncState defined in the manuscript
+    """
     def __init__(self, indel_set_list: List[IndelSet] = []):
         self.indel_set_list = indel_set_list
 
@@ -360,6 +380,11 @@ class AncState:
         return [indel_set for indel_set in self.indel_set_list if indel_set.__class__ == SingletonWC]
 
 class TractRepr(tuple):
+    """
+    Look up "target tract representation" in the manuscript
+    Essentially a tuple of target tracts
+    (Used as an allele group to sum over in the likelihood calculation)
+    """
     def __new__(cls, *args):
         return tuple.__new__(cls, args)
 

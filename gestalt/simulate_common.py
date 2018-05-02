@@ -18,6 +18,8 @@ import pickle
 from pathlib import Path
 from numpy import ndarray
 import copy
+import typing
+from typing import List
 
 from cell_lineage_tree import CellLineageTree
 from cell_state import CellState, CellTypeTree
@@ -26,19 +28,25 @@ from clt_simulator import CLTSimulatorBifurcating
 from clt_simulator_simple import CLTSimulatorOneLayer, CLTSimulatorTwoLayers
 from allele_simulator_simult import AlleleSimulatorSimultaneous
 from allele import Allele
-from clt_observer import CLTObserver
+from clt_observer import CLTObserver, ObservedAlignedSeq
 from clt_estimator import CLTParsimonyEstimator
 from clt_likelihood_estimator import *
 from alignment import AlignerNW
 from barcode_metadata import BarcodeMetadata
 from approximator import ApproximatorLB
-from tree_distance import UnrootRFDistanceMeasurer
+from tree_distance import TreeDistanceMeasurer, TreeDistanceMeasurerAgg
 
 from constants import *
 from common import *
 from summary_util import *
 
-def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_trees):
+def get_parsimony_trees(
+        obs_leaves: List[ObservedAlignedSeq],
+        args,
+        bcode_meta: BarcodeMetadata,
+        measurer: TreeDistanceMeasurer,
+        max_trees: int,
+        do_collapse: bool=False):
     parsimony_estimator = CLTParsimonyEstimator(
             bcode_meta,
             args.out_folder,
@@ -46,22 +54,15 @@ def get_parsimony_trees(obs_leaves, args, bcode_meta, true_tree, max_trees):
     #TODO: DOESN'T USE CELL STATE
     parsimony_trees = parsimony_estimator.estimate(
             obs_leaves,
-            num_mix_runs=args.num_jumbles)
+            num_mix_runs=args.num_jumbles,
+            do_collapse=do_collapse)
     logging.info("Total parsimony trees %d", len(parsimony_trees))
 
     parsimony_score = parsimony_trees[0].get_parsimony_score()
     logging.info("parsimony scores %d", parsimony_score)
 
-    # Group the trees together by RF distance
-    measurer = UnrootRFDistanceMeasurer(true_tree)
-    parsimony_tree_dict = measurer.group_trees_by_dist(parsimony_trees, max_trees)
-
-    # Print details
-    for dist, tree_group in parsimony_tree_dict.items():
-        logging.info("rf dist %d, num %d", dist, len(tree_group))
-        for tree in tree_group:
-            logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-    return parsimony_tree_dict
+    parsimony_trees_grouped = measurer.group_trees_by_dist(parsimony_trees, max_trees)
+    return parsimony_trees_grouped
 
 def create_cell_type_tree(args):
     # This first rate means nothing!
@@ -98,7 +99,12 @@ def create_simulators(args, clt_model):
     observer = CLTObserver()
     return clt_simulator, observer
 
-def create_cell_lineage_tree(args, clt_model):
+def create_cell_lineage_tree(args, clt_model, bifurcating_only: bool = False):
+    """
+    @param bifurcating_only: return a collapsed clt that is bifurcating (so sample leaves
+                            so that we only get bifurcations)
+    @return original clt, the set of observed leaves, and the true topology for the observed leaves
+    """
     clt_simulator, observer = create_simulators(args, clt_model)
 
     # Keep trying to make CLT until enough leaves in observed tree
@@ -111,6 +117,7 @@ def create_cell_lineage_tree(args, clt_model):
             data_seed = args.data_seed,
             time = args.time,
             max_nodes = args.max_clt_nodes)
+        clt.label_node_ids()
 
         sampling_rate = args.sampling_rate
         while (len(obs_leaves) < args.min_leaves or len(obs_leaves) >= args.max_leaves) and sampling_rate <= 1:
@@ -120,7 +127,8 @@ def create_cell_lineage_tree(args, clt_model):
                     sampling_rate,
                     clt,
                     seed=args.model_seed,
-                    observe_cell_state=args.use_cell_state)
+                    observe_cell_state=args.use_cell_state,
+                    bifurcating_only=bifurcating_only)
 
             logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
             num_tries += 1
@@ -138,8 +146,9 @@ def create_cell_lineage_tree(args, clt_model):
 
     if len(obs_leaves) < args.min_leaves:
         raise Exception("Could not manage to get enough leaves")
-    true_tree.label_tree_with_strs()
+
     logging.info(true_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+
     # Check all leaves unique because rf distance code requires leaves to be unique
     # The only reason leaves wouldn't be unique is if we are observing cell state OR
     # we happen to have the same allele arise spontaneously in different parts of the tree.
@@ -188,22 +197,32 @@ def fit_pen_likelihood(
         max_iters: int,
         approximator: ApproximatorLB,
         sess: Session,
+        tot_time: float,
         warm_start: Dict[str, ndarray] = None,
         br_len_scale: float = 0.1,
-        br_len_shrink: float = 0.8,
-        tot_time: float = 1,
-        max_branch_attempts: int = 10):
+        branch_len_inners: ndarray = None, # If not given, randomly initialize
+        branch_len_offsets: ndarray = None, # If not given, randomly initialize
+        dist_measurers: TreeDistanceMeasurerAgg = None):
     """
     Fit the model for the given tree topology
     @param warm_start: use the given variables to initialize the model
                         If None, then start from scratch
+    @param dist_measurers: if provided, passes it to the Estimator to see
+                        how distance changes thru the training procedure
     """
-    num_nodes = len([t for t in tree.traverse()])
-    branch_len_inners = np.random.rand(num_nodes) * br_len_scale
+    # TODO: didn't implement warm start for this multifurcating case
+    assert warm_start is None
+
+    num_nodes = tree.get_num_nodes()
+    if branch_len_inners is None:
+        branch_len_inners = np.random.rand(num_nodes) * br_len_scale
+    if branch_len_offsets is None:
+        branch_len_offsets = np.random.rand(num_nodes) * br_len_scale
     target_lams_known = target_lams is not None
     if not target_lams_known:
-        target_lams = 0.3 * np.ones(bcode_meta.n_targets) + np.random.uniform(size=bcode_meta.n_targets) * 0.08
+        target_lams = 0.04 * np.ones(bcode_meta.n_targets) + np.random.uniform(size=bcode_meta.n_targets) * 0.02
 
+    tree.label_node_ids()
     res_model = CLTLikelihoodModel(
         tree,
         bcode_meta,
@@ -211,6 +230,7 @@ def fit_pen_likelihood(
         target_lams = target_lams,
         target_lams_known=target_lams_known,
         branch_len_inners = branch_len_inners,
+        branch_len_offsets = branch_len_offsets,
         cell_type_tree = cell_type_tree,
         cell_lambdas_known = know_cell_lams,
         tot_time = tot_time)
@@ -219,30 +239,9 @@ def fit_pen_likelihood(
             approximator,
             log_barr)
 
-    if warm_start is None:
-        # Initialize with parameters such that the branch lengths are positive
-        all_branch_lens_positive = all([b > 0 for b in res_model.get_branch_lens()[1:]])
-        for j in range(max_branch_attempts):
-            print("attempt %d to make br lens all positive" % j)
-            # Keep initializing branch lengths until they are all positive
-            model_vars = res_model.get_vars_as_dict()
-            br_len_scale *= br_len_shrink
-            model_vars["branch_len_inners"] = np.random.rand(num_nodes) * br_len_scale
-            res_model.set_params_from_dict(model_vars)
-            all_branch_lens_positive = all([b > 0 for b in res_model.get_branch_lens()[1:]])
-            if all_branch_lens_positive:
-                break
-        assert all_branch_lens_positive
-    else:
-        # calculate branch length from tree
-        for node in tree.traverse():
-            if not node.is_root() and not node.is_leaf():
-                branch_len_inners[node.node_id] = node.dist
+    # Initialize with parameters such that the branch lengths are positive
+    res_model.initialize_branch_lens(br_len_scale=br_len_scale)
 
-        model_vars = copy.deepcopy(warm_start)
-        model_vars["branch_len_inners"] = branch_len_inners
-        res_model.set_params_from_dict(model_vars)
-
-    pen_log_lik, history = estimator.fit(max_iters)
+    pen_log_lik, history = estimator.fit(max_iters, dist_measurers = dist_measurers)
 
     return pen_log_lik, history, res_model

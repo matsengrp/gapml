@@ -208,15 +208,22 @@ def collapse_zero_lens(raw_tree: TreeNode):
 
     # Step 3: add nodes that were observed but were collapsed away.
     # This ensures only one leaf node for each observed allele.
-    for node in tree.traverse():
+    for node in tree.traverse("preorder"):
+        node.add_feature("is_copy", False)
+
+    for node in tree.traverse("preorder"):
         if node.observed and not node.is_leaf():
             # Use a node from the dictionary as a template
             child_template = removed_children_dict[node.name]
             # Copy this node and its features... don't use the original one just in case
-            new_child = TreeNode(name=child_template.name)
-            for feat in child_template.features:
-                new_child.add_feature(feat, getattr(child_template, feat))
+            new_child = CellLineageTree.convert(
+                    child_template,
+                    allele_list = child_template.allele_list,
+                    allele_events_list = child_template.allele_events_list,
+                    cell_state = child_template.cell_state,
+                    resolved_multifurcation = False)
             node.add_child(new_child)
+            new_child.add_feature("is_copy", True)
             new_child.observed = True
             node.observed = False
 

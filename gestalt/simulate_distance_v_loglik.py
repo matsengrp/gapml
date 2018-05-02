@@ -258,7 +258,7 @@ def main(args=sys.argv[1:]):
                         args.log_barr,
                         args.max_iters,
                         approximator,
-                        tot_time = args.time)
+                        args.time)
                 worker_list.append(lik_scorer)
 
         if args.do_distributed and len(worker_list) > 1:
