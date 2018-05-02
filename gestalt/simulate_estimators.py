@@ -56,6 +56,11 @@ def parse_args():
         default=[0.01] * 10,
         help='target cut rates -- will get slightly perturbed for the true value')
     parser.add_argument(
+        '--variance-target-lambdas',
+        type=float,
+        default=0.0008,
+        help='variance of target cut rates (so variance of perturbations)')
+    parser.add_argument(
         '--know-target-lambdas',
         action='store_true')
     parser.add_argument(
@@ -178,7 +183,16 @@ def main(args=sys.argv[1:]):
     bcode_meta = BarcodeMetadata(unedited_barcode = barcode_orig, num_barcodes = args.num_barcodes)
 
     # initialize the target lambdas with some perturbation to ensure we don't have eigenvalues that are exactly equal
-    args.target_lambdas = np.array(args.target_lambdas) + np.random.uniform(size=args.num_targets) * 0.08
+    perturbations = np.random.uniform(size=args.num_targets) - 0.5
+    perturbations = perturbations / np.sqrt(np.var(perturbations)) * np.sqrt(args.variance_target_lambdas)
+    args.target_lambdas = np.array(args.target_lambdas) + perturbations
+    min_lambda = np.min(args.target_lambdas)
+    if min_lambda < 0:
+        boost = 0.00001
+        args.target_lambdas = args.target_lambdas - min_lambda + boost
+        args.birth_lambda += -min_lambda + boost
+        args.death_lambda += -min_lambda + boost
+    assert np.isclose(np.var(args.target_lambdas), args.variance_target_lambdas)
     logging.info("args.target_lambdas %s" % str(args.target_lambdas))
 
     # Create a cell-type tree
@@ -251,9 +265,9 @@ def main(args=sys.argv[1:]):
             obs_leaves,
             args,
             bcode_meta,
-            true_tree,
             measurer,
-            args.max_trees)
+            args.max_trees,
+            do_collapse=False)
         logging.info("Parsimony SPR distances: %s ", parsimony_trees_grouped.keys())
 
         best_spr = sorted(parsimony_trees_grouped.keys())[0]
