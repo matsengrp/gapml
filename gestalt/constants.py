@@ -16,10 +16,9 @@ CONTROL_ORGANS = ["7B_1_to_500_blood", "7B_1_to_20_blood", "7B_1_to_100_blood"]
 COLORS = ["cyan", "green", "orange"]
 
 MIX_CFG_FILE = "mix.cfg"
-#MIX_PATH = "~/phylip-3.697/exe/mix"
-MIX_PATH = "mix"
+MIX_PATH = "~/phylip-3.697/exe/mix"
 
-RSPR_PATH = "/Users/jeanfeng/rspr_1_3_0/rspr"
+RSPR_PATH = "/home/jfeng2/rspr_1_3_0/rspr"
 
 UNLIKELY = "unlikely"
 PERTURB_ZERO = 1e-10

@@ -870,7 +870,7 @@ class CLTLikelihoodModel:
                             Lprob[node.node_id] = tf.multiply(Lprob[node.node_id], ch_ordered_down_probs[ch_id])
 
                 # Handle numerical underflow
-                scaling_term = tf.constant(1.0, dtype=tf.float64) # tf.reduce_sum(Lprob[node.node_id], name="scaling_term")
+                scaling_term = tf.reduce_sum(Lprob[node.node_id], name="scaling_term")
                 Lprob[node.node_id] = tf.div(Lprob[node.node_id], scaling_term, name="sub_log_lik")
                 scaling_terms.append(scaling_term)
 
@@ -1141,9 +1141,11 @@ class CLTLikelihoodModel:
 
     def get_fitted_bifurcating_tree(self):
         """
-        The model params are a continuous formulation for a multifurcating tree.
-        Let us now actually create the bifurcating tree topology using the current model parameters.
+        Recall the model was parameterized as a continuous formulation for a multifurcating tree.
+        This function returns the bifurcating tree topology using the current model parameters.
+        @return CellLineageTree
         """
+        # Get the current model parameters
         br_lens, br_len_offsets = self.sess.run(
                 [self.branch_lens, self.branch_len_offsets],
                 feed_dict={self.tot_time_ph: self.tot_time})
@@ -1151,11 +1153,7 @@ class CLTLikelihoodModel:
         scratch_tree = self.topology.copy("deepcopy")
         for node in scratch_tree.traverse("preorder"):
             if not node.is_resolved_multifurcation():
-                copy_child = None
-                for c in node.get_children():
-                    if c.is_copy:
-                        copy_child = c
-
+                # Resolve the multifurcation by creating the spine of "identifcal" nodes
                 children_not_copies = [c for c in node.get_children() if not c.is_copy]
                 children_offsets = [br_len_offsets[c.node_id] for c in children_not_copies]
                 sort_indexes = np.argsort(children_offsets)
@@ -1167,11 +1165,8 @@ class CLTLikelihoodModel:
                             allele_list = node.allele_list,
                             allele_events_list = node.allele_events_list,
                             cell_state = node.cell_state,
-                            dist = children_offsets[idx] - curr_offset) # temporarily set to zero
+                            dist = children_offsets[idx] - curr_offset)
                     new_spine_node.node_id = None
-                    #for feat in node.features:
-                    #    new_spine_node.add_feature(feat, getattr(node, feat))
-                    #new_spine_node.dist = children_offsets[idx] - curr_offset
                     curr_spine_node.add_child(new_spine_node)
 
                     child = children_not_copies[idx]
@@ -1181,6 +1176,11 @@ class CLTLikelihoodModel:
                     curr_spine_node = new_spine_node
                     curr_offset = children_offsets[idx]
 
+                # If this node is observed, then create the corresponding leaf last
+                copy_child = None
+                for c in node.get_children():
+                    if c.is_copy:
+                        copy_child = c
                 if copy_child is not None:
                     node.remove_child(copy_child)
                     curr_spine_node.add_child(copy_child)
@@ -1190,6 +1190,7 @@ class CLTLikelihoodModel:
             elif node.node_id is not None:
                 node.dist = br_lens[node.node_id]
 
+        # Just checking that the tree is ultrametric
         for leaf in scratch_tree:
             assert np.isclose(self.tot_time, leaf.get_distance(scratch_tree))
         return scratch_tree
