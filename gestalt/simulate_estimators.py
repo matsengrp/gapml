@@ -1,5 +1,12 @@
 """
 A simulation engine to see how well cell lineage estimation performs
+Searches over bifurcating trees with the same multifurcating tree
+by using a continuous parameterization.
+
+This code compares:
+    * using topologies straight from parsimony
+    * topology search using collapsed topologies from parsimony
+    * topology search using collapsed oracle
 """
 from __future__ import division, print_function
 import os
@@ -279,6 +286,7 @@ def main(args=sys.argv[1:]):
                 # Send in name of the tree as auxiliary information
                 aux = name)
 
+    # The dict of trees to fit models for
     trees_to_test = {}
 
     # Get the parsimony-estimated topologies
@@ -303,20 +311,24 @@ def main(args=sys.argv[1:]):
         logging.info("Mean parsimony %s distance: %f", measurer.name, np.mean(parsimony_dists))
         logging.info("Min parsimony %s distance: %d", measurer.name, min_dist)
 
+        # Add the closest tree from parsimony to the list
         trees_to_test["best_parsimony"] = best_parsimony_tree
         logging.info("Best parsimony -- not collapsed")
         logging.info(best_parsimony_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
+        # Add the collapsed version of the closest tree from parsimony to the list
         best_coll_tree = collapse_internally_labelled_tree(best_parsimony_tree)
         trees_to_test["best_pars_multifurc"] = best_coll_tree
         logging.info("Best parsimony -- collapsed")
         logging.info(best_coll_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
+        # Add a random tree from parsimony to the list
         random_parsimony_tree = parsimony_trees[np.random.randint(low=0, high=len(parsimony_trees))]
         trees_to_test["random_parsimony"] = random_parsimony_tree
         logging.info("Random parsimony -- not collapsed")
         logging.info(random_parsimony_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
+        # Add a collapsed version of the random tree from parsimony to the list
         random_coll_tree = collapse_internally_labelled_tree(random_parsimony_tree)
         rf_measurer = UnrootRFDistanceMeasurer(random_coll_tree, None)
         rf_dist = rf_measurer.get_dist(best_coll_tree)
@@ -336,7 +348,7 @@ def main(args=sys.argv[1:]):
         do_collapse=True)
     logging.info("Number of collapsed parsimony trees %d", len(coll_parsimony_trees))
 
-    # Collapse the oracle tree
+    # Add a collapsed version of the oracle tree from parsimony to the list
     oracle_coll_tree = collapse_internally_labelled_tree(true_tree)
     trees_to_test["oracle_multifurc"] = oracle_coll_tree
     logging.info("Oracle collapsed tree")
