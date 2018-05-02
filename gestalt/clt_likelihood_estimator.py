@@ -51,11 +51,16 @@ class CLTPenalizedEstimator(CLTEstimator):
 
     def fit(self,
             max_iters: int,
-            print_iter: int=50,
+            print_iter: int = 50,
             step_size: float = 0.01,
             dist_measurers: TreeDistanceMeasurerAgg = None):
         """
         Finds the best model parameters
+        @param max_iters: number of iterations of gradient descent
+        @param print_iter: number of iters to wait to print iterim results
+        @param step_size: step size for gradient descent
+        @param dist_measurer: if available, this is use to measure how close current tree is to the true tree
+                            useful to see how progress is being made
         """
         feed_dict = {
                     self.model.log_barr_ph: self.log_barr,

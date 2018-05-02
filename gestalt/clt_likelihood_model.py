@@ -326,10 +326,10 @@ class CLTLikelihoodModel:
             # Keep initializing branch lengths until they are all positive
             model_vars = self.get_vars_as_dict()
             br_len_scale *= br_len_shrink
-            model_vars["branch_len_inners"] = np.random.rand(num_nodes) * br_len_scale
+            model_vars["branch_len_inners"] = np.random.rand(self.num_nodes) * br_len_scale
 
             # Initialize branch length offsets
-            model_vars["branch_len_offsets"] = np.random.rand(num_nodes) * br_len_scale
+            model_vars["branch_len_offsets"] = np.random.rand(self.num_nodes) * br_len_scale
             for node in self.topology.traverse():
                 if node.is_root() or node.up.is_resolved_multifurcation() or node.is_copy:
                     # Make sure the root or bifurcating nodes don't have offsets
@@ -893,8 +893,6 @@ class CLTLikelihoodModel:
             self.create_cell_type_log_lik()
             self.log_lik = self.log_lik_cell_type + self.log_lik_alleles
 
-        #self.branch_log_barr = tf.reduce_sum(tf.log(
-        #    self.branch_lens[self.root_node_id + 1:]))
         # penalize the leaf branch lengths if they get too close to zero
         # (preventing things from going negative)
         self.branch_log_barr = tf.reduce_sum(tf.log(tf.gather(
@@ -1153,6 +1151,11 @@ class CLTLikelihoodModel:
         scratch_tree = self.topology.copy("deepcopy")
         for node in scratch_tree.traverse("preorder"):
             if not node.is_resolved_multifurcation():
+                copy_child = None
+                for c in node.get_children():
+                    if c.is_copy:
+                        copy_child = c
+
                 # Resolve the multifurcation by creating the spine of "identifcal" nodes
                 children_not_copies = [c for c in node.get_children() if not c.is_copy]
                 children_offsets = [br_len_offsets[c.node_id] for c in children_not_copies]
@@ -1177,10 +1180,6 @@ class CLTLikelihoodModel:
                     curr_offset = children_offsets[idx]
 
                 # If this node is observed, then create the corresponding leaf last
-                copy_child = None
-                for c in node.get_children():
-                    if c.is_copy:
-                        copy_child = c
                 if copy_child is not None:
                     node.remove_child(copy_child)
                     curr_spine_node.add_child(copy_child)
