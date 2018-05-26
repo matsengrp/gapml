@@ -12,7 +12,8 @@ import logging
 from pathlib import Path
 import six
 
-from tree_distance import *
+from cell_lineage_tree import CellLineageTree
+from tree_distance import TreeDistanceMeasurer
 from constants import *
 from common import *
 from simulate_common import *
@@ -80,7 +81,13 @@ def parse_args():
 
     return args
 
-def get_sorted_parsimony_trees(parsimony_trees, oracle_measurer):
+def get_sorted_parsimony_trees(
+        parsimony_trees: List[CellLineageTree],
+        oracle_measurer: TreeDistanceMeasurer):
+    """
+    @return a sorted list of tree tuples (tree, tree dist) based on
+            distance to the true tree
+    """
     oracle_tuples = []
     for pars_tree in parsimony_trees:
         tree_dist = oracle_measurer.get_dist(pars_tree)
@@ -98,12 +105,24 @@ def get_sorted_parsimony_trees(parsimony_trees, oracle_measurer):
     return oracle_tuples
 
 def get_bifurc_multifurc_trees(
-        tree_list,
-        max_bifurc,
-        max_multifurc,
-        selection_type,
+        tree_list: List[CellLineageTree],
+        max_bifurc: int,
+        max_multifurc: int,
+        selection_type: str,
         distance_cls,
-        scratch_dir):
+        scratch_dir: str):
+    """
+    @param distance_cls: a TreeDistanceMeasurer class for finding unique collapsed trees
+
+    @return a list of dictionaries with entries
+                selection_type
+                whether or not a collapsed tree
+                idx -- uniq ID for this tree topology within selection type
+                aux -- random other info
+                tree -- the tree topology
+            The list has no more than `max_bifurc` bifurcating trees and
+            no more than `max_multifurc` collapsed/multifurcating trees.
+    """
     trees_to_output = []
     tree_measurers = []
     for i, tree_tuple in enumerate(tree_list):
@@ -173,6 +192,7 @@ def main(args=sys.argv[1:]):
         do_collapse=False)
 
     if args.max_best_multifurc or args.max_best:
+        # Get the trees based on distance to the true tree
         oracle_tuples = get_sorted_parsimony_trees(parsimony_trees, oracle_measurer)
         trees_to_output = get_bifurc_multifurc_trees(
                 oracle_tuples,
@@ -182,6 +202,7 @@ def main(args=sys.argv[1:]):
                 distance_cls,
                 args.scratch_dir)
 
+    # Just get random trees
     random.shuffle(parsimony_trees)
     random_tree_tuples = [(t, None) for t in parsimony_trees]
     random_trees_to_output = get_bifurc_multifurc_trees(

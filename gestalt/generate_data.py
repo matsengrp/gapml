@@ -224,6 +224,7 @@ def create_cell_lineage_tree(args, clt_model, bifurcating_only: bool = False):
         assert len(set([n.allele_events_list_str for n in true_tree])) == len(true_tree), "leaves must be unique"
 
     return clt, obs_leaves, true_tree
+
 def main(args=sys.argv[1:]):
     args = parse_args()
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)

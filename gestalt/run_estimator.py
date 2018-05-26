@@ -58,8 +58,7 @@ def parse_args():
     parser.add_argument(
             '--seed',
             type=int,
-            default=40,
-            help="Seed for generating the model")
+            default=40)
     parser.add_argument(
             '--log-barr',
             type=float,
