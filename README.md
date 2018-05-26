@@ -34,6 +34,9 @@ To run specific test module tests/test\_me.py:
 python3 -m unittest tests.<test_me>
 ```
 
+# GESTALT code entrance
+`python simulate_estimators.py`
+
 # GESTALT Code structure
 
 CLT = cell lineage tree
