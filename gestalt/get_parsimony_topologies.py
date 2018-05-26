@@ -7,16 +7,12 @@ by using a continuous parameterization
 from __future__ import division, print_function
 import os
 import sys
-import csv
 import numpy as np
 import argparse
 import time
 import random
 import tensorflow as tf
-from tensorflow.python import debug as tf_debug
-from scipy.stats import pearsonr, spearmanr, kendalltau
 import logging
-import pickle
 from pathlib import Path
 import six
 
@@ -117,7 +113,7 @@ def get_sorted_parsimony_trees(parsimony_trees, oracle_measurer):
 
     logging.info("Uniq parsimony %s distances: %s", oracle_measurer.name, np.unique(parsimony_dists))
     logging.info("Mean parsimony %s distance: %f", oracle_measurer.name, np.mean(parsimony_dists))
-    logging.info("Min parsimony %s distance: %d", oracle_measurer.name, min_dist)
+    logging.info("Min parsimony %s distance: %d", oracle_measurer.name, np.min(parsimony_dists))
 
     return oracle_tuples
 
@@ -162,6 +158,7 @@ def get_bifurc_multifurc_trees(
                     'selection_type': selection_type,
                     'multifurc': True,
                     'idx': num_multifurc,
+                    'aux': None,
                     'tree': coll_tree})
     return trees_to_output
 
@@ -184,7 +181,7 @@ def main(args=sys.argv[1:]):
     if args.true_model_pkl is not None:
         with open(args.true_model_pkl, "rb") as f:
             true_model_dict = six.moves.cPickle.load(f)
-            oracle_measurer = distance_cls(true_tree, args.scratch_dir)
+            oracle_measurer = distance_cls(true_model_dict["true_tree"], args.scratch_dir)
 
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
@@ -222,7 +219,7 @@ def main(args=sys.argv[1:]):
     # Save each tree as separate pickle file
     for i, tree_topology_dict in enumerate(trees_to_output):
         tree_pickle_out = "%s/parsimony_tree%d.pkl" % (args.out_folder, i)
-        print("Creating tree file %s" % tree_pickle_out)
+        print(tree_pickle_out)
         with open(tree_pickle_out, "wb") as f:
             six.moves.cPickle.dump(tree_topology_dict, f, protocol = 2)
 

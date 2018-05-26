@@ -31,7 +31,6 @@ from allele_simulator_simult import AlleleSimulatorSimultaneous
 from allele import Allele
 from clt_observer import CLTObserver
 from clt_estimator import CLTParsimonyEstimator
-from clt_likelihood_estimator import *
 from alignment import AlignerNW
 from barcode_metadata import BarcodeMetadata
 from approximator import ApproximatorLB
@@ -46,28 +45,22 @@ from summary_util import *
 from simulate_common import *
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='simulate GESTALT')
+    parser = argparse.ArgumentParser(description='fit topology and branch lengths for GESTALT')
+    parser.add_argument(
+        '--obs-data',
+        type=str,
+        default="_output/obs_data.pkl",
+        help='pkl file with observed sequence data, should be a dict with ObservedAlignSeq')
+    parser.add_argument(
+        '--true-model',
+        type=str,
+        default=None,
+        help='pkl file with true model if available')
     parser.add_argument(
         '--out-folder',
         type=str,
         default="_output",
         help='folder to put output in')
-    parser.add_argument(
-        '--num-barcodes',
-        type=int,
-        default=1,
-        help="number of independent barcodes. we assume all the same")
-    parser.add_argument(
-        '--target-lambdas',
-        type=float,
-        nargs=2,
-        default=[0.02] * 10,
-        help='target cut rates -- will get slightly perturbed for the true value')
-    parser.add_argument(
-        '--variance-target-lambdas',
-        type=float,
-        default=0.0008,
-        help='variance of target cut rates (so variance of perturbations)')
     parser.add_argument(
         '--know-target-lambdas',
         action='store_true')
@@ -78,57 +71,11 @@ def parse_args():
         '--const-branch-len',
         action='store_true')
     parser.add_argument(
-        '--repair-long-probability',
-        type=float,
-        nargs=2,
-        default=[0.001] * 2,
-        help='probability of doing no deletion/insertion during repair')
-    parser.add_argument(
-        '--repair-indel-probability',
-        type=float,
-        default=0.1,
-        help='probability of doing no deletion/insertion during repair')
-    parser.add_argument(
-        '--repair-deletion-lambda',
-        type=float,
-        default=3,
-        help=
-        'poisson parameter for distribution of symmetric deltion about cut site(s)'
-    )
-    parser.add_argument(
-        '--repair-insertion-lambda',
-        type=float,
-        default=1,
-        help='poisson parameter for distribution of insertion in cut site(s)')
-    parser.add_argument(
-        '--birth-lambda', type=float, default=1.8, help='birth rate')
-    parser.add_argument(
-        '--death-lambda', type=float, default=0.001, help='death rate')
-    parser.add_argument(
         '--time', type=float, default=1.2, help='how much time to simulate')
-    parser.add_argument(
-        '--sampling-rate',
-        type=float,
-        default=0.9,
-        help='proportion cells sampled/alleles successfully sequenced')
     parser.add_argument(
         '--debug', action='store_true', help='debug tensorflow')
     parser.add_argument(
-        '--single-layer', action='store_true', help='single layer tree')
-    parser.add_argument(
-        '--two-layers', action='store_true', help='two layer tree')
-    parser.add_argument(
-            '--model-seed',
-            type=int,
-            default=0,
-            help="Seed for generating the model")
-    parser.add_argument(
-            '--data-seed',
-            type=int,
-            default=0,
-            help="Seed for generating data")
-    parser.add_argument(
-            '--optim-seed',
+            '--seed',
             type=int,
             default=40,
             help="Seed for generating the model")
@@ -139,9 +86,6 @@ def parse_args():
             help="log barrier parameter on the branch lengths")
     parser.add_argument('--max-iters', type=int, default=20)
     parser.add_argument('--max-depth', type=int, default=10)
-    parser.add_argument('--min-leaves', type=int, default=2)
-    parser.add_argument('--max-leaves', type=int, default=10)
-    parser.add_argument('--max-clt-nodes', type=int, default=40000)
     parser.add_argument('--num-inits', type=int, default=1)
     parser.add_argument(
             '--mix-path',
@@ -190,77 +134,29 @@ def collapse_internally_labelled_tree(tree: CellLineageTree):
 def main(args=sys.argv[1:]):
     args = parse_args()
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
-    np.random.seed(seed=args.model_seed)
-
-    barcode_orig = BarcodeMetadata.create_fake_barcode_str(args.num_targets) if args.num_targets != NUM_BARCODE_V7_TARGETS else BARCODE_V7
-    bcode_meta = BarcodeMetadata(unedited_barcode = barcode_orig, num_barcodes = args.num_barcodes)
-
-    # initialize the target lambdas with some perturbation to ensure we don't have eigenvalues that are exactly equal
-    perturbations = np.random.uniform(size=args.num_targets) - 0.5
-    perturbations = perturbations / np.sqrt(np.var(perturbations)) * np.sqrt(args.variance_target_lambdas)
-    args.target_lambdas = np.array(args.target_lambdas) + perturbations
-    min_lambda = np.min(args.target_lambdas)
-    if min_lambda < 0:
-        boost = 0.00001
-        args.target_lambdas = args.target_lambdas - min_lambda + boost
-        args.birth_lambda += -min_lambda + boost
-        args.death_lambda += -min_lambda + boost
-    assert np.isclose(np.var(args.target_lambdas), args.variance_target_lambdas)
-    logging.info("args.target_lambdas %s" % str(args.target_lambdas))
-
-    # Create a cell-type tree
-    cell_type_tree = create_cell_type_tree(args)
-
     logging.info(str(args))
 
-    sess = tf.InteractiveSession()
-    # Create model
-    clt_model = CLTLikelihoodModel(
-            None,
-            bcode_meta,
-            sess,
-            target_lams = np.array(args.target_lambdas),
-            trim_long_probs = np.array(args.repair_long_probability),
-            trim_zero_prob = args.repair_indel_probability,
-            trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
-            insert_zero_prob = args.repair_indel_probability,
-            insert_poisson = args.repair_insertion_lambda,
-            cell_type_tree = cell_type_tree)
-    clt_model.tot_time = args.time
-    tf.global_variables_initializer().run()
+    np.random.seed(seed=args.seed)
 
-    clt, obs_leaves, true_tree = create_cell_lineage_tree(
-            args,
-            clt_model,
-            bifurcating_only=True)
+    with open(args.obs_data, "rb") as f:
+        obs_data_dict = six.moves.cPickle.load(f)
+        bcode_meta = obs_data_dict["bcode_meta"]
+        obs_leaves = obs_data_dict["obs_leaves"]
+    logging.info("Number of uniq obs alleles %d", len(obs_leaves))
 
-    tree_dist_measurers = TreeDistanceMeasurerAgg([
+    true_model_dict = None
+    with open(args.true_model, "rb") as f:
+        true_model_dict = six.moves.cPickle.load(f)
+        oracle_dist_measurers = TreeDistanceMeasurerAgg([
             UnrootRFDistanceMeasurer,
             RootRFDistanceMeasurer,
             SPRDistanceMeasurer,
             MRCADistanceMeasurer],
-            true_tree,
+            true_model_dict["true_tree"],
             args.scratch_dir)
 
-    # Gather true branch lengths
-    true_tree.label_node_ids(CLTLikelihoodModel.NODE_ORDER)
-    leaf_strs = [l.allele_events_list_str for l in true_tree]
-    assert len(leaf_strs) == len(set(leaf_strs))
-
-    for leaf in true_tree:
-        assert np.isclose(leaf.get_distance(true_tree), args.time)
-
-    # Get parsimony score of tree?
-    pars_score = true_tree.get_parsimony_score()
-    logging.info("Oracle tree parsimony score %d", pars_score)
-
-    # Print fun facts about the data
-    num_leaves = len(true_tree)
-    logging.info("True tree topology, num leaves %d" % num_leaves)
-    logging.info(true_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-    logging.info(true_tree.get_ascii(attributes=["cell_state"], show_internal=True))
-    logging.info(true_tree.get_ascii(attributes=["observed"], show_internal=True))
-    logging.info("Number of uniq obs alleles %d", len(obs_leaves))
+    sess = tf.InteractiveSession()
+    tf.global_variables_initializer().run()
 
     # Instantiate approximator used by our penalized MLE
     approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
@@ -286,25 +182,26 @@ def main(args=sys.argv[1:]):
 
     # Get the parsimony-estimated topologies
     if args.use_parsimony:
-        measurer = UnrootRFDistanceMeasurer(true_tree, args.scratch_dir)
         parsimony_trees = get_parsimony_trees(
             obs_leaves,
             args,
             bcode_meta,
             do_collapse=False)
 
-        min_dist = measurer.get_dist(parsimony_trees[0])
+        oracle_measurer = UnrootRFDistanceMeasurer(true_tree, args.scratch_dir)
+
+        min_dist = oracle_measurer.get_dist(parsimony_trees[0])
         best_parsimony_tree = parsimony_trees[0]
         parsimony_dists = [min_dist]
         for pars_tree in parsimony_trees:
-            tree_dist = measurer.get_dist(pars_tree)
+            tree_dist = oracle_measurer.get_dist(pars_tree)
             parsimony_dists.append(tree_dist)
             if tree_dist < min_dist:
                 best_parsimony_tree = pars_tree
                 min_dist = tree_dist
-        logging.info("Uniq parsimony %s distances: %s", measurer.name, np.unique(parsimony_dists))
-        logging.info("Mean parsimony %s distance: %f", measurer.name, np.mean(parsimony_dists))
-        logging.info("Min parsimony %s distance: %d", measurer.name, min_dist)
+        logging.info("Uniq parsimony %s distances: %s", oracle_measurer.name, np.unique(parsimony_dists))
+        logging.info("Mean parsimony %s distance: %f", oracle_measurer.name, np.mean(parsimony_dists))
+        logging.info("Min parsimony %s distance: %d", oracle_measurer.name, min_dist)
 
         # Add the closest tree from parsimony to the list
         trees_to_test["best_parsimony"] = best_parsimony_tree
