@@ -22,7 +22,7 @@ nest.add(
 
 nest.add(
     'model_seed',
-    range(200,210),
+    range(300,320),
     label_func=lambda c: 'model%d' % c)
 
 nest.add(

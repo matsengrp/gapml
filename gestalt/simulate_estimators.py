@@ -137,11 +137,6 @@ def parse_args():
             type=float,
             default=0.001,
             help="log barrier parameter on the branch lengths")
-    parser.add_argument(
-            '--lasso-param',
-            type=float,
-            default=0,
-            help="lasso parameter on the branch lengths")
     parser.add_argument('--max-iters', type=int, default=20)
     parser.add_argument('--max-depth', type=int, default=10)
     parser.add_argument('--min-leaves', type=int, default=2)
@@ -386,6 +381,7 @@ def main(args=sys.argv[1:]):
         result_print_list["log_lik"] = res.train_history[-1]["log_lik"][0]
         all_print_results.append(result_print_list)
 
+        logging.info("Tree %s", worker.aux)
         logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
         logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
@@ -414,7 +410,7 @@ def main(args=sys.argv[1:]):
         out_dict = {
             "true_model_params": clt_model.get_vars_as_dict(),
             "true_tree": true_tree,
-            "res_workers": successful_res_workers,
+            "res_workers": [(res, worker.aux) for res, worker in successful_res_workers],
             "obs_leaves": obs_leaves,
             "bcode_meta": bcode_meta,
             "args": args}
