@@ -1,5 +1,5 @@
 """
-Get tree topologies from parsimony
+Get tree topologies based on the oracle
 """
 from __future__ import division, print_function
 import os
@@ -8,6 +8,7 @@ import numpy as np
 import argparse
 import time
 import random
+import tensorflow as tf
 import logging
 from pathlib import Path
 import six
@@ -41,44 +42,12 @@ def parse_args():
             type=int,
             default=40,
             help="Random number generator seed")
-    parser.add_argument(
-            '--mix-path',
-            type=str,
-            default=MIX_PATH)
-    parser.add_argument('--num-jumbles',
-            type=int,
-            default=1)
-    parser.add_argument('--max-random',
-            type=int,
-            default=1)
-    parser.add_argument('--max-random-multifurc',
-            type=int,
-            default=1)
-    parser.add_argument('--max-best',
-            type=int,
-            default=0)
-    parser.add_argument('--max-best-multifurc',
-            type=int,
-            default=0)
 
     args = parser.parse_args()
-    if args.max_best_multifurc or args.max_best:
-        # Require having true tree to know what is a "best" tree
-        assert args.true_model_pkl is not None
-
-    args.log_file = "%s/parsimony_log.txt" % args.out_folder
+    args.log_file = "%s/oracle_tree_log.txt" % args.out_folder
     print("Log file", args.log_file)
-
-    # check that there is no infile in the current folder -- this will
-    # screw up mix because it will use the wrong input file
-    my_file = Path("infile")
-    assert not my_file.exists()
-
-    args.scratch_dir = os.path.join(args.out_folder, "scratch")
-    if not os.path.exists(args.scratch_dir):
-        os.mkdir(args.scratch_dir)
-
     return args
+
 
 def get_sorted_parsimony_trees(parsimony_trees, oracle_measurer):
     oracle_tuples = []
@@ -149,55 +118,30 @@ def main(args=sys.argv[1:]):
 
     np.random.seed(seed=args.seed)
 
-    with open(args.obs_data_pkl, "rb") as f:
-        obs_data_dict = six.moves.cPickle.load(f)
-        bcode_meta = obs_data_dict["bcode_meta"]
-        obs_leaves = obs_data_dict["obs_leaves"]
-    logging.info("Number of uniq obs alleles %d", len(obs_leaves))
+    with open(args.true_model_pkl, "rb") as f:
+        true_model_dict = six.moves.cPickle.load(f)
 
-    true_model_dict = None
-    oracle_measurer = None
-    distance_cls = UnrootRFDistanceMeasurer
-    if args.true_model_pkl is not None:
-        with open(args.true_model_pkl, "rb") as f:
-            true_model_dict = six.moves.cPickle.load(f)
-            oracle_measurer = distance_cls(true_model_dict["true_tree"], args.scratch_dir)
+    oracle_coll_tree = collapse_internally_labelled_tree(true_model_dict["true_tree"])
+    logging.info(true_model_dict["true_tree"].get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    logging.info(oracle_coll_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
-    trees_to_output = []
-
-    # Get the parsimony-estimated topologies
-    parsimony_trees = get_parsimony_trees(
-        obs_leaves,
-        args,
-        bcode_meta,
-        do_collapse=False)
-
-    if args.max_best_multifurc or args.max_best:
-        oracle_tuples = get_sorted_parsimony_trees(parsimony_trees, oracle_measurer)
-        trees_to_output = get_bifurc_multifurc_trees(
-                oracle_tuples,
-                args.max_best,
-                args.max_best_multifurc,
-                'best_parsimony',
-                distance_cls,
-                args.scratch_dir)
-
-    random.shuffle(parsimony_trees)
-    random_tree_tuples = [(t, None) for t in parsimony_trees]
-    random_trees_to_output = get_bifurc_multifurc_trees(
-            random_tree_tuples,
-            args.max_random,
-            args.max_random_multifurc,
-            'random_parsimony',
-            distance_cls,
-            args.scratch_dir)
-    trees_to_output += random_trees_to_output
+    trees_to_output = [{
+        'selection_type': 'oracle',
+        'multifurc': False,
+        'idx': 0,
+        'aux': None,
+        'tree': true_model_dict["true_tree"],
+    }, {
+        'selection_type': 'oracle',
+        'multifurc': True,
+        'idx': 0,
+        'aux': None,
+        'tree': oracle_coll_tree}]
 
     # Save each tree as separate pickle file
     for i, tree_topology_dict in enumerate(trees_to_output):
-        tree_pickle_out = "%s/parsimony_tree%d.pkl" % (args.out_folder, i)
+        tree_pickle_out = "%s/oracle_tree%d.pkl" % (args.out_folder, i)
         print(tree_pickle_out)
-        logging.info(tree_topology_dict["tree"].get_ascii(attributes=["allele_events_list_str"], show_internal=True))
         with open(tree_pickle_out, "wb") as f:
             six.moves.cPickle.dump(tree_topology_dict, f, protocol = 2)
 

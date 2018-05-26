@@ -1,12 +1,10 @@
 """
-A simulation engine to see how well cell lineage estimation performs
+This code fits model parameters and branch lengths
+constrained to the multifurcating tree topology.
+
 Searches over bifurcating trees with the same multifurcating tree
 by using a continuous parameterization.
-
-This code compares:
-    * using topologies straight from parsimony
-    * topology search using collapsed topologies from parsimony
-    * topology search using collapsed oracle
+Suppose constant events when resolving multifurcations.
 """
 from __future__ import division, print_function
 import os
@@ -52,6 +50,11 @@ def parse_args():
         default="_output/obs_data.pkl",
         help='pkl file with observed sequence data, should be a dict with ObservedAlignSeq')
     parser.add_argument(
+        '--tree-topology',
+        type=str,
+        default="_output/parsimony_tree0.pkl",
+        help='pkl file with tree topology')
+    parser.add_argument(
         '--true-model',
         type=str,
         default=None,
@@ -71,7 +74,7 @@ def parse_args():
         '--const-branch-len',
         action='store_true')
     parser.add_argument(
-        '--time', type=float, default=1.2, help='how much time to simulate')
+        '--time', type=float, default=1.2, help='how much time to fit for')
     parser.add_argument(
         '--debug', action='store_true', help='debug tensorflow')
     parser.add_argument(
@@ -91,13 +94,6 @@ def parse_args():
             '--mix-path',
             type=str,
             default=MIX_PATH)
-    parser.add_argument('--max-trees',
-            type=int,
-            default=2)
-    parser.add_argument('--num-jumbles',
-            type=int,
-            default=1)
-    parser.add_argument('--use-parsimony', action='store_true', help="use mix (CS parsimony) to estimate tree topologies")
     parser.add_argument('--do-distributed', action='store_true')
 
     parser.set_defaults(use_cell_state=False)
@@ -111,25 +107,7 @@ def parse_args():
     if not os.path.exists(args.scratch_dir):
         os.mkdir(args.scratch_dir)
 
-    if args.use_parsimony:
-        # check that there is no infile in the current folder -- this will
-        # screw up mix because it will use the wrong input file
-        my_file = Path("infile")
-        assert not my_file.exists()
-
     return args
-
-def collapse_internally_labelled_tree(tree: CellLineageTree):
-    coll_tree = tree.copy("deepcopy")
-    for n in coll_tree.traverse():
-        n.name = n.allele_events_list_str
-        if not n.is_root():
-            if n.allele_events_list_str == n.up.allele_events_list_str:
-                n.dist = 0
-            else:
-                n.dist = 1
-    coll_tree = collapse_zero_lens(coll_tree)
-    return coll_tree
 
 def main(args=sys.argv[1:]):
     args = parse_args()

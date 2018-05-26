@@ -32,10 +32,23 @@ from alignment import AlignerNW
 from barcode_metadata import BarcodeMetadata
 from approximator import ApproximatorLB
 from tree_distance import TreeDistanceMeasurer, TreeDistanceMeasurerAgg
+from collapsed_tree import collapse_zero_lens
 
 from constants import *
 from common import *
 from summary_util import *
+
+def collapse_internally_labelled_tree(tree: CellLineageTree):
+    coll_tree = tree.copy("deepcopy")
+    for n in coll_tree.traverse():
+        n.name = n.allele_events_list_str
+        if not n.is_root():
+            if n.allele_events_list_str == n.up.allele_events_list_str:
+                n.dist = 0
+            else:
+                n.dist = 1
+    coll_tree = collapse_zero_lens(coll_tree)
+    return coll_tree
 
 def get_parsimony_trees(
         obs_leaves: List[ObservedAlignedSeq],
