@@ -111,9 +111,9 @@ def _regrow_collapsed_tree(tree: TreeNode, uniq_allele_branches: Dict):
 
 def _remove_single_child_unobs_nodes(tree: TreeNode):
     """
-    Remove unobserved nodes that only have a single child
+    Remove single link children from the root node until there is at most two single links
     """
-    while len(tree.get_children()) == 1 and not tree.observed:
+    while len(tree.get_children()) == 1 and len(tree.get_children()[0].get_children()) == 1:
         child_node = tree.get_children()[0]
         # Preserve branch lengths by propagating down (ete does this wrong)
         child_node_dist = child_node.dist

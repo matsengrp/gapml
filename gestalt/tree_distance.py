@@ -75,7 +75,8 @@ class TreeDistanceMeasurer:
 
         return tree_group_dict
 
-    def get_uniq_trees(self, trees: List[CellLineageTree], max_trees: int=None):
+    @classmethod
+    def get_uniq_trees(cls, trees: List[CellLineageTree], max_trees: int=None):
         """
         @param max_trees: find this many uniq trees at most
         @return tuple with:
@@ -89,7 +90,7 @@ class TreeDistanceMeasurer:
         if max_trees is not None and max_trees == 1:
             return uniq_trees
 
-        tree_measurers = [self.__class__(trees[0], self.scratch_dir)]
+        tree_measurers = [cls(trees[0], self.scratch_dir)]
         for idx, tree in enumerate(trees[1:]):
             has_match = False
             for uniq_t, measurer in zip(uniq_trees, tree_measurers):
@@ -99,7 +100,7 @@ class TreeDistanceMeasurer:
                     break
             if not has_match:
                 uniq_trees.append(tree)
-                tree_measurers.append(self.__class__(tree, self.scratch_dir))
+                tree_measurers.append(cls(tree, self.scratch_dir))
                 num_trees += 1
                 if max_trees is not None and num_trees > max_trees:
                     break
