@@ -19,16 +19,11 @@ from scipy.stats import pearsonr, spearmanr, kendalltau
 import logging
 import six
 
-from cell_state import CellState, CellTypeTree
-from allele import Allele
-from barcode_metadata import BarcodeMetadata
 from approximator import ApproximatorLB
-
 from likelihood_scorer import LikelihoodScorer
 from tree_distance import *
 from constants import *
 from common import *
-from summary_util import *
 from simulate_common import *
 
 def parse_args():
