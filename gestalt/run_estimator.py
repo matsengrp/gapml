@@ -69,7 +69,7 @@ def parse_args():
 
     parser.set_defaults(use_cell_state=False)
     args = parser.parse_args()
-    args.log_file = "%s/fit_log.txt" % args.out_folder
+    args.log_file = args.tree_topology_pkl.replace(".pkl", "_fit_log.txt")
     print("Log file", args.log_file)
     args.pickle_out = args.tree_topology_pkl.replace(".pkl", "_fitted.pkl")
     args.csv_out = args.tree_topology_pkl.replace(".pkl", "_fitted.csv")
