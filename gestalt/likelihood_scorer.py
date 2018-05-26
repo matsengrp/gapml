@@ -43,6 +43,7 @@ class LikelihoodScorer(ParallelWorker):
         @param tree: the cell lineage tree topology to fit the likelihood for
         @param init_model_vars: the model variables to initialize with
         @param aux: auxiliary info -- any python dict
+                    (not used by anything. just if you want something stored)
         """
         self.seed = seed
         self.tree = tree
