@@ -22,7 +22,7 @@ def parse_args():
         help='Collapsed reads file: format 7B')
     return parser.parse_args()
 
-def process_event_format7B(event_str: str, min_target: int, max_target: int):
+def process_event_format7B(event_str: str, min_target: int, max_target: int, min_pos: int = 0):
     """
     Takes a single event string and creates an event object
     Right now processes events in a super dumb way.
@@ -32,7 +32,7 @@ def process_event_format7B(event_str: str, min_target: int, max_target: int):
     """
     event_split = event_str.split("+")
     event_type_str = event_split[0][-1]
-    event_pos = int(event_split[1])
+    event_pos = int(event_split[1]) - min_pos
     if event_type_str == "D":
         del_len = int(event_split[0][:-1])
         return Event(event_pos, del_len, min_target=min_target, max_target=max_target, insert_str="")

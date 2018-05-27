@@ -495,7 +495,6 @@ class CLTLikelihoodModel:
         min_right_trim = is_right_longs * right_trim_long_min
         max_right_trim = tf_common.ifelse(is_right_longs, right_trim_long_max, right_trim_long_min - 1)
 
-        # TODO: using a uniform distribution for now
         check_left_max = tf.cast(tf.less_equal(left_trim_len, max_left_trim), tf.float64)
         check_left_min = tf.cast(tf.less_equal(min_left_trim, left_trim_len), tf.float64)
         left_prob = check_left_max * check_left_min * tf_common.ifelse(
@@ -788,7 +787,7 @@ class CLTLikelihoodModel:
                         name="haz_away.multifurc")
                 return tf.exp(-haz_aways * time_stays_constant)
             else:
-                root_haz_away = self.hazard_away_dict[TractRepr()] 
+                root_haz_away = self.hazard_away_dict[TractRepr()]
                 return tf.exp(-root_haz_away * time_stays_constant)
         else:
             return tf.constant(1.0, dtype=tf.float64)
@@ -1160,7 +1159,7 @@ class CLTLikelihoodModel:
                 children_not_copies = [c for c in node.get_children() if not c.is_copy]
                 children_offsets = [br_len_offsets[c.node_id] for c in children_not_copies]
                 sort_indexes = np.argsort(children_offsets)
-                
+
                 curr_offset = 0
                 curr_spine_node = node
                 for idx in sort_indexes:

@@ -1,7 +1,6 @@
 """
 A simulation engine to create cell lineage tree and data samples
 """
-from __future__ import division, print_function
 import os
 import sys
 import csv
