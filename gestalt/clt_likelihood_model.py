@@ -1067,7 +1067,7 @@ class CLTLikelihoodModel:
                 children_not_copies = [c for c in node.get_children() if not c.is_copy]
                 children_offsets = [br_len_offsets[c.node_id] for c in children_not_copies]
                 sort_indexes = np.argsort(children_offsets)
-                
+
                 curr_offset = 0
                 curr_spine_node = node
                 for idx in sort_indexes:
