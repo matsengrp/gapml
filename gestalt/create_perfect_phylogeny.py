@@ -1,5 +1,7 @@
 """
 Read data and create perfect phylogeny if possible
+
+Using the algorithm from: "Fast Algorithms for Inferring Evolutionary Trees" Agarwala, 1992
 """
 from typing import List
 import os
