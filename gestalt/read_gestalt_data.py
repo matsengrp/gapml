@@ -83,7 +83,7 @@ def process_observed_seq_format7B(target_str_list: List[str], cell_state: CellSt
     # TODO: This will have to do for now...
     cleaned_events = events
 
-    return ObservedAlignedSeq(None, AlleleEvents(cleaned_events), cell_state, abundance=1)
+    return ObservedAlignedSeq(None, [AlleleEvents(cleaned_events)], cell_state, abundance=1)
 
 def parse_reads_file_format7B(file_name,
                               target_hdr_fmt="target%d",
@@ -128,6 +128,21 @@ def parse_reads_file_format7B(file_name,
         organ_dict[str(cell_type)] = organ_str
     return all_alleles, organ_dict
 
+def filter_for_common_alleles(all_alleles: List[ObservedAlignedSeq], threshold = 5):
+    count_dict = {}
+    for allele in all_alleles:
+        key = (tuple(allele.allele_events_list), allele.cell_state)
+        if key in count_dict:
+            count_dict[key][0] += 1
+        else:
+            count_dict[key] = [1, allele]
+    
+    common_alleles = []
+    for key, (count, allele) in count_dict.items():
+        if count > threshold:
+            common_alleles.append(allele)
+    return common_alleles
+        
 def main():
     args = parse_args()
 
@@ -140,6 +155,8 @@ def main():
             crucial_pos_len=[6,6])
 
     obs_leaves, organ_dict = parse_reads_file_format7B(args.reads_file)
+    obs_leaves = filter_for_common_alleles(obs_leaves)
+    print("Number of leaves", len(obs_leaves))
 
     # Save the observed data
     with open(args.out_obs_data, "wb") as f:
