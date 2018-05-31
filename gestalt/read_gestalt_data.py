@@ -19,7 +19,7 @@ from barcode_metadata import BarcodeMetadata
 from clt_observer import ObservedAlignedSeq
 from read_seq_data import process_event_format7B
 from cell_state import CellState, CellTypeTree
-from allele_events import AlleleEvents
+from allele_events import AlleleEvents, Event
 from constants import CONTROL_ORGANS
 from constants import NO_EVENT_STRS
 from constants import BARCODE_V7, NUM_BARCODE_V7_TARGETS
@@ -60,28 +60,27 @@ def process_observed_seq_format7B(target_str_list: List[str], cell_state: CellSt
     events = [
         process_event_format7B(event_str, min_targ, max_targ) for event_str, (min_targ, max_targ) in evt_target_dict.items() if event_str not in NO_EVENT_STRS
     ]
-    events = sorted(events, key=lambda ev: ev.min_target)
+    events = sorted(events, key=lambda ev: ev.start_pos)
 
-    #####
-    # Jean's experiments to see how clean this data is...
-    # We need the same cut site across all barcodes and we need no compound events...
-    #####
-    #for i in range(10):
-    #    has_zero_del = False
-    #    for ev in events:
-    #        if ev.min_target == i and ev.del_len == 0:
-    #            has_zero_del = True
-    #            break
-    #    if has_zero_del:
-    #        match_events = [ev for ev in events if ev.min_target == i]
-    #        if len(match_events) == 1:
-    #            print(match_events)
-
-    #for i in range(len(events) - 1):
-    #    print(events[i].max_target >= events[i+1].min_target)
-
-    # TODO: This will have to do for now...
-    cleaned_events = events
+    if events:
+        cleaned_events = [events[0]]
+        for evt in events[1:]:
+            prev_evt = cleaned_events[-1]
+            if prev_evt.min_target == evt.min_target:
+                new_event = Event(
+                        prev_evt.start_pos,
+                        # TODO: this is hack. not correct right now
+                        evt.del_len + prev_evt.del_len,# + evt.start_pos - prev_evt.start_pos,
+                        prev_evt.min_target,
+                        evt.max_target,
+                        # TODO: this is hack. not correct right now
+                        prev_evt.insert_str + evt.insert_str)
+                assert prev_evt.max_target <= evt.max_target
+                cleaned_events[-1] = new_event
+            else:
+                cleaned_events.append(evt)
+    else:
+        cleaned_events = events
 
     return ObservedAlignedSeq(None, [AlleleEvents(cleaned_events)], cell_state, abundance=1)
 
@@ -141,6 +140,8 @@ def filter_for_common_alleles(all_alleles: List[ObservedAlignedSeq], threshold =
     for key, (count, allele) in count_dict.items():
         if count > threshold:
             common_alleles.append(allele)
+            if len(allele.allele_events_list[0].events) != np.unique([e.min_target for e in allele.allele_events_list[0].events]).size:
+                print(allele)
     return common_alleles
         
 def main():
