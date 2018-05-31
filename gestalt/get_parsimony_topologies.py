@@ -13,7 +13,7 @@ from pathlib import Path
 import six
 
 from cell_lineage_tree import CellLineageTree
-from tree_distance import TreeDistanceMeasurer
+from tree_distance import TreeDistanceMeasurer, UnrootRFDistanceMeasurer
 from constants import *
 from common import *
 from simulate_common import *
