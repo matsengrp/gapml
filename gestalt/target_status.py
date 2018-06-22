@@ -63,7 +63,7 @@ class TargetStatus(tuple):
     def deact_targets(self):
         deact_targs = []
         for deact_tract in self:
-            deact_targs += list(range(deact_tract.min_deact_target, deact_tract.max_deact_target))
+            deact_targs += list(range(deact_tract.min_deact_target, deact_tract.max_deact_target + 1))
         return deact_targs
 
     def merge(self, other_targ_stat):

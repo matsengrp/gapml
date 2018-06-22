@@ -69,14 +69,16 @@ class CLTPenalizedEstimator(CLTEstimator):
         pen_log_lik = self.model.sess.run(self.model.smooth_log_lik, feed_dict=feed_dict)
         train_history = []
         for i in range(max_iters):
-            _, log_lik, pen_log_lik, log_barr, log_lik_alleles, log_lik_cell_type = self.model.sess.run(
+            _, log_lik, pen_log_lik, log_barr, log_lik_alleles, log_lik_cell_type, trans_mats, trim_probs = self.model.sess.run(
                     [
                         self.model.adam_train_op,
                         self.model.log_lik,
                         self.model.smooth_log_lik,
                         self.model.branch_log_barr,
                         self.model.log_lik_alleles,
-                        self.model.log_lik_cell_type],
+                        self.model.log_lik_cell_type,
+                        self.model.trans_mats,
+                        self.model.trim_probs],
                     feed_dict=feed_dict)
             if pen_log_lik == -np.inf:
                 raise ValueError("Penalized log lik not finite, failed on iteration %d" % i)

@@ -132,6 +132,7 @@ def main(args=sys.argv[1:]):
        dist_measurers = oracle_dist_measurers)
 
     res = worker.do_work_directly(sess)
+    logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["node_id"], show_internal=True))
     logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
     logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 

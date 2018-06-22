@@ -964,6 +964,8 @@ class CLTLikelihoodModel:
                 tf.log(Lprob[self.root_node_id]),
                 name="alleles_log_lik")
 
+        self.trans_mats = trans_mats
+        self.trim_probs = trim_probs
         return log_lik_alleles, Ddiags
 
     def create_log_lik(self, transition_matrix_wrappers: Dict):
@@ -1091,11 +1093,12 @@ class CLTLikelihoodModel:
                 sg.min_deact_target: sg for sg in child_singletons}
         singleton_targets = set(list(target_to_singleton.keys()))
 
-        for i, start_target_status in enumerate(child_transition_wrapper.states):
-            for end_target_status in child_transition_wrapper.states[i + 1:]:
+        for start_target_status in child_transition_wrapper.states:
+            for end_target_status in child_transition_wrapper.states:
                 new_deact_targets = end_target_status.minus(start_target_status)
-                new_singletons = new_deact_targets.intersection(singleton_targets)
-                if new_singletons:
+                matching_targets = new_deact_targets.intersection(singleton_targets)
+                if matching_targets:
+                    new_singletons = [target_to_singleton[target] for target in matching_targets]
                     log_trim_probs = tf.gather(
                             params = self.singleton_log_cond_prob,
                             indices = [self.singleton_index_dict[sg] for sg in new_singletons])
