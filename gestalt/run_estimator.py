@@ -24,7 +24,6 @@ from likelihood_scorer import LikelihoodScorer
 from tree_distance import *
 from constants import *
 from common import *
-from simulate_common import *
 
 def parse_args():
     parser = argparse.ArgumentParser(description='fit topology and branch lengths for GESTALT')
