@@ -10,7 +10,7 @@ import logging
 from clt_estimator import CLTEstimator
 from cell_lineage_tree import CellLineageTree
 from clt_likelihood_model import CLTLikelihoodModel
-from approximator import ApproximatorLB
+from transition_wrapper_maker import TransitionWrapperMaker
 from tree_distance import TreeDistanceMeasurerAgg
 
 class CLTPenalizedEstimator(CLTEstimator):
@@ -23,19 +23,18 @@ class CLTPenalizedEstimator(CLTEstimator):
     def __init__(
         self,
         model: CLTLikelihoodModel,
-        approximator: ApproximatorLB,
+        transition_wrapper_maker: TransitionWrapperMaker,
         log_barr: float):
         """
         @param model: initial CLT model params
         """
         self.model = model
-        self.approximator = approximator
         self.log_barr = log_barr
 
         # Create the skeletons for the transition matrices -- via state sum approximation
-        self.transition_mat_wrappers = self.approximator.create_transition_matrix_wrappers(model)
+        transition_wrappers = transition_wrapper_maker.create_transition_wrappers()
         logging.info("Done creating transition matrices")
-        self.model.create_log_lik(self.transition_mat_wrappers)
+        self.model.create_log_lik(transition_wrappers)
         logging.info("Done creating tensorflow graph")
         tf.global_variables_initializer().run()
 
@@ -47,7 +46,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         #print("Log lik", log_lik)
         #print("log lik grad", log_lik_grad)
 
-        #self.model.check_grad(self.transition_mat_wrappers)
+        #self.model.check_grad(transition_wrappers)
 
     def fit(self,
             max_iters: int,

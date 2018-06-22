@@ -15,8 +15,7 @@ from barcode_metadata import BarcodeMetadata
 from indel_sets import IndelSet, TargetTract, SingletonWC, Singleton, TractRepr, DeactTract, DeactTargetsEvt, Tract
 from target_status import TargetStatus, TargetDeactTract
 from anc_state import AncState
-from transition_matrix import TransitionMatrixWrapper
-from transition_matrix_maker import TransitionWrapper
+from transition_wrapper_maker import TransitionWrapper
 import tf_common
 from common import inv_sigmoid
 from constants import PERTURB_ZERO
@@ -621,7 +620,7 @@ class CLTLikelihoodModel:
         return target_status_transition_idxs, hazards
 
 
-    def _create_hazard_dict(self, trans_mat_wrappers_list: List[List[TransitionMatrixWrapper]]):
+    def _create_hazard_dict(self, trans_mat_wrappers_list: List[List[TransitionWrapper]]):
         """
         @param transition_matrix_wrappers: iterable with transition matrix wrappers
 
@@ -667,7 +666,7 @@ class CLTLikelihoodModel:
                 for i, targ_stat in enumerate(target_statuses)}
         return hazard_away_dict, hazard_away_nodes
 
-    def _create_hazard_away_dict_old(self, trans_mat_wrappers_list: List[List[TransitionMatrixWrapper]]):
+    def _create_hazard_away_dict_old(self, trans_mat_wrappers_list: List[List[TransitionWrapper]]):
         """
         @param transition_matrix_wrappers: iterable with transition matrix wrappers
 
@@ -820,7 +819,7 @@ class CLTLikelihoodModel:
                 tf.log(self.L_cell_type[self.root_node_id][self.cell_type_root]),
                 name="cell_type_log_lik")
 
-    def create_topology_log_lik(self, transition_matrix_wrappers: Dict[int, List[TransitionMatrixWrapper]]):
+    def create_topology_log_lik(self, transition_matrix_wrappers: Dict[int, List[TransitionWrapper]]):
         """
         Create a tensorflow graph of the likelihood calculation
         """
@@ -886,7 +885,7 @@ class CLTLikelihoodModel:
 
     def _create_topology_log_lik_barcode(
             self,
-            transition_matrix_wrappers: Dict[int, List[TransitionMatrixWrapper]],
+            transition_matrix_wrappers: Dict[int, List[TransitionWrapper]],
             bcode_idx: int):
         # Store the tensorflow objects that calculate the prob of a node being in each state given the leaves
         Lprob = dict()
@@ -901,7 +900,7 @@ class CLTLikelihoodModel:
             if node.is_leaf():
                 node_wrapper = transition_matrix_wrappers[node.node_id][bcode_idx]
                 prob_array = np.zeros((node_wrapper.num_likely_states + 1, 1))
-                observed_key = node_wrapper.key_dict[node_wrapper.leaf_target_status]
+                observed_key = node_wrapper.key_dict[node_wrapper.leaf_state]
                 prob_array[observed_key] = 1
                 Lprob[node.node_id] = tf.constant(prob_array, dtype=tf.float64)
             else:
@@ -1039,7 +1038,7 @@ class CLTLikelihoodModel:
         return q_matrix
 
     def _create_transition_matrix_old(self,
-            #matrix_wrapper: TransitionMatrixWrapper,
+            #matrix_wrapper: TransitionWrapper,
             target_statuses: List[TargetStatus],
             hazard_dict: Dict[Tract, Tensor],
             hazard_away_dict: Dict[TractRepr, int]):
@@ -1117,7 +1116,7 @@ class CLTLikelihoodModel:
             return tf.ones(output_shape, dtype=tf.float64)
 
     def _create_trim_prob_matrix_old(self,
-            ch_trans_mat_w: TransitionMatrixWrapper,
+            ch_trans_mat_w: TransitionWrapper,
             singleton_log_cond_prob: Tensor,
             singleton_index_dict: Dict[int, Singleton],
             node: CellLineageTree,

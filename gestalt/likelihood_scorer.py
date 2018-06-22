@@ -1,13 +1,15 @@
 from typing import List, Tuple, Dict
 from numpy import ndarray
+import numpy as np
 import tensorflow as tf
 
 from cell_lineage_tree import CellLineageTree
 from cell_state import CellTypeTree
 from barcode_metadata import BarcodeMetadata
-from approximator import ApproximatorLB
 from parallel_worker import ParallelWorker
-from simulate_common import fit_pen_likelihood
+from transition_wrapper_maker import TransitionWrapperMaker
+from clt_likelihood_model import CLTLikelihoodModel
+from clt_likelihood_estimator import CLTPenalizedEstimator
 from tree_distance import TreeDistanceMeasurerAgg
 
 class LikelihoodScorerResult:
@@ -21,7 +23,8 @@ class LikelihoodScorerResult:
 
 class LikelihoodScorer(ParallelWorker):
     """
-    Runs `fit_pen_likelihood` given a tree. Allows for warm starts
+    Fits model parameters and branch lengths for a given tree
+    Since this is a parallel worker, it may be used through the job management system SLURM
     """
     def __init__(self,
             seed: int,
@@ -32,18 +35,22 @@ class LikelihoodScorer(ParallelWorker):
             target_lams: ndarray,
             log_barr: float,
             max_iters: int,
-            approximator: ApproximatorLB,
+            transition_wrap_maker: TransitionWrapperMaker,
             tot_time: float,
-            init_model_vars: Dict[str, ndarray] = None,
-            dist_measurers: TreeDistanceMeasurerAgg = None,
-            aux : Dict  = None):
+            dist_measurers: TreeDistanceMeasurerAgg = None):
         """
         @param seed: required to set the seed of each parallel worker
-        @param args: arguments that provide settings for how to fit the model
         @param tree: the cell lineage tree topology to fit the likelihood for
-        @param init_model_vars: the model variables to initialize with
-        @param aux: auxiliary info -- any python dict
-                    (not used by anything. just if you want something stored)
+        @param bcode_meta: BarcodeMetadata
+        @param cell_type_tree: pass this in if the likelihood includes cell type information
+        @param know_cell_lams: whether or not to use the cell type transition rates in `cell_type_tree`
+        @param target_lams: if this is not None, then we will use these fixed target lambda rates
+        @param log_barr: log barrier penalty parameter, i.e. how much to scale the penalty
+        @param max_iters: maximum number of iterations for MLE
+        @param transition_wrap_maker: TransitionWrapperMaker
+        @param tot_time: total height of the tree
+        @param dist_measurers: if not None, TreeDistanceMeasurerAgg is used to measure the distance between the estimated
+                                tree and the oracle tree at each iteration
         """
         self.seed = seed
         self.tree = tree
@@ -53,11 +60,9 @@ class LikelihoodScorer(ParallelWorker):
         self.target_lams = target_lams
         self.log_barr = log_barr
         self.max_iters = max_iters
-        self.approximator = approximator
+        self.transition_wrap_maker = transition_wrap_maker
         self.tot_time = tot_time
-        self.init_model_vars = init_model_vars
         self.dist_measurers = dist_measurers
-        self.aux = aux
 
     def run_worker(self, shared_obj):
         """
@@ -68,27 +73,49 @@ class LikelihoodScorer(ParallelWorker):
             tf.global_variables_initializer().run()
             return self.do_work_directly(sess)
 
-    def do_work_directly(self, sess):
+    def do_work_directly(self,
+            sess,
+            # TODO: should this live here
+            br_len_scale: float = 0.1):
         """
         Bypasses all the other code for a ParallelWorker
-        TODO: clean up this code??? this function is super specific. not sure if thats a good thing
-        Suppose a tensorflow session is given already. Do not make a new one
         Used when we aren't submitting jobs
+        Supposes a tensorflow session is given already. Does not make a new one
+
         @param sess: tensorflow session
+
+        @return LikelihoodScorerResult
         """
-        train_history, res_model = fit_pen_likelihood(
+        num_nodes = self.tree.get_num_nodes()
+        init_branch_len_inners = np.random.rand(num_nodes) * br_len_scale
+        init_branch_len_offsets = np.random.rand(num_nodes) * br_len_scale
+        target_lams_known = self.target_lams is not None
+        init_target_lams = self.target_lams
+        if not target_lams_known:
+            # TODO: magic numbers
+            init_target_lams = 0.04 * np.ones(self.bcode_meta.n_targets) + np.random.uniform(size=self.bcode_meta.n_targets) * 0.02
+    
+        self.tree.label_node_ids()
+        res_model = CLTLikelihoodModel(
             self.tree,
             self.bcode_meta,
-            self.cell_type_tree,
-            self.know_cell_lams,
-            self.target_lams,
-            self.log_barr,
-            self.max_iters,
-            self.approximator,
             sess,
-            self.tot_time,
-            warm_start=self.init_model_vars,
-            dist_measurers = self.dist_measurers)
+            target_lams = init_target_lams,
+            target_lams_known = target_lams_known,
+            branch_len_inners = init_branch_len_inners,
+            branch_len_offsets = init_branch_len_offsets,
+            cell_type_tree = self.cell_type_tree,
+            cell_lambdas_known = self.know_cell_lams,
+            tot_time = self.tot_time)
+        estimator = CLTPenalizedEstimator(
+                res_model,
+                self.transition_wrap_maker,
+                self.log_barr)
+    
+        # Initialize with parameters such that the branch lengths are positive
+        res_model.initialize_branch_lens(br_len_scale=br_len_scale)
+    
+        train_history = estimator.fit(self.max_iters, dist_measurers = self.dist_measurers)
         return LikelihoodScorerResult(
                 res_model.get_vars_as_dict(),
                 res_model.get_fitted_bifurcating_tree(),
