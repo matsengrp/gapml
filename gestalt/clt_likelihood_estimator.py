@@ -51,7 +51,7 @@ class CLTPenalizedEstimator(CLTEstimator):
 
     def fit(self,
             max_iters: int,
-            print_iter: int = 50,
+            print_iter: int = 1,
             step_size: float = 0.01,
             dist_measurers: TreeDistanceMeasurerAgg = None):
         """

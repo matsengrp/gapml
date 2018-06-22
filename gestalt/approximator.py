@@ -1,7 +1,8 @@
 from typing import Tuple, List, Set, Dict
 import itertools
 
-from indel_sets import TargetTract, AncState, IndelSet, SingletonWC, TractRepr, Tract
+from indel_sets import TargetTract, IndelSet, SingletonWC, TractRepr, Tract
+from anc_state import AncState
 from indel_sets import get_deactivated_targets
 from cell_lineage_tree import CellLineageTree
 from state_sum import StateSum

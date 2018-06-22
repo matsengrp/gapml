@@ -19,7 +19,8 @@ from scipy.stats import pearsonr, spearmanr, kendalltau
 import logging
 import six
 
-from approximator import ApproximatorLB
+#from transition_matrix_maker import ApproximatorLB
+from transition_matrix_maker import TransitionMatrixMaker
 from likelihood_scorer import LikelihoodScorer
 from tree_distance import *
 from constants import *
@@ -113,8 +114,9 @@ def main(args=sys.argv[1:]):
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
 
-    # Instantiate approximator used by our penalized MLE
-    approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
+    # Instantiate transition_matrix_maker used by our penalized MLE
+    #transition_matrix_maker = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
+    transition_matrix_maker = TransitionMatrixMaker(bcode_metadata = bcode_meta)
 
     worker = LikelihoodScorer(
        args.seed,
@@ -125,7 +127,7 @@ def main(args=sys.argv[1:]):
        None, # Do not know target lambdas
        args.log_barr,
        args.max_iters,
-       approximator,
+       transition_matrix_maker,
        tot_time = args.time,
        dist_measurers = oracle_dist_measurers)
 

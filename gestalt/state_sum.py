@@ -1,6 +1,7 @@
 from typing import List, Tuple, Set
 
-from indel_sets import TargetTract, AncState, TractRepr
+from indel_sets import TargetTract, TractRepr
+from anc_state import AncState
 from barcode_metadata import BarcodeMetadata
 from allele_events import AlleleEvents
 
