@@ -12,6 +12,7 @@ from clt_likelihood_model import CLTLikelihoodModel
 from clt_likelihood_estimator import CLTPenalizedEstimator
 from tree_distance import TreeDistanceMeasurerAgg
 
+
 class LikelihoodScorerResult:
     """
     Stores results from LikelihoodScorer below
@@ -20,6 +21,7 @@ class LikelihoodScorerResult:
         self.model_params_dict = model_params_dict
         self.fitted_bifurc_tree = fitted_bifurc_tree
         self.train_history = train_history
+
 
 class LikelihoodScorer(ParallelWorker):
     """
@@ -73,10 +75,7 @@ class LikelihoodScorer(ParallelWorker):
             tf.global_variables_initializer().run()
             return self.do_work_directly(sess)
 
-    def do_work_directly(self,
-            sess,
-            # TODO: should this live here
-            br_len_scale: float = 0.1):
+    def do_work_directly(self, sess):
         """
         Bypasses all the other code for a ParallelWorker
         Used when we aren't submitting jobs
@@ -86,9 +85,6 @@ class LikelihoodScorer(ParallelWorker):
 
         @return LikelihoodScorerResult
         """
-        num_nodes = self.tree.get_num_nodes()
-        init_branch_len_inners = np.random.rand(num_nodes) * br_len_scale
-        init_branch_len_offsets = np.random.rand(num_nodes) * br_len_scale
         target_lams_known = self.target_lams is not None
         init_target_lams = self.target_lams
         if not target_lams_known:
@@ -102,8 +98,6 @@ class LikelihoodScorer(ParallelWorker):
             sess,
             target_lams = init_target_lams,
             target_lams_known = target_lams_known,
-            branch_len_inners = init_branch_len_inners,
-            branch_len_offsets = init_branch_len_offsets,
             cell_type_tree = self.cell_type_tree,
             cell_lambdas_known = self.know_cell_lams,
             tot_time = self.tot_time)
@@ -113,7 +107,7 @@ class LikelihoodScorer(ParallelWorker):
                 self.log_barr)
     
         # Initialize with parameters such that the branch lengths are positive
-        res_model.initialize_branch_lens(br_len_scale=br_len_scale)
+        res_model.initialize_branch_lens()
     
         train_history = estimator.fit(self.max_iters, dist_measurers = self.dist_measurers)
         return LikelihoodScorerResult(

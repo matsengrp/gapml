@@ -13,13 +13,13 @@ from clt_likelihood_model import CLTLikelihoodModel
 from transition_wrapper_maker import TransitionWrapperMaker
 from tree_distance import TreeDistanceMeasurerAgg
 
+
 class CLTPenalizedEstimator(CLTEstimator):
     """
     Likelihood estimator
 
     TODO: Right now this ignores cell type. we'll add it in later
     """
-    gamma_prior = (1,0.2)
     def __init__(
         self,
         model: CLTLikelihoodModel,
@@ -27,6 +27,8 @@ class CLTPenalizedEstimator(CLTEstimator):
         log_barr: float):
         """
         @param model: initial CLT model params
+        @param transition_wrapper_maker: TransitionWrapperMaker
+        @param log_barr: penalty parameter for the log barrier function (or just the penalty in general)
         """
         self.model = model
         self.log_barr = log_barr
@@ -68,16 +70,14 @@ class CLTPenalizedEstimator(CLTEstimator):
         pen_log_lik = self.model.sess.run(self.model.smooth_log_lik, feed_dict=feed_dict)
         train_history = []
         for i in range(max_iters):
-            _, log_lik, pen_log_lik, log_barr, log_lik_alleles, log_lik_cell_type, trans_mats, trim_probs = self.model.sess.run(
+            _, log_lik, pen_log_lik, log_barr, log_lik_alleles, log_lik_cell_type = self.model.sess.run(
                     [
                         self.model.adam_train_op,
                         self.model.log_lik,
                         self.model.smooth_log_lik,
                         self.model.branch_log_barr,
                         self.model.log_lik_alleles,
-                        self.model.log_lik_cell_type,
-                        self.model.trans_mats,
-                        self.model.trim_probs],
+                        self.model.log_lik_cell_type],
                     feed_dict=feed_dict)
             if pen_log_lik == -np.inf:
                 raise ValueError("Penalized log lik not finite, failed on iteration %d" % i)

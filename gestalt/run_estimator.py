@@ -15,7 +15,7 @@ import argparse
 import time
 import tensorflow as tf
 from tensorflow.python import debug as tf_debug
-from scipy.stats import pearsonr, spearmanr, kendalltau
+from scipy.stats import pearsonr
 import logging
 import six
 
