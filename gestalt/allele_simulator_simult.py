@@ -7,6 +7,7 @@ from scipy.stats import poisson
 
 from allele import Allele, AlleleList
 from indel_sets import TargetTract
+from target_status import TargetStatus
 from allele_simulator import AlleleSimulator
 from barcode_metadata import BarcodeMetadata
 from bounded_poisson import BoundedPoisson
@@ -73,7 +74,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         active_targets = allele.get_active_targets()
         num_active_targets = len(active_targets)
         if num_active_targets:
-            target_tracts = list(CLTLikelihoodModel.get_possible_target_tracts(active_targets))
+            target_tracts = list(TargetStatus.get_possible_target_tracts(active_targets))
             all_hazards = self.model.get_hazards(target_tracts)
             tt_times = [expon.rvs(scale=1.0 / hz) for hz in all_hazards]
             race_winner = target_tracts[np.argmin(tt_times)]

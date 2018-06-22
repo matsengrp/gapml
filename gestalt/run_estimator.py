@@ -15,16 +15,15 @@ import argparse
 import time
 import tensorflow as tf
 from tensorflow.python import debug as tf_debug
-from scipy.stats import pearsonr, spearmanr, kendalltau
+from scipy.stats import pearsonr
 import logging
 import six
 
-from approximator import ApproximatorLB
+from transition_wrapper_maker import TransitionWrapperMaker
 from likelihood_scorer import LikelihoodScorer
 from tree_distance import *
 from constants import *
 from common import *
-from simulate_common import *
 
 def parse_args():
     parser = argparse.ArgumentParser(description='fit topology and branch lengths for GESTALT')
@@ -113,8 +112,7 @@ def main(args=sys.argv[1:]):
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
 
-    # Instantiate approximator used by our penalized MLE
-    approximator = ApproximatorLB(extra_steps = 1, anc_generations = 1, bcode_metadata = bcode_meta)
+    transition_wrap_maker = TransitionWrapperMaker(tree, bcode_meta)
 
     worker = LikelihoodScorer(
        args.seed,
@@ -125,11 +123,12 @@ def main(args=sys.argv[1:]):
        None, # Do not know target lambdas
        args.log_barr,
        args.max_iters,
-       approximator,
+       transition_wrap_maker,
        tot_time = args.time,
        dist_measurers = oracle_dist_measurers)
 
     res = worker.do_work_directly(sess)
+    logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["node_id"], show_internal=True))
     logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
     logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 

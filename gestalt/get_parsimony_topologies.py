@@ -13,10 +13,13 @@ from pathlib import Path
 import six
 
 from cell_lineage_tree import CellLineageTree
-from tree_distance import TreeDistanceMeasurer
+from clt_observer import ObservedAlignedSeq
+from barcode_metadata import BarcodeMetadata
+from tree_distance import TreeDistanceMeasurer, UnrootRFDistanceMeasurer
+from clt_estimator import CLTParsimonyEstimator
+from collapsed_tree import collapse_zero_lens
 from constants import *
 from common import *
-from simulate_common import *
 
 def parse_args():
     parser = argparse.ArgumentParser(description='fit topology and branch lengths for GESTALT')
@@ -160,6 +163,38 @@ def get_bifurc_multifurc_trees(
                     'aux': None,
                     'tree': coll_tree})
     return trees_to_output
+
+def collapse_internally_labelled_tree(tree: CellLineageTree):
+    coll_tree = tree.copy("deepcopy")
+    for n in coll_tree.traverse():
+        n.name = n.allele_events_list_str
+        if not n.is_root():
+            if n.allele_events_list_str == n.up.allele_events_list_str:
+                n.dist = 0
+            else:
+                n.dist = 1
+    coll_tree = collapse_zero_lens(coll_tree)
+    return coll_tree
+
+def get_parsimony_trees(
+        obs_leaves: List[ObservedAlignedSeq],
+        args,
+        bcode_meta: BarcodeMetadata,
+        do_collapse: bool=False):
+    parsimony_estimator = CLTParsimonyEstimator(
+            bcode_meta,
+            args.out_folder,
+            args.mix_path)
+    #TODO: DOESN'T USE CELL STATE
+    parsimony_trees = parsimony_estimator.estimate(
+            obs_leaves,
+            num_mix_runs=args.num_jumbles,
+            do_collapse=do_collapse)
+    logging.info("Total parsimony trees %d", len(parsimony_trees))
+
+    parsimony_score = parsimony_trees[0].get_parsimony_score()
+    logging.info("parsimony scores %d", parsimony_score)
+    return parsimony_trees
 
 def main(args=sys.argv[1:]):
     args = parse_args()

@@ -28,7 +28,7 @@ def parse_args():
     parser.add_argument(
         '--true-model-pkl',
         type=str,
-        default=None,
+        default="_output/true_model.pkl",
         help='pkl file with true model if available')
     parser.add_argument(
         '--out-folder',

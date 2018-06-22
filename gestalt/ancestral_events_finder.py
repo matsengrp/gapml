@@ -3,7 +3,7 @@ import numpy as np
 
 from cell_lineage_tree import CellLineageTree
 from allele_events import Event, AlleleEvents
-from indel_sets import AncState
+from anc_state import AncState
 
 from barcode_metadata import BarcodeMetadata
 
@@ -28,7 +28,6 @@ def annotate_ancestral_states(tree: CellLineageTree, bcode_meta: BarcodeMetadata
         node.add_feature("anc_state_list_str", [str(k) for k in node.anc_state_list])
 
 def get_possible_anc_states(tree: CellLineageTree):
-    # TODO: use a python reduce function?
     children = tree.get_children()
     parent_anc_state_list = []
     for bcode_idx, par_anc_state in enumerate(children[0].anc_state_list):

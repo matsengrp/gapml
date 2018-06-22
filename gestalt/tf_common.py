@@ -35,6 +35,9 @@ def not_equal_float(a, b):
 def equal_float(a, b):
     return tf.cast(tf.equal(a, b), tf.float64)
 
+def greater_equal_float(a, b):
+    return tf.cast(tf.greater_equal(a, b), tf.float64)
+
 def ifelse(bool_tensor, a, b):
     return bool_tensor * a + (1 - bool_tensor) * b
 

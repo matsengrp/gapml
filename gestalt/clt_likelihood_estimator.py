@@ -10,8 +10,9 @@ import logging
 from clt_estimator import CLTEstimator
 from cell_lineage_tree import CellLineageTree
 from clt_likelihood_model import CLTLikelihoodModel
-from approximator import ApproximatorLB
+from transition_wrapper_maker import TransitionWrapperMaker
 from tree_distance import TreeDistanceMeasurerAgg
+
 
 class CLTPenalizedEstimator(CLTEstimator):
     """
@@ -19,23 +20,23 @@ class CLTPenalizedEstimator(CLTEstimator):
 
     TODO: Right now this ignores cell type. we'll add it in later
     """
-    gamma_prior = (1,0.2)
     def __init__(
         self,
         model: CLTLikelihoodModel,
-        approximator: ApproximatorLB,
+        transition_wrapper_maker: TransitionWrapperMaker,
         log_barr: float):
         """
         @param model: initial CLT model params
+        @param transition_wrapper_maker: TransitionWrapperMaker
+        @param log_barr: penalty parameter for the log barrier function (or just the penalty in general)
         """
         self.model = model
-        self.approximator = approximator
         self.log_barr = log_barr
 
         # Create the skeletons for the transition matrices -- via state sum approximation
-        self.transition_mat_wrappers = self.approximator.create_transition_matrix_wrappers(model)
+        transition_wrappers = transition_wrapper_maker.create_transition_wrappers()
         logging.info("Done creating transition matrices")
-        self.model.create_log_lik(self.transition_mat_wrappers)
+        self.model.create_log_lik(transition_wrappers)
         logging.info("Done creating tensorflow graph")
         tf.global_variables_initializer().run()
 
@@ -47,11 +48,11 @@ class CLTPenalizedEstimator(CLTEstimator):
         #print("Log lik", log_lik)
         #print("log lik grad", log_lik_grad)
 
-        #self.model.check_grad(self.transition_mat_wrappers)
+        #self.model.check_grad(transition_wrappers)
 
     def fit(self,
             max_iters: int,
-            print_iter: int = 50,
+            print_iter: int = 1,
             step_size: float = 0.01,
             dist_measurers: TreeDistanceMeasurerAgg = None):
         """
