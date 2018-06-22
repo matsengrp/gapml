@@ -851,7 +851,7 @@ class CLTLikelihoodModel:
         self.log_lik_alleles = tf.add_n(self.log_lik_alleles_list)
 
     def _initialize_lower_prob(self,
-            transition_matrix_wrappers: Dict[int, List[TransitionMatrixWrapper]],
+            transition_wrappers: Dict[int, List[TransitionWrapper]],
             node: CellLineageTree,
             bcode_idx: int):
         """
@@ -868,14 +868,14 @@ class CLTLikelihoodModel:
                 for child in node.children if not child.is_copy]))
             if not node.is_root():
                 # When making this probability, order the elements per the transition matrix of this node
-                possible_target_statuses = transition_matrix_wrappers[node.node_id][bcode_idx]
+                transition_wrapper = transition_wrappers[node.node_id][bcode_idx]
                 index_vals = [[
-                        [targ_stat_idx, 0],
-                        self.hazard_away_dict[targ_stat]]
-                    for targ_stat_idx, targ_stat in enumerate(possible_target_statuses)]
+                        [transition_wrapper.key_dict[state], 0],
+                        self.hazard_away_dict[state]]
+                    for state in transition_wrapper.states]
                 haz_aways = tf_common.scatter_nd(
                         index_vals,
-                        output_shape=[len(possible_target_statuses), 1],
+                        output_shape=[transition_wrapper.num_likely_states + 1, 1],
                         name="haz_away.multifurc")
                 return tf.exp(-haz_aways * time_stays_constant)
             else:
