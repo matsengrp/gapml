@@ -95,45 +95,45 @@ class CLTObserver:
     def observe_leaves(self,
                        sampling_rate: float,
                        cell_lineage_tree: CellLineageTree,
-                       give_pruned_clt: bool = True,
                        seed: int = None,
-                       bifurcating_only: bool = True,
-                       observe_cell_state: bool = True):
+                       #bifurcating_only: bool = False,
+                       observe_cell_state: bool = False):
         """
         Samples leaves from the cell lineage tree, of those that are not dead
-
-        TODO: this probably won't work very well for very large trees.
+        Note: a bit slow for big trees
 
         @param sampling_rate: the rate at which alleles from the alive leaf cells are observed
         @param cell_lineage_tree: tree to sample leaves from
         @param seed: controls how the sampling is performed
+        @param 
 
         @return Tuple with
                     1. a list of the sampled observations (List[ObservedAlignedSeq])
-                    2. a cell lineage tree with pruned leaves
+                    2. the subtree of the full cell lineage tree with the sampled leaves
+                    2. a collapsed cell lineage tree for the sampled tree
         """
         assert (0 < sampling_rate <= 1)
         np.random.seed(seed)
-        clt = self._sample_leaves(cell_lineage_tree, sampling_rate)
+        sampled_clt = self._sample_leaves(cell_lineage_tree, sampling_rate)
 
         # Collapse the tree per ultrametric constraints
-        clt = collapsed_tree.collapse_ultrametric(clt)
+        collapsed_clt = collapsed_tree.collapse_ultrametric(sampled_clt)
 
-        if bifurcating_only:
-            if clt.is_many_furcating():
-                # TODO: deal with this in the future...
-                raise ValueError("Need root of clt to be bifurcating")
-            for node in clt.traverse():
-                if node.is_many_furcating():
-                    node.detach()
-            for node in clt.get_descendants(strategy="postorder"):
-                if len(node.get_children()) == 1:
-                    node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
+        #if bifurcating_only:
+        #    if collapsed_clt.is_many_furcating():
+        #        # TODO: deal with this in the future...
+        #        raise ValueError("Need root of collapsed_clt to be bifurcating")
+        #    for node in collapsed_clt.traverse():
+        #        if node.is_many_furcating():
+        #            node.detach()
+        #    for node in collapsed_clt.get_descendants(strategy="postorder"):
+        #        if len(node.get_children()) == 1:
+        #            node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
 
         observations = {}
         # When observing each leaf, observe with specified error rate
         # Gather observed leaves, calculating abundance
-        for leaf in clt:
+        for leaf in collapsed_clt:
             allele_list_with_errors = self._observe_leaf_with_error(leaf)
 
             allele_str_id = leaf.allele_events_list_str
@@ -148,8 +148,7 @@ class CLTObserver:
                 observations[cell_id] = ObservedAlignedSeq(
                     allele_list=allele_list_with_errors,
                     allele_events_list=leaf.allele_events_list,
-                    # TODO: what if lots of possible cell states?!
-                    cell_state=leaf.cell_state,
+                    cell_state=leaf.cell_state if observe_cell_state else None,
                     abundance=1,
                 )
 
@@ -158,20 +157,21 @@ class CLTObserver:
 
         obs_vals = list(observations.values())
         random.shuffle(obs_vals)
-        if give_pruned_clt:
-            # This section just checks that the collapsing procedure is correct
-            obs_evts_list = []
-            tree_evts = []
-            for o in observations.values():
-                obs_evts_list.append(str(o))
-            for node in clt.traverse():
-                if node.observed:
-                    tree_evts.append(node.allele_events_list_str)
-            logging.info("diff events? %s", str(set(obs_evts_list) - set(tree_evts)))
-            logging.info("diff events? %s", str(set(tree_evts) - set(obs_evts_list)))
-            assert set(tree_evts) == set(obs_evts_list), "the two sets are not equal"
-            # End of checking
 
-            return obs_vals, clt
-        else:
-            return obs_vals
+        # This section just checks that the collapsing procedure is correct
+        obs_evts = set([str(o) for o in observations.values()])
+        tree_evts = set([leaf.allele_events_list_str for leaf in collapsed_clt])
+        logging.info("diff events? %s", str(obs_evts - tree_evts))
+        logging.info("diff events? %s", str(tree_evts - obs_evts))
+        assert tree_evts == obs_evts, "the two sets are not equal"
+
+        for leaf in cell_lineage_tree:
+            time = cell_lineage_tree.get_distance(leaf)
+            break
+        for leaf in sampled_clt:
+            assert np.isclose(leaf.get_distance(sampled_clt), time)
+        for leaf in collapsed_clt:
+            assert np.isclose(leaf.get_distance(collapsed_clt), time)
+        # End of checking
+
+        return obs_vals, sampled_clt, collapsed_clt
