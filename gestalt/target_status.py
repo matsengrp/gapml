@@ -1,4 +1,5 @@
 import itertools
+import numpy as np
 from typing import List
 
 from barcode_metadata import BarcodeMetadata
@@ -53,6 +54,9 @@ class TargetStatus(tuple):
         """
         @param target_deact_tracts: Tuple[TargetDeactTract]
         """
+        for i in range(len(target_deact_tracts) - 1):
+            assert target_deact_tracts[i].max_deact_target != target_deact_tracts[i + 1].min_deact_target - 1
+            
         return tuple.__new__(cls, target_deact_tracts)
 
     def __getnewargs__(self):
@@ -69,30 +73,129 @@ class TargetStatus(tuple):
         return deact_targs
 
     def merge(self, other_targ_stat):
-        my_deact_tracts = list(self)
-        other_deact_tracts = list(other_targ_stat)
-        new_targ_stat = list(sorted(my_deact_tracts + other_deact_tracts, key = lambda x: x.min_deact_target))
-        return TargetStatus(*new_targ_stat)
+        """
+        This performs the most basic merge!
+        """
+        if len(self) == 0:
+            return other_targ_stat
+        if len(other_targ_stat) == 0:
+            return self
+
+        max_targets = max(other_targ_stat[-1].max_deact_target + 1, self[-1].max_deact_target + 1)
+        binary_status = self._get_binary_status(max_targets)
+        for deact_tract in other_targ_stat:
+            assert binary_status[deact_tract.min_deact_target] == 0
+            assert binary_status[deact_tract.max_deact_target] == 0
+            binary_status[deact_tract.min_deact_target: deact_tract.max_deact_target + 1] = 1
+
+        return TargetStatus._binary_status_to_target_status(binary_status.tolist())
 
     def add(self, deact_tract: TargetDeactTract):
-        my_deact_tracts = list(self)
-        new_targ_stat = list(sorted(my_deact_tracts + [deact_tract], key = lambda x: x.min_deact_target))
-        return TargetStatus(*new_targ_stat)
+        """
+        @return TargetStatus that results after adding this `deact_tract`
+        """
+        if len(self) == 0:
+            return TargetStatus(deact_tract)
 
-    def minus(self, other_targ_stat):
-        return set(self.deact_targets) - set(other_targ_stat.deact_targets)
+        max_targets = max(deact_tract.max_deact_target + 1, self[-1].max_deact_target + 1)
+        binary_status = self._get_binary_status(max_targets)
+        assert binary_status[deact_tract.min_deact_target] == 0
+        assert binary_status[deact_tract.max_deact_target] == 0
+        binary_status[deact_tract.min_deact_target: deact_tract.max_deact_target + 1] = 1
+        return TargetStatus._binary_status_to_target_status(binary_status.tolist())
+
+    def minus(self, orig_targ_stat):
+        """
+        @param orig_targ_stat: TargetStatus, the "original" target status
+        @return the list of targets that were deactivated by this target status,
+                where the `orig_targ_stat` was the original target status.
+        """
+        orig_targs = set(orig_targ_stat.deact_targets)
+        self_targs = set(self.deact_targets)
+        if self_targs >= orig_targs:
+            return self_targs - orig_targs
+        else:
+            return set()
+
+    def _get_binary_status(self, n_targets: int):
+        """
+        @return numpy array with 1 where the target is no longer active
+        """
+        binary_status = np.zeros(n_targets, dtype=int)
+        for deact_tract in self:
+            binary_status[deact_tract.min_deact_target: deact_tract.max_deact_target + 1] = 1
+        return binary_status
 
     def get_active_targets(self, bcode_meta: BarcodeMetadata):
-        if len(self) == 0:
-            return list(range(bcode_meta.n_targets))
+        """
+        @return List[int] of active targets
+        """
+        inactive_status = self._get_binary_status(bcode_meta.n_targets)
+        return np.where(inactive_status == 0)[0].tolist()
 
-        active_targets = list(range(self[0].min_deact_target))
-        last_deact_targ = self[0].max_deact_target
-        for deact_targs in self[1:]:
-            active_targets += list(range(last_deact_targ + 1, deact_targs.min_deact_target))
-            last_deact_targ = deact_targs.max_deact_target
-        active_targets += list(range(last_deact_targ + 1, bcode_meta.n_targets))
-        return active_targets 
+    def get_possible_target_tracts(self, bcode_meta: BarcodeMetadata):
+        """
+        @return List[TargetTract]
+        """
+        # Take one step from this TT group using two step procedure
+        # 1. enumerate all possible start positions for target tract
+        # 2. enumerate all possible end positions for target tract
+
+        active_any_targs = self.get_active_targets(bcode_meta)
+        n_any_targs = len(active_any_targs)
+        # List possible starts of the target tracts
+        all_starts = [[] for _ in range(n_any_targs)]
+        for i0_prime, t0_prime in enumerate(active_any_targs):
+            # Short left trim
+            all_starts[i0_prime].append((t0_prime, t0_prime))
+            if t0_prime > 1:
+                # Long left trim
+                all_starts[i0_prime].append((t0_prime - 1, t0_prime))
+
+        # Create possible ends of the target tracts
+        all_ends = [[] for i in range(n_any_targs)]
+        for i1_prime, t1_prime in enumerate(active_any_targs):
+            # Short right trim
+            all_ends[i1_prime].append((t1_prime, t1_prime))
+            if t1_prime < bcode_meta.n_targets - 1:
+                # Allow a long right trim
+                all_ends[i1_prime].append((t1_prime, t1_prime + 1))
+
+        # Finally create all possible target tracts by combining possible start and ends
+        tt_evts = set()
+        for j, tt_starts in enumerate(all_starts):
+            for k in range(j, n_any_targs):
+                tt_ends = all_ends[k]
+                for tt_start in tt_starts:
+                    for tt_end in tt_ends:
+                        tt_evt = TargetTract(tt_start[0], tt_start[1], tt_end[0], tt_end[1])
+                        tt_evts.add(tt_evt)
+
+        return list(tt_evts)
+
+    @staticmethod
+    def _binary_status_to_target_status(binary_status: List[int]):
+        """
+        Convert a binary status to a TargetStatus
+        @return TargetStatus
+        """
+        deact_targs = []
+        curr_deact_start_targ = None
+        for idx, val in enumerate(binary_status):
+            if val == 1:
+                if curr_deact_start_targ is None:
+                    curr_deact_start_targ = idx
+            else:
+                if curr_deact_start_targ is not None:
+                    deact_targs.append(TargetDeactTract(
+                        curr_deact_start_targ,
+                        idx - 1))
+                    curr_deact_start_targ = None
+        if curr_deact_start_targ is not None:
+            deact_targs.append(TargetDeactTract(
+                curr_deact_start_targ,
+                len(binary_status) - 1))
+        return TargetStatus(*deact_targs)
 
     @staticmethod
     def get_all_transitions(bcode_meta: BarcodeMetadata):
@@ -111,47 +214,3 @@ class TargetStatus(tuple):
                     new_targ_stat = targ_stat.add(transition_deact_tract)
                     target_status_transition_dict[targ_stat][new_targ_stat] = transition_deact_tract
         return target_status_transition_dict
-
-    @staticmethod
-    def get_possible_target_tracts(active_any_targs: List[int]):
-        """
-        @param active_any_targs: a list of active targets that can be cut with any trim
-        @return a set of possible target tracts
-        """
-        n_any_targs = len(active_any_targs)
-
-        # Take one step from this TT group using two step procedure
-        # 1. enumerate all possible start positions for target tract
-        # 2. enumerate all possible end positions for target tract
-
-        # List possible starts of the target tracts
-        all_starts = [[] for _ in range(n_any_targs)]
-        for i0_prime, t0_prime in enumerate(active_any_targs):
-            # No left trim overflow
-            all_starts[i0_prime].append((t0_prime, t0_prime))
-            # Determine if left trim overflow allowed
-            if i0_prime < n_any_targs - 1 and active_any_targs[i0_prime + 1] == t0_prime + 1:
-                # Add in the long left trim overflow
-                all_starts[i0_prime + 1].append((t0_prime, t0_prime + 1))
-
-        # Create possible ends of the target tracts
-        all_ends = [[] for i in range(n_any_targs)]
-        for i1_prime, t1_prime in enumerate(active_any_targs):
-            # No right trim overflow
-            all_ends[i1_prime].append((t1_prime, t1_prime))
-            # Determine if right trim overflow allowed
-            if i1_prime > 0 and active_any_targs[i1_prime - 1] == t1_prime - 1:
-                # Add in the right trim overflow
-                all_ends[i1_prime - 1].append((t1_prime - 1, t1_prime))
-
-        # Finally create all possible target tracts by combining possible start and ends
-        tt_evts = set()
-        for j, tt_starts in enumerate(all_starts):
-            for k in range(j, n_any_targs):
-                tt_ends = all_ends[k]
-                for tt_start in tt_starts:
-                    for tt_end in tt_ends:
-                        tt_evt = TargetTract(tt_start[0], tt_start[1], tt_end[0], tt_end[1])
-                        tt_evts.add(tt_evt)
-
-        return tt_evts

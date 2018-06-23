@@ -19,8 +19,9 @@ class Event(tuple):
         """
         @param start_pos: position where event begins
         @param del_len: number of nucleotides deleted
+        @param min_target: min target that got cut
+        @param max_target: max target that got cut
         @param insert_str: sequence of nucleotides inserted
-        @param targets: which targets this event is associated with
         """
         return tuple.__new__(cls, (start_pos, del_len, min_target, max_target, insert_str))
 
@@ -86,12 +87,6 @@ class AlleleEvents:
         for i in range(len(start_ends) - 1):
             assert(start_ends[i] <= start_ends[i + 1])
         self.num_targets = num_targets
-
-    def get_used_targets(self):
-        disturbed_targets = set()
-        for evt in self.events:
-            disturbed_targets.update(list(range(evt.min_target, evt.max_target + 1)))
-        return disturbed_targets
 
     def __lt__(self, other):
         # Needed for robinson fould calculation for some reason

@@ -71,10 +71,9 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
                 event_time: the time of the event that won
                             if no event happens, then returns None
         """
-        active_targets = allele.get_active_targets()
-        num_active_targets = len(active_targets)
-        if num_active_targets:
-            target_tracts = list(TargetStatus.get_possible_target_tracts(active_targets))
+        targ_stat = allele.get_target_status()
+        target_tracts = targ_stat.get_possible_target_tracts(self.bcode_meta)
+        if len(target_tracts):
             all_hazards = self.model.get_hazards(target_tracts)
             tt_times = [expon.rvs(scale=1.0 / hz) for hz in all_hazards]
             race_winner = target_tracts[np.argmin(tt_times)]
@@ -88,8 +87,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         @param init_allele: the initial state of the allele
         @param time: the amount of time to simulate the allele modification process
 
-        @return allele list after the simulation procedure
-                does not modify the allele that got passed in :)
+        @return allele after the simulation procedure
         """
         allele = Allele(init_allele.allele, init_allele.bcode_meta)
 
@@ -102,9 +100,6 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
 
             if time_remain > 0:
                 # Target(s) got cut
-                allele.cut(target_tract.min_target)
-                if target_tract.min_target != target_tract.max_target:
-                    allele.cut(target_tract.max_target)
                 self._do_repair(allele, target_tract)
         return allele
 

@@ -248,6 +248,11 @@ class TargetTract(Tract, DeactEvt):
             min_targ: int,
             max_targ: int,
             max_deact_targ: int):
+        assert min_targ <= max_targ
+        assert min_deact_targ >= min_targ - 1
+        assert min_deact_targ <= min_targ
+        assert max_targ <= max_deact_targ
+        assert max_deact_targ <= max_targ + 1
         return tuple.__new__(cls, (min_deact_targ, min_targ, max_targ, max_deact_targ))
 
     def __getnewargs__(self):

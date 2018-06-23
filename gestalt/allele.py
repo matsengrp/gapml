@@ -8,6 +8,7 @@ from alignment import Aligner
 from allele_events import AlleleEvents, Event
 from constants import BARCODE_V7, NUM_BARCODE_V7_TARGETS
 from barcode_metadata import BarcodeMetadata
+from target_status import TargetDeactTract, TargetStatus
 
 class AlleleList:
     """
@@ -61,31 +62,25 @@ class Allele:
         """
         # an editable copy of the allele (as a list for mutability)
         self.allele = list(allele)
-        # a list of target indices that have a DSB and need repair
-        self.needs_repair = set()
 
         self.bcode_meta = bcode_meta
 
-    def get_active_targets(self):
+    def get_target_status(self):
         """
         @return List[int], index of the targets that can be cut, e.g. the targets where the crucial positions
         are not modified
         """
         # TODO: right now this code is pretty inefficient... but only used by simulator i think?
         events = self.get_event_encoding().events
-        inactive = self.needs_repair.copy()
+        deact_tracts = []
         for evt in events:
             min_deact, max_deact = self.bcode_meta.get_min_max_deact_targets(evt)
-            inactive.update(range(min_deact, max_deact + 1))
-        matches = [i for i in range(self.bcode_meta.n_targets) if i not in inactive]
-        return matches
+            deact_tracts.append(TargetDeactTract(min_deact, max_deact))
+        return TargetStatus(*deact_tracts)
 
-    def cut(self, target_idx):
-        """
-        Marks this target as having a DSB
-        """
-        assert(target_idx in self.get_active_targets())
-        self.needs_repair.add(target_idx)
+    def get_active_targets(self):
+        targ_stat = self.get_target_status()
+        return targ_stat.get_active_targets(self.bcode_meta)
 
     def indel(self,
               target1: int,
@@ -103,8 +98,9 @@ class Allele:
         @param right_del_len: number of nucleotides to delete to the right
         @param insertion: sequence placed between target deletions
         '''
-        assert(target1 in self.needs_repair)
-        assert(target2 in self.needs_repair)
+        active_targets = self.get_active_targets()
+        assert(target1 in active_targets)
+        assert(target2 in active_targets)
 
         # TODO: make this code more efficient
         # indices into the self.allele list (accounting for the spacers)
@@ -141,10 +137,6 @@ class Allele:
                 deleted += 1
         # put it back together
         self.allele = (left + insertion + center + right).split(',')
-        # Update needs_repair
-        # Currently assumes that during inter-target indels, any cuts in the middle
-        # also get repaired.
-        self.needs_repair = self.needs_repair.difference(set(range(target1, target2 + 1)))
 
     def get_events(self, aligner: Aligner = None, left_align: bool = False):
         '''
