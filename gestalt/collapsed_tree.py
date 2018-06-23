@@ -32,7 +32,7 @@ def _remove_single_child_unobs_nodes(tree: TreeNode):
         grandchild_node = child_node.get_children()[0]
         # Preserve branch lengths by propagating down (ete does this wrong)
         child_node_dist = child_node.dist
-        grandchild.dist += child_node_dist
+        grandchild_node.dist += child_node_dist
         child_node.delete(prevent_nondicotomic=True, preserve_branch_length=False)
 
     for node in tree.get_descendants(strategy="postorder"):
@@ -65,6 +65,7 @@ def collapse_ultrametric(raw_tree: CellLineageTree):
     # Begin creating the collapsed tree
     collapsed_tree = CellLineageTree(
             allele_list = tree.allele_list,
+            allele_events_list = tree.allele_events_list,
             cell_state = tree.cell_state)
     node_to_collapsed_node_dict = {tree.node_id: collapsed_tree}
     latest_allele_node_dict = {tree.allele_events_list_str: (collapsed_tree, 0)}
@@ -79,6 +80,7 @@ def collapse_ultrametric(raw_tree: CellLineageTree):
             parent_collapsed_node = node_to_collapsed_node_dict[parent.node_id]
             new_child_collapsed_node = CellLineageTree(
                 allele_list = child.allele_list,
+                allele_events_list = child.allele_events_list,
                 cell_state = child.cell_state,
                 dist = child.dist)
             parent_collapsed_node.add_child(new_child_collapsed_node)
@@ -91,6 +93,7 @@ def collapse_ultrametric(raw_tree: CellLineageTree):
             collapsed_child_dist = child.dist_to_root - parent_dist_to_root
             new_child_collapsed_node = CellLineageTree(
                 allele_list = child.allele_list,
+                allele_events_list = child.allele_events_list,
                 cell_state = child.cell_state,
                 dist = collapsed_child_dist)
             parent_collapsed_node.add_child(new_child_collapsed_node)

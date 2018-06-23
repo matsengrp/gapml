@@ -1,17 +1,12 @@
 """
 A simulation engine to create cell lineage tree and data samples
 """
-import os
 import sys
-import csv
 import numpy as np
 import argparse
 import time
 import tensorflow as tf
-from tensorflow.python import debug as tf_debug
 import logging
-import pickle
-from pathlib import Path
 import six
 
 from cell_state import CellState, CellTypeTree
@@ -20,14 +15,10 @@ from cell_state_simulator import CellTypeSimulator
 from clt_simulator import CLTSimulatorBifurcating
 from clt_likelihood_model import CLTLikelihoodModel
 from allele_simulator_simult import AlleleSimulatorSimultaneous
-from allele import Allele
-from clt_observer import CLTObserver, ObservedAlignedSeq
-from alignment import AlignerNW
+from clt_observer import CLTObserver
 from barcode_metadata import BarcodeMetadata
 
-from constants import *
-from common import *
-from summary_util import *
+from constants import NUM_BARCODE_V7_TARGETS, BARCODE_V7
 
 def parse_args():
     parser = argparse.ArgumentParser(description='simulate GESTALT')
