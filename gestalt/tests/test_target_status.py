@@ -65,7 +65,6 @@ class CollapsedTreeTestCase(unittest.TestCase):
                 new_targ_stat,
                 TargetStatus(*([TargetDeactTract(3,7)])))
 
-
     def test_minus(self):
         deact_tracts1 = [TargetDeactTract(0,1)]
         targ_stat1 = TargetStatus(*deact_tracts1)
@@ -74,12 +73,19 @@ class CollapsedTreeTestCase(unittest.TestCase):
                 targ_stat1.minus(TargetStatus()),
                 set([0,1]))
 
-        deact_tracts1 = [TargetDeactTract(0,1), TargetDeactTract(3,3)]
-        targ_stat1 = TargetStatus(*deact_tracts1)
+        deact_tracts2 = [TargetDeactTract(0,1), TargetDeactTract(3,3)]
+        targ_stat2 = TargetStatus(*deact_tracts2)
 
         self.assertEqual(
-                targ_stat1.minus(TargetStatus(TargetDeactTract(0,1))),
+                targ_stat2.minus(TargetStatus(TargetDeactTract(0,1))),
                 set([3]))
+
+        deact_tracts3 = [TargetDeactTract(3,6)]
+        targ_stat3 = TargetStatus(*deact_tracts3)
+
+        self.assertEqual(
+                targ_stat3.minus(targ_stat2),
+                set())
 
     def test_active_targets(self):
         deact_tracts1 = [TargetDeactTract(0,1), TargetDeactTract(4,4)]
