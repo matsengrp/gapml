@@ -82,7 +82,7 @@ class TargetStatus(tuple):
             return self
 
         max_targets = max(other_targ_stat[-1].max_deact_target + 1, self[-1].max_deact_target + 1)
-        binary_status = self.get_binary_status(max_targets)
+        binary_status = self._get_binary_status(max_targets)
         for deact_tract in other_targ_stat:
             assert binary_status[deact_tract.min_deact_target] == 0
             assert binary_status[deact_tract.max_deact_target] == 0
@@ -98,31 +98,11 @@ class TargetStatus(tuple):
             return TargetStatus(deact_tract)
 
         max_targets = max(deact_tract.max_deact_target + 1, self[-1].max_deact_target + 1)
-        binary_status = self.get_binary_status(max_targets)
+        binary_status = self._get_binary_status(max_targets)
         assert binary_status[deact_tract.min_deact_target] == 0
         assert binary_status[deact_tract.max_deact_target] == 0
         binary_status[deact_tract.min_deact_target: deact_tract.max_deact_target + 1] = 1
         return TargetStatus._binary_status_to_target_status(binary_status.tolist())
-
-    @staticmethod
-    def _binary_status_to_target_status(binary_status: List[int]):
-        deact_targs = []
-        curr_deact_start_targ = None
-        for idx, val in enumerate(binary_status):
-            if val == 1:
-                if curr_deact_start_targ is None:
-                    curr_deact_start_targ = idx
-            else:
-                if curr_deact_start_targ is not None:
-                    deact_targs.append(TargetDeactTract(
-                        curr_deact_start_targ,
-                        idx - 1))
-                    curr_deact_start_targ = None
-        if curr_deact_start_targ is not None:
-            deact_targs.append(TargetDeactTract(
-                curr_deact_start_targ,
-                len(binary_status) - 1))
-        return TargetStatus(*deact_targs)
 
     def minus(self, orig_targ_stat):
         """
@@ -137,14 +117,20 @@ class TargetStatus(tuple):
         else:
             return set()
 
-    def get_binary_status(self, n_targets: int):
+    def _get_binary_status(self, n_targets: int):
+        """
+        @return numpy array with 1 where the target is no longer active
+        """
         binary_status = np.zeros(n_targets, dtype=int)
         for deact_tract in self:
             binary_status[deact_tract.min_deact_target: deact_tract.max_deact_target + 1] = 1
         return binary_status
 
     def get_active_targets(self, bcode_meta: BarcodeMetadata):
-        inactive_status = self.get_binary_status(bcode_meta.n_targets)
+        """
+        @return List[int] of active targets
+        """
+        inactive_status = self._get_binary_status(bcode_meta.n_targets)
         return np.where(inactive_status == 0)[0].tolist()
 
     def get_possible_target_tracts(self, bcode_meta: BarcodeMetadata):
@@ -186,6 +172,30 @@ class TargetStatus(tuple):
                         tt_evts.add(tt_evt)
 
         return list(tt_evts)
+
+    @staticmethod
+    def _binary_status_to_target_status(binary_status: List[int]):
+        """
+        Convert a binary status to a TargetStatus
+        @return TargetStatus
+        """
+        deact_targs = []
+        curr_deact_start_targ = None
+        for idx, val in enumerate(binary_status):
+            if val == 1:
+                if curr_deact_start_targ is None:
+                    curr_deact_start_targ = idx
+            else:
+                if curr_deact_start_targ is not None:
+                    deact_targs.append(TargetDeactTract(
+                        curr_deact_start_targ,
+                        idx - 1))
+                    curr_deact_start_targ = None
+        if curr_deact_start_targ is not None:
+            deact_targs.append(TargetDeactTract(
+                curr_deact_start_targ,
+                len(binary_status) - 1))
+        return TargetStatus(*deact_targs)
 
     @staticmethod
     def get_all_transitions(bcode_meta: BarcodeMetadata):
