@@ -121,8 +121,8 @@ def main(args=sys.argv[1:]):
     with open(args.true_model_pkl, "rb") as f:
         true_model_dict = six.moves.cPickle.load(f)
 
-    oracle_coll_tree = collapse_internally_labelled_tree(true_model_dict["true_tree"])
-    logging.info(true_model_dict["true_tree"].get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    oracle_coll_tree = collapse_internally_labelled_tree(true_model_dict["collapsed_subtree"])
+    logging.info(true_model_dict["collapsed_subtree"].get_ascii(attributes=["allele_events_list_str"], show_internal=True))
     logging.info(oracle_coll_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
     trees_to_output = [{
@@ -130,7 +130,7 @@ def main(args=sys.argv[1:]):
         'multifurc': False,
         'idx': 0,
         'aux': None,
-        'tree': true_model_dict["true_tree"],
+        'tree': true_model_dict["collapsed_subtree"],
     }, {
         'selection_type': 'oracle',
         'multifurc': True,

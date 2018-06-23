@@ -23,151 +23,97 @@ def _label_dist_to_root(tree: TreeNode):
             max_dist = node.dist_to_root
     return max_dist
 
-def _get_earliest_uniq_branches(tree: TreeNode):
-    """
-    @return a dict with all the unique pairs of parent to child alleles in the tree.
-            The dict maps child allele string to [
-                the earliest node with the child allele,
-                the distance from this earliest node to the root,
-                the parent node's allele string,
-                whether or not the allele is observed]
-    """
-    uniq_allele_branches = dict()
-    for node in tree.traverse():
-        allele_id = node.allele_events_list_str
-        node_up_dist = 0 if node.is_root() else node.up.dist_to_root
-        if allele_id in uniq_allele_branches:
-            shortest_dist = uniq_allele_branches[allele_id][1]
-            is_observed = uniq_allele_branches[allele_id][-1]
-            if node.up.dist_to_root < shortest_dist:
-                uniq_allele_branches[allele_id] = [
-                        node,
-                        node_up_dist,
-                        node.up,
-                        is_observed]
-        else:
-            uniq_allele_branches[allele_id] = [
-                    node,
-                    node_up_dist,
-                    node.up,
-                    False]
-        # An allele is observed if the allele ever appears at a leaf
-        uniq_allele_branches[allele_id][-1] |= node.is_leaf()
-    return uniq_allele_branches
-
-def _regrow_collapsed_tree(tree: TreeNode, uniq_allele_branches: Dict):
-    """
-    Regrow the tree per the rules about first appearance.
-    Modifies `tree` to create the new tree with `tree` as the root
-
-    @return a dictionary mapping
-        allele => a dictionary mapping
-                        dist to root => node with that allele
-    """
-    # Sort the branches/alleles so that we process branches sequentially by the time of creation/
-    # the time these alleles branched off.
-    sorted_branches = sorted(list(uniq_allele_branches.values()), key=lambda br: br[1])
-    # Useful dictionary to tracking what nodes we have created so far
-    existing_nodes_dict = {tree.allele_events_list_str: {0: tree}}
-    for node, dist_to_root, old_parent_node, is_obs in sorted_branches:
-        # Check if this node is not the root
-        if node.allele_events_list_str != NO_EVT_STR:
-            parent_allele_str = old_parent_node.allele_events_list_str
-            print(parent_allele_str, "=>", node.allele_events_list_str, dist_to_root)
-            if parent_allele_str in existing_nodes_dict:
-                if dist_to_root in existing_nodes_dict[parent_allele_str]:
-                    # There already exists a node with the parent allele that is exactly this distance
-                    # away from the root.
-                    # This seems like it would happen only in rare cases?
-                    par_node = existing_nodes_dict[parent_allele_str][dist_to_root]
-                else:
-                    # There does not exist a node with this parent allele of this distance
-                    # away from the root, though there are nodes with this parent allele
-                    # that are closer to the root. We need to make this new parent node and
-                    # connect this new node to its appropriate parent node
-                    max_dist_to_root = max(list(existing_nodes_dict[parent_allele_str].keys()))
-                    grandpa_node = existing_nodes_dict[parent_allele_str][max_dist_to_root]
-                    assert dist_to_root > max_dist_to_root
-                    # Use the grandpa node as a template for creating a new parent node
-                    par_node = CellLineageTree(
-                            allele_list = old_parent_node.allele_list,
-                            cell_state = old_parent_node.cell_state,
-                            dist = dist_to_root - max_dist_to_root)
-                    par_node.add_feature("dist_to_root", dist_to_root)
-                    grandpa_node.add_child(par_node)
-                    existing_nodes_dict[parent_allele_str][dist_to_root] = par_node
-            else:
-                raise ValueError("Should never happen -- allele should already exist")
-
-            if node.allele_events_list_str in existing_nodes_dict:
-                raise ValueError("Should never happen -- allele cant exist already")
-            else:
-                # Now put this parent node in this new allele's dictionary -- it is the first
-                # timepoint where the new allele is branching off of the parent allele.
-                # Now we can create children nodes that branch off of this first timepoint.
-                existing_nodes_dict[node.allele_events_list_str] = {
-                        dist_to_root: par_node}
-    return existing_nodes_dict
-
 def _remove_single_child_unobs_nodes(tree: TreeNode):
     """
     Remove single link children from the root node until there is at most two single links
     """
     while len(tree.get_children()) == 1 and len(tree.get_children()[0].get_children()) == 1:
         child_node = tree.get_children()[0]
+        grandchild_node = child_node.get_children()[0]
         # Preserve branch lengths by propagating down (ete does this wrong)
         child_node_dist = child_node.dist
-        for grandchild in child_node.children:
-            grandchild.dist += child_node_dist
+        grandchild_node.dist += child_node_dist
         child_node.delete(prevent_nondicotomic=True, preserve_branch_length=False)
-    assert(tree.is_root())
 
     for node in tree.get_descendants(strategy="postorder"):
-        if len(node.get_children()) == 1 and not node.observed:
+        if len(node.get_children()) == 1:
             node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
 
-def collapse_ultrametric(raw_tree: TreeNode):
+def collapse_ultrametric(raw_tree: CellLineageTree):
+    """
+    @return a collapsed CellLineageTree like that in the manuscript (the collapsed tree
+            from the filtration that cannot distinguish between nodes with the same alleles)
+    """
     tree = _preprocess(raw_tree)
     tree.label_tree_with_strs()
-
+    tree.label_node_ids()
     max_dist = _label_dist_to_root(tree)
-
-    uniq_allele_branches = _get_earliest_uniq_branches(tree)
-
-    # We break up the whole tree
-    for node in tree.traverse(strategy="postorder"):
-        node.detach()
-
-    # We are ready to reconstruct the collapsed ultrametric tree
-    existing_nodes_dict = _regrow_collapsed_tree(tree, uniq_allele_branches)
-
-    # Now create leaf nodes that ensure we satisfy the ultrametric assumption
-    for node, _, _, is_observed in uniq_allele_branches.values():
-        allele_id = node.allele_events_list_str
-        if is_observed and max_dist not in existing_nodes_dict[allele_id]:
-            max_dist_to_root = max(list(existing_nodes_dict[allele_id].keys()))
-            par_node = existing_nodes_dict[allele_id][max_dist_to_root]
-            new_node = CellLineageTree(
-                    allele_list = node.allele_list,
-                    cell_state = node.cell_state,
-                    dist = max_dist - max_dist_to_root)
-            new_node.add_feature("dist_to_root", max_dist)
-            par_node.add_child(new_node)
-
-    # Mark nodes as observed or not
-    for node in tree.traverse():
-        # Any node that has distance to root equal to max dist is observed
-        node.add_feature("observed", node.dist_to_root == max_dist)
-
-    _remove_single_child_unobs_nodes(tree)
 
     print(tree.get_ascii(attributes=["dist"], show_internal=True))
     print(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-    print(tree.get_ascii(attributes=["observed"], show_internal=True))
+
+    # Get all the branches in the original tree and sort them by time
+    branches = []
+    for node in tree.iter_descendants():
+        branch = {
+                "parent": node.up,
+                "child": node,
+                "dist_to_root": node.dist_to_root}
+        branches.append(branch)
+    sorted_branches = sorted(branches, key=lambda x: x["dist_to_root"])
+
+    # Begin creating the collapsed tree
+    collapsed_tree = CellLineageTree(
+            allele_list = tree.allele_list,
+            allele_events_list = tree.allele_events_list,
+            cell_state = tree.cell_state)
+    node_to_collapsed_node_dict = {tree.node_id: collapsed_tree}
+    latest_allele_node_dict = {tree.allele_events_list_str: (collapsed_tree, 0)}
+    for branch in sorted_branches:
+        child = branch["child"]
+        parent = branch["parent"]
+
+        is_diff_allele = child.allele_events_list_str != parent.allele_events_list_str
+        if is_diff_allele:
+            # If child allele differs from parent, attach the new collapsed child to the matching
+            # collapsed parent
+            parent_collapsed_node = node_to_collapsed_node_dict[parent.node_id]
+            new_child_collapsed_node = CellLineageTree(
+                allele_list = child.allele_list,
+                allele_events_list = child.allele_events_list,
+                cell_state = child.cell_state,
+                dist = child.dist)
+            parent_collapsed_node.add_child(new_child_collapsed_node)
+            node_to_collapsed_node_dict[child.node_id] = new_child_collapsed_node
+            latest_allele_node_dict[child.allele_events_list_str] = (new_child_collapsed_node, child.dist_to_root)
+        else:
+            # If the child allele same as parent, attach the new collapsed child
+            # to the latest node with that same allele
+            parent_collapsed_node, parent_dist_to_root = latest_allele_node_dict[parent.allele_events_list_str]
+            collapsed_child_dist = child.dist_to_root - parent_dist_to_root
+            new_child_collapsed_node = CellLineageTree(
+                allele_list = child.allele_list,
+                allele_events_list = child.allele_events_list,
+                cell_state = child.cell_state,
+                dist = collapsed_child_dist)
+            parent_collapsed_node.add_child(new_child_collapsed_node)
+            node_to_collapsed_node_dict[child.node_id] = new_child_collapsed_node
+            latest_allele_node_dict[child.allele_events_list_str] = (new_child_collapsed_node, child.dist_to_root)
+
+    # Mark nodes as observed or not
+    for node in collapsed_tree.traverse():
+        # Any node that has distance to root equal to max dist is observed
+        node.add_feature("observed", node.is_leaf())
+
+    _remove_single_child_unobs_nodes(collapsed_tree)
+
+    print(collapsed_tree.get_ascii(attributes=["dist"], show_internal=True))
+    print(collapsed_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    print(collapsed_tree.get_ascii(attributes=["observed"], show_internal=True))
     for leaf in tree:
         assert np.isclose(leaf.get_distance(tree), max_dist)
 
-    return tree
+    return collapsed_tree
 
 def collapse_zero_lens(raw_tree: TreeNode):
     """
