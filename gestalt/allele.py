@@ -98,8 +98,9 @@ class Allele:
         @param right_del_len: number of nucleotides to delete to the right
         @param insertion: sequence placed between target deletions
         '''
-        assert(target1 in self.get_active_targets())
-        assert(target2 in self.get_active_targets())
+        active_targets = self.get_active_targets()
+        assert(target1 in active_targets)
+        assert(target2 in active_targets)
 
         # TODO: make this code more efficient
         # indices into the self.allele list (accounting for the spacers)

@@ -53,6 +53,9 @@ class TargetStatus(tuple):
         """
         @param target_deact_tracts: Tuple[TargetDeactTract]
         """
+        for i in range(len(target_deact_tracts) - 1):
+            assert target_deact_tracts[i].max_deact_target != target_deact_tracts[i + 1].min_deact_target - 1
+            
         return tuple.__new__(cls, target_deact_tracts)
 
     def __getnewargs__(self):
@@ -69,18 +72,96 @@ class TargetStatus(tuple):
         return deact_targs
 
     def merge(self, other_targ_stat):
+        """
+        This performs the most basic merge!
+        """
         my_deact_tracts = list(self)
-        other_deact_tracts = list(other_targ_stat)
-        new_targ_stat = list(sorted(my_deact_tracts + other_deact_tracts, key = lambda x: x.min_deact_target))
+        new_targ_stat = TargetStatus(*my_deact_tracts)
+        for deact_tract in other_targ_stat:
+            new_targ_stat = new_targ_stat.add(deact_tract)
         return TargetStatus(*new_targ_stat)
 
     def add(self, deact_tract: TargetDeactTract):
-        my_deact_tracts = list(self)
-        new_targ_stat = list(sorted(my_deact_tracts + [deact_tract], key = lambda x: x.min_deact_target))
-        return TargetStatus(*new_targ_stat)
+        """
+        @return TargetStatus that results after adding this `deact_tract`
+        """
+        if len(self) == 0:
+            return TargetStatus(deact_tract)
+        
+        if deact_tract.max_deact_target + 1 == self[0].min_deact_target:
+            new_deact_tracts = [TargetDeactTract(
+                deact_tract.min_deact_target,
+                self[0].max_deact_target)]
+            not_added_yet = False
+        elif deact_tract.max_deact_target + 1 < self[0].min_deact_target:
+            new_deact_tracts = [deact_tract, self[0]]
+            not_added_yet = False
+        else:
+            new_deact_tracts = [self[0]]
+            not_added_yet = True
+
+        for my_tract in self[1:]:
+            if my_tract.min_deact_target == new_deact_tracts[-1].max_deact_target + 1:
+                new_deact_tracts[-1] = TargetDeactTract(
+                    new_deact_tracts[-1].min_deact_target,
+                    my_tract.max_deact_target)
+            elif my_tract.min_deact_target > deact_tract.min_deact_target:
+                if not_added_yet:
+                    if my_tract.max_deact_target < deact_tract.max_deact_target:
+                        if deact_tract.min_deact_target == new_deact_tracts[-1].max_deact_target + 1:
+                            new_deact_tracts[-1] = TargetDeactTract(
+                                new_deact_tracts[-1].min_deact_target,
+                                deact_tract.max_deact_target)
+                        else:
+                            # The new deact_tract masks the old one
+                            new_deact_tracts.append(deact_tract)
+                        not_added_yet = False
+                    elif my_tract.min_deact_target > deact_tract.max_deact_target + 1:
+                        if deact_tract.min_deact_target == new_deact_tracts[-1].max_deact_target + 1:
+                            new_deact_tracts[-1] = TargetDeactTract(
+                                new_deact_tracts[-1].min_deact_target,
+                                deact_tract.max_deact_target)
+                        else:
+                            new_deact_tracts.append(deact_tract)
+                        new_deact_tracts.append(my_tract)
+                        not_added_yet = False
+                    elif my_tract.min_deact_target == deact_tract.max_deact_target + 1:
+                        if deact_tract.min_deact_target == new_deact_tracts[-1].max_deact_target + 1:
+                            new_deact_tracts[-1] = TargetDeactTract(
+                                new_deact_tracts[-1].min_deact_target,
+                                my_tract.max_deact_target)
+                        else:
+                            new_deact_tracts.append(TargetDeactTract(
+                                deact_tract.min_deact_target,
+                                my_tract.max_deact_target))
+                        not_added_yet = False
+                    else:
+                        raise ValueError("this deact tract cannot be added")
+                else:
+                    new_deact_tracts.append(my_tract)
+            else:
+                new_deact_tracts.append(my_tract)
+
+        if not_added_yet:
+            if deact_tract.min_deact_target == self[-1].max_deact_target + 1:
+                new_deact_tracts[-1] = TargetDeactTract(
+                    self[-1].min_deact_target,
+                    deact_tract.max_deact_target)
+            else:
+                new_deact_tracts.append(deact_tract)
+
+        return TargetStatus(*new_deact_tracts)
 
     def minus(self, other_targ_stat):
-        return set(self.deact_targets) - set(other_targ_stat.deact_targets)
+        """
+        @param other_targ_stat: the "original" target status
+        @return the list of targets that were deactivated by this target status,
+                where the `other_targ_stat` was the original target status
+        """
+        other_targs = set(other_targ_stat.deact_targets)
+        self_targs = set(self.deact_targets)
+        assert other_targs <= self_targs
+        return self_targs - other_targs
 
     def get_active_targets(self, bcode_meta: BarcodeMetadata):
         if len(self) == 0:
@@ -96,7 +177,7 @@ class TargetStatus(tuple):
 
     def get_possible_target_tracts(self, bcode_meta: BarcodeMetadata):
         """
-        @return a set of possible target tracts
+        @return List[TargetTract]
         """
         # Take one step from this TT group using two step procedure
         # 1. enumerate all possible start positions for target tract
