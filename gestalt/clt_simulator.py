@@ -83,19 +83,19 @@ class BirthDeathTreeSimulator:
         self.birth_scale = 1.0 / birth_rate
         self.death_scale = 1.0 / death_rate
 
-    def simulate(self, root_allele_list: AlleleList, root_cell_state: CellState, time: float, max_nodes: int = 10):
+    def simulate(self, root_allele_list: AlleleList, time: float, max_nodes: int = 10):
         """
         Generates a CLT based on the model
         The root_allele and root_cell_state is constant (used as a dummy only).
-        Override them if you want them to change
 
-        @param root_allele: ignored
-        @param root_cell_state: ignored
+        @param root_allele_list: this is copied as the AlleleList for all nodes in this tree
         @param time: amount of time to simulate the CLT
+        @param max_nodes: maximum number of nodes to have in the full CLT
+
+        @return CellLineageTree from the birth death tree simulator -- provides a topology only
         """
         tree = CellLineageTree(
             allele_list=root_allele_list,
-            cell_state=root_cell_state,
             dist=0)
 
         self.curr_nodes = 1
@@ -138,46 +138,37 @@ class BirthDeathTreeSimulator:
         obs_branch_length = min(branch_length, remain_time)
         remain_time = remain_time - obs_branch_length
 
-        # Keep allele/cell state constant
-        branch_end_cell_state = tree.cell_state
-        branch_end_allele_list = tree.allele_list
-
         if remain_time <= 0:
             assert remain_time == 0
             # Time of event is past observation time
             self._process_observe_end(
                 tree,
                 obs_branch_length,
-                branch_end_cell_state,
-                branch_end_allele_list)
+                tree.allele_list)
         elif division_happens:
             # Cell division
             self._process_cell_birth(
                 tree,
                 obs_branch_length,
-                branch_end_cell_state,
-                branch_end_allele_list,
+                tree.allele_list,
                 remain_time)
         else:
             # Cell died
             self._process_cell_death(
                 tree,
                 obs_branch_length,
-                branch_end_cell_state,
-                branch_end_allele_list)
+                tree.allele_list)
 
     def _process_observe_end(
         self,
         tree: CellLineageTree,
         branch_length: float,
-        branch_end_cell_state: CellState,
         branch_end_allele_list: Allele):
         """
         Observation time is up. Stop observing cell.
         """
         child1 = CellLineageTree(
             allele_list=branch_end_allele_list,
-            cell_state=branch_end_cell_state,
             dist=branch_length)
         tree.add_child(child1)
 
@@ -185,7 +176,6 @@ class BirthDeathTreeSimulator:
         self,
         tree: CellLineageTree,
         branch_length: float,
-        branch_end_cell_state: CellState,
         branch_end_allele_list: Allele,
         remain_time: float):
         """
@@ -195,16 +185,13 @@ class BirthDeathTreeSimulator:
         """
         child0 = CellLineageTree(
             allele_list=branch_end_allele_list,
-            cell_state=branch_end_cell_state,
             dist=branch_length)
         child1 = CellLineageTree(
             allele_list=branch_end_allele_list,
-            cell_state=branch_end_cell_state,
             dist=0)
         branch_end_allele_list2 = copy.deepcopy(branch_end_allele_list)
         child2 = CellLineageTree(
             allele_list=branch_end_allele_list2,
-            cell_state=branch_end_cell_state,
             dist=0)
         child0.add_child(child1)
         child0.add_child(child2)
@@ -225,7 +212,6 @@ class BirthDeathTreeSimulator:
         """
         child1 = CellLineageTree(
             allele_list=branch_end_allele_list,
-            cell_state=branch_end_cell_state,
             dist=branch_length,
             dead=True)
         tree.add_child(child1)
@@ -269,9 +255,9 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
         # Run the simulation to just create the tree topology
         tree = self.bd_tree_simulator.simulate(
                 root_allele,
-                root_cell_state,
                 time,
                 max_nodes)
+        tree.cell_state = root_cell_state
 
         np.random.seed(data_seed)
         # Run the simulation to create the alleles along the tree topology
