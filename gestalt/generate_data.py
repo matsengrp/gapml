@@ -131,13 +131,10 @@ def create_simulators(args, clt_model):
 def create_cell_lineage_tree(
         args,
         clt_model: CLTLikelihoodModel,
-        #bifurcating_only: bool = False,
         max_tries: int = 20,
         sampling_rate_incr: float = 0.02,
         sampling_rate_min: float = 1e-3):
     """
-    #@param bifurcating_only: return a collapsed clt that is bifurcating (so sample leaves
-    #                        so that we only get bifurcations) -- debugging purposes only
     @return original clt, the set of observed leaves, and the true topology for the observed leaves
     """
     clt_simulator, observer = create_simulators(args, clt_model)
@@ -164,7 +161,6 @@ def create_cell_lineage_tree(
                         sampling_rate,
                         clt,
                         seed=args.model_seed)
-                        #bifurcating_only=bifurcating_only)
 
                 logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
                 if len(obs_leaves) < args.min_leaves:
@@ -261,7 +257,6 @@ def main(args=sys.argv[1:]):
     _, obs_leaves, true_subtree, collapsed_subtree = create_cell_lineage_tree(
             args,
             clt_model)
-            #bifurcating_only=True)
 
     true_subtree.label_node_ids(CLTLikelihoodModel.NODE_ORDER)
     collapsed_subtree.label_node_ids(CLTLikelihoodModel.NODE_ORDER)

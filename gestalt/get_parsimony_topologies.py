@@ -215,7 +215,7 @@ def main(args=sys.argv[1:]):
     if args.true_model_pkl is not None:
         with open(args.true_model_pkl, "rb") as f:
             true_model_dict = six.moves.cPickle.load(f)
-            oracle_measurer = distance_cls(true_model_dict["true_tree"], args.scratch_dir)
+            oracle_measurer = distance_cls(true_model_dict["collapsed_subtree"], args.scratch_dir)
 
     trees_to_output = []
 

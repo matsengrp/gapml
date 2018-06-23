@@ -106,7 +106,7 @@ def main(args=sys.argv[1:]):
                 RootRFDistanceMeasurer,
                 #SPRDistanceMeasurer,
                 MRCADistanceMeasurer],
-                true_model_dict["true_tree"],
+                true_model_dict["collapsed_subtree"],
                 args.scratch_dir)
 
     sess = tf.InteractiveSession()
