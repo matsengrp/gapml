@@ -215,7 +215,6 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         manual_log_prob = manual_cut_log_prob + np.sum(log_trim_probs)
 
         # All three calculations should match
-        print(multifurc_log_lik, bifurc_log_lik, manual_log_prob)
         self.assertTrue(np.isclose(multifurc_log_lik, manual_log_prob))
         self.assertTrue(np.isclose(bifurc_log_lik, manual_log_prob))
 
@@ -362,8 +361,8 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         branch_len = 0.1
         model = self._create_bifurc_model(topology, self.bcode_metadata, branch_len)
 
-        t_mats = TransitionWrapperMaker(topology, self.bcode_metadata).create_transition_wrappers()
-        model.create_log_lik(t_mats)
+        transition_wrappers = TransitionWrapperMaker(topology, self.bcode_metadata).create_transition_wrappers()
+        model.create_log_lik(transition_wrappers)
         log_lik, _ = model.get_log_lik()
 
         # Manually calculate the hazard
@@ -396,8 +395,8 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         target_lams = model.target_lams.eval()
         trim_long_probs = model.trim_long_probs.eval()
 
-        t_mats = TransitionWrapperMaker(topology, self.bcode_metadata).create_transition_wrappers()
-        model.create_log_lik(t_mats)
+        transition_wrappers = TransitionWrapperMaker(topology, self.bcode_metadata).create_transition_wrappers()
+        model.create_log_lik(transition_wrappers)
         log_lik, _ = model.get_log_lik()
 
         # Manually calculate the hazard
@@ -448,8 +447,8 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         target_lams = model.target_lams.eval()
         trim_long_probs = model.trim_long_probs.eval()
 
-        t_mats = TransitionWrapperMaker(topology, self.bcode_metadata).create_transition_wrappers()
-        model.create_log_lik(t_mats)
+        transition_wrappers = TransitionWrapperMaker(topology, self.bcode_metadata).create_transition_wrappers()
+        model.create_log_lik(transition_wrappers)
         log_lik, _ = model.get_log_lik()
 
         # Manually calculate the hazard -- can cut the middle only or cut the whole barcode
@@ -514,8 +513,8 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         target_lams = model.target_lams.eval()
         trim_long_probs = model.trim_long_probs.eval()
 
-        t_mats = TransitionWrapperMaker(topology, self.bcode_metadata).create_transition_wrappers()
-        model.create_log_lik(t_mats)
+        transition_wrappers = TransitionWrapperMaker(topology, self.bcode_metadata).create_transition_wrappers()
+        model.create_log_lik(transition_wrappers)
         log_lik, _ = model.get_log_lik()
 
         # The probability should be the same as a single branch with double the length
