@@ -105,6 +105,14 @@ class CollapsedTreeTestCase(unittest.TestCase):
         self.assertTrue(TargetTract(2,3,7,7) in target_tracts)
         self.assertTrue(TargetTract(6,7,7,8) in target_tracts)
 
+    def test_get_contained_target_statuses(self):
+        target_statuses = TargetDeactTract(0,1).get_contained_target_statuses()
+        self.assertTrue(TargetStatus() in target_statuses)
+        self.assertTrue(TargetStatus(TargetDeactTract(0,0)) in target_statuses)
+        self.assertTrue(TargetStatus(TargetDeactTract(1,1)) in target_statuses)
+        self.assertTrue(TargetStatus(TargetDeactTract(0,1)) in target_statuses)
+        self.assertTrue(len(target_statuses) == 4)
+
     def test_get_all_transitions(self):
         all_transitions = TargetStatus.get_all_transitions(self.bcode_meta)
         self.assertEqual(all_transitions[TargetStatus(TargetDeactTract(0,9))], {})

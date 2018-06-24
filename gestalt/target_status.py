@@ -104,6 +104,23 @@ class TargetStatus(tuple):
         binary_status[deact_tract.min_deact_target: deact_tract.max_deact_target + 1] = 1
         return TargetStatus._binary_status_to_target_status(binary_status.tolist())
 
+    def add_target_tract(self, target_tract: TargetTract):
+        """
+        @return TargetStatus that results after adding this `target_tract`
+        """
+        if len(self) == 0:
+            deact_tract = TargetDeactTract(
+                    target_tract.min_deact_target,
+                    target_tract.max_deact_target)
+            return TargetStatus(deact_tract)
+
+        max_targets = max(target_tract.max_deact_target + 1, self[-1].max_deact_target + 1)
+        binary_status = self._get_binary_status(max_targets)
+        assert binary_status[target_tract.min_target] == 0
+        assert binary_status[target_tract.max_target] == 0
+        binary_status[target_tract.min_deact_target: target_tract.max_deact_target + 1] = 1
+        return TargetStatus._binary_status_to_target_status(binary_status.tolist())
+
     def minus(self, orig_targ_stat):
         """
         @param orig_targ_stat: TargetStatus, the "original" target status
@@ -201,7 +218,7 @@ class TargetStatus(tuple):
     @staticmethod
     def get_all_transitions(bcode_meta: BarcodeMetadata):
         """
-        @return Dict[start TargetStatus, Dict[end TargetStatus, TargetDeactTract that was introduced to create the end TargetStatus]
+        @return Dict[start TargetStatus, Dict[end TargetStatus, List[TargetTract] that can be introduced to the start TargetStatus to create the end TargetStatus]
         """
         target_status_transition_dict = dict()
         deact_targs = TargetDeactTract(0, bcode_meta.n_targets - 1)
@@ -209,9 +226,11 @@ class TargetStatus(tuple):
         for targ_stat in target_statuses:
             target_status_transition_dict[targ_stat] = dict()
             active_targets = targ_stat.get_active_targets(bcode_meta)
-            for i, start_targ in enumerate(active_targets):
-                for end_targ in active_targets[i:]:
-                    transition_deact_tract = TargetDeactTract(start_targ, end_targ)
-                    new_targ_stat = targ_stat.add(transition_deact_tract)
-                    target_status_transition_dict[targ_stat][new_targ_stat] = transition_deact_tract
+            possible_target_tracts = targ_stat.get_possible_target_tracts(bcode_meta)
+            for target_tract in possible_target_tracts:
+                new_targ_stat = targ_stat.add_target_tract(target_tract)
+                if new_targ_stat in targ_stat:
+                    target_status_transition_dict[targ_stat][new_targ_stat].append(target_tract)
+                else:
+                    target_status_transition_dict[targ_stat][new_targ_stat] = [target_tract]
         return target_status_transition_dict
