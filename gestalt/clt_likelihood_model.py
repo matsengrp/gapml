@@ -195,15 +195,7 @@ class CLTLikelihoodModel:
                 continue
 
             if not node.up.is_resolved_multifurcation():
-                if node.is_copy:
-                    # Remember that copy nodes must be leaves -- take the max offset to be this node's offset
-                    max_offset = tf.reduce_max(tf.stack([
-                        self.branch_len_offsets[sister.node_id] for sister in node.get_sisters()]),
-                        name="max_offset")
-                    branch_lens_dict.append([
-                        [node.node_id],
-                        self.tot_time_ph - dist_to_root[node.up.node_id] - max_offset])
-                elif node.is_leaf():
+                if node.is_leaf():
                     # A leaf node that is not a copy
                     # Therefore use it's offset to determine branch length
                     branch_lens_dict.append([
@@ -337,7 +329,7 @@ class CLTLikelihoodModel:
             # Initialize branch length offsets
             model_vars["branch_len_offsets"] = np.random.rand(self.num_nodes) * br_len_scale
             for node in self.topology.traverse():
-                if node.is_root() or node.up.is_resolved_multifurcation() or node.is_copy:
+                if node.is_root() or node.up.is_resolved_multifurcation():
                     # Make sure the root or bifurcating nodes don't have offsets
                     model_vars["branch_len_offsets"][node.node_id] = 0
 
@@ -488,7 +480,7 @@ class CLTLikelihoodModel:
                             + left_long_lambda * self.trim_long_probs[1]
                             + left_short_lambda * right_short_lambda)
 
-        is_four_or_more = tf_common.greater_equal_float(t0 + 3, t1)
+        is_four_or_more = tf_common.greater_equal_float(t1, t0 + 3)
         lambda_four = (left_short_lambda * right_short_lambda
                 + left_short_lambda * right_long_lambda
                 + left_long_lambda * right_short_lambda
@@ -516,7 +508,7 @@ class CLTLikelihoodModel:
         hazard_away_dict = {
                 targ_stat: hazard_away_nodes[i]
                 for i, targ_stat in enumerate(target_statuses)}
-        return hazard_away_dict, hazard_away_nodes
+        return hazard_away_dict
 
     def _create_hazard_away_target_statuses(self, target_statuses: List[TargetStatus]):
         """
@@ -725,7 +717,7 @@ class CLTLikelihoodModel:
         # Get the hazards for making the instantaneous transition matrix
         # Doing it all at once to speed up computation
         self.target_status_transition_idxs, self.target_status_transition_hazards = self._create_target_status_transition_hazards()
-        self.hazard_away_dict, self.hazard_aways = self._create_hazard_away_dict()
+        self.hazard_away_dict = self._create_hazard_away_dict()
         singletons = CLTLikelihoodModel.get_all_singletons(self.topology)
         target_tracts = [sg.get_target_tract() for sg in singletons]
         self.hazard_target_tract_dict = self._create_target_tract_hazards(target_tracts)
@@ -759,7 +751,7 @@ class CLTLikelihoodModel:
             # Then we need to multiply the probability of the "spine" -- assuming constant ancestral state along the entire spine
             time_stays_constant = tf.reduce_max(tf.stack([
                 self.branch_len_offsets[child.node_id]
-                for child in node.children if not child.is_copy]))
+                for child in node.children]))
             if not node.is_root():
                 # When making this probability, order the elements per the transition matrix of this node
                 transition_wrapper = transition_wrappers[node.node_id][bcode_idx]
@@ -1058,14 +1050,9 @@ class CLTLikelihoodModel:
         scratch_tree = self.topology.copy("deepcopy")
         for node in scratch_tree.traverse("preorder"):
             if not node.is_resolved_multifurcation():
-                copy_child = None
-                for c in node.get_children():
-                    if c.is_copy:
-                        copy_child = c
-
                 # Resolve the multifurcation by creating the spine of "identifcal" nodes
-                children_not_copies = [c for c in node.get_children() if not c.is_copy]
-                children_offsets = [br_len_offsets[c.node_id] for c in children_not_copies]
+                children = node.get_children()
+                children_offsets = [br_len_offsets[c.node_id] for c in children]
                 sort_indexes = np.argsort(children_offsets)
 
                 curr_offset = 0
@@ -1079,17 +1066,12 @@ class CLTLikelihoodModel:
                     new_spine_node.node_id = None
                     curr_spine_node.add_child(new_spine_node)
 
-                    child = children_not_copies[idx]
+                    child = children[idx]
                     node.remove_child(child)
                     new_spine_node.add_child(child)
 
                     curr_spine_node = new_spine_node
                     curr_offset = children_offsets[idx]
-
-                # If this node is observed, then create the corresponding leaf last
-                if copy_child is not None:
-                    node.remove_child(copy_child)
-                    curr_spine_node.add_child(copy_child)
 
             if node.is_root():
                 node.dist = 0
