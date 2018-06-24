@@ -21,14 +21,9 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             cut_site = 3,
             crucial_pos_len = [3,3])
         self.num_targets = self.bcode_metadata.n_targets
-        np.random.seed(1)
-
-    def tearDown(self):
-        self.sess.close()
-        tf.reset_default_graph()
 
     def _create_bifurc_model(self, topology, bcode_metadata, branch_len, branch_lens = [], target_lams = None):
-        self.sess = tf.InteractiveSession()
+        sess = tf.InteractiveSession()
         num_nodes = topology.get_num_nodes()
         if len(branch_lens) == 0:
             branch_lens = [branch_len for _ in range(num_nodes)]
@@ -48,7 +43,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         model = CLTLikelihoodModel(
                 topology,
                 bcode_metadata,
-                self.sess,
+                sess,
                 branch_len_inners = np.array(branch_lens),
                 branch_len_offsets= 1e-20 * np.ones(num_nodes), # dummy!!!
                 target_lams = target_lams,
@@ -68,7 +63,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             branch_len_offsets,
             tot_time = 1,
             target_lams = None):
-        self.sess = tf.InteractiveSession()
+        sess = tf.InteractiveSession()
         num_nodes = topology.get_num_nodes()
 
         if target_lams is None:
@@ -76,7 +71,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         model = CLTLikelihoodModel(
                 topology,
                 bcode_metadata,
-                self.sess,
+                sess,
                 branch_len_inners = np.array(branch_len_inners, dtype=float),
                 branch_len_offsets= np.array(branch_len_offsets, dtype=float),
                 target_lams = target_lams,
@@ -89,7 +84,6 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         tf.global_variables_initializer().run()
         return model, target_lams
 
-    @unittest.skip("demonstrating skipping")
     def test_multifurcation_resolution(self):
         # Create multifurcating tree -- this is star tree
         topology = CellLineageTree(allele_events_list = [AlleleEvents(num_targets=self.num_targets)])
@@ -225,7 +219,6 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         self.assertTrue(np.isclose(multifurc_log_lik, manual_log_prob))
         self.assertTrue(np.isclose(bifurc_log_lik, manual_log_prob))
 
-    @unittest.skip("demonstrating skipping")
     def test_multifurc_vs_bifurc(self):
         """
         Consider a more complex multifurcation/bifurcating tree
@@ -360,7 +353,6 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         multifurc_log_lik, _ = multifurc_model.get_log_lik()
         self.assertTrue(np.isclose(multifurc_log_lik, bifurc_log_lik))
 
-    @unittest.skip("demonstrating skipping")
     def test_branch_likelihood_no_events(self):
         # Create a branch with no events
         topology = CellLineageTree(allele_events_list = [AlleleEvents(num_targets=self.num_targets)])
@@ -384,7 +376,6 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         # Check the two are equal
         self.assertTrue(np.isclose(log_lik[0], manual_log_prob))
 
-    @unittest.skip("demonstrating skipping")
     def test_branch_likelihood(self):
         # Create a branch with one event
         topology = CellLineageTree(allele_events_list = [AlleleEvents(num_targets=self.num_targets)])
