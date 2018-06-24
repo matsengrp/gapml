@@ -14,9 +14,7 @@ from pathlib import Path
 import six
 
 from tree_distance import *
-from constants import *
-from common import *
-from simulate_common import *
+from collapsed_tree import collapse_zero_lens
 
 def parse_args():
     parser = argparse.ArgumentParser(description='fit topology and branch lengths for GESTALT')
@@ -48,68 +46,17 @@ def parse_args():
     print("Log file", args.log_file)
     return args
 
-
-def get_sorted_parsimony_trees(parsimony_trees, oracle_measurer):
-    oracle_tuples = []
-    for pars_tree in parsimony_trees:
-        tree_dist = oracle_measurer.get_dist(pars_tree)
-        oracle_tuples.append((
-            pars_tree,
-            tree_dist))
-
-    oracle_tuples = list(sorted(oracle_tuples, key=lambda tup: tup[1]))
-    parsimony_dists = [tup[1] for tup in oracle_tuples]
-
-    logging.info("Uniq parsimony %s distances: %s", oracle_measurer.name, np.unique(parsimony_dists))
-    logging.info("Mean parsimony %s distance: %f", oracle_measurer.name, np.mean(parsimony_dists))
-    logging.info("Min parsimony %s distance: %d", oracle_measurer.name, np.min(parsimony_dists))
-
-    return oracle_tuples
-
-def get_bifurc_multifurc_trees(
-        tree_list,
-        max_bifurc,
-        max_multifurc,
-        selection_type,
-        distance_cls,
-        scratch_dir):
-    trees_to_output = []
-    tree_measurers = []
-    for i, tree_tuple in enumerate(tree_list):
-        num_multifurc = len(tree_measurers)
-        if i > max_bifurc and num_multifurc > max_multifurc:
-            break
-
-        tree = tree_tuple[0]
-        if i < max_bifurc:
-            # Append to trees
-            trees_to_output.append({
-                'selection_type': selection_type,
-                'multifurc': False,
-                'idx': i,
-                'aux': tree_tuple[1],
-                'tree': tree})
-
-        if num_multifurc < max_multifurc:
-            # Check if this multifurc tree is unique
-            has_match = False
-            coll_tree = collapse_internally_labelled_tree(tree)
-            for measurer in tree_measurers:
-                dist = measurer.get_dist(coll_tree)
-                has_match = dist == 0
-                if has_match:
-                    break
-
-            if not has_match:
-                tree_measurers.append(distance_cls(coll_tree, scratch_dir))
-                # Append to trees
-                trees_to_output.append({
-                    'selection_type': selection_type,
-                    'multifurc': True,
-                    'idx': num_multifurc,
-                    'aux': None,
-                    'tree': coll_tree})
-    return trees_to_output
+def collapse_internally_labelled_tree(tree: CellLineageTree):
+    coll_tree = tree.copy("deepcopy")
+    for n in coll_tree.traverse():
+        n.name = n.allele_events_list_str
+        if not n.is_root():
+            if n.allele_events_list_str == n.up.allele_events_list_str:
+                n.dist = 0
+            else:
+                n.dist = 1
+    coll_tree = collapse_zero_lens(coll_tree)
+    return coll_tree
 
 def main(args=sys.argv[1:]):
     args = parse_args()
@@ -121,9 +68,9 @@ def main(args=sys.argv[1:]):
     with open(args.true_model_pkl, "rb") as f:
         true_model_dict = six.moves.cPickle.load(f)
 
-    oracle_coll_tree = collapse_internally_labelled_tree(true_model_dict["collapsed_subtree"])
+    oracle_multifurc_tree = collapse_internally_labelled_tree(true_model_dict["collapsed_subtree"])
     logging.info(true_model_dict["collapsed_subtree"].get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-    logging.info(oracle_coll_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    logging.info(oracle_multifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
     trees_to_output = [{
         'selection_type': 'oracle',
@@ -136,7 +83,7 @@ def main(args=sys.argv[1:]):
         'multifurc': True,
         'idx': 0,
         'aux': None,
-        'tree': oracle_coll_tree}]
+        'tree': oracle_multifurc_tree}]
 
     # Save each tree as separate pickle file
     for i, tree_topology_dict in enumerate(trees_to_output):
