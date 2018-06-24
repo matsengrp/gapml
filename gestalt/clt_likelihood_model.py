@@ -468,8 +468,8 @@ class CLTLikelihoodModel:
         """
         left_short_lambda = tf.gather(self.target_lams, t0) * self.trim_short_probs[0]
         right_short_lambda = tf.gather(self.target_lams, t1) * self.trim_short_probs[1]
-        left_long_lambda = tf.gather(self.target_lams, t0 + 1) * self.trim_long_probs[0]
-        right_long_lambda = tf.gather(self.target_lams, t1 - 1) * self.trim_long_probs[1]
+        left_long_lambda = tf.gather(self.target_lams, tf.minimum(t0 + 1, self.num_targets - 1)) * self.trim_long_probs[0]
+        right_long_lambda = tf.gather(self.target_lams, tf.maximum(t1 - 1, 0)) * self.trim_long_probs[1]
 
         # one target deactivated
         is_one = tf_common.equal_float(t1, t0)
