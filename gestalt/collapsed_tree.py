@@ -100,16 +100,10 @@ def collapse_ultrametric(raw_tree: CellLineageTree):
             node_to_collapsed_node_dict[child.node_id] = new_child_collapsed_node
             latest_allele_node_dict[child.allele_events_list_str] = (new_child_collapsed_node, child.dist_to_root)
 
-    # Mark nodes as observed or not
-    for node in collapsed_tree.traverse():
-        # Any node that has distance to root equal to max dist is observed
-        node.add_feature("observed", node.is_leaf())
-
     _remove_single_child_unobs_nodes(collapsed_tree)
 
     print(collapsed_tree.get_ascii(attributes=["dist"], show_internal=True))
     print(collapsed_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-    print(collapsed_tree.get_ascii(attributes=["observed"], show_internal=True))
     for leaf in tree:
         assert np.isclose(leaf.get_distance(tree), max_dist)
 
@@ -120,65 +114,14 @@ def collapse_zero_lens(raw_tree: TreeNode):
     Remove zero-length edges from the tree, but leave one leaf node for each observed node.
     """
     tree = _preprocess(raw_tree)
-    # All nodes must have a name!!!
-    assert tree.name != ""
-    # dictionary maps node name to a node that was removed because it was a "duplicate"
-    # (i.e. zero length away). We use this dictionary later to add nodes back in
-    removed_children_dict = {}
 
-    # Step 1: just collapse all zero length edges. So if an observed node was a parent
-    # of another node, it will no longer be a leaf node after this procedure.
     for node in tree.traverse(strategy='postorder'):
-        if not hasattr(node, "observed"):
-            # All leaf nodes are observed
-            node.add_feature("observed", node.is_leaf())
-
-        if node.dist == 0 and not node.is_root():
-            # Need to remove this node and propogate the observed status
-            # up to the parent node (if parent observed already, dont update
-            # the parent)
-            up_node = node.up
-            if hasattr(up_node, "observed"):
-                if not up_node.observed:
-                    up_node.add_feature("observed", node.observed)
-                    up_node.name = node.name
-            else:
-                up_node.add_feature("observed", node.observed)
-                up_node.name = node.name
+        if node.dist == 0 and not node.is_root() and not node.is_leaf():
             node.delete(prevent_nondicotomic=False)
-            if up_node.name not in removed_children_dict:
-                removed_children_dict[up_node.name] = node
 
-    # Step 2: Clean up the tree so that all nodes have at least two children
     _remove_single_child_unobs_nodes(tree)
 
-    # Step 3: add nodes that were observed but were collapsed away.
-    # This ensures only one leaf node for each observed allele.
     for node in tree.traverse("preorder"):
-        node.add_feature("is_copy", False)
-
-    for node in tree.traverse("preorder"):
-        if node.observed and not node.is_leaf():
-            # Use a node from the dictionary as a template
-            child_template = removed_children_dict[node.name]
-            # Copy this node and its features... don't use the original one just in case
-            if tree.__class__ == CellLineageTree:
-                new_child = CellLineageTree.convert(
-                    child_template,
-                    allele_list = child_template.allele_list,
-                    allele_events_list = child_template.allele_events_list,
-                    cell_state = child_template.cell_state,
-                    resolved_multifurcation = False)
-            else:
-                new_child = TreeNode(
-                        name=child_template.name,
-                        dist=child_template.dist)
-                for k in child_template.features:
-                    if k not in new_child.features:
-                        new_child.add_feature(k, getattr(child_template, k))
-            node.add_child(new_child)
-            new_child.add_feature("is_copy", True)
-            new_child.observed = True
-            node.observed = False
+        node.add_feature("observed", node.is_leaf())
 
     return tree

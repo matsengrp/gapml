@@ -89,16 +89,16 @@ class AncState:
             if indel_set.__class__ == SingletonWC:
                 inner_wc = indel_set.inner_wc
                 if inner_wc is not None:
-                    sub_statuses = AncState._get_contained_target_statuses(
-                        TargetDeactTract(inner_wc.min_target, inner_wc.max_target))
+                    deact_tract = TargetDeactTract(inner_wc.min_target, inner_wc.max_target)
+                    sub_statuses = deact_tract.get_contained_target_statuses()
                 else:
                     sub_statuses = [TargetStatus()]
                 singleton_targ_stat = TargetStatus(TargetDeactTract(
                     indel_set.min_deact_target, indel_set.max_deact_target))
                 return [singleton_targ_stat] + sub_statuses
             else:
-                return AncState._get_contained_target_statuses(
-                    TargetDeactTract(indel_set.min_target, indel_set.max_target))
+                deact_tract = TargetDeactTract(indel_set.min_target, indel_set.max_target)
+                return deact_tract.get_contained_target_statuses()
 
         if len(self.indel_set_list) == 0:
             return [TargetStatus()]

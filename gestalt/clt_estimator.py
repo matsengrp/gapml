@@ -30,6 +30,10 @@ class CLTEstimator:
 
 class CLTParsimonyEstimator(CLTEstimator):
     def __init__(self, bcode_meta: BarcodeMetadata, out_folder: str, mix_path: str = MIX_PATH):
+        """
+        @param out_folder: file path to where to put the mix input and output files
+        @param mix_path: path for running mix
+        """
         self.orig_barcode = bcode_meta.unedited_barcode
         self.bcode_meta = bcode_meta
         self.out_folder = out_folder
@@ -43,13 +47,17 @@ class CLTParsimonyEstimator(CLTEstimator):
             clt: CellLineageTree,
             tree: TreeNode,
             event_list: List[Event],
-            processed_obs: Dict[str, List[List[Event]]],
             processed_abund: Dict[str, int]):
         """
         Performs the recursive process of forming a cell lineage tree
+        Converts children nodes of `tree` and appends them to `clt`
+
+        @param clt: CellLineageTree of the current node, this is the thing we are creating
+        @param tree: TreeNode of the current node, this is the thing we are converting from
+        @param event_list: the list of events observed in all the data, used to reconstruct nodes
+        @param processed_abund: dictionary mapping node name to abundance values
         """
         for c in tree.children:
-            branch_length = c.dist
             child_event_ids = [
                 evt_idx
                 for evt_idx, allele_char in enumerate(c.binary_allele)
@@ -69,45 +77,40 @@ class CLTParsimonyEstimator(CLTEstimator):
                     [[(event.start_pos,
                         event.del_end,
                         event.insert_str) for event in events] for events in grouped_events])
-            cell_state = None if not c.is_leaf() else processed_obs[c.name]
             cell_abundance = 0 if not c.is_leaf() else processed_abund[c.name]
             child_clt = CellLineageTree.convert(c,
                                         allele_list=child_allele_list,
-                                        cell_state=cell_state,
                                         abundance=cell_abundance,
-                                        dist=branch_length)
+                                        dist=c.dist)
             clt.add_child(child_clt)
-            self._do_convert(child_clt, c, event_list, processed_obs, processed_abund)
+            self._do_convert(child_clt, c, event_list, processed_abund)
 
     def convert_tree_to_clt(self,
             tree: TreeNode,
             event_list: List[Event],
-            processed_obs: Dict[str, List[List[Event]]],
             processed_abund: Dict[str, int]):
         """
         Make a regular TreeNode to a Cell lineage tree
         """
-        # TODO: update cell state maybe in the future?
         clt = CellLineageTree.convert(
                 tree,
                 AlleleList(
                     [self.orig_barcode] * self.bcode_meta.num_barcodes,
-                    self.bcode_meta),
-                cell_state=None)
-        self._do_convert(clt, tree, event_list, processed_obs, processed_abund)
-        for node in clt.traverse():
-            node.add_feature("observed", node.is_leaf())
-
-        # Don't do this since we want to ensure that the root node's only possible state
-        # is "not edited"
-        #while len(clt.get_children()) == 1:
-        #    child_node = clt.get_children()[0]
-        #    child_node.delete(prevent_nondicotomic=True, preserve_branch_length=True)
-        #assert(clt.is_root())
+                    self.bcode_meta))
+        self._do_convert(clt, tree, event_list, processed_abund)
 
         return clt
 
     def _create_mix_cfg(self, seed_num, num_jumbles=5):
+        """
+        Writes a mix config file
+        TODO: create and specify the weights file too, weights based on abundance values
+
+        @param seed_num: seed passed to mix, specified in MIX config
+        @param num_jumbles: number of jumbles, specified in MIX config
+        @return file path to the mix config file
+        """
+        assert seed_num % 2 == 1
         mix_cfg_lines = [
                 self.infile,
                 "F",
@@ -119,7 +122,7 @@ class CLTParsimonyEstimator(CLTEstimator):
                 "P",
                 "J",
                 # Seed for jumbling must be odd
-                str(seed_num * 2 + 1),
+                str(seed_num),
                 str(num_jumbles),
                 "Y"
                 ]
@@ -134,14 +137,11 @@ class CLTParsimonyEstimator(CLTEstimator):
             observations: List[ObservedAlignedSeq],
             encode_hidden: bool = True,
             use_cell_state: bool = False,
-            do_collapse: bool = False,
-            num_mix_runs: int = 2):
+            mix_seed: int = 1):
         """
         @param observations: the observations to run MIX on
         @param encode_hidden: indicate hidden states to MIX
         @param use_cell_state: ignored -- this is always false
-        @param num_mix_runs: number of mix runs with different seeds
-        @param do_collapse: return collapsed trees instead of bifurcating trees
 
         @return a list of unique cell lineage tree estimates
                 calls out to mix on the command line
@@ -161,38 +161,18 @@ class CLTParsimonyEstimator(CLTEstimator):
                 encode_hidden=encode_hidden,
                 use_cell_state=use_cell_state)
 
-        # Now run mix many times
-        tree_lists = []
-        for seed_i in range(num_mix_runs):
-            new_mix_cfg_file = self._create_mix_cfg(seed_i)
-            pars_trees = self.run_mix(new_mix_cfg_file)
-            # Note: These trees aren't necessarily unique
-            tree_lists.append(pars_trees)
-
-        # Read out the results
-        bifurcating_trees = [t for trees in tree_lists for t in trees]
+        new_mix_cfg_file = self._create_mix_cfg(mix_seed)
+        bifurcating_trees = self.run_mix(new_mix_cfg_file)
         logging.info("num bifurcating trees %d", len(bifurcating_trees))
-        if do_collapse:
-            # Collapse trees
-            mix_trees = [collapsed_tree.collapse_zero_lens(t) for t in bifurcating_trees]
-        else:
-            mix_trees = bifurcating_trees
 
-        # Get a mapping from cell to cell state
-        processed_obs = {k: v[2] for k, v in processed_seqs.items()}
         # Get a mapping from cell to abundance
         processed_abund = {k: v[0] for k, v in processed_seqs.items()}
         # Now convert these trees to CLTs
         clts = []
-        for t in mix_trees:
-            clt_new = self.convert_tree_to_clt(t, event_list, processed_obs, processed_abund)
+        for t in bifurcating_trees:
+            clt_new = self.convert_tree_to_clt(t, event_list, processed_abund)
             clt_new.label_tree_with_strs()
             clts.append(clt_new)
-
-        if do_collapse:
-            # Get the unique collapsed trees
-            clts = self.dist_measurer.get_uniq_trees(clts)
-
         return clts
 
     def run_mix(self, new_mix_cfg_file):

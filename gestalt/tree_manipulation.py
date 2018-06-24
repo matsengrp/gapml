@@ -30,7 +30,6 @@ def _resolve_multifurc(node: CellLineageTree, c_index: int):
             allele_list=node.allele_list,
             allele_events_list=node.allele_events_list,
             cell_state=node.cell_state)
-    new_inner_node.add_feature("observed", node.observed)
 
     sisters = child.get_sisters()
     for s in sisters:

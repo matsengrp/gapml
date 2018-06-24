@@ -11,6 +11,7 @@ import random
 import logging
 from pathlib import Path
 import six
+from typing import List
 
 from cell_lineage_tree import CellLineageTree
 from clt_observer import ObservedAlignedSeq
@@ -19,7 +20,6 @@ from tree_distance import TreeDistanceMeasurer, UnrootRFDistanceMeasurer
 from clt_estimator import CLTParsimonyEstimator
 from collapsed_tree import collapse_zero_lens
 from constants import *
-from common import *
 
 def parse_args():
     parser = argparse.ArgumentParser(description='fit topology and branch lengths for GESTALT')
@@ -43,29 +43,44 @@ def parse_args():
     parser.add_argument(
             '--seed',
             type=int,
-            default=40,
-            help="Random number generator seed")
+            default=5,
+            help="Random number generator seed. Also used as seed for MIX. Must be odd")
     parser.add_argument(
             '--mix-path',
             type=str,
             default=MIX_PATH)
-    parser.add_argument('--num-jumbles',
-            type=int,
-            default=1)
     parser.add_argument('--max-random',
             type=int,
-            default=1)
+            default=1,
+            help="""
+                Output `max-random` bifurcating trees estimated from parsimony
+                Random selection among those estimated from parsimony.
+                """)
     parser.add_argument('--max-random-multifurc',
             type=int,
-            default=1)
+            default=1,
+            help="""
+                Output `max-random-multifurc` different multifurcating trees estimated from parsimony,
+                i.e. collapse the bifurcating trees and output the multifurcating versions.
+                """)
     parser.add_argument('--max-best',
             type=int,
-            default=0)
+            default=0,
+            help="""
+                Output the top `max-best` bifurcating trees from parsimony.
+                Right now, 'best' is measured by distance to the collapsed oracle tree.
+                """)
     parser.add_argument('--max-best-multifurc',
             type=int,
-            default=0)
+            default=0,
+            help="""
+                Output the top `max-best` multifurcating trees from parsimony.
+                Right now, 'best' is measured by distance to the collapsed oracle tree.
+                So we find the closest bifurcating trees and then collapse them.
+                """)
 
     args = parser.parse_args()
+    assert args.seed % 2 == 1
     if args.max_best_multifurc or args.max_best:
         # Require having true tree to know what is a "best" tree
         assert args.true_model_pkl is not None
@@ -88,9 +103,14 @@ def get_sorted_parsimony_trees(
         parsimony_trees: List[CellLineageTree],
         oracle_measurer: TreeDistanceMeasurer):
     """
+    @param parsimony_trees: trees from MIX
+    @param oracle_measurer: distance measurer to the oracle tree
+
     @return a sorted list of tree tuples (tree, tree dist) based on
             distance to the true tree
     """
+    assert oracle_measurer is not None
+
     oracle_tuples = []
     for pars_tree in parsimony_trees:
         tree_dist = oracle_measurer.get_dist(pars_tree)
@@ -146,7 +166,7 @@ def get_bifurc_multifurc_trees(
         if num_multifurc < max_multifurc:
             # Check if this multifurc tree is unique
             has_match = False
-            coll_tree = collapse_internally_labelled_tree(tree)
+            coll_tree = collapse_zero_lens(tree)
             for measurer in tree_measurers:
                 dist = measurer.get_dist(coll_tree)
                 has_match = dist == 0
@@ -164,32 +184,18 @@ def get_bifurc_multifurc_trees(
                     'tree': coll_tree})
     return trees_to_output
 
-def collapse_internally_labelled_tree(tree: CellLineageTree):
-    coll_tree = tree.copy("deepcopy")
-    for n in coll_tree.traverse():
-        n.name = n.allele_events_list_str
-        if not n.is_root():
-            if n.allele_events_list_str == n.up.allele_events_list_str:
-                n.dist = 0
-            else:
-                n.dist = 1
-    coll_tree = collapse_zero_lens(coll_tree)
-    return coll_tree
-
 def get_parsimony_trees(
         obs_leaves: List[ObservedAlignedSeq],
         args,
-        bcode_meta: BarcodeMetadata,
-        do_collapse: bool=False):
+        bcode_meta: BarcodeMetadata):
+    """
+    Run MIX to get maximum parsimony trees
+    """
     parsimony_estimator = CLTParsimonyEstimator(
             bcode_meta,
             args.out_folder,
             args.mix_path)
-    #TODO: DOESN'T USE CELL STATE
-    parsimony_trees = parsimony_estimator.estimate(
-            obs_leaves,
-            num_mix_runs=args.num_jumbles,
-            do_collapse=do_collapse)
+    parsimony_trees = parsimony_estimator.estimate(obs_leaves, mix_seed=args.seed)
     logging.info("Total parsimony trees %d", len(parsimony_trees))
 
     parsimony_score = parsimony_trees[0].get_parsimony_score()
@@ -213,6 +219,8 @@ def main(args=sys.argv[1:]):
     oracle_measurer = None
     distance_cls = UnrootRFDistanceMeasurer
     if args.true_model_pkl is not None:
+        # TODO: we might not think that the best tree is the collapsed tree. Need to add more flexibility
+        #       if we want to use a different tree metric and oracle tree
         with open(args.true_model_pkl, "rb") as f:
             true_model_dict = six.moves.cPickle.load(f)
             oracle_measurer = distance_cls(true_model_dict["collapsed_subtree"], args.scratch_dir)
@@ -223,8 +231,7 @@ def main(args=sys.argv[1:]):
     parsimony_trees = get_parsimony_trees(
         obs_leaves,
         args,
-        bcode_meta,
-        do_collapse=False)
+        bcode_meta)
 
     if args.max_best_multifurc or args.max_best:
         # Get the trees based on distance to the true tree
