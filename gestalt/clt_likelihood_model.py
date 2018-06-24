@@ -833,7 +833,6 @@ class CLTLikelihoodModel:
                     # use the same node
                     if end_state in self.targ_stat_transition_hazards_dict[start_state]:
                         hazard = self.targ_stat_transition_hazards_dict[start_state][end_state]
-                        index_vals.append([[start_key, end_key], hazard])
                     else:
                         hazard = tf.add_n(
                             [self.target_tract_hazards[self.target_tract_dict[tt]] for tt in target_tracts_for_transition])

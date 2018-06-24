@@ -96,6 +96,14 @@ class CollapsedTreeTestCase(unittest.TestCase):
                 [2,3,5,6,7,8,9])
 
     def test_possible_target_tracts(self):
+        targ_stat = TargetStatus()
+        bcode_meta = BarcodeMetadata(
+            unedited_barcode = ("AA", "ATCGATCG", "ACTG", "ATCGATCG", "ACTG", "TGACTAGC", "TT"),
+            cut_site = 3,
+            crucial_pos_len = [3,3])
+        target_tracts = set(targ_stat.get_possible_target_tracts(bcode_meta))
+        self.assertTrue(TargetTract(0,0,2,2) in target_tracts)
+
         deact_tracts = [TargetDeactTract(0,2), TargetDeactTract(4,6), TargetDeactTract(8,9)]
         targ_stat = TargetStatus(*deact_tracts)
         target_tracts = set(targ_stat.get_possible_target_tracts(self.bcode_meta))

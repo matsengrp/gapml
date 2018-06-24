@@ -224,13 +224,14 @@ class TargetStatus(tuple):
         deact_targs = TargetDeactTract(0, bcode_meta.n_targets - 1)
         target_statuses = deact_targs.get_contained_target_statuses()
         for targ_stat in target_statuses:
-            target_status_transition_dict[targ_stat] = dict()
+            targ_stat_start_dict = dict()
             active_targets = targ_stat.get_active_targets(bcode_meta)
             possible_target_tracts = targ_stat.get_possible_target_tracts(bcode_meta)
             for target_tract in possible_target_tracts:
                 new_targ_stat = targ_stat.add_target_tract(target_tract)
-                if new_targ_stat in targ_stat:
-                    target_status_transition_dict[targ_stat][new_targ_stat].append(target_tract)
+                if new_targ_stat in targ_stat_start_dict:
+                    targ_stat_start_dict[new_targ_stat].append(target_tract)
                 else:
-                    target_status_transition_dict[targ_stat][new_targ_stat] = [target_tract]
+                    targ_stat_start_dict[new_targ_stat] = [target_tract]
+            target_status_transition_dict[targ_stat] = targ_stat_start_dict
         return target_status_transition_dict
