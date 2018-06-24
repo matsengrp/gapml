@@ -1,4 +1,5 @@
 import itertools
+import numpy as np
 from typing import List
 from functools import reduce
 
@@ -21,9 +22,15 @@ class AncState:
             return "unmod"
 
     def to_max_target_status(self):
-        return TargetStatus(*[
-            TargetDeactTract(indel_set.min_deact_target, indel_set.max_deact_target)
-            for indel_set in self.indel_set_list])
+        if len(self.indel_set_list) == 0:
+            return TargetStatus()
+        else:
+            max_target = self.indel_set_list[-1].max_deact_target
+            binary_status = np.zeros(max_target + 1)
+            for indel_set in self.indel_set_list:
+                binary_status[indel_set.min_deact_target:indel_set.max_deact_target + 1] = 1
+            targ_stat = TargetStatus._binary_status_to_target_status(binary_status.tolist())
+            return targ_stat
 
     @staticmethod
     def create_for_observed_allele(allele: AlleleEvents, bcode_meta: BarcodeMetadata):

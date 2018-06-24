@@ -177,6 +177,7 @@ class TargetStatus(tuple):
     def _binary_status_to_target_status(binary_status: List[int]):
         """
         Convert a binary status to a TargetStatus
+        @param binary_status: 1 means inactive, 0 means active in this numpy array
         @return TargetStatus
         """
         deact_targs = []
