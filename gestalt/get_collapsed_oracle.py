@@ -2,13 +2,8 @@
 Get tree topologies based on the oracle
 """
 from __future__ import division, print_function
-import os
 import sys
-import numpy as np
 import argparse
-import time
-import random
-import tensorflow as tf
 import logging
 from pathlib import Path
 import six
@@ -33,13 +28,6 @@ def parse_args():
         type=str,
         default="_output",
         help='folder to put output in')
-    parser.add_argument(
-        '--debug', action='store_true', help='debug tensorflow')
-    parser.add_argument(
-            '--seed',
-            type=int,
-            default=40,
-            help="Random number generator seed")
 
     args = parser.parse_args()
     args.log_file = "%s/oracle_tree_log.txt" % args.out_folder
@@ -62,8 +50,6 @@ def main(args=sys.argv[1:]):
     args = parse_args()
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
-
-    np.random.seed(seed=args.seed)
 
     with open(args.true_model_pkl, "rb") as f:
         true_model_dict = six.moves.cPickle.load(f)
