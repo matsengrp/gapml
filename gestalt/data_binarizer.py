@@ -9,8 +9,8 @@ def binarize_observations(bcode_meta: BarcodeMetadata, observations: List[Observ
     Prepares the observations to be sent to phylip
     Each event is represented by a tuple (start idx, end idx, insertion)
 
-    @return processed_seqs: Dict[str, List[float, List[List[Event]], CellState]]
-                this maps the sequence names to event list and abundance
+    @return processed_seqs: Dict[str, List[float, List[List[Event]]]]
+                this maps the sequence names to (abundance, list of event lists)
             all_event_dict: List[Dict[event_tuple, event number]]
                 maps events to their event number
             event_list: List[event_tuple]

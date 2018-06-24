@@ -906,10 +906,10 @@ class CLTLikelihoodModel:
                     target_tract = special_deact_tracts[deact_target_range].get_singleton().get_target_tract()
                     hazard = self.hazard_target_tract_dict[target_tract]
                 else:
+                    end_haz_idx = idxs_for_start_state[end_state]
                     hazard = self.target_status_transition_hazards[end_haz_idx]
 
                 end_key = transition_wrapper.key_dict[end_state]
-                end_haz_idx = idxs_for_start_state[end_state]
                 haz_to_possible += hazard
                 index_vals.append([[start_key, end_key], hazard])
 
@@ -993,7 +993,7 @@ class CLTLikelihoodModel:
                                 self.L_cell_type[node.node_id],
                                 down_probs)
 
-                if node.observed:
+                if node.is_leaf():
                     # If node is observed, we don't need all the other values in this vector
                     # TODO: we might be doing extra computation, though it seems okay for now
                     node_observe_state = node.cell_state.categorical_state.cell_type

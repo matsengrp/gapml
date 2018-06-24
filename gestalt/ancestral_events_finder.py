@@ -16,7 +16,7 @@ def annotate_ancestral_states(tree: CellLineageTree, bcode_meta: BarcodeMetadata
     Find all possible events in the internal nodes.
     """
     for node in tree.traverse("postorder"):
-        if node.observed:
+        if node.is_leaf():
             node.add_feature("anc_state_list", [
                 AncState.create_for_observed_allele(evts, bcode_meta)
                 for evts in node.allele_events_list])

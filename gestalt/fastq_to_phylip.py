@@ -22,7 +22,7 @@ def write_seqs_to_phy(processed_seqs: Dict[str, List],
                     # TODO: currently ignored. include cell state in the future?
                     use_cell_state: bool =False):
     """
-    @param processed_seqs: dict key = sequence id, dict val = [abundance, list of events, cell state]
+    @param processed_seqs: dict key = sequence id, dict val = [abundance, list of events]
     @param event_dicts: list for dicts, one for each barcode, key = event, dict val = event phylip id
     @param phy_file: name of file to input to phylip
     @param abundance_file: name of file with abundance values
@@ -49,7 +49,6 @@ def write_seqs_to_phy(processed_seqs: Dict[str, List],
         for seq_id, seq_data in processed_seqs.items():
             seq_abundance = seq_data[0]
             all_seq_events = seq_data[1]
-            seq_cell_state = seq_data[2]
             event_idxs = [event_dicts[bcode_idx][evt] for bcode_idx, bcode_evts in enumerate(all_seq_events) for evt in bcode_evts]
             event_arr = np.array(['0' for _ in range(num_events)])
             event_arr[event_idxs] = '1'
