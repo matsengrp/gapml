@@ -25,7 +25,7 @@ class CLTSimulator:
         self.cell_state_simulator = cell_state_simulator
         self.allele_simulator = allele_simulator
 
-    def simulate(self, root_allele: Allele, root_cell_state: CellState, time: float, max_nodes: int = 10):
+    def simulate(self, root_allele: Allele, root_cell_state: CellState, time: float, max_nodes: int = 50):
         raise NotImplementedError()
 
     def _simulate_alleles(self, tree: CellLineageTree):
@@ -130,7 +130,7 @@ class BirthDeathTreeSimulator:
             return
 
         if remain_time == 0:
-            print("time out")
+            print("CLT Simulator time out")
             return
 
         # Determine branch length and event at end of branch
@@ -163,7 +163,7 @@ class BirthDeathTreeSimulator:
         self,
         tree: CellLineageTree,
         branch_length: float,
-        branch_end_allele_list: Allele):
+        branch_end_allele_list: AlleleList):
         """
         Observation time is up. Stop observing cell.
         """
@@ -176,7 +176,7 @@ class BirthDeathTreeSimulator:
         self,
         tree: CellLineageTree,
         branch_length: float,
-        branch_end_allele_list: Allele,
+        branch_end_allele_list: AlleleList,
         remain_time: float):
         """
         Cell division
@@ -205,8 +205,7 @@ class BirthDeathTreeSimulator:
         self,
         tree: CellLineageTree,
         branch_length: float,
-        branch_end_cell_state: CellState,
-        branch_end_allele_list: Allele):
+        branch_end_allele_list: AlleleList):
         """
         Cell has died. Add a dead child cell to `tree`.
         """

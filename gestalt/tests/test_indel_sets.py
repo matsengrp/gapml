@@ -1,6 +1,7 @@
 import unittest
 
 from indel_sets import *
+from anc_state import AncState
 
 class AlleleTestCase(unittest.TestCase):
     def test_intersection(self):
