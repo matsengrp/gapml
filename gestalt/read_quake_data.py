@@ -22,7 +22,7 @@ def parse_args():
     parser.add_argument(
         '--reads-file',
         type=str,
-        default="../../data/quake/Split2_Annotated_Barcodes_edited.csv",
+        default="/fh/fast/matsen_e/gestalt/quake/Split2_Annotated_Barcodes_edited.csv",
         help='Reads file from quake')
     parser.add_argument(
         '--out-obs-data',
@@ -53,7 +53,7 @@ def _process_observed_indel_tract(
     secondary_target_cut_site = bcode_meta.abs_cut_sites[secondary_target]
 
     del_len = -length if length < 0 else 0
-    
+
     if left_coord <= 0:
         start_pos = primary_target_cut_site + left_coord
     elif left_coord < threshold_left_coord:
@@ -100,12 +100,13 @@ def parse_reads_file(file_name: str, bcode_meta: BarcodeMetadata):
             insertions]))
         obs_allele_evts = obs_allele_evts[1:]
         allele_evts = [
-                _process_observed_indel_tract(*allele_evt, bcode_meta)
+                _process_observed_indel_tract(*allele_evt, bcode_meta=bcode_meta)
                 for allele_evt in obs_allele_evts]
 
         num_organs = 0
         cell_states_dict = dict()
         obs_leaves = []
+        observed_alleles = dict()
         for row in reader:
             organ_str = row[0][0]
             if organ_str not in cell_states_dict:
@@ -123,7 +124,12 @@ def parse_reads_file(file_name: str, bcode_meta: BarcodeMetadata):
                 allele_events_list=[AlleleEvents(allele_evts_for_seq, bcode_meta.n_targets)],
                 cell_state=cell_state,
                 abundance=1)
-            obs_leaves.append(obs_aligned_seq)
+            if str(obs_aligned_seq) not in observed_alleles:
+                obs_leaves.append(obs_aligned_seq)
+                observed_alleles[str(obs_aligned_seq)] = obs_aligned_seq
+            else:
+                print("abundance higher than one")
+                observed_alleles[str(obs_aligned_seq)].abundance += 1
 
     organ_dict = {}
     for organ_str, cell_type in cell_states_dict.items():

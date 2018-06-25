@@ -158,7 +158,7 @@ class CLTObserver:
         """
         Perform basic checks that the collapsing procedure is correct
         """
-        obs_evts = set([str(o) for o in obs_vals]) 
+        obs_evts = set([str(o) for o in obs_vals])
         tree_evts = set([leaf.allele_events_list_str for leaf in collapsed_clt])
         logging.info("diff events? %s", str(obs_evts - tree_evts))
         logging.info("diff events? %s", str(tree_evts - obs_evts))

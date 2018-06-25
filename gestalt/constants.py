@@ -52,9 +52,9 @@ BARCODE_QUAKE = (
 COLORS = ["cyan", "green", "orange"]
 
 MIX_CFG_FILE = "mix.cfg"
-MIX_PATH = "mix" #"~/phylip-3.697/exe/mix"
+MIX_PATH = "~/phylip-3.697/exe/mix"
 
-RSPR_PATH = "/Users/jeanfeng/rspr_1_3_0/rspr" # "/home/jfeng2/rspr_1_3_0/rspr"
+RSPR_PATH = "/home/jfeng2/rspr_1_3_0/rspr"
 
 UNLIKELY = "unlikely"
 PERTURB_ZERO = 1e-10
