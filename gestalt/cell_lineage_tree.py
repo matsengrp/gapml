@@ -96,7 +96,6 @@ class CellLineageTree(TreeNode):
         for node in self.traverse("preorder"):
             if not node.is_root():
                 node_evts = [set(allele_evts.events) for allele_evts in node.allele_events_list]
-                print(node.up.allele_events_list)
                 node_up_evts = [set(allele_evts.events) for allele_evts in node.up.allele_events_list]
                 num_evts = sum([
                     len(n_evts - n_up_evts) for n_evts, n_up_evts in zip(node_evts, node_up_evts)])

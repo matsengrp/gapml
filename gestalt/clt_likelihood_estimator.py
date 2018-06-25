@@ -35,7 +35,7 @@ class CLTPenalizedEstimator(CLTEstimator):
 
         # Create the skeletons for the transition matrices -- via state sum approximation
         transition_wrappers = transition_wrapper_maker.create_transition_wrappers()
-        logging.info("Done creating transition matrices")
+        logging.info("Done creating transition wrappers")
         self.model.create_log_lik(transition_wrappers)
         logging.info("Done creating tensorflow graph")
         tf.global_variables_initializer().run()
