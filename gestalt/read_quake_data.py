@@ -1,5 +1,5 @@
 """
-Read data from GESTALT and convert to pickle file with List[ObservedAlignedSeq]
+Read data from Stephen Quake's lab and convert to pickle file with List[ObservedAlignedSeq]
 """
 from typing import List
 import os
