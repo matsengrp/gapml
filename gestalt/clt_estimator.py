@@ -11,7 +11,7 @@ from fastq_to_phylip import write_seqs_to_phy
 import phylip_parse
 import collapsed_tree
 from cell_lineage_tree import CellLineageTree
-from allele import Allele, AlleleList
+from allele import Allele, AlleleList, AlleleEvents
 from allele_events import Event
 from cell_state import CellState
 from barcode_metadata import BarcodeMetadata
@@ -70,16 +70,19 @@ class CLTParsimonyEstimator(CLTEstimator):
                 actual_evt = evt[1]
                 grouped_events[bcode_idx].append(actual_evt)
 
-            child_allele_list = AlleleList(
-                    [self.orig_barcode] * self.bcode_meta.num_barcodes,
-                    self.bcode_meta)
-            child_allele_list.process_events(
-                    [[(event.start_pos,
-                        event.del_end,
-                        event.insert_str) for event in events] for events in grouped_events])
+            allele_events_list = []
+            for grp_evts in grouped_events:
+                sorted_grp_evts = sorted(grp_evts, key=lambda evt:evt.start_pos)
+                final_obs_events = sorted_grp_evts[:1]
+                for evt in sorted_grp_evts[1:]:
+                    if not final_obs_events[-1].hides(evt):
+                        final_obs_events.append(evt)
+                allele_events_list.append(
+                        AlleleEvents(final_obs_events))
+
             cell_abundance = 0 if not c.is_leaf() else processed_abund[c.name]
             child_clt = CellLineageTree.convert(c,
-                                        allele_list=child_allele_list,
+                                        allele_events_list=allele_events_list,
                                         abundance=cell_abundance,
                                         dist=c.dist)
             clt.add_child(child_clt)
@@ -94,9 +97,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         """
         clt = CellLineageTree.convert(
                 tree,
-                AlleleList(
-                    [self.orig_barcode] * self.bcode_meta.num_barcodes,
-                    self.bcode_meta))
+                allele_events_list=[AlleleEvents([]) for _ in range(self.bcode_meta.num_barcodes)])
         self._do_convert(clt, tree, event_list, processed_abund)
 
         return clt
@@ -163,6 +164,8 @@ class CLTParsimonyEstimator(CLTEstimator):
 
         new_mix_cfg_file = self._create_mix_cfg(mix_seed)
         bifurcating_trees = self.run_mix(new_mix_cfg_file)
+
+        # Read out the results
         logging.info("num bifurcating trees %d", len(bifurcating_trees))
 
         # Get a mapping from cell to abundance

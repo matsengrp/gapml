@@ -259,12 +259,20 @@ class TargetTract(Tract, DeactEvt):
         return self
 
     @property
+    def min_deact_targ(self):
+        return self[0]
+
+    @property
     def min_target(self):
         return self[1]
 
     @property
     def max_target(self):
         return self[2]
+
+    @property
+    def max_deact_targ(self):
+        return self[3]
 
     @property
     def is_left_long(self):

@@ -131,6 +131,7 @@ def main(args=sys.argv[1:]):
     logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["node_id"], show_internal=True))
     logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
     logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["cell_state"]))
 
     if oracle_dist_measurers is not None:
         result_print_dict = oracle_dist_measurers.get_tree_dists([res.fitted_bifurc_tree])[0]

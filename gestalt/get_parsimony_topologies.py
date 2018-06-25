@@ -39,8 +39,6 @@ def parse_args():
         default="_output",
         help='folder to put output in')
     parser.add_argument(
-        '--debug', action='store_true', help='debug tensorflow')
-    parser.add_argument(
             '--seed',
             type=int,
             default=5,
@@ -259,7 +257,17 @@ def main(args=sys.argv[1:]):
     # Save each tree as separate pickle file
     for i, tree_topology_dict in enumerate(trees_to_output):
         tree_pickle_out = "%s/parsimony_tree%d.pkl" % (args.out_folder, i)
-        print(tree_pickle_out)
+        logging.info(tree_pickle_out)
+        logging.info(tree_topology_dict)
+
+        for node in tree_topology_dict["tree"].traverse():
+            target_tracts = []
+            for evt in node.allele_events_list[0].events:
+                min_deact, max_deact = bcode_meta.get_min_max_deact_targets(evt)
+                target_tracts.append((min_deact, evt.min_target, evt.max_target, max_deact))
+            node.add_feature("tt_string", str(target_tracts))
+
+        logging.info(tree_topology_dict["tree"].get_ascii(attributes=["tt_string"], show_internal=True))
         logging.info(tree_topology_dict["tree"].get_ascii(attributes=["allele_events_list_str"], show_internal=True))
         with open(tree_pickle_out, "wb") as f:
             six.moves.cPickle.dump(tree_topology_dict, f, protocol = 2)

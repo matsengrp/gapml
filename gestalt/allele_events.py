@@ -86,6 +86,10 @@ class AlleleEvents:
         start_ends = [i for tup in start_ends for i in tup]
         for i in range(len(start_ends) - 1):
             assert(start_ends[i] <= start_ends[i + 1])
+        for i in range(len(self.events) - 1):
+            if (self.events[i].max_target >= self.events[i + 1].min_target):
+                print(events)
+            assert(self.events[i].max_target < self.events[i + 1].min_target)
         self.num_targets = num_targets
 
     def __lt__(self, other):
