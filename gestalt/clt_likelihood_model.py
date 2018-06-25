@@ -109,11 +109,12 @@ class CLTLikelihoodModel:
         if self.topology:
             self.branch_lens = self._create_branch_lens()
 
+        # Calculcate the hazards for all the target tracts beforehand. Speeds up computation in the future.
         self.target_tract_hazards, self.target_tract_dict = self._create_all_target_tract_hazards()
         # Dictionary for storing hazards between target statuses -- assuming all moves are possible
         self.targ_stat_transition_hazards_dict = {
             start_target_status: {} for start_target_status in self.targ_stat_transitions_dict.keys()}
-
+        # Calculate hazard for transitioning away from all target statuses beforehand. Speeds up future computation.
         self.hazard_away_dict = self._create_hazard_away_dict()
 
         self.adam_opt = tf.train.AdamOptimizer(learning_rate=0.005)
@@ -320,7 +321,7 @@ class CLTLikelihoodModel:
             br_len_shrink: float=0.8):
         """
         Will randomly initialize branch lengths if they are not all positive already
-        @param max_attempts: will try at most 10 times to initialize branch lengths
+        @param max_attempts: will try at most this many times to initialize branch lengths
         """
         def _are_all_branch_lens_positive():
             return all([b > 0 for b in self.get_branch_lens()[1:]])
@@ -388,7 +389,7 @@ class CLTLikelihoodModel:
             long_left_statuses: Tensor,
             long_right_statuses: Tensor):
         """
-        Creates tensorflow node for calculating hazard
+        Creates tensorflow node for calculating hazard of a target tract
 
         @param min_target: the minimum target that was cut
         @param max_target: the maximum target that was cut
@@ -410,10 +411,7 @@ class CLTLikelihoodModel:
 
     def _create_hazard_away_dict(self):
         """
-        @param transition_wrappers: iterable with transition matrix wrappers
-
-        @return Dict mapping the tuple of start target tract repr to a hazard away node
-                a tensorflow tensor with the calculations for the hazard away
+        @return Dictionary mapping all possible TargetStatus to tensorflow tensor for the hazard away
         """
         target_statuses = list(self.targ_stat_transitions_dict.keys())
 
@@ -634,7 +632,7 @@ class CLTLikelihoodModel:
         self.singleton_index_dict = {sg: int(i) for i, sg in enumerate(singletons)}
         self.singleton_log_cond_prob = self._create_log_indel_probs(singletons)
 
-        # Finally actually create the nodes for calculating the log likelihoods of the alleles
+        # Actually create the nodes for calculating the log likelihoods of the alleles
         self.log_lik_alleles_list = []
         self.Ddiags_list = []
         for bcode_idx in range(self.bcode_meta.num_barcodes):

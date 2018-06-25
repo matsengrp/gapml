@@ -90,20 +90,6 @@ class TargetStatus(tuple):
 
         return TargetStatus._binary_status_to_target_status(binary_status.tolist())
 
-    def add(self, deact_tract: TargetDeactTract):
-        """
-        @return TargetStatus that results after adding this `deact_tract`
-        """
-        if len(self) == 0:
-            return TargetStatus(deact_tract)
-
-        max_targets = max(deact_tract.max_deact_target + 1, self[-1].max_deact_target + 1)
-        binary_status = self._get_binary_status(max_targets)
-        assert binary_status[deact_tract.min_deact_target] == 0
-        assert binary_status[deact_tract.max_deact_target] == 0
-        binary_status[deact_tract.min_deact_target: deact_tract.max_deact_target + 1] = 1
-        return TargetStatus._binary_status_to_target_status(binary_status.tolist())
-
     def add_target_tract(self, target_tract: TargetTract):
         """
         @return TargetStatus that results after adding this `target_tract`
