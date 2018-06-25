@@ -48,9 +48,6 @@ def parse_args():
         default="_output",
         help='folder to put output in')
     parser.add_argument(
-        '--const-branch-len',
-        action='store_true')
-    parser.add_argument(
         '--time', type=float, default=1.2, help='how much time to fit for')
     parser.add_argument(
         '--debug', action='store_true', help='debug tensorflow')

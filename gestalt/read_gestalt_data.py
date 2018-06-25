@@ -8,8 +8,6 @@ import csv
 import numpy as np
 import argparse
 import time
-import tensorflow as tf
-from tensorflow.python import debug as tf_debug
 import logging
 import pickle
 from pathlib import Path
