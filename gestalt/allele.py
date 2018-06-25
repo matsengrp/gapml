@@ -5,6 +5,7 @@ from numpy.random import choice
 
 from alignment import Aligner
 
+from indel_sets import TargetTract
 from allele_events import AlleleEvents, Event
 from constants import BARCODE_V7, NUM_BARCODE_V7_TARGETS
 from barcode_metadata import BarcodeMetadata
@@ -72,11 +73,12 @@ class Allele:
         """
         # TODO: right now this code is pretty inefficient... but only used by simulator i think?
         events = self.get_event_encoding().events
-        deact_tracts = []
+        target_status = TargetStatus()
         for evt in events:
             min_deact, max_deact = self.bcode_meta.get_min_max_deact_targets(evt)
-            deact_tracts.append(TargetDeactTract(min_deact, max_deact))
-        return TargetStatus(*deact_tracts)
+            target_status = target_status.add_target_tract(
+                    TargetTract(min_deact, min_deact, max_deact, max_deact))
+        return target_status
 
     def get_active_targets(self):
         targ_stat = self.get_target_status()

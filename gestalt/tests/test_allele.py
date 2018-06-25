@@ -20,42 +20,14 @@ class AlleleTestCase(unittest.TestCase):
         self.TARGET_LEN = len(self.ORIG_BARCODE[1])
         self.SEP_LEN = len(self.ORIG_BARCODE[2])
         self.CUT_SITE_NUM = 3
-        self.CUT_SITES = [self.CUT_SITE_NUM] * self.NUM_TARGETS
         self.barcode_meta = BarcodeMetadata(
                 self.ORIG_BARCODE,
-                self.CUT_SITES,
-                [3,3])
+                cut_site = self.CUT_SITE_NUM,
+                crucial_pos_len = [3,3])
         self.allele = Allele(
             self.ORIG_BARCODE, self.barcode_meta)
 
-    def test_active_targets(self):
-        active_targets = self.allele.get_active_targets()
-        self.assertEqual(
-            set(active_targets),
-            set(range(self.NUM_TARGETS)))
-
-        self.allele.cut(0)
-        active_targets = self.allele.get_active_targets()
-        self.assertEqual(
-            set(active_targets),
-            set(range(1,self.NUM_TARGETS)))
-
-        self.allele.indel(0, 0, 0, 0, "")
-        active_targets = self.allele.get_active_targets()
-        self.assertEqual(
-            set(active_targets),
-            set(range(self.NUM_TARGETS)))
-
-        self.allele.cut(0)
-        self.allele.indel(0, 0, 0, 0, "atcg")
-        active_targets = self.allele.get_active_targets()
-        self.assertEqual(
-            set(active_targets),
-            set(range(1, self.NUM_TARGETS)))
-
     def test_indel(self):
-        self.allele.cut(0)
-        self.assertEqual(self.allele.needs_repair, set([0]))
         self.allele.indel(0, 0, 1, 2, "atcg")
         allele_str = str(self.allele)
         true_prefix = "%s%s-atcg--%s" % (
@@ -63,11 +35,7 @@ class AlleleTestCase(unittest.TestCase):
             self.ORIG_BARCODE[1][:self.TARGET_LEN - self.CUT_SITE_NUM - 1],
             self.ORIG_BARCODE[1][-self.CUT_SITE_NUM + 2:])
         self.assertTrue(allele_str.startswith(true_prefix))
-        self.assertTrue(len(self.allele.needs_repair) == 0)
 
-        self.allele.cut(1)
-        self.allele.cut(3)
-        self.assertEqual(self.allele.needs_repair, set([1,3]))
         # cut off 4 to the left, which cuts thru to a separator sequence
         # cut off 6 to the right, though the sequence actually only has 4 more to the right
         self.allele.indel(1, 3, 4, 6, "atcg")
@@ -77,13 +45,16 @@ class AlleleTestCase(unittest.TestCase):
             "-" * 4,
             "-" * (4 + (self.TARGET_LEN + self.SEP_LEN) * 2))
         self.assertTrue(allele_str.endswith(true_suffix))
-        self.assertTrue(len(set(self.allele.needs_repair)) == 0)
+
+    def test_lots_of_indels(self):
+        # Nothing to repair/cut
+        for i in range(self.barcode_meta.n_targets):
+            self.allele.indel(i, i, 0, 0, "atcg")
 
     def test_events(self):
         evts = self.allele.get_events()
         self.assertEqual(len(evts), 0)
 
-        self.allele.cut(0)
         self.allele.indel(0, 0, 1, 2, "atcg")
         evts = self.allele.get_events()
         self.assertEqual(evts, [(3, 6, "atcg")])
