@@ -109,8 +109,12 @@ class CLTLikelihoodModel:
         if self.topology:
             self.branch_lens = self._create_branch_lens()
 
-        self._create_hazard_node_for_simulation()
         self.target_tract_hazards, self.target_tract_dict = self._create_all_target_tract_hazards()
+        # Dictionary for storing hazards between target statuses -- assuming all moves are possible
+        self.targ_stat_transition_hazards_dict = {
+            start_target_status: {} for start_target_status in self.targ_stat_transitions_dict.keys()}
+
+        self.hazard_away_dict = self._create_hazard_away_dict()
 
         self.adam_opt = tf.train.AdamOptimizer(learning_rate=0.005)
 
@@ -347,17 +351,11 @@ class CLTLikelihoodModel:
 
     def get_hazards(self, tt_evts: List[TargetTract]):
         """
-        @param tt_evt: the target tract that is getting introduced
+        @param tt_evts: list of target tracts that is getting introduced
         @return hazard of the event happening
         """
-        hazards = self.sess.run(
-                self.hazard,
-                feed_dict={
-                    self.targets_ph: [
-                        [tt_evt.min_target, tt_evt.max_target] for tt_evt in tt_evts],
-                    self.long_status_ph: [
-                        [tt_evt.is_left_long, tt_evt.is_right_long] for tt_evt in tt_evts]})
-        return hazards
+        return self.sess.run(
+                [self.target_tract_hazards[self.target_tract_dict[tt]] for tt in tt_evts])
 
     def get_hazard(self, tt_evt: TargetTract):
         """
@@ -365,19 +363,6 @@ class CLTLikelihoodModel:
         @return hazard of the event happening
         """
         return self.get_hazards([tt_evt])[0]
-
-    def _create_hazard_node_for_simulation(self):
-        """
-        creates nodes just for calculating the hazard of introducing particular target tracts when simulating stuff
-        """
-        self.targets_ph = tf.placeholder(tf.int32, [None, 2])
-        self.long_status_ph = tf.placeholder(tf.float64, [None, 2])
-
-        self.hazard = self._create_hazard_target_tract(
-                self.targets_ph[:,0],
-                self.targets_ph[:,1],
-                self.long_status_ph[:,0],
-                self.long_status_ph[:,1])
 
     def _create_all_target_tract_hazards(self):
         """
@@ -643,18 +628,9 @@ class CLTLikelihoodModel:
         """
         Create a tensorflow graph of the likelihood calculation
         """
-        # Dictionary for storing hazards between target statuses -- assuming all moves are possible
-        self.targ_stat_transition_hazards_dict = {
-            start_target_status: {} for start_target_status in self.targ_stat_transitions_dict.keys()}
-
-        # Get the hazards for making the instantaneous transition matrix
-        # Doing it all at once to speed up computation
-        self.hazard_away_dict = self._create_hazard_away_dict()
-        singletons = CLTLikelihoodModel.get_all_singletons(self.topology)
-        target_tracts = [sg.get_target_tract() for sg in singletons]
-
         # Get all the conditional probabilities of the trims
         # Doing it all at once to speed up computation
+        singletons = CLTLikelihoodModel.get_all_singletons(self.topology)
         self.singleton_index_dict = {sg: int(i) for i, sg in enumerate(singletons)}
         self.singleton_log_cond_prob = self._create_log_indel_probs(singletons)
 

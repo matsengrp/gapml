@@ -165,7 +165,7 @@ class TargetStatus(tuple):
         for i0_prime, t0_prime in enumerate(active_any_targs):
             # Short left trim
             all_starts[i0_prime].append((t0_prime, t0_prime))
-            if t0_prime > 1:
+            if t0_prime > 0:
                 # Long left trim
                 all_starts[i0_prime].append((t0_prime - 1, t0_prime))
 

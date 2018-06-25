@@ -122,6 +122,38 @@ class CollapsedTreeTestCase(unittest.TestCase):
         self.assertTrue(len(target_statuses) == 4)
 
     def test_get_all_transitions(self):
-        all_transitions = TargetStatus.get_all_transitions(self.bcode_meta)
-        self.assertEqual(all_transitions[TargetStatus(TargetDeactTract(0,9))], {})
-        self.assertEqual(len(all_transitions.keys()), 1024)
+        bcode_meta = BarcodeMetadata(
+            unedited_barcode = ("AA", "ATCGATCG", "ACTG", "ATCGATCG", "ACTG", "TGACTAGC", "TT"),
+            cut_site = 3,
+            crucial_pos_len = [3,3])
+        all_transitions = TargetStatus.get_all_transitions(bcode_meta)
+        self.assertEqual(len(all_transitions.keys()), 8)
+
+        self.assertEqual(all_transitions[TargetStatus(TargetDeactTract(0,2))], {})
+        self.assertEqual(set(all_transitions[TargetStatus()].keys()),
+                set([TargetStatus(TargetDeactTract(0,0)),
+                    TargetStatus(TargetDeactTract(0,1)),
+                    TargetStatus(TargetDeactTract(1,1)),
+                    TargetStatus(TargetDeactTract(1,2)),
+                    TargetStatus(TargetDeactTract(0,2)),
+                    TargetStatus(TargetDeactTract(2,2))]))
+        self.assertEqual(
+                set(all_transitions[TargetStatus()][TargetStatus(TargetDeactTract(0,1))]),
+                set([TargetTract(0,0,1,1),
+                    TargetTract(0,0,0,1),
+                    TargetTract(0,1,1,1)]))
+        self.assertEqual(
+                set(all_transitions[TargetStatus()][TargetStatus(TargetDeactTract(0,2))]),
+                set([
+                    TargetTract(0,0,2,2),
+                    TargetTract(0,0,1,2),
+                    TargetTract(0,1,1,2),
+                    TargetTract(0,1,2,2)]))
+        self.assertEqual(
+                set(all_transitions[TargetStatus(TargetDeactTract(0,1))][TargetStatus(TargetDeactTract(0,2))]),
+                set([
+                    TargetTract(2,2,2,2),
+                    TargetTract(1,2,2,2)]))
+        self.assertEqual(
+                set(all_transitions[TargetStatus(TargetDeactTract(1,1))][TargetStatus(TargetDeactTract(0,2))]),
+                set([TargetTract(0,0,2,2)]))
