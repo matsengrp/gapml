@@ -109,7 +109,13 @@ class CLTLikelihoodModel:
         if self.topology:
             self.branch_lens = self._create_branch_lens()
 
-        self._create_hazard_node_for_simulation()
+        # Calculcate the hazards for all the target tracts beforehand. Speeds up computation in the future.
+        self.target_tract_hazards, self.target_tract_dict = self._create_all_target_tract_hazards()
+        # Dictionary for storing hazards between target statuses -- assuming all moves are possible
+        self.targ_stat_transition_hazards_dict = {
+            start_target_status: {} for start_target_status in self.targ_stat_transitions_dict.keys()}
+        # Calculate hazard for transitioning away from all target statuses beforehand. Speeds up future computation.
+        self.hazard_away_dict = self._create_hazard_away_dict()
 
         self.adam_opt = tf.train.AdamOptimizer(learning_rate=0.005)
 
@@ -315,7 +321,7 @@ class CLTLikelihoodModel:
             br_len_shrink: float=0.8):
         """
         Will randomly initialize branch lengths if they are not all positive already
-        @param max_attempts: will try at most 10 times to initialize branch lengths
+        @param max_attempts: will try at most this many times to initialize branch lengths
         """
         def _are_all_branch_lens_positive():
             return all([b > 0 for b in self.get_branch_lens()[1:]])
@@ -346,17 +352,11 @@ class CLTLikelihoodModel:
 
     def get_hazards(self, tt_evts: List[TargetTract]):
         """
-        @param tt_evt: the target tract that is getting introduced
+        @param tt_evts: list of target tracts that is getting introduced
         @return hazard of the event happening
         """
-        hazards = self.sess.run(
-                self.hazard,
-                feed_dict={
-                    self.targets_ph: [
-                        [tt_evt.min_target, tt_evt.max_target] for tt_evt in tt_evts],
-                    self.long_status_ph: [
-                        [tt_evt.is_left_long, tt_evt.is_right_long] for tt_evt in tt_evts]})
-        return hazards
+        return self.sess.run(
+                [self.target_tract_hazards[self.target_tract_dict[tt]] for tt in tt_evts])
 
     def get_hazard(self, tt_evt: TargetTract):
         """
@@ -365,38 +365,23 @@ class CLTLikelihoodModel:
         """
         return self.get_hazards([tt_evt])[0]
 
-    def _create_hazard_node_for_simulation(self):
+    def _create_all_target_tract_hazards(self):
         """
-        creates nodes just for calculating the hazard of introducing particular target tracts when simulating stuff
+        @return Tuple with:
+            tensorflow tensor with hazards for all possible target tracts
+            dictionary mapping all possible target tracts to their index in the tensor
         """
-        self.targets_ph = tf.placeholder(tf.int32, [None, 2])
-        self.long_status_ph = tf.placeholder(tf.float64, [None, 2])
+        target_status_all_active = TargetStatus()
+        all_target_tracts = target_status_all_active.get_possible_target_tracts(self.bcode_meta)
+        tt_dict = {tt: i for i, tt in enumerate(all_target_tracts)}
 
-        self.hazard = self._create_hazard_target_tract(
-                self.targets_ph[:,0],
-                self.targets_ph[:,1],
-                self.long_status_ph[:,0],
-                self.long_status_ph[:,1])
+        min_targets = tf.constant([tt.min_target for tt in all_target_tracts], dtype=tf.int32)
+        max_targets = tf.constant([tt.max_target for tt in all_target_tracts], dtype=tf.int32)
+        long_left_statuses = tf.constant([tt.is_left_long for tt in all_target_tracts], dtype=tf.float64)
+        long_right_statuses = tf.constant([tt.is_right_long for tt in all_target_tracts], dtype=tf.float64)
 
-    def _create_target_tract_hazards(self, target_tracts: List[TargetTract]):
-        """
-        @param target_tracts: a list of target tracts that we want to create hazard nodes for
-
-        @return Dict[TargetTract, tensorflow node calculating hazard of that target tract]
-        """
-        min_targets = tf.constant([tt.min_target for tt in target_tracts], dtype=tf.int32)
-        max_targets = tf.constant([tt.max_target for tt in target_tracts], dtype=tf.int32)
-        long_left_statuses = tf.constant([tt.is_left_long for tt in target_tracts], dtype=tf.float64)
-        long_right_statuses = tf.constant([tt.is_right_long for tt in target_tracts], dtype=tf.float64)
-
-        # Compute the hazard
-        hazard_target_tracts = self._create_hazard_target_tract(min_targets, max_targets, long_left_statuses, long_right_statuses)
-
-        # Now create the dictionary
-        hazard_tt_dict = {}
-        for i, tt in enumerate(target_tracts):
-            hazard_tt_dict[tt] = hazard_target_tracts[i]
-        return hazard_tt_dict
+        all_hazards = self._create_hazard_target_tract(min_targets, max_targets, long_left_statuses, long_right_statuses)
+        return all_hazards, tt_dict
 
     def _create_hazard_target_tract(self,
             min_target: Tensor,
@@ -404,7 +389,7 @@ class CLTLikelihoodModel:
             long_left_statuses: Tensor,
             long_right_statuses: Tensor):
         """
-        Creates tensorflow node for calculating hazard
+        Creates tensorflow node for calculating hazard of a target tract
 
         @param min_target: the minimum target that was cut
         @param max_target: the maximum target that was cut
@@ -423,83 +408,10 @@ class CLTLikelihoodModel:
         right_trim_prob = tf_common.ifelse(long_right_statuses, self.trim_long_probs[1], 1 - self.trim_long_probs[1])
         hazard = tf.exp(log_lambda_part + tf.log(left_trim_prob) + tf.log(right_trim_prob), name="hazard")
         return hazard
-    
-    def _create_target_status_transition_hazards(self):
-        """
-        @return tuple of:
-            1. Dict[start TargetStatus, Dict[end TargetStatus, index of the (start,end) target status pair in the tensorflow tensor]]
-            2. tensorflow tensor calculating hazard of transitioning between the target statuses
-        """
-        deact_targ_starts = []
-        deact_targ_ends = []
-        target_status_transition_idxs = dict()
-        idx = 0
-        for start_targ_stat, end_targ_dict in self.targ_stat_transitions_dict.items():
-            target_status_transition_idxs[start_targ_stat] = dict()
-            for end_targ_stat, deact_tract in end_targ_dict.items():
-                deact_targ_starts.append(deact_tract.min_deact_target)
-                deact_targ_ends.append(deact_tract.max_deact_target)
-                target_status_transition_idxs[start_targ_stat][end_targ_stat] = idx
-                idx += 1
-    
-        t0 = tf.constant(deact_targ_starts, dtype=tf.int32)
-        t1 = tf.constant(deact_targ_ends, dtype=tf.int32)
-        hazards = self._create_hazard_deact(t0, t1)
-    
-        return target_status_transition_idxs, hazards
-
-    def _create_hazard_deact(self, t0: List[int], t1: List[int]):
-        """
-        Create the tensorflow node for the hazard of adding a new deact tract that deactivates targets t0 to t1
-        This is calculated by summing over the hazards of introducing all target tracts that match that deactivation range
-
-        @param t0: first target deactivated
-        @param t1: last target deactivated
-
-        @return tensorflow tensor where i-th value corresponds to i-th deact tract
-        """
-        left_short_lambda = tf.gather(self.target_lams, t0) * self.trim_short_probs[0]
-        right_short_lambda = tf.gather(self.target_lams, t1) * self.trim_short_probs[1]
-        left_long_lambda = tf.gather(self.target_lams, tf.minimum(t0 + 1, self.num_targets - 1)) * self.trim_long_probs[0]
-        right_long_lambda = tf.gather(self.target_lams, tf.maximum(t1 - 1, 0)) * self.trim_long_probs[1]
-
-        # one target deactivated
-        is_one = tf_common.equal_float(t1, t0)
-        lambda_one = left_short_lambda * self.trim_short_probs[1]
-
-        # two targets consecutive
-        is_two_consec = tf_common.equal_float(t0 + 1, t1)
-        lambda_two_consec = (left_short_lambda * self.trim_long_probs[1]
-                            + right_short_lambda * self.trim_long_probs[0]
-                            + left_short_lambda * right_short_lambda)
-
-        # three targets consecutive
-        is_three_consec = tf_common.equal_float(t0 + 2, t1)
-        lambda_three_consec = (left_short_lambda * right_long_lambda
-                            + left_long_lambda * right_short_lambda
-                            + left_long_lambda * self.trim_long_probs[1]
-                            + left_short_lambda * right_short_lambda)
-
-        is_four_or_more = tf_common.greater_equal_float(t1, t0 + 3)
-        lambda_four = (left_short_lambda * right_short_lambda
-                + left_short_lambda * right_long_lambda
-                + left_long_lambda * right_short_lambda
-                + left_long_lambda * right_long_lambda)
-
-        # add them all up
-        hazard = (lambda_four * is_four_or_more
-                + lambda_three_consec * is_three_consec
-                + lambda_two_consec * is_two_consec
-                + lambda_one * is_one)
-
-        return hazard
 
     def _create_hazard_away_dict(self):
         """
-        @param transition_wrappers: iterable with transition matrix wrappers
-
-        @return Dict mapping the tuple of start target tract repr to a hazard away node
-                a tensorflow tensor with the calculations for the hazard away
+        @return Dictionary mapping all possible TargetStatus to tensorflow tensor for the hazard away
         """
         target_statuses = list(self.targ_stat_transitions_dict.keys())
 
@@ -714,20 +626,13 @@ class CLTLikelihoodModel:
         """
         Create a tensorflow graph of the likelihood calculation
         """
-        # Get the hazards for making the instantaneous transition matrix
-        # Doing it all at once to speed up computation
-        self.target_status_transition_idxs, self.target_status_transition_hazards = self._create_target_status_transition_hazards()
-        self.hazard_away_dict = self._create_hazard_away_dict()
-        singletons = CLTLikelihoodModel.get_all_singletons(self.topology)
-        target_tracts = [sg.get_target_tract() for sg in singletons]
-        self.hazard_target_tract_dict = self._create_target_tract_hazards(target_tracts)
-
         # Get all the conditional probabilities of the trims
         # Doing it all at once to speed up computation
+        singletons = CLTLikelihoodModel.get_all_singletons(self.topology)
         self.singleton_index_dict = {sg: int(i) for i, sg in enumerate(singletons)}
         self.singleton_log_cond_prob = self._create_log_indel_probs(singletons)
 
-        # Finally actually create the nodes for calculating the log likelihoods of the alleles
+        # Actually create the nodes for calculating the log likelihoods of the alleles
         self.log_lik_alleles_list = []
         self.Ddiags_list = []
         for bcode_idx in range(self.bcode_meta.num_barcodes):
@@ -870,9 +775,9 @@ class CLTLikelihoodModel:
         """
         # Get the target tracts of the singletons -- this is important
         # since the transition matrix excludes the impossible target tracts
-        special_deact_tracts = {
-                (sgwc.min_deact_target, sgwc.max_deact_target): sgwc
-                for sgwc in transition_wrapper.anc_state.get_singleton_wcs()}
+        special_tts = set([
+                sgwc.get_singleton().get_target_tract()
+                for sgwc in transition_wrapper.anc_state.get_singleton_wcs()])
 
         possible_states = set(transition_wrapper.states)
         impossible_key = transition_wrapper.num_likely_states
@@ -885,21 +790,29 @@ class CLTLikelihoodModel:
             # Hazard of staying is negative of hazard away
             index_vals.append([[start_key, start_key], -haz_away])
 
-            idxs_for_start_state = self.target_status_transition_idxs[start_state]
-            all_end_states = set(idxs_for_start_state.keys())
+            all_end_states = set(self.targ_stat_transitions_dict[start_state].keys())
             possible_end_states = all_end_states.intersection(possible_states)
             haz_to_possible = 0
             for end_state in possible_end_states:
                 # Figure out if this is a special transition involving only a particular target tract
                 # Or if it a general any-target-tract transition
-                transition_deact_tract = self.targ_stat_transitions_dict[start_state][end_state]
-                deact_target_range = (transition_deact_tract.min_deact_target, transition_deact_tract.max_deact_target)
-                if deact_target_range in special_deact_tracts:
-                    target_tract = special_deact_tracts[deact_target_range].get_singleton().get_target_tract()
-                    hazard = self.hazard_target_tract_dict[target_tract]
+                target_tracts_for_transition = self.targ_stat_transitions_dict[start_state][end_state]
+                matching_tts = special_tts.intersection(target_tracts_for_transition)
+                if matching_tts:
+                    assert len(matching_tts) == 1
+                    matching_tt = list(matching_tts)[0]
+                    hazard = self.target_tract_hazards[self.target_tract_dict[matching_tt]]
                 else:
-                    end_haz_idx = idxs_for_start_state[end_state]
-                    hazard = self.target_status_transition_hazards[end_haz_idx]
+                    # if we already calculated the hazard of the transition between these target statuses,
+                    # use the same node
+                    if end_state in self.targ_stat_transition_hazards_dict[start_state]:
+                        hazard = self.targ_stat_transition_hazards_dict[start_state][end_state]
+                    else:
+                        hazard = tf.add_n(
+                            [self.target_tract_hazards[self.target_tract_dict[tt]] for tt in target_tracts_for_transition])
+
+                        # Store this hazard if we need it in the future
+                        self.targ_stat_transition_hazards_dict[start_state][end_state] = hazard
 
                 end_key = transition_wrapper.key_dict[end_state]
                 haz_to_possible += hazard
@@ -908,10 +821,11 @@ class CLTLikelihoodModel:
             # Hazard to unlikely state is hazard away minus hazard to likely states
             index_vals.append([[start_key, impossible_key], haz_away - haz_to_possible])
 
+        matrix_len = transition_wrapper.num_likely_states + 1
         q_matrix = tf_common.scatter_nd(
-                index_vals,
-                output_shape=[transition_wrapper.num_likely_states + 1, transition_wrapper.num_likely_states + 1],
-                name="top.q_matrix")
+            index_vals,
+            output_shape=[matrix_len, matrix_len],
+            name="top.q_matrix")
         return q_matrix
 
     def _create_trim_prob_matrix(self, child_transition_wrapper: TransitionWrapper):

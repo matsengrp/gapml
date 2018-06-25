@@ -459,11 +459,11 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             hazard_away_dict[TargetStatus(TargetDeactTract(0,2))],
             ])
         hazard_to_cut1 = target_lams[1] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
-        hazard_to_cut03 = target_lams[0] * target_lams[2] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
+        hazard_to_cut02 = target_lams[0] * target_lams[2] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
 
         q_mat = np.matrix([
-            [-hazard_away, hazard_to_cut1, hazard_to_cut03, hazard_away - hazard_to_cut1 - hazard_to_cut03],
-            [0, -hazard_away_from_cut1, hazard_to_cut03, hazard_away_from_cut1 - hazard_to_cut03],
+            [-hazard_away, hazard_to_cut1, hazard_to_cut02, hazard_away - hazard_to_cut1 - hazard_to_cut02],
+            [0, -hazard_away_from_cut1, hazard_to_cut02, hazard_away_from_cut1 - hazard_to_cut02],
             [0, 0, -hazard_away_cut02, hazard_away_cut02],
             [0, 0, 0, 0]])
         prob_mat = tf_common._custom_expm(q_mat, branch_len)[0]
@@ -524,11 +524,11 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             hazard_away_dict[TargetStatus()],
             hazard_away_dict[TargetStatus(TargetDeactTract(1,1))]])
         hazard_to_cut1 = target_lams[1] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
-        hazard_to_cut03 = target_lams[0] * target_lams[2] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
+        hazard_to_cut02 = target_lams[0] * target_lams[2] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
 
         q_mat = np.matrix([
-            [-hazard_away, hazard_to_cut1, hazard_to_cut03, hazard_away - hazard_to_cut1 - hazard_to_cut03],
-            [0, -hazard_away_from_cut1, hazard_to_cut03, hazard_away - hazard_to_cut03],
+            [-hazard_away, hazard_to_cut1, hazard_to_cut02, hazard_away - hazard_to_cut1 - hazard_to_cut02],
+            [0, -hazard_away_from_cut1, hazard_to_cut02, hazard_away - hazard_to_cut02],
             [0, 0, 0, 0],
             [0, 0, 0, 0]])
         prob_mat = tf_common._custom_expm(q_mat, branch_len1 + branch_len2)[0]
