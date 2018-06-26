@@ -653,7 +653,7 @@ class CLTLikelihoodModel:
                     for state in transition_wrapper.states]
                 haz_aways = tf_common.scatter_nd(
                         index_vals,
-                        output_shape=[transition_wrapper.num_likely_states + 1, 1],
+                        output_shape=[transition_wrapper.num_possible_states + 1, 1],
                         name="haz_away.multifurc")
                 return tf.exp(-haz_aways * time_stays_constant)
             else:
@@ -685,7 +685,7 @@ class CLTLikelihoodModel:
         for node in self.topology.traverse("postorder"):
             if node.is_leaf():
                 node_wrapper = transition_wrappers[node.node_id][bcode_idx]
-                prob_array = np.zeros((node_wrapper.num_likely_states + 1, 1))
+                prob_array = np.zeros((node_wrapper.num_possible_states + 1, 1))
                 observed_key = node_wrapper.key_dict[node_wrapper.leaf_state]
                 prob_array[observed_key] = 1
                 Lprob[node.node_id] = tf.constant(prob_array, dtype=tf.float64)
@@ -767,7 +767,7 @@ class CLTLikelihoodModel:
                 for sgwc in transition_wrapper.anc_state.get_singleton_wcs()])
 
         possible_states = set(transition_wrapper.states)
-        impossible_key = transition_wrapper.num_likely_states
+        impossible_key = transition_wrapper.num_possible_states
 
         index_vals = []
         for start_state in transition_wrapper.states:
@@ -808,7 +808,7 @@ class CLTLikelihoodModel:
             # Hazard to unlikely state is hazard away minus hazard to likely states
             index_vals.append([[start_key, impossible_key], haz_away - haz_to_possible])
 
-        matrix_len = transition_wrapper.num_likely_states + 1
+        matrix_len = transition_wrapper.num_possible_states + 1
         q_matrix = tf_common.scatter_nd(
             index_vals,
             output_shape=[matrix_len, matrix_len],
@@ -843,7 +843,7 @@ class CLTLikelihoodModel:
                     end_key = child_transition_wrapper.key_dict[end_target_status]
                     index_vals.append([[start_key, end_key], log_val])
 
-        output_shape = [child_transition_wrapper.num_likely_states + 1, child_transition_wrapper.num_likely_states + 1]
+        output_shape = [child_transition_wrapper.num_possible_states + 1, child_transition_wrapper.num_possible_states + 1]
         if index_vals:
             return tf.exp(tf_common.scatter_nd(
                 index_vals,
@@ -1014,7 +1014,7 @@ class CLTLikelihoodModel:
             for targ_stat in new_wrapper.states]
         down_probs = tf_common.scatter_nd(
                 index_vals,
-                output_shape=[new_wrapper.num_likely_states + 1, 1],
+                output_shape=[new_wrapper.num_possible_states + 1, 1],
                 name="top.down_probs")
         return down_probs
 

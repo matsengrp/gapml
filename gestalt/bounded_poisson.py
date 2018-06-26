@@ -23,7 +23,6 @@ class BoundedPoisson:
 
     def pmf(self, k: int):
         if k > self.max_val:
-            # TODO: keep this here for simulations. remove later for real data
             raise ValueError("CUT TOO MUCH! %d, max = %d" % (k, self.max_val))
         elif k == 0:
             return self.poisson_dist.pmf(0) + 1 - self.poisson_dist.cdf(self.max_val)

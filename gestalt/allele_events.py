@@ -23,6 +23,10 @@ class Event(tuple):
         @param max_target: max target that got cut
         @param insert_str: sequence of nucleotides inserted
         """
+        assert start_pos >= 0
+        assert min_target >= 0
+        assert min_target <= max_target
+        assert del_len >= 0
         return tuple.__new__(cls, (start_pos, del_len, min_target, max_target, insert_str))
 
     def __getnewargs__(self):

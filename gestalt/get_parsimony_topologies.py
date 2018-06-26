@@ -44,6 +44,11 @@ def parse_args():
             default=5,
             help="Random number generator seed. Also used as seed for MIX. Must be odd")
     parser.add_argument(
+            '--num-jumbles',
+            type=int,
+            default=5,
+            help="Number of times to jumble. (This is an input to MIX)")
+    parser.add_argument(
             '--mix-path',
             type=str,
             default=MIX_PATH)
@@ -193,7 +198,10 @@ def get_parsimony_trees(
             bcode_meta,
             args.out_folder,
             args.mix_path)
-    parsimony_trees = parsimony_estimator.estimate(obs_leaves, mix_seed=args.seed)
+    parsimony_trees = parsimony_estimator.estimate(
+            obs_leaves,
+            mix_seed=args.seed,
+            num_jumbles=args.num_jumbles)
     logging.info("Total parsimony trees %d", len(parsimony_trees))
 
     parsimony_score = parsimony_trees[0].get_parsimony_score()

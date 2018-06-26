@@ -21,8 +21,7 @@ class TransitionWrapper:
         self.states = target_statuses
         # The mapping from state to state index number for this node
         self.key_dict = {targ_stat: i for i, targ_stat in enumerate(target_statuses)}
-        # TODO: rename to num_possible_states
-        self.num_likely_states = len(target_statuses)
+        self.num_possible_states = len(target_statuses)
 
         # Ancestral state at this node
         self.anc_state = anc_state
