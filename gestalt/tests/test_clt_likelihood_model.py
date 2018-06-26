@@ -29,13 +29,14 @@ class LikelihoodModelTestCase(unittest.TestCase):
         self.trim_long_probs = self.mdl.trim_long_probs.eval()
 
     def test_get_hazard(self):
+        tt_hazards = self.mdl.get_all_target_tract_hazards()
         tt = TargetTract(2,2,2,2)
-        hazard = self.mdl.get_hazard(tt)
+        hazard = tt_hazard[self.mdl.target_tract_dict[tt]]
         self.assertTrue(np.isclose(hazard,
             self.target_lams[2] * (1 - self.trim_long_probs[0]) * (1 - self.trim_long_probs[1])))
 
         tt = TargetTract(0,0,2,2)
-        hazard = self.mdl.get_hazard(tt)
+        hazard = tt_hazards[self.mdl.target_tract_dict[tt]]
         self.assertTrue(np.isclose(hazard,
             self.target_lams[0] * self.target_lams[2] * (1 - self.trim_long_probs[0]) * (1 - self.trim_long_probs[1])))
 

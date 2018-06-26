@@ -15,6 +15,7 @@ from clt_observer import ObservedAlignedSeq
 from cell_state import CellState, CellTypeTree
 from barcode_metadata import BarcodeMetadata
 from allele_events import Event, AlleleEvents
+from indel_sets import Singleton
 from constants import BARCODE_QUAKE
 
 def parse_args():
@@ -66,21 +67,40 @@ def _process_observed_indel_tract(
         # Maybe the cut site is actually for target `primary_target + 1`?
         raise ValueError("is the primary target correct??")
 
-    for contained_target in range(min_target, max_target - 1):
+    for contained_target in range(min_target, max_target + 1):
         contained_cut_site = bcode_meta.abs_cut_sites[contained_target]
+        print(contained_target, contained_cut_site, start_pos, start_pos + del_len)
+        if start_pos > contained_cut_site:
+            print("min target not covered...")
+            min_target = contained_target + 1
         if contained_cut_site > start_pos + del_len:
-            print("secondary not covered...", contained_cut_site, start_pos + del_len)
-            if contained_target == max_target - 2:
+            print("secondary not covered...")
+            if contained_cut_site > start_pos + del_len - threshold_left_coord:
+                max_target = contained_target
                 omitted_insert_length = contained_cut_site - (start_pos + del_len)
                 del_len += omitted_insert_length
                 insertion += "A" * omitted_insert_length
+                break
+            else:
+                # Decrease the max target instead...
+                max_target = max_target - 1
+                break
 
-    return Event(
+    insertion = insertion.lower()
+    evt = Event(
         start_pos = start_pos,
         del_len = del_len,
         min_target = min_target,
         max_target = max_target,
-        insert_str = insertion)
+        insert_str = insertion.lower())
+
+    # Run these lines only for debugging
+    min_deact_targ, max_deact_targ = bcode_meta.get_min_max_deact_targets(evt)
+    sg = Singleton(start_pos, del_len, min_deact_targ, min_target, max_target, max_deact_targ, insertion.lower())
+    sg.get_trim_lens(bcode_meta)
+    print("FINAL sg", sg)
+
+    return evt
 
 def parse_reads_file(file_name: str, bcode_meta: BarcodeMetadata):
     with open(file_name, "r") as f:

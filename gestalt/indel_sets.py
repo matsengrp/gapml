@@ -148,6 +148,11 @@ class Singleton(IndelSet):
             max_target: int,
             max_deact_target: int,
             insert_str: str = ""):
+        assert min_deact_target >= min_target - 1
+        assert min_deact_target <= min_target
+        assert min_target <= max_target
+        assert max_target <= max_deact_target
+        assert max_target + 1 >= max_deact_target
         return tuple.__new__(cls, (start_pos, del_len, min_deact_target, min_target, max_target, max_deact_target, insert_str))
 
     def __getnewargs__(self):
@@ -204,8 +209,20 @@ class Singleton(IndelSet):
                 self.max_target,
                 self.max_deact_target)
 
+    def get_trim_lens(self, bcode_meta: BarcodeMetadata):
+        left_trim_len = bcode_meta.abs_cut_sites[self.min_target] - self.start_pos
+        right_trim_len = self.del_end - bcode_meta.abs_cut_sites[self.max_target]
+        assert left_trim_len >= 0
+        assert right_trim_len >= 0
+        assert left_trim_len < bcode_meta.left_max_trim[self.min_target]
+        assert right_trim_len < bcode_meta.right_max_trim[self.max_target]
+        return left_trim_len, right_trim_len
+
     def __str__(self):
-        return "Singleton,%d,%d,%d,%d,%s" % (self.min_deact_target,
+        return "Singleton,%d,%d,%d,%d,%d,%d,%s" % (
+                self.start_pos,
+                self.del_len,
+                self.min_deact_target,
                 self.min_target,
                 self.max_target,
                 self.max_deact_target,

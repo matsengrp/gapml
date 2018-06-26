@@ -67,7 +67,11 @@ class CLTPenalizedEstimator(CLTEstimator):
                     self.model.log_barr_ph: self.log_barr,
                     self.model.tot_time_ph: self.model.tot_time
                 }
-        pen_log_lik = self.model.sess.run(self.model.smooth_log_lik, feed_dict=feed_dict)
+
+        pen_log_lik = self.model.sess.run(
+            self.model.smooth_log_lik,
+            feed_dict=feed_dict)
+        logging.info("initial penalized log lik %f", pen_log_lik)
         train_history = []
         for i in range(max_iters):
             _, log_lik, pen_log_lik, log_barr, log_lik_alleles, log_lik_cell_type = self.model.sess.run(
