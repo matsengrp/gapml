@@ -3,7 +3,6 @@ import scipy.stats
 import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
-from ete3 import TreeStyle, NodeStyle
 
 from cell_lineage_tree import CellLineageTree
 from tree_distance import MRCADistanceMeasurer
@@ -18,6 +17,7 @@ def plot_mrca_matrix(bifurc_tree: CellLineageTree, file_name: str):
     plt.savefig(file_name)
 
 def plot_tree(tree: CellLineageTree, file_name: str):
+    from ete3 import TreeStyle, NodeStyle
     nstyle = NodeStyle()
     nstyle["size"] = 0
     for n in tree.traverse():
@@ -31,7 +31,7 @@ def plot_tree(tree: CellLineageTree, file_name: str):
     ts.scale = 100
     tree.render(file_name, w=183, units="mm", tree_style=ts)
 
-# Save the data
-with open("tmp_mount/_output_worm2/parsimony_tree1_fitted.pkl", "rb") as f:
-    res = six.moves.cPickle.load(f)
-plot_tree(res.fitted_bifurc_tree, "/Users/jeanfeng/Desktop/parsimony_tree1_fitted.png")
+## Save the data
+#with open("tmp_mount/_output_worm2/parsimony_tree1_fitted.pkl", "rb") as f:
+#    res = six.moves.cPickle.load(f)
+#plot_tree(res.fitted_bifurc_tree, "/Users/jeanfeng/Desktop/parsimony_tree1_fitted.png")

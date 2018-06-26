@@ -38,6 +38,11 @@ def parse_args():
         type=str,
         default="_output/fishies.pkl",
         help='file to store seq data')
+    parser.add_argument(
+        '--abundance-thres',
+        type=int,
+        default=5,
+        help='Only include the alleles that have appeared at least this number of times')
     return parser.parse_args()
 
 def process_observed_seq_format7B(
@@ -66,92 +71,71 @@ def process_observed_seq_format7B(
         process_event_format7B(event_str, min_targ, max_targ, min_pos=min_pos)
         for event_str, (min_targ, max_targ) in evt_target_dict.items() if event_str not in NO_EVENT_STRS
     ]
-    events = sorted(events, key=lambda ev: ev.start_pos)
+    cleaned_events = sorted(events, key=lambda ev: ev.start_pos)
 
-    print(bcode_meta.abs_cut_sites)
-    # Deal with multiple/compound events affecting same min target
-    cleaned_events = events[:1]
-    for evt in events[1:]:
-        prev_evt = cleaned_events[-1]
-        if prev_evt.min_target == evt.min_target:
-            new_event = Event(
-                    prev_evt.start_pos,
-                    # TODO: this is hack. not correct right now
-                    evt.del_len + prev_evt.del_len,
-                    prev_evt.min_target,
-                    evt.max_target,
-                    # TODO: this is hack. not correct right now
-                    prev_evt.insert_str + evt.insert_str)
-            assert prev_evt.max_target <= evt.max_target
-            cleaned_events[-1] = new_event
-        else:
-            cleaned_events.append(evt)
-
-    # Deal with weird alignment of indel events vs barcode cut sites
+    # Assign the target to the one matching the cut site
     # Pad bad alignments with insertions and deletions
-    print("orig", events)
-    print("semi cl", cleaned_events)
     for i, evt in enumerate(cleaned_events):
         new_start_targ = evt.min_target
         new_end_targ = evt.max_target
         if evt.start_pos > bcode_meta.abs_cut_sites[evt.min_target]:
             new_start_targ = evt.min_target + 1
-        if evt.start_pos + evt.del_len < bcode_meta.abs_cut_sites[evt.max_target]:
+        if evt.del_end < bcode_meta.abs_cut_sites[evt.max_target]:
             new_end_targ = evt.max_target - 1
 
         if new_start_targ > new_end_targ:
-            new_start_targ = evt.min_target
-            new_end_targ = min(evt.min_target + 1, bcode_meta.n_targets - 1)
-            dist_to_start = np.abs(bcode_meta.abs_cut_sites[new_start_targ] - evt.start_pos)
-            dist_to_end = np.abs(bcode_meta.abs_cut_sites[new_end_targ] - evt.start_pos)
-            if dist_to_start > 2 * dist_to_end:
-                new_start_targ = new_end_targ
-
-            new_cut_site = bcode_meta.abs_cut_sites[new_start_targ]
-            new_start_pos = min(evt.start_pos, new_cut_site)
-            cleaned_events[i] = Event(
-                    new_start_pos,
-                    new_cut_site - new_start_pos,
-                    new_start_targ,
-                    new_start_targ,
-                    evt.insert_str + "A" * (new_cut_site - new_start_pos))
+            # Determine the new target
+            if new_start_targ > bcode_meta.n_targets - 1:
+                new_target = new_end_targ
+            elif new_end_targ < 0:
+                new_target = 0
+            else:
+                cut_site1 = bcode_meta.abs_cut_sites[new_start_targ]
+                cut_site2 = bcode_meta.abs_cut_sites[new_end_targ]
+                min_dist1 = min(np.abs(evt.start_pos - cut_site1), np.abs(evt.del_end - cut_site1))
+                min_dist2 = min(np.abs(evt.start_pos - cut_site2), np.abs(evt.del_end - cut_site2))
+                new_target = new_start_targ if min_dist1 < min_dist2 else new_end_targ
+            new_start_targ = new_target
+            new_end_targ = new_target
+            new_start_pos = min(evt.start_pos, bcode_meta.abs_cut_sites[new_start_targ])
+            new_del_len = max(evt.del_end - new_start_pos, bcode_meta.abs_cut_sites[new_start_targ] - new_start_pos)
+            # TODO: putting in a dummy insert sequence for now
+            new_insert_str = evt.insert_str + "a" * (new_del_len - evt.del_len)
+            event = Event(
+                new_start_pos,
+                new_del_len,
+                new_start_targ,
+                new_end_targ,
+                new_insert_str)
         else:
-            cleaned_events[i] = Event(
-                    evt.start_pos,
-                    evt.del_len,
-                    new_start_targ,
-                    new_end_targ,
-                    evt.insert_str)
+            event = Event(
+                evt.start_pos,
+                evt.del_len,
+                new_start_targ,
+                new_end_targ,
+                evt.insert_str)
+        assert event.max_target < bcode_meta.n_targets
+        cleaned_events[i] = event
 
-    print("semi-semi cl", cleaned_events)
-    i = 0
-    while i < len(cleaned_events) - 1:
-        min_deact_target, max_deact_target = bcode_meta.get_min_max_deact_targets(cleaned_events[i])
-        #min_deact_target_nxt, max_deact_target_nxt = bcode_meta.get_min_max_deact_targets(cleaned_events[i + 1])
-        if max_deact_target > cleaned_events[i + 1].min_target:
-            print("clash...", cleaned_events[i], cleaned_events[i + 1])
-            print(min_deact_target, max_deact_target)
-            raise ValueError("max deactivated target is larger than the min target for the next event")
-            #evt = cleaned_events[i]
-            #if evt.del_len:
-            #    cleaned_events[i] = Event(
-            #        evt.start_pos,
-            #        evt.del_len - 1,
-            #        evt.min_target,
-            #        evt.max_target,
-            #        evt.insert_str)
+    # Deal with multiple/compound events affecting same min target
+    # At the end of this, there should be at most one event per target
+    non_clashing_events = cleaned_events[:1]
+    for evt in cleaned_events[1:]:
+        prev_evt = non_clashing_events[-1]
+        if prev_evt.max_target >= evt.min_target:
+            new_omit_str_len = max(0, evt.start_pos - prev_evt.start_pos >= prev_evt.del_len)
+            new_event = Event(
+                    prev_evt.start_pos,
+                    evt.start_pos - prev_evt.start_pos + evt.del_len,
+                    prev_evt.min_target,
+                    max(prev_evt.max_target, evt.max_target),
+                    # TODO: we're putting a dummy insertion string when merging events
+                    prev_evt.insert_str + evt.insert_str + "a" * new_omit_str_len)
+            non_clashing_events[-1] = new_event
         else:
-            i = i + 1
+            non_clashing_events.append(evt)
 
-    target_tracts = []
-    for evt in cleaned_events:
-        min_deact_target, max_deact_target = bcode_meta.get_min_max_deact_targets(evt)
-        target_tracts.append((min_deact_target, evt.min_target, evt.max_target, max_deact_target))
-    print("target tract", target_tracts)
-
-    print("clean", cleaned_events)
-    print('----------------------------------------')
-    return ObservedAlignedSeq(None, [AlleleEvents(cleaned_events)], cell_state, abundance=1)
+    return ObservedAlignedSeq(None, [AlleleEvents(non_clashing_events)], cell_state, abundance=1)
 
 def parse_reads_file_format7B(file_name,
                               bcode_meta: BarcodeMetadata,
@@ -167,6 +151,7 @@ def parse_reads_file_format7B(file_name,
     num_organs = 0
     cell_states_dict = dict()
     all_alleles = []
+    observed_alleles = dict()
     with open(file_name, "r") as f:
         reader = csv.reader(f, delimiter='\t')
         header = next(reader)
@@ -182,40 +167,24 @@ def parse_reads_file_format7B(file_name,
                 cell_state = cell_states_dict[organ_str]
 
                 # Now create allele representation
-                allele_events = process_observed_seq_format7B(
+                obs_aligned_seq = process_observed_seq_format7B(
                     [
                         row[target_start_idx + i]
                         for i in range(NUM_BARCODE_V7_TARGETS)
                     ],
                     cell_state,
                     bcode_meta)
-                all_alleles.append(allele_events)
+                if str(obs_aligned_seq) not in observed_alleles:
+                    observed_alleles[str(obs_aligned_seq)] = obs_aligned_seq
+                else:
+                    observed_alleles[str(obs_aligned_seq)].abundance += 1
                 if max_read is not None and len(all_alleles) == max_read:
                     break
 
     organ_dict = {}
     for organ_str, cell_type in cell_states_dict.items():
         organ_dict[str(cell_type)] = organ_str
-    return all_alleles, organ_dict
-
-def filter_for_common_alleles(all_alleles: List[ObservedAlignedSeq], threshold = 5):
-    count_dict = {}
-    for allele in all_alleles:
-        key = (tuple(allele.allele_events_list), allele.cell_state)
-        if key in count_dict:
-            count_dict[key][0] += 1
-        else:
-            count_dict[key] = [1, allele]
-
-    common_alleles = []
-    for key, (count, allele) in count_dict.items():
-        if count > threshold:
-            common_alleles.append(allele)
-            num_events = len(allele.allele_events_list[0].events)
-            num_min_targets = np.unique([e.min_target for e in allele.allele_events_list[0].events]).size
-            assert num_events == num_min_targets
-
-    return common_alleles
+    return list(observed_alleles.values()), organ_dict
 
 def main():
     args = parse_args()
@@ -231,7 +200,7 @@ def main():
             crucial_pos_len=[6,6])
 
     obs_leaves, organ_dict = parse_reads_file_format7B(args.reads_file, bcode_meta)
-    obs_leaves = filter_for_common_alleles(obs_leaves)
+    obs_leaves = [obs for obs in obs_leaves if obs.abundance >= args.abundance_thres]
     logging.info("Number of leaves %d", len(obs_leaves))
 
     # Save the observed data

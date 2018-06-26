@@ -56,7 +56,7 @@ class TargetStatus(tuple):
         """
         for i in range(len(target_deact_tracts) - 1):
             assert target_deact_tracts[i].max_deact_target != target_deact_tracts[i + 1].min_deact_target - 1
-            
+
         return tuple.__new__(cls, target_deact_tracts)
 
     def __getnewargs__(self):
@@ -84,8 +84,8 @@ class TargetStatus(tuple):
         max_targets = max(other_targ_stat[-1].max_deact_target + 1, self[-1].max_deact_target + 1)
         binary_status = self._get_binary_status(max_targets)
         for deact_tract in other_targ_stat:
-            assert binary_status[deact_tract.min_deact_target] == 0
-            assert binary_status[deact_tract.max_deact_target] == 0
+            #assert binary_status[deact_tract.min_deact_target] == 0
+            #assert binary_status[deact_tract.max_deact_target] == 0
             binary_status[deact_tract.min_deact_target: deact_tract.max_deact_target + 1] = 1
 
         return TargetStatus._binary_status_to_target_status(binary_status.tolist())

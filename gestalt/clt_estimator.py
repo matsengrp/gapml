@@ -138,7 +138,8 @@ class CLTParsimonyEstimator(CLTEstimator):
             observations: List[ObservedAlignedSeq],
             encode_hidden: bool = True,
             use_cell_state: bool = False,
-            mix_seed: int = 1):
+            mix_seed: int = 1,
+            num_jumbles: int = 5):
         """
         @param observations: the observations to run MIX on
         @param encode_hidden: indicate hidden states to MIX
@@ -162,7 +163,7 @@ class CLTParsimonyEstimator(CLTEstimator):
                 encode_hidden=encode_hidden,
                 use_cell_state=use_cell_state)
 
-        new_mix_cfg_file = self._create_mix_cfg(mix_seed)
+        new_mix_cfg_file = self._create_mix_cfg(mix_seed, num_jumbles)
         bifurcating_trees = self.run_mix(new_mix_cfg_file)
 
         # Read out the results
