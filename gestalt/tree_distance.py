@@ -184,7 +184,7 @@ class MRCADistanceMeasurer(TreeDistanceMeasurer):
     Use mrca dist in "Mapping Phylogenetic Trees to Reveal Distinct Patterns of Evolution", Kendall and Colijn
     """
     name = "mrca"
-    def __init__(self, ref_tree: CellLineageTree, scratch_dir: str):
+    def __init__(self, ref_tree: CellLineageTree, scratch_dir: str = None):
         self.ref_tree = ref_tree
         self.scratch_dir = scratch_dir
 

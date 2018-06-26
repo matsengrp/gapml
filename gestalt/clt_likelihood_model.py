@@ -316,7 +316,7 @@ class CLTLikelihoodModel:
 
     def initialize_branch_lens(self,
             max_attempts: int=10,
-            br_len_scale: float=0.1,
+            br_len_scale: float=0.5,
             br_len_shrink: float=0.8):
         """
         Will randomly initialize branch lengths if they are not all positive already

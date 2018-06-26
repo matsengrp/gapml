@@ -21,6 +21,7 @@ import six
 
 from transition_wrapper_maker import TransitionWrapperMaker
 from likelihood_scorer import LikelihoodScorer
+from plot_mrca_matrices import plot_mrca_matrix
 from tree_distance import *
 from constants import *
 from common import *
@@ -125,6 +126,7 @@ def main(args=sys.argv[1:]):
        dist_measurers = oracle_dist_measurers)
 
     res = worker.do_work_directly(sess)
+    print(res.model_params_dict)
     logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["node_id"], show_internal=True))
     logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
     logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
@@ -155,6 +157,10 @@ def main(args=sys.argv[1:]):
     # Save the data
     with open(args.pickle_out, "wb") as f:
         six.moves.cPickle.dump(res, f, protocol = 2)
+
+    plot_mrca_matrix(
+        res.fitted_bifurc_tree,
+        args.pickle_out.replace(".pkl", "_mrca.png"))
 
 if __name__ == "__main__":
     main()
