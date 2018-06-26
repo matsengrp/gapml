@@ -71,19 +71,23 @@ def process_observed_seq_format7B(
         process_event_format7B(event_str, min_targ, max_targ, min_pos=min_pos)
         for event_str, (min_targ, max_targ) in evt_target_dict.items() if event_str not in NO_EVENT_STRS
     ]
-    cleaned_events = sorted(events, key=lambda ev: ev.start_pos)
 
     # Assign the target to the one matching the cut site
     # Pad bad alignments with insertions and deletions
+    cleaned_events = sorted(events, key=lambda ev: ev.start_pos)
     for i, evt in enumerate(cleaned_events):
         new_start_targ = evt.min_target
         new_end_targ = evt.max_target
         if evt.start_pos > bcode_meta.abs_cut_sites[evt.min_target]:
+            # Start position is after the min target. Proposal is to shift the min cut target
             new_start_targ = evt.min_target + 1
         if evt.del_end < bcode_meta.abs_cut_sites[evt.max_target]:
+            # End position is before the max target. Proposal is to shift the max cut target
             new_end_targ = evt.max_target - 1
 
         if new_start_targ > new_end_targ:
+            # If we shifted such that the targets don't make sense, we need to start over.
+            # This is probably a focal deletion that is not aligned with a cut site.
             # Determine the new target
             if new_start_targ > bcode_meta.n_targets - 1:
                 new_target = new_end_targ
@@ -117,8 +121,8 @@ def process_observed_seq_format7B(
         assert event.max_target < bcode_meta.n_targets
         cleaned_events[i] = event
 
-    # Deal with multiple/compound events affecting same min target
-    # At the end of this, there should be at most one event per target
+    # Deal with multiple/compound events affecting the same targets.
+    # We will merge these clashing events into a single event.
     non_clashing_events = cleaned_events[:1]
     for evt in cleaned_events[1:]:
         prev_evt = non_clashing_events[-1]
