@@ -44,7 +44,6 @@ class CLTLikelihoodModel:
             tot_time: float = 1):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
-        TODO: this is currently known to the model, even though it shouldn't be! we should make this a variable too
         @param double_cut_weight: a weight for inter-target indels
         @param target_lams: target lambda rates
         @param target_lams_known: if True, do not make target_lams a parameter that can be tuned. so target_lams would be fixed
@@ -62,7 +61,6 @@ class CLTLikelihoodModel:
         self.targ_stat_transitions_dict = TargetStatus.get_all_transitions(self.bcode_meta)
 
         self.num_targets = bcode_meta.n_targets
-        self.double_cut_weight = double_cut_weight
 
         # Process cell type tree
         self.cell_type_tree = cell_type_tree
@@ -98,6 +96,7 @@ class CLTLikelihoodModel:
         # Create all the variables
         self._create_parameters(
                 target_lams,
+                [double_cut_weight],
                 trim_long_probs,
                 [trim_zero_prob],
                 trim_poissons,
@@ -121,17 +120,27 @@ class CLTLikelihoodModel:
 
     def _create_parameters(self,
             target_lams: ndarray,
+            double_cut_weight: List[float], # list of length one
             trim_long_probs: ndarray,
-            trim_zero_prob: float,
+            trim_zero_prob: List[float],
             trim_poissons: ndarray,
-            insert_zero_prob: float,
-            insert_poisson: float,
+            insert_zero_prob: List[float],
+            insert_poisson: List[float],
             branch_len_inners: ndarray,
             branch_len_offsets: ndarray,
             cell_type_lams: ndarray):
+        """
+        Creates the tensorflow nodes for each of the model parameters
+        """
+        assert len(double_cut_weight) == 1
+        assert len(trim_zero_prob) == 1
+        assert len(insert_zero_prob) == 1
+        assert len(insert_poisson) == 1
+
         # Fix the first target value -- not for optimization
         model_params = np.concatenate([
                     [] if self.target_lams_known else np.log(target_lams[1:]),
+                    np.log(double_cut_weight),
                     inv_sigmoid(trim_long_probs),
                     inv_sigmoid(trim_zero_prob),
                     np.log(trim_poissons),
@@ -155,6 +164,9 @@ class CLTLikelihoodModel:
                     tf.constant([target_lams[0]], dtype=tf.float64),
                     tf.exp(self.all_vars[:up_to_size])],
                     axis=0)
+        prev_size = up_to_size
+        up_to_size += 1
+        self.double_cut_weight = tf.exp(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
         up_to_size += trim_long_probs.size
         self.trim_long_probs = tf.sigmoid(self.all_vars[prev_size: up_to_size])
@@ -232,6 +244,7 @@ class CLTLikelihoodModel:
     def set_params_from_dict(self, param_dict: Dict[str, ndarray]):
         self.set_params(
                 param_dict["target_lams"],
+                param_dict["double_cut_weight"],
                 param_dict["trim_long_probs"],
                 param_dict["trim_zero_prob"],
                 param_dict["trim_poissons"],
@@ -244,6 +257,7 @@ class CLTLikelihoodModel:
 
     def set_params(self,
             target_lams: ndarray,
+            double_cut_weight: float,
             trim_long_probs: ndarray,
             trim_zero_prob: float,
             trim_poissons: ndarray,
@@ -263,6 +277,7 @@ class CLTLikelihoodModel:
 
         init_val = np.concatenate([
             [] if self.target_lams_known else np.log(target_lams[1:]),
+            np.log(double_cut_weight),
             inv_sigmoid(trim_long_probs),
             inv_sigmoid(trim_zero_prob),
             np.log(trim_poissons),
@@ -279,6 +294,7 @@ class CLTLikelihoodModel:
         """
         return self.sess.run([
             self.target_lams,
+            self.double_cut_weight,
             self.trim_long_probs,
             self.trim_zero_prob,
             self.trim_poissons,
@@ -295,6 +311,7 @@ class CLTLikelihoodModel:
         var_vals = self.get_vars()
         var_labels = [
             "target_lams",
+            "double_cut_weight",
             "trim_long_probs",
             "trim_zero_prob",
             "trim_poissons",
