@@ -122,7 +122,6 @@ class SingletonWC(IndelSet):
     def insert_len(self):
         return len(self.insert_str)
 
-    # TODO: make this a function instead?
     @property
     def inner_wc(self):
         if self.max_target - 1 >= self.min_target + 1:
@@ -423,64 +422,3 @@ class TractRepr(tuple):
         """
         tracts_raw = reduce(lambda x,y: x + y, tract_groups, ())
         return TractRepr(*tracts_raw)
-
-def merge_tracts(tract_group_orig: Tuple[Tract], tract_result: Tract):
-    """
-    @param tract_group_orig: a tuple of tracts
-    @param tract_result: the tract that is getting introduced
-
-    @return the new tract tuple after introducing this tract (deals with masking
-            and merging of adjacent deactivation tracts)
-    """
-    # Create the tuple of tracts that occurs after deact_evt is introduced
-    # Calls python sort which is inefficient maybe, but it's cleaner code
-    # TODO: make faster?
-    # TODO: write tests for this function
-    tract_tuple = tuple(sorted(
-        tract_group_orig + (tract_result,),
-        key=lambda tract: tract.min_deact_target))
-
-    # Merge adjacent deactivation tracts
-    tract_tuple_merged = ()
-    curr_deact_tract = None
-    prev_tract = None
-    for tract in tract_tuple:
-        if prev_tract is not None:
-            # Check if there are masked tracts
-            if prev_tract.max_deact_target > tract.max_deact_target:
-                # Check that the masked tract is not the new tract
-                assert(tract != tract_result)
-                continue
-
-        if not tract.is_deact_tract:
-            if curr_deact_tract:
-                tract_tuple_merged += (curr_deact_tract, )
-                curr_deact_tract = None
-
-            tract_tuple_merged += (tract,)
-        else:
-            if curr_deact_tract is None:
-                curr_deact_tract = tract
-            elif tract.min_deact_target == curr_deact_tract.max_deact_target + 1:
-                curr_deact_tract = DeactTract(
-                        curr_deact_tract.min_deact_target,
-                        tract.max_deact_target)
-            else:
-                tract_tuple_merged += (curr_deact_tract, )
-                curr_deact_tract = tract
-        prev_tract = tract
-
-    # If there is a lingering deact tract to add to the list...
-    if curr_deact_tract:
-        tract_tuple_merged += (curr_deact_tract, )
-
-    return tract_tuple_merged
-
-def get_deactivated_targets(tract_grp: Tuple[IndelSet]):
-    if tract_grp:
-        deactivated = list(range(tract_grp[0].min_deact_target, tract_grp[0].max_deact_target + 1))
-        for tract in tract_grp[1:]:
-            deactivated += list(range(tract.min_deact_target, tract.max_deact_target + 1))
-        return set(deactivated)
-    else:
-        return set()
