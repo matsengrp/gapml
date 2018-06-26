@@ -90,7 +90,7 @@ class LikelihoodScorer(ParallelWorker):
         if not target_lams_known:
             # TODO: magic numbers
             init_target_lams = 0.04 * np.ones(self.bcode_meta.n_targets) + np.random.uniform(size=self.bcode_meta.n_targets) * 0.02
-    
+
         self.tree.label_node_ids()
         res_model = CLTLikelihoodModel(
             self.tree,
@@ -105,10 +105,10 @@ class LikelihoodScorer(ParallelWorker):
                 res_model,
                 self.transition_wrap_maker,
                 self.log_barr)
-    
+
         # Initialize with parameters such that the branch lengths are positive
         res_model.initialize_branch_lens()
-    
+
         train_history = estimator.fit(self.max_iters, dist_measurers = self.dist_measurers)
         return LikelihoodScorerResult(
                 res_model.get_vars_as_dict(),

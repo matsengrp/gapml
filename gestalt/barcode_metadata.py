@@ -55,15 +55,13 @@ class BarcodeMetadata:
         # Max length of any trim for target i -- left
         self.left_max_trim = [
             self.abs_cut_sites[i] - self.abs_cut_sites[i - 1] - 1 for i in range(1, self.n_targets)]
-        # TODO: right now this just copies over the max from the 1st target
-        self.left_max_trim = [self.left_max_trim[0]] + self.left_max_trim
+        self.left_max_trim = [self.abs_cut_sites[0]] + self.left_max_trim
         self.left_long_trim_min = [self.left_max_trim[0]] + self.left_long_trim_min
 
         # Max length of any trim for target i -- right
         self.right_max_trim = [
             self.abs_cut_sites[i + 1] - self.abs_cut_sites[i] for i in range(self.n_targets - 1)]
-        # TODO: right now this just copies over the max from the 1st target
-        self.right_max_trim += [self.right_max_trim[-1]]
+        self.right_max_trim += [self.orig_length - self.abs_cut_sites[-1]]
         self.right_long_trim_min += [self.right_max_trim[-1]]
 
     def get_min_max_deact_targets(self, evt: Event):
@@ -77,6 +75,8 @@ class BarcodeMetadata:
         else:
             max_deact_target = evt.max_target
 
+        assert min_deact_target is not None
+        assert max_deact_target is not None
         return min_deact_target, max_deact_target
 
     @staticmethod

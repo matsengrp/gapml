@@ -202,18 +202,17 @@ class CLTLikelihoodModel:
 
             if not node.up.is_resolved_multifurcation():
                 if node.is_leaf():
-                    # A leaf node that is not a copy
-                    # Therefore use it's offset to determine branch length
+                    # A leaf node, use its offset to determine branch length
                     branch_lens_dict.append([
                         [node.node_id],
                         self.tot_time_ph - dist_to_root[node.up.node_id] - self.branch_len_offsets[node.node_id]])
                 else:
-                    # Internal node -- use the branch length to specify the branch length
+                    # Internal node -- use the branch length minus offset to specify the branch length (in the bifurcating tree)
                     # But use the offset + branch length to determine distance from root
                     branch_lens_dict.append([
                         [node.node_id],
-                        self.branch_len_inners[node.node_id]])
-                    dist_to_root[node.node_id] = dist_to_root[node.up.node_id] + self.branch_len_inners[node.node_id] + self.branch_len_offsets[node.node_id]
+                        self.branch_len_inners[node.node_id] - self.branch_len_offsets[node.node_id]])
+                    dist_to_root[node.node_id] = dist_to_root[node.up.node_id] + self.branch_len_inners[node.node_id]
             else:
                 if not node.is_leaf():
                     branch_lens_dict.append([
@@ -333,7 +332,7 @@ class CLTLikelihoodModel:
             model_vars["branch_len_inners"] = np.random.rand(self.num_nodes) * br_len_scale
 
             # Initialize branch length offsets
-            model_vars["branch_len_offsets"] = np.random.rand(self.num_nodes) * br_len_scale
+            model_vars["branch_len_offsets"] = model_vars["branch_len_inners"] * 0.25
             for node in self.topology.traverse():
                 if node.is_root() or node.up.is_resolved_multifurcation():
                     # Make sure the root or bifurcating nodes don't have offsets
@@ -350,20 +349,8 @@ class CLTLikelihoodModel:
         # This line is just to check that the tree is initialized to be ultrametric
         self.get_fitted_bifurcating_tree()
 
-    def get_hazards(self, tt_evts: List[TargetTract]):
-        """
-        @param tt_evts: list of target tracts that is getting introduced
-        @return hazard of the event happening
-        """
-        return self.sess.run(
-                [self.target_tract_hazards[self.target_tract_dict[tt]] for tt in tt_evts])
-
-    def get_hazard(self, tt_evt: TargetTract):
-        """
-        @param tt_evt: the target tract that is getting introduced
-        @return hazard of the event happening
-        """
-        return self.get_hazards([tt_evt])[0]
+    def get_all_target_tract_hazards(self):
+        return self.sess.run(self.target_tract_hazards)
 
     def _create_all_target_tract_hazards(self):
         """
@@ -538,9 +525,9 @@ class CLTLikelihoodModel:
         left_trim_len = min_target_sites - start_posns
         right_trim_len = del_ends - max_target_sites
 
-        left_trim_long_min = tf.constant([self.bcode_meta.left_long_trim_min[mt] for mt in max_targets], dtype=tf.float64)
+        left_trim_long_min = tf.constant([self.bcode_meta.left_long_trim_min[mt] for mt in min_targets], dtype=tf.float64)
         right_trim_long_min = tf.constant([self.bcode_meta.right_long_trim_min[mt] for mt in max_targets], dtype=tf.float64)
-        left_trim_long_max = tf.constant([self.bcode_meta.left_max_trim[mt] for mt in max_targets], dtype=tf.float64)
+        left_trim_long_max = tf.constant([self.bcode_meta.left_max_trim[mt] for mt in min_targets], dtype=tf.float64)
         right_trim_long_max = tf.constant([self.bcode_meta.right_max_trim[mt] for mt in max_targets], dtype=tf.float64)
 
         min_left_trim = is_left_longs * left_trim_long_min
@@ -670,7 +657,7 @@ class CLTLikelihoodModel:
                         name="haz_away.multifurc")
                 return tf.exp(-haz_aways * time_stays_constant)
             else:
-                root_haz_away = self.hazard_away_dict[TargetStatus()] 
+                root_haz_away = self.hazard_away_dict[TargetStatus()]
                 return tf.exp(-root_haz_away * time_stays_constant)
         else:
             return tf.constant(1.0, dtype=tf.float64)
@@ -684,7 +671,7 @@ class CLTLikelihoodModel:
                                     for deciding how to calculate the transition probabilities
         @param bcode_idx: the index of the allele we are calculating the likelihood for
 
-        @return tensorflow tensor with the log likelihood of the allele with index `bcode_idx` for the given tree topology 
+        @return tensorflow tensor with the log likelihood of the allele with index `bcode_idx` for the given tree topology
         """
         # Store the tensorflow objects that calculate the prob of a node being in each state given the leaves
         Lprob = dict()
@@ -693,7 +680,7 @@ class CLTLikelihoodModel:
         trans_mats = dict()
         trim_probs = dict()
         # Store all the scaling terms addressing numerical underflow
-        scaling_terms = []
+        log_scaling_terms = dict()
         # Tree traversal order should be postorder
         for node in self.topology.traverse("postorder"):
             if node.is_leaf():
@@ -703,10 +690,10 @@ class CLTLikelihoodModel:
                 prob_array[observed_key] = 1
                 Lprob[node.node_id] = tf.constant(prob_array, dtype=tf.float64)
             else:
-                Lprob[node.node_id] = self._initialize_lower_prob(
+                log_Lprob_node = tf.log(self._initialize_lower_prob(
                         transition_wrappers,
                         node,
-                        bcode_idx)
+                        bcode_idx))
 
                 for child in node.children:
                     child_wrapper = transition_wrappers[child.node_id][bcode_idx]
@@ -746,18 +733,18 @@ class CLTLikelihoodModel:
                             # No need to reorder
                             ch_id = child_wrapper.key_dict[TargetStatus()]
                             down_probs = ch_ordered_down_probs[ch_id]
-                        Lprob[node.node_id] = tf.multiply(Lprob[node.node_id], down_probs)
+                        log_Lprob_node = log_Lprob_node + tf.log(down_probs)
 
                 # Handle numerical underflow
-                scaling_term = tf.reduce_sum(Lprob[node.node_id], name="scaling_term")
-                Lprob[node.node_id] = tf.div(Lprob[node.node_id], scaling_term, name="sub_log_lik")
-                scaling_terms.append(scaling_term)
+                log_scaling_term = tf.reduce_max(log_Lprob_node)
+                Lprob[node.node_id] = tf.exp(log_Lprob_node - log_scaling_term, name="scaled_down_prob")
+                log_scaling_terms[node.node_id] = log_scaling_term
 
         with tf.name_scope("alleles_log_lik"):
             # Account for the scaling terms we used for handling numerical underflow
-            scaling_terms = tf.stack(scaling_terms)
+            log_scaling_terms_all = tf.stack(list(log_scaling_terms.values()))
             log_lik_alleles = tf.add(
-                tf.reduce_sum(tf.log(scaling_terms), name="add_normalizer"),
+                tf.reduce_sum(log_scaling_terms_all, name="add_normalizer"),
                 tf.log(Lprob[self.root_node_id]),
                 name="alleles_log_lik")
 
@@ -864,7 +851,7 @@ class CLTLikelihoodModel:
                 name="top.trim_probs"))
         else:
             return tf.ones(output_shape, dtype=tf.float64)
-    
+
     """
     Functions for getting the log likelihood of the cell type information
     (not really used or tested recently. you are warned)

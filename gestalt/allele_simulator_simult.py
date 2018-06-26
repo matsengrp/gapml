@@ -25,6 +25,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         """
         self.bcode_meta = model.bcode_meta
         self.model = model
+        self.all_target_tract_hazards = model.get_all_target_tract_hazards()
 
         self.left_del_distributions = self._create_bounded_poissons(
             min_vals = self.bcode_meta.left_long_trim_min,
@@ -74,7 +75,9 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         targ_stat = allele.get_target_status()
         target_tracts = targ_stat.get_possible_target_tracts(self.bcode_meta)
         if len(target_tracts):
-            all_hazards = self.model.get_hazards(target_tracts)
+            all_hazards = [
+                self.all_target_tract_hazards[self.model.target_tract_dict[tt]]
+                for tt in target_tracts]
             tt_times = [expon.rvs(scale=1.0 / hz) for hz in all_hazards]
             race_winner = target_tracts[np.argmin(tt_times)]
             min_time = np.min(tt_times)

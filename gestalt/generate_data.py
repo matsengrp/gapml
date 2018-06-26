@@ -253,6 +253,7 @@ def main(args=sys.argv[1:]):
             cell_type_tree = cell_type_tree,
             tot_time = args.time)
     tf.global_variables_initializer().run()
+    logging.info("Done creating model")
 
     _, obs_leaves, true_subtree, collapsed_subtree = create_cell_lineage_tree(
             args,
