@@ -560,12 +560,16 @@ class CLTLikelihoodModel:
 
         check_left_max = tf.cast(tf.less_equal(left_trim_len, max_left_trim), tf.float64)
         check_left_min = tf.cast(tf.less_equal(min_left_trim, left_trim_len), tf.float64)
+        # The probability of a left trim for length zero in our truncated poisson is assigned to be (for a normal poisson) Pr(0) + Pr(X > max_trim)
+        # The other probabilities for the truncated poisson are therefore equal to the usual poisson distribution
         left_prob = check_left_max * check_left_min * tf_common.ifelse(
                 tf_common.equal_float(left_trim_len, 0),
                 self.poiss_left.prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_left.cdf(max_left_trim),
                 self.poiss_left.prob(left_trim_len))
         check_right_max = tf.cast(tf.less_equal(right_trim_len, max_right_trim), tf.float64)
         check_right_min = tf.cast(tf.less_equal(min_right_trim, right_trim_len), tf.float64)
+        # The probability of a right trim for length zero in our truncated poisson is assigned to be (for a normal poisson) Pr(0) + Pr(X > max_trim)
+        # The other probabilities for the truncated poisson are therefore equal to the usual poisson distribution
         right_prob = check_right_max * check_right_min * tf_common.ifelse(
                 tf_common.equal_float(right_trim_len, 0),
                 self.poiss_right.prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_right.cdf(max_right_trim),
@@ -631,6 +635,12 @@ class CLTLikelihoodModel:
         self.adam_train_op = self.adam_opt.minimize(-self.smooth_log_lik, var_list=self.all_vars)
         logging.info("Finished making me an optimizer, time: %d", time.time() - st_time)
 
+    def _init_singleton_probs(self, singletons: List[Singleton]):
+        # Get all the conditional probabilities of the trims
+        # Doing it all at once to speed up computation
+        self.singleton_index_dict = {sg: int(i) for i, sg in enumerate(singletons)}
+        self.singleton_log_cond_prob = self._create_log_indel_probs(singletons)
+
     """
     Section for creating the log likelihood of the allele data
     """
@@ -639,11 +649,8 @@ class CLTLikelihoodModel:
         """
         Create a tensorflow graph of the likelihood calculation
         """
-        # Get all the conditional probabilities of the trims
-        # Doing it all at once to speed up computation
         singletons = CLTLikelihoodModel.get_all_singletons(self.topology)
-        self.singleton_index_dict = {sg: int(i) for i, sg in enumerate(singletons)}
-        self.singleton_log_cond_prob = self._create_log_indel_probs(singletons)
+        self.init_singleton_probs(singletons)
 
         # Actually create the nodes for calculating the log likelihoods of the alleles
         self.log_lik_alleles_list = []

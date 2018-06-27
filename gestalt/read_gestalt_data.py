@@ -142,7 +142,8 @@ def process_observed_seq_format7B(
     return ObservedAlignedSeq(
             None,
             [AlleleEvents(non_clashing_events)],
-            cell_state, abundance=1)
+            cell_state,
+            abundance=1)
 
 def parse_reads_file_format7B(file_name,
                               bcode_meta: BarcodeMetadata,
