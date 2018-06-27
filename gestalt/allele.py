@@ -75,7 +75,7 @@ class Allele:
         events = self.get_event_encoding().events
         target_status = TargetStatus()
         for evt in events:
-            min_deact, max_deact = self.bcode_meta.get_min_max_deact_targets(evt)
+            min_deact, max_deact = evt.get_min_max_deact_targets(self.bcode_meta)
             target_status = target_status.add_target_tract(
                     TargetTract(min_deact, min_deact, max_deact, max_deact))
         return target_status

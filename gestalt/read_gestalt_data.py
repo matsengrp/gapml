@@ -139,7 +139,11 @@ def process_observed_seq_format7B(
         else:
             non_clashing_events.append(evt)
 
-    return ObservedAlignedSeq(None, [AlleleEvents(non_clashing_events)], cell_state, abundance=1)
+    return ObservedAlignedSeq(
+            None,
+            [AlleleEvents(non_clashing_events)],
+            cell_state,
+            abundance=1)
 
 def parse_reads_file_format7B(file_name,
                               bcode_meta: BarcodeMetadata,
@@ -206,6 +210,11 @@ def main():
     obs_leaves, organ_dict = parse_reads_file_format7B(args.reads_file, bcode_meta)
     obs_leaves = [obs for obs in obs_leaves if obs.abundance >= args.abundance_thres]
     logging.info("Number of leaves %d", len(obs_leaves))
+
+    # Check trim length assignments
+    for obs in obs_leaves:
+        for evt in obs.allele_events_list[0].events:
+            evt.get_trim_lens(bcode_meta)
 
     # Save the observed data
     with open(args.out_obs_data, "wb") as f:

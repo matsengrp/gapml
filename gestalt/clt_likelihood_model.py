@@ -1,4 +1,5 @@
 import time
+import logging
 import numpy as np
 import tensorflow as tf
 from tensorflow import Tensor
@@ -18,6 +19,7 @@ import tf_common
 from common import inv_sigmoid
 from constants import PERTURB_ZERO
 
+from profile_support import profile
 
 class CLTLikelihoodModel:
     """
@@ -377,7 +379,7 @@ class CLTLikelihoodModel:
         """
         target_status_all_active = TargetStatus()
         all_target_tracts = target_status_all_active.get_possible_target_tracts(self.bcode_meta)
-        tt_dict = {tt: i for i, tt in enumerate(all_target_tracts)}
+        tt_dict = {tt: int(i) for i, tt in enumerate(all_target_tracts)}
 
         min_targets = tf.constant([tt.min_target for tt in all_target_tracts], dtype=tf.int32)
         max_targets = tf.constant([tt.max_target for tt in all_target_tracts], dtype=tf.int32)
@@ -509,6 +511,10 @@ class CLTLikelihoodModel:
 
         @return list of tensorflow tensors with indel probs for each singleton
         """
+        # TODO: move this check elsewhere? This is to check that all trim lengths make sense!
+        for sg in singletons:
+            sg.get_trim_lens(self.bcode_meta)
+
         if not singletons:
             return []
         else:
@@ -554,12 +560,16 @@ class CLTLikelihoodModel:
 
         check_left_max = tf.cast(tf.less_equal(left_trim_len, max_left_trim), tf.float64)
         check_left_min = tf.cast(tf.less_equal(min_left_trim, left_trim_len), tf.float64)
+        # The probability of a left trim for length zero in our truncated poisson is assigned to be (for a normal poisson) Pr(0) + Pr(X > max_trim)
+        # The other probabilities for the truncated poisson are therefore equal to the usual poisson distribution
         left_prob = check_left_max * check_left_min * tf_common.ifelse(
                 tf_common.equal_float(left_trim_len, 0),
                 self.poiss_left.prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_left.cdf(max_left_trim),
                 self.poiss_left.prob(left_trim_len))
         check_right_max = tf.cast(tf.less_equal(right_trim_len, max_right_trim), tf.float64)
         check_right_min = tf.cast(tf.less_equal(min_right_trim, right_trim_len), tf.float64)
+        # The probability of a right trim for length zero in our truncated poisson is assigned to be (for a normal poisson) Pr(0) + Pr(X > max_trim)
+        # The other probabilities for the truncated poisson are therefore equal to the usual poisson distribution
         right_prob = check_right_max * check_right_min * tf_common.ifelse(
                 tf_common.equal_float(right_trim_len, 0),
                 self.poiss_right.prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_right.cdf(max_right_trim),
@@ -597,17 +607,16 @@ class CLTLikelihoodModel:
     """
     LOG LIKELIHOOD CALCULATION section
     """
+    @profile
     def create_log_lik(self, transition_wrappers: Dict):
         """
         Creates tensorflow nodes that calculate the log likelihood of the observed data
         """
+        st_time = time.time()
         self.log_lik_cell_type = tf.zeros([])
         self.create_topology_log_lik(transition_wrappers)
-        if self.cell_type_tree is None:
-            self.log_lik = self.log_lik_alleles
-        else:
-            self.create_cell_type_log_lik()
-            self.log_lik = self.log_lik_cell_type + self.log_lik_alleles
+        logging.info("Done creating topology log likelihood, time: %d", time.time() - st_time)
+        self.log_lik = self.log_lik_alleles
 
         # penalize the leaf branch lengths if they get too close to zero
         # (preventing things from going negative)
@@ -618,23 +627,30 @@ class CLTLikelihoodModel:
                 self.log_lik,
                 self.log_barr_ph * self.branch_log_barr)
 
+        logging.info("Computing gradients....")
+        st_time = time.time()
         self.smooth_log_lik_grad = self.adam_opt.compute_gradients(
             self.smooth_log_lik,
             var_list=[self.all_vars])
         self.adam_train_op = self.adam_opt.minimize(-self.smooth_log_lik, var_list=self.all_vars)
+        logging.info("Finished making me an optimizer, time: %d", time.time() - st_time)
+
+    def _init_singleton_probs(self, singletons: List[Singleton]):
+        # Get all the conditional probabilities of the trims
+        # Doing it all at once to speed up computation
+        self.singleton_index_dict = {sg: int(i) for i, sg in enumerate(singletons)}
+        self.singleton_log_cond_prob = self._create_log_indel_probs(singletons)
 
     """
     Section for creating the log likelihood of the allele data
     """
+    @profile
     def create_topology_log_lik(self, transition_wrappers: Dict[int, List[TransitionWrapper]]):
         """
         Create a tensorflow graph of the likelihood calculation
         """
-        # Get all the conditional probabilities of the trims
-        # Doing it all at once to speed up computation
         singletons = CLTLikelihoodModel.get_all_singletons(self.topology)
-        self.singleton_index_dict = {sg: int(i) for i, sg in enumerate(singletons)}
-        self.singleton_log_cond_prob = self._create_log_indel_probs(singletons)
+        self.init_singleton_probs(singletons)
 
         # Actually create the nodes for calculating the log likelihoods of the alleles
         self.log_lik_alleles_list = []
@@ -679,6 +695,7 @@ class CLTLikelihoodModel:
         else:
             return tf.constant(1.0, dtype=tf.float64)
 
+    @profile
     def _create_topology_log_lik_barcode(
             self,
             transition_wrappers: Dict[int, List[TransitionWrapper]],
@@ -696,6 +713,7 @@ class CLTLikelihoodModel:
         pt_matrix = dict()
         trans_mats = dict()
         trim_probs = dict()
+        down_probs_dict = dict()
         # Store all the scaling terms addressing numerical underflow
         log_scaling_terms = dict()
         # Tree traversal order should be postorder
@@ -745,11 +763,13 @@ class CLTLikelihoodModel:
                                     ch_ordered_down_probs,
                                     node_wrapper,
                                     child_wrapper)
+                            down_probs_dict[child.node_id] = down_probs
                         else:
                             # For the root node, we just want the probability where the root node is unmodified
                             # No need to reorder
                             ch_id = child_wrapper.key_dict[TargetStatus()]
                             down_probs = ch_ordered_down_probs[ch_id]
+                            down_probs_dict[child.node_id] = down_probs
                         log_Lprob_node = log_Lprob_node + tf.log(down_probs)
 
                 # Handle numerical underflow
@@ -765,8 +785,11 @@ class CLTLikelihoodModel:
                 tf.log(Lprob[self.root_node_id]),
                 name="alleles_log_lik")
 
+        self.Lprob = Lprob
+        self.down_probs_dict = down_probs_dict
         return log_lik_alleles, Ddiags
 
+    @profile
     def _create_transition_matrix(self, transition_wrapper: TransitionWrapper):
         """
         @param transition_wrapper: TransitionWrapper that is associated with a particular branch
@@ -786,18 +809,23 @@ class CLTLikelihoodModel:
         possible_states = set(transition_wrapper.states)
         impossible_key = transition_wrapper.num_possible_states
 
-        index_vals = []
+        single_tt_sparse_indices = []
+        single_tt_gather_indices = []
+        sparse_indices = []
+        sparse_vals = []
         for start_state in transition_wrapper.states:
             start_key = transition_wrapper.key_dict[start_state]
             haz_away = self.hazard_away_dict[start_state]
 
             # Hazard of staying is negative of hazard away
-            index_vals.append([[start_key, start_key], -haz_away])
+            sparse_indices.append([start_key, start_key])
+            sparse_vals.append(-haz_away)
 
             all_end_states = set(self.targ_stat_transitions_dict[start_state].keys())
             possible_end_states = all_end_states.intersection(possible_states)
-            haz_to_possible = 0
             for end_state in possible_end_states:
+                end_key = transition_wrapper.key_dict[end_state]
+
                 # Figure out if this is a special transition involving only a particular target tract
                 # Or if it a general any-target-tract transition
                 target_tracts_for_transition = self.targ_stat_transitions_dict[start_state][end_state]
@@ -805,154 +833,104 @@ class CLTLikelihoodModel:
                 if matching_tts:
                     assert len(matching_tts) == 1
                     matching_tt = list(matching_tts)[0]
-                    hazard = self.target_tract_hazards[self.target_tract_dict[matching_tt]]
+                    single_tt_gather_indices.append(int(self.target_tract_dict[matching_tt]))
+                    single_tt_sparse_indices.append([start_key, end_key])
                 else:
                     # if we already calculated the hazard of the transition between these target statuses,
                     # use the same node
                     if end_state in self.targ_stat_transition_hazards_dict[start_state]:
                         hazard = self.targ_stat_transition_hazards_dict[start_state][end_state]
                     else:
-                        hazard = tf.add_n(
-                            [self.target_tract_hazards[self.target_tract_dict[tt]] for tt in target_tracts_for_transition])
+                        hazard_idxs = [self.target_tract_dict[tt] for tt in target_tracts_for_transition]
+                        hazard = tf.reduce_sum(tf.gather(
+                            params = self.target_tract_hazards,
+                            indices = hazard_idxs))
 
                         # Store this hazard if we need it in the future
                         self.targ_stat_transition_hazards_dict[start_state][end_state] = hazard
 
-                end_key = transition_wrapper.key_dict[end_state]
-                haz_to_possible += hazard
-                index_vals.append([[start_key, end_key], hazard])
-
-            # Hazard to unlikely state is hazard away minus hazard to likely states
-            index_vals.append([[start_key, impossible_key], haz_away - haz_to_possible])
+                    sparse_indices.append([start_key, end_key])
+                    sparse_vals.append(hazard)
 
         matrix_len = transition_wrapper.num_possible_states + 1
-        q_matrix = tf_common.scatter_nd(
-            index_vals,
-            output_shape=[matrix_len, matrix_len],
-            name="top.q_matrix")
-        return q_matrix
+        if single_tt_gather_indices:
+            single_tt_sparse_vals = tf.gather(
+                params = self.target_tract_hazards,
+                indices = single_tt_gather_indices)
+            q_single_tt_matrix = tf.scatter_nd(
+                single_tt_sparse_indices,
+                single_tt_sparse_vals,
+                [matrix_len, matrix_len - 1],
+                name="top.q_matrix")
+        else:
+            q_single_tt_matrix = 0
 
+        # TODO: We might be able to construct this faster using matrix multiplication (or element-wise)
+        # rather than this reduce_sum(gather) strategy.
+        q_all_tt_matrix = tf.scatter_nd(
+            sparse_indices,
+            sparse_vals,
+            [matrix_len, matrix_len - 1],
+            name="top.q_matrix")
+        q_matrix = q_all_tt_matrix + q_single_tt_matrix
+        # Add hazard to impossible states
+        hazard_impossible_states = -tf.reshape(
+                tf.reduce_sum(q_matrix, axis=1),
+                [matrix_len, 1])
+
+        q_matrix_full = tf.concat([q_matrix, hazard_impossible_states], axis=1)
+
+        return q_matrix_full
+
+    @profile
     def _create_trim_prob_matrix(self, child_transition_wrapper: TransitionWrapper):
         """
         @param transition_wrapper: TransitionWrapper that is associated with a particular branch
 
         @return matrix of conditional probabilities of each trim
+                So the entry in (i,j) is the trim probability for transitioning from target status i
+                to target status j. There is a trim prob associated with it because this must correspond to
+                the introduction of a singleton in the AncState.
+
                 note: this is used to generate the matrix for a specific branch in the tree
+                If the transition is not possible, we fill in with trim prob 1.0 since it doesnt matter
         """
-        index_vals = []
-
         child_singletons = child_transition_wrapper.anc_state.get_singletons()
-        target_to_singleton = {
-                sg.min_deact_target: sg for sg in child_singletons}
-        singleton_targets = set(list(target_to_singleton.keys()))
+        tt_to_singleton = {
+                sg.get_target_tract(): sg for sg in child_singletons}
+        singleton_target_tracts = set(list(tt_to_singleton.keys()))
 
+        target_status_states = set(child_transition_wrapper.states)
+        sparse_indices = []
+        singleton_gather_indices = []
         for start_target_status in child_transition_wrapper.states:
-            for end_target_status in child_transition_wrapper.states:
-                new_deact_targets = end_target_status.minus(start_target_status)
-                matching_targets = new_deact_targets.intersection(singleton_targets)
-                if matching_targets:
-                    new_singletons = [target_to_singleton[target] for target in matching_targets]
-                    log_trim_probs = tf.gather(
-                            params = self.singleton_log_cond_prob,
-                            indices = [self.singleton_index_dict[sg] for sg in new_singletons])
-                    log_val = tf.reduce_sum(log_trim_probs)
+            end_state_dict = self.targ_stat_transitions_dict[start_target_status]
+            possible_end_target_statuses = set(list(end_state_dict.keys()))
+            matching_end_targ_statuses = target_status_states.intersection(possible_end_target_statuses)
+            for end_target_status in matching_end_targ_statuses:
+                possible_target_tract_transitions = end_state_dict[end_target_status]
+                matching_tts = singleton_target_tracts.intersection(possible_target_tract_transitions)
+                if matching_tts:
+                    assert len(matching_tts) == 1
+                    matching_tt = list(matching_tts)[0]
+                    matching_singleton = tt_to_singleton[matching_tt]
+                    singleton_gather_indices.append(int(self.singleton_index_dict[matching_singleton]))
                     start_key = child_transition_wrapper.key_dict[start_target_status]
                     end_key = child_transition_wrapper.key_dict[end_target_status]
-                    index_vals.append([[start_key, end_key], log_val])
+                    sparse_indices.append([start_key, end_key])
 
-        output_shape = [child_transition_wrapper.num_possible_states + 1, child_transition_wrapper.num_possible_states + 1]
-        if index_vals:
-            return tf.exp(tf_common.scatter_nd(
-                index_vals,
+        output_length = child_transition_wrapper.num_possible_states + 1
+        output_shape = [output_length, output_length]
+
+        if singleton_gather_indices:
+            sparse_vals = tf.gather(self.singleton_log_cond_prob, singleton_gather_indices)
+            return tf.exp(tf.scatter_nd(
+                sparse_indices,
+                sparse_vals,
                 output_shape,
                 name="top.trim_probs"))
         else:
             return tf.ones(output_shape, dtype=tf.float64)
-
-    """
-    Functions for getting the log likelihood of the cell type information
-    (not really used or tested recently. you are warned)
-    """
-    def create_cell_type_log_lik(self):
-        """
-        Create a tensorflow graph of the likelihood calculation
-        """
-        self.cell_type_q_mat = self._create_cell_type_instant_matrix()
-        # Store the tensorflow objects that calculate the prob of a node being in each state given the leaves
-        self.L_cell_type = dict()
-        self.D_cell_type = dict()
-        # Store all the scaling terms addressing numerical underflow
-        scaling_terms = []
-        # Traversal needs to be postorder!
-        for node in self.topology.traverse("postorder"):
-            if node.is_leaf():
-                cell_type_one_hot = np.zeros((self.num_cell_types, 1))
-                cell_type_one_hot[node.cell_state.categorical_state.cell_type] = 1
-                self.L_cell_type[node.node_id] = tf.constant(cell_type_one_hot, dtype=tf.float64)
-            else:
-                self.L_cell_type[node.node_id] = tf.constant(1.0, dtype=tf.float64)
-                for child in node.children:
-                    # Create the probability matrix exp(Qt) = A * exp(Dt) * A^-1
-                    with tf.name_scope("cell_type_expm_ops%d" % node.node_id):
-                        pr_matrix, _, _, D = tf_common.myexpm(
-                                self.cell_type_q_mat,
-                                self.branch_lens[child.node_id])
-                        self.D_cell_type[child.node_id] = D
-                        down_probs = tf.matmul(pr_matrix, self.L_cell_type[child.node_id])
-                        self.L_cell_type[node.node_id] = tf.multiply(
-                                self.L_cell_type[node.node_id],
-                                down_probs)
-
-                if node.is_leaf():
-                    # If node is observed, we don't need all the other values in this vector
-                    # TODO: we might be doing extra computation, though it seems okay for now
-                    node_observe_state = node.cell_state.categorical_state.cell_type
-                    cell_type_one_hot = np.zeros((self.num_cell_types, 1))
-                    cell_type_one_hot[node_observe_state] = 1
-                    self.L_cell_type[node.node_id] = tf.multiply(
-                            self.L_cell_type[node.node_id][node_observe_state],
-                            tf.constant(cell_type_one_hot, dtype=tf.float64))
-
-                # Handle numerical underflow
-                scaling_term = tf.reduce_sum(self.L_cell_type[node.node_id], name="scaling_term")
-                self.L_cell_type[node.node_id] = tf.div(self.L_cell_type[node.node_id], scaling_term, name="sub_log_lik")
-                scaling_terms.append(scaling_term)
-
-        with tf.name_scope("cell_type_log_lik"):
-            # Account for the scaling terms we used for handling numerical underflow
-            scaling_terms = tf.stack(scaling_terms)
-            self.log_lik_cell_type = tf.add(
-                tf.reduce_sum(tf.log(scaling_terms), name="add_normalizer"),
-                tf.log(self.L_cell_type[self.root_node_id][self.cell_type_root]),
-                name="cell_type_log_lik")
-
-    def _create_cell_type_instant_matrix(self, haz_away=1e-10):
-        num_leaves = tf.constant(len(self.cell_type_tree), dtype=tf.float64)
-        index_vals = []
-        self.num_cell_types = 0
-        # Note: tree traversal order doesnt matter
-        for node in self.cell_type_tree.traverse("preorder"):
-            self.num_cell_types += 1
-            if node.is_leaf():
-                haz_node = haz_away + np.random.rand() * 1e-10
-                haz_node_away = tf.constant(haz_node, dtype=tf.float64)
-                index_vals.append([(node.cell_type, node.cell_type), -haz_away])
-                for leaf in self.cell_type_tree:
-                    if leaf.cell_type != node.cell_type:
-                        index_vals.append([(node.cell_type, leaf.cell_type), haz_node_away/(num_leaves - 1)])
-            else:
-                tot_haz = tf.zeros([], dtype=tf.float64)
-                for child in node.get_children():
-                    haz_child = self.cell_type_lams[child.cell_type]
-                    index_vals.append([(node.cell_type, child.cell_type), haz_child])
-                    tot_haz = tf.add(tot_haz, haz_child)
-                index_vals.append([(node.cell_type, node.cell_type), -tot_haz])
-
-        q_matrix = tf_common.scatter_nd(
-                index_vals,
-                output_shape=[self.num_cell_types, self.num_cell_types],
-                name="top.cell_type_q_matrix")
-        return q_matrix
 
     def get_fitted_bifurcating_tree(self):
         """
@@ -968,7 +946,7 @@ class CLTLikelihoodModel:
         scratch_tree = self.topology.copy("deepcopy")
         for node in scratch_tree.traverse("preorder"):
             if not node.is_resolved_multifurcation():
-                # Resolve the multifurcation by creating the spine of "identifcal" nodes
+                # Resolve the multifurcation by creating the spine of "identical" nodes
                 children = node.get_children()
                 children_offsets = [br_len_offsets[c.node_id] for c in children]
                 sort_indexes = np.argsort(children_offsets)

@@ -13,7 +13,7 @@ from target_status import TargetStatus, TargetDeactTract
 from transition_wrapper_maker import TransitionWrapper
 from anc_state import AncState
 
-class LikelihoodModelTestCase(unittest.TestCase):
+class CLTTransitionProbTestCase(unittest.TestCase):
     def setUp(self):
         self.num_targets = 10
         bcode_metadata = BarcodeMetadata()
@@ -31,7 +31,7 @@ class LikelihoodModelTestCase(unittest.TestCase):
     def test_get_hazard(self):
         tt_hazards = self.mdl.get_all_target_tract_hazards()
         tt = TargetTract(2,2,2,2)
-        hazard = tt_hazard[self.mdl.target_tract_dict[tt]]
+        hazard = tt_hazards[self.mdl.target_tract_dict[tt]]
         self.assertTrue(np.isclose(hazard,
             self.target_lams[2] * (1 - self.trim_long_probs[0]) * (1 - self.trim_long_probs[1])))
 

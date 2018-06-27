@@ -271,7 +271,7 @@ def main(args=sys.argv[1:]):
         for node in tree_topology_dict["tree"].traverse():
             target_tracts = []
             for evt in node.allele_events_list[0].events:
-                min_deact, max_deact = bcode_meta.get_min_max_deact_targets(evt)
+                min_deact, max_deact = evt.get_min_max_deact_targets(bcode_meta)
                 target_tracts.append((min_deact, evt.min_target, evt.max_target, max_deact))
             node.add_feature("tt_string", str(target_tracts))
 

@@ -88,6 +88,7 @@ def main(args=sys.argv[1:]):
         bcode_meta = obs_data_dict["bcode_meta"]
         obs_leaves = obs_data_dict["obs_leaves"]
     logging.info("Number of uniq obs alleles %d", len(obs_leaves))
+    logging.info("Barcode cut sites %s", str(bcode_meta.abs_cut_sites))
 
     with open(args.tree_topology_pkl, "rb") as f:
         tree_topology_dict = six.moves.cPickle.load(f)

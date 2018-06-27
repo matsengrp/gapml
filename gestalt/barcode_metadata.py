@@ -1,7 +1,6 @@
 from typing import List, Tuple
 import numpy as np
 
-from allele_events import Event
 from constants import BARCODE_V7, NUM_BARCODE_V7_TARGETS
 
 class BarcodeMetadata:
@@ -56,28 +55,16 @@ class BarcodeMetadata:
         self.left_max_trim = [
             self.abs_cut_sites[i] - self.abs_cut_sites[i - 1] - 1 for i in range(1, self.n_targets)]
         self.left_max_trim = [self.abs_cut_sites[0]] + self.left_max_trim
-        self.left_long_trim_min = [self.left_max_trim[0]] + self.left_long_trim_min
+        # Min length of a long trim for target i -- left
+        # note that for the 0th target, we can never have long cuts. therefore the min long trim is max trim + 1
+        self.left_long_trim_min = [self.left_max_trim[0] + 1] + self.left_long_trim_min
 
         # Max length of any trim for target i -- right
         self.right_max_trim = [
             self.abs_cut_sites[i + 1] - self.abs_cut_sites[i] for i in range(self.n_targets - 1)]
         self.right_max_trim += [self.orig_length - self.abs_cut_sites[-1]]
-        self.right_long_trim_min += [self.right_max_trim[-1]]
-
-    def get_min_max_deact_targets(self, evt: Event):
-        if evt.min_target > 1 and evt.start_pos <= self.pos_sites[evt.min_target - 1][1]:
-            min_deact_target = evt.min_target - 1
-        else:
-            min_deact_target = evt.min_target
-
-        if evt.max_target < self.n_targets - 1 and self.pos_sites[evt.max_target + 1][0] < evt.del_end:
-            max_deact_target = evt.max_target + 1
-        else:
-            max_deact_target = evt.max_target
-
-        assert min_deact_target is not None
-        assert max_deact_target is not None
-        return min_deact_target, max_deact_target
+        # note that for the last target, we can never have long cuts. therefore the min long trim is max trim + 1
+        self.right_long_trim_min += [self.right_max_trim[-1] + 1]
 
     @staticmethod
     def create_fake_barcode_str(num_targets: int):

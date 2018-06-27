@@ -95,7 +95,7 @@ def _process_observed_indel_tract(
         insert_str = insertion.lower())
 
     # Run these lines only for debugging
-    min_deact_targ, max_deact_targ = bcode_meta.get_min_max_deact_targets(evt)
+    min_deact_targ, max_deact_targ = evt.get_min_max_deact_targets(bcode_meta)
     sg = Singleton(start_pos, del_len, min_deact_targ, min_target, max_target, max_deact_targ, insertion.lower())
     sg.get_trim_lens(bcode_meta)
     print("FINAL sg", sg)
