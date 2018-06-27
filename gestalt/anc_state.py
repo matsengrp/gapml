@@ -39,7 +39,7 @@ class AncState:
         """
         indel_set_list = []
         for evt in allele.events:
-            min_deact_target, max_deact_target = bcode_meta.get_min_max_deact_targets(evt)
+            min_deact_target, max_deact_target = evt.get_min_max_deact_targets(bcode_meta)
             indel_set_list.append(
                 SingletonWC(
                     evt.start_pos,

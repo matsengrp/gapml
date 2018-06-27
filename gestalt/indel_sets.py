@@ -147,6 +147,7 @@ class Singleton(IndelSet):
             max_target: int,
             max_deact_target: int,
             insert_str: str = ""):
+        assert min_deact_target >= 0
         assert min_deact_target >= min_target - 1
         assert min_deact_target <= min_target
         assert min_target <= max_target
@@ -213,8 +214,8 @@ class Singleton(IndelSet):
         right_trim_len = self.del_end - bcode_meta.abs_cut_sites[self.max_target]
         assert left_trim_len >= 0
         assert right_trim_len >= 0
-        assert left_trim_len < bcode_meta.left_max_trim[self.min_target]
-        assert right_trim_len < bcode_meta.right_max_trim[self.max_target]
+        assert left_trim_len <= bcode_meta.left_max_trim[self.min_target]
+        assert right_trim_len <= bcode_meta.right_max_trim[self.max_target]
         return left_trim_len, right_trim_len
 
     def __str__(self):

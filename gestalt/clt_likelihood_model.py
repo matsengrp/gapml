@@ -511,6 +511,10 @@ class CLTLikelihoodModel:
 
         @return list of tensorflow tensors with indel probs for each singleton
         """
+        # TODO: move this check elsewhere? This is to check that all trim lengths make sense!
+        for sg in singletons:
+            sg.get_trim_lens(self.bcode_meta)
+
         if not singletons:
             return []
         else:
@@ -702,6 +706,7 @@ class CLTLikelihoodModel:
         pt_matrix = dict()
         trans_mats = dict()
         trim_probs = dict()
+        down_probs_dict = dict()
         # Store all the scaling terms addressing numerical underflow
         log_scaling_terms = dict()
         # Tree traversal order should be postorder
@@ -751,11 +756,13 @@ class CLTLikelihoodModel:
                                     ch_ordered_down_probs,
                                     node_wrapper,
                                     child_wrapper)
+                            down_probs_dict[child.node_id] = down_probs
                         else:
                             # For the root node, we just want the probability where the root node is unmodified
                             # No need to reorder
                             ch_id = child_wrapper.key_dict[TargetStatus()]
                             down_probs = ch_ordered_down_probs[ch_id]
+                            down_probs_dict[child.node_id] = down_probs
                         log_Lprob_node = log_Lprob_node + tf.log(down_probs)
 
                 # Handle numerical underflow
@@ -771,6 +778,8 @@ class CLTLikelihoodModel:
                 tf.log(Lprob[self.root_node_id]),
                 name="alleles_log_lik")
 
+        self.Lprob = Lprob
+        self.down_probs_dict = down_probs_dict
         return log_lik_alleles, Ddiags
 
     @profile

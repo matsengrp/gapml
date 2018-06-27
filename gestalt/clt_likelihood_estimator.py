@@ -68,10 +68,24 @@ class CLTPenalizedEstimator(CLTEstimator):
                     self.model.tot_time_ph: self.model.tot_time
                 }
 
+        # THIS IS FOR DEBUGGING
+        #Lprobs = self.model.sess.run(
+        #    [self.model.Lprob[node.node_id] for node in self.model.topology.traverse()],
+        #    feed_dict=feed_dict)
+        #for i, node in enumerate(self.model.topology.traverse()):
+        #    print("Lprob", node.node_id, Lprobs[i])
+        #down_probs = self.model.sess.run(
+        #    [self.model.down_probs_dict[key] for key in self.model.down_probs_dict.keys()],
+        #    feed_dict=feed_dict)
+        #for idx, key in enumerate(self.model.down_probs_dict.keys()):
+        #    print("down prob", key, down_probs[idx])
+        #    if np.sum(down_probs[idx]) == 0:
+        #        print("BAD DOWN PROB", key)
         pen_log_lik = self.model.sess.run(
             self.model.smooth_log_lik,
             feed_dict=feed_dict)
         logging.info("initial penalized log lik %f", pen_log_lik)
+        assert not np.isnan(pen_log_lik)
         train_history = []
         for i in range(max_iters):
             _, log_lik, pen_log_lik, log_barr, log_lik_alleles, log_lik_cell_type = self.model.sess.run(
