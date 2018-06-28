@@ -141,7 +141,7 @@ class CLTLikelihoodModel:
 
         # Fix the first target value -- not for optimization
         model_params = np.concatenate([
-                    [] if self.target_lams_known else np.log(target_lams[1:]),
+                    [] if self.target_lams_known else np.log(target_lams),
                     np.log(double_cut_weight),
                     inv_sigmoid(trim_long_probs),
                     inv_sigmoid(trim_zero_prob),
@@ -161,11 +161,8 @@ class CLTLikelihoodModel:
             up_to_size = 0
             self.target_lams = tf.constant(target_lams, dtype=tf.float64)
         else:
-            up_to_size = target_lams.size - 1
-            self.target_lams = tf.concat([
-                    tf.constant([target_lams[0]], dtype=tf.float64),
-                    tf.exp(self.all_vars[:up_to_size])],
-                    axis=0)
+            up_to_size = target_lams.size
+            self.target_lams = tf.exp(self.all_vars[:up_to_size])
         prev_size = up_to_size
         up_to_size += 1
         self.double_cut_weight = tf.exp(self.all_vars[prev_size: up_to_size])
@@ -403,7 +400,9 @@ class CLTLikelihoodModel:
         """
         # Compute the hazard
         # Adding a weight for double cuts for now
-        log_lambda_part = tf.log(tf.gather(self.target_lams, min_target)) + tf.log(tf.gather(self.target_lams, max_target) * self.double_cut_weight) * tf_common.not_equal_float(min_target, max_target)
+        log_lambda_part = (
+                tf.log(tf.gather(self.target_lams, min_target))
+                + tf.log(tf.gather(self.target_lams, max_target) * self.double_cut_weight) * tf_common.not_equal_float(min_target, max_target))
         left_trim_prob = tf_common.ifelse(long_left_statuses, self.trim_long_probs[0], 1 - self.trim_long_probs[0])
         right_trim_prob = tf_common.ifelse(long_right_statuses, self.trim_long_probs[1], 1 - self.trim_long_probs[1])
         hazard = tf.exp(log_lambda_part + tf.log(left_trim_prob) + tf.log(right_trim_prob), name="hazard")
