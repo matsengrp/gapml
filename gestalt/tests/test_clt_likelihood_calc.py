@@ -22,7 +22,14 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             crucial_pos_len = [3,3])
         self.num_targets = self.bcode_metadata.n_targets
 
-    def _create_bifurc_model(self, topology, bcode_metadata, branch_len, branch_lens = [], target_lams = None):
+    def _create_bifurc_model(
+            self,
+            topology,
+            bcode_metadata,
+            branch_len,
+            branch_lens = [],
+            double_cut_weight = 0.3,
+            target_lams = None):
         sess = tf.InteractiveSession()
         num_nodes = topology.get_num_nodes()
         if len(branch_lens) == 0:
@@ -45,13 +52,14 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
                 bcode_metadata,
                 sess,
                 branch_len_inners = np.array(branch_lens),
-                branch_len_offsets= 1e-20 * np.ones(num_nodes), # dummy!!!
+                branch_len_offsets_proportion = 1e-20 * np.ones(num_nodes), # dummy!!!
                 target_lams = target_lams,
                 trim_long_probs = 0.1 * np.ones(2),
                 trim_zero_prob = 0.5,
                 trim_poissons = np.ones(2),
                 insert_zero_prob = 0.5,
                 insert_poisson = 2,
+                double_cut_weight = double_cut_weight,
                 tot_time = tot_time)
         tf.global_variables_initializer().run()
         return model
@@ -62,24 +70,28 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             branch_len_inners,
             branch_len_offsets,
             tot_time = 1,
+            double_cut_weight = 0.3,
             target_lams = None):
         sess = tf.InteractiveSession()
         num_nodes = topology.get_num_nodes()
 
         if target_lams is None:
             target_lams = np.ones(bcode_metadata.n_targets) + np.random.uniform(size=bcode_metadata.n_targets) * 0.1
+        br_len_inners = np.array(branch_len_inners, dtype=float)
+        br_len_offsets = np.array(branch_len_offsets, dtype=float)
         model = CLTLikelihoodModel(
                 topology,
                 bcode_metadata,
                 sess,
-                branch_len_inners = np.array(branch_len_inners, dtype=float),
-                branch_len_offsets= np.array(branch_len_offsets, dtype=float),
+                branch_len_inners = br_len_inners,
+                branch_len_offsets_proportion = br_len_offsets/(br_len_inners + 1e-10),
                 target_lams = target_lams,
                 trim_long_probs = 0.1 * np.ones(2),
                 trim_zero_prob = 0.5,
                 trim_poissons = np.ones(2),
                 insert_zero_prob = 0.5,
                 insert_poisson = 2,
+                double_cut_weight = double_cut_weight,
                 tot_time = tot_time)
         tf.global_variables_initializer().run()
         return model, target_lams
@@ -116,7 +128,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         child3.add_feature("node_id", 3)
 
         tot_time = 4
-        branch_len_inners = [0, 1, 2, 1]
+        branch_len_inners = [0, 4, 4, 4]
         branch_len_offsets = [0, 3, 2, 3]
         model, target_lams = self._create_multifurc_model(
                 topology,
@@ -130,40 +142,34 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         model.create_log_lik(transition_maker.create_transition_wrappers())
         multifurc_log_lik, _ = model.get_log_lik()
 
-        # Create equivalent bifurcating tree      
+        # Create equivalent bifurcating tree
         topology = CellLineageTree(allele_events_list = [AlleleEvents(num_targets=self.num_targets)])
-        topology.add_feature("observed", False)
         topology.add_feature("node_id", 0)
 
         topology_ext1 = CellLineageTree(allele_events_list = [AlleleEvents(num_targets=self.num_targets)])
         topology.add_child(topology_ext1)
-        topology_ext1.add_feature("observed", False)
         topology_ext1.add_feature("node_id", 1)
         topology_ext1.dist = 2
 
         topology_ext2 = CellLineageTree(allele_events_list = [AlleleEvents(num_targets=self.num_targets)])
         topology_ext1.add_child(topology_ext2)
-        topology_ext2.add_feature("observed", False)
         topology_ext2.add_feature("node_id", 2)
         topology_ext2.dist = 1
 
         child2 = CellLineageTree(
                 allele_events_list=[AlleleEvents([event2], num_targets=self.num_targets)])
         topology_ext1.add_child(child2)
-        child2.add_feature("observed", True)
         child2.add_feature("node_id", 3)
         child2.dist = 2
 
         child1 = CellLineageTree(allele_events_list=[AlleleEvents(num_targets=self.num_targets)])
         topology_ext2.add_child(child1)
-        child1.add_feature("observed", True)
         child1.add_feature("node_id", 4)
         child1.dist = 1
 
         child3 = CellLineageTree(
                 allele_events_list=[AlleleEvents([event3], num_targets=self.num_targets)])
         topology_ext2.add_child(child3)
-        child3.add_feature("observed", True)
         child3.add_feature("node_id", 5)
         child3.dist = 1
 
@@ -192,7 +198,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             [0, 0, 0]])
         manual_cut_log_prob = -hazard_away * tot_time
         for idx in range(2,4):
-            prob_mat = tf_common._custom_expm(q_mat, branch_len_inners[idx])[0]
+            prob_mat = tf_common._custom_expm(q_mat, branch_lens[idx])[0]
             manual_cut_log_prob += np.log(prob_mat[0,1])
         # Get prob of deletion - one left, two right
         manual_trim_log_prob2 = bifurc_model._create_log_indel_probs([Singleton(
@@ -443,7 +449,12 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         topology.add_child(child)
 
         branch_len = 10
-        model = self._create_bifurc_model(topology, self.bcode_metadata, branch_len)
+        double_cut_weight  = 0.3
+        model = self._create_bifurc_model(
+                topology,
+                self.bcode_metadata,
+                branch_len,
+                double_cut_weight = double_cut_weight)
         target_lams = model.target_lams.eval()
         trim_long_probs = model.trim_long_probs.eval()
 
@@ -459,7 +470,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             hazard_away_dict[TargetStatus(TargetDeactTract(0,2))],
             ])
         hazard_to_cut1 = target_lams[1] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
-        hazard_to_cut02 = target_lams[0] * target_lams[2] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
+        hazard_to_cut02 = double_cut_weight * target_lams[0] * target_lams[2] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
 
         q_mat = np.matrix([
             [-hazard_away, hazard_to_cut1, hazard_to_cut02, hazard_away - hazard_to_cut1 - hazard_to_cut02],
@@ -505,11 +516,13 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
 
         branch_len1 = 10
         branch_len2 = 5
+        double_cut_weight = 0.3
         model = self._create_bifurc_model(
                 topology,
                 self.bcode_metadata,
                 branch_len=None,
-                branch_lens=[branch_len1, branch_len2])
+                branch_lens=[branch_len1, branch_len2],
+                double_cut_weight = double_cut_weight)
         target_lams = model.target_lams.eval()
         trim_long_probs = model.trim_long_probs.eval()
 
@@ -524,7 +537,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             hazard_away_dict[TargetStatus()],
             hazard_away_dict[TargetStatus(TargetDeactTract(1,1))]])
         hazard_to_cut1 = target_lams[1] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
-        hazard_to_cut02 = target_lams[0] * target_lams[2] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
+        hazard_to_cut02 = double_cut_weight * target_lams[0] * target_lams[2] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
 
         q_mat = np.matrix([
             [-hazard_away, hazard_to_cut1, hazard_to_cut02, hazard_away - hazard_to_cut1 - hazard_to_cut02],

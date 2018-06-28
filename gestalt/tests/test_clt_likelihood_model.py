@@ -16,13 +16,15 @@ from anc_state import AncState
 class CLTTransitionProbTestCase(unittest.TestCase):
     def setUp(self):
         self.num_targets = 10
+        self.double_cut_weight = 0.3
         bcode_metadata = BarcodeMetadata()
         self.sess = tf.InteractiveSession()
         self.mdl = CLTLikelihoodModel(
                 None,
                 bcode_metadata,
                 self.sess,
-                target_lams = 0.1 + np.arange(bcode_metadata.n_targets))
+                target_lams = 0.1 + np.arange(bcode_metadata.n_targets),
+                double_cut_weight = self.double_cut_weight)
 
         tf.global_variables_initializer().run()
         self.target_lams = self.mdl.target_lams.eval()
@@ -38,7 +40,7 @@ class CLTTransitionProbTestCase(unittest.TestCase):
         tt = TargetTract(0,0,2,2)
         hazard = tt_hazards[self.mdl.target_tract_dict[tt]]
         self.assertTrue(np.isclose(hazard,
-            self.target_lams[0] * self.target_lams[2] * (1 - self.trim_long_probs[0]) * (1 - self.trim_long_probs[1])))
+            self.double_cut_weight * self.target_lams[0] * self.target_lams[2] * (1 - self.trim_long_probs[0]) * (1 - self.trim_long_probs[1])))
 
     def test_create_transition_matrix(self):
         target_stat_start = TargetStatus()
@@ -56,12 +58,12 @@ class CLTTransitionProbTestCase(unittest.TestCase):
             self.assertTrue(np.isclose(0, np.sum(q_mat[i,:])))
 
         hazard = (
-                self.target_lams[0] * self.target_lams[1] * (1 - self.trim_long_probs[0]) * (1 - self.trim_long_probs[1])
+                self.double_cut_weight * self.target_lams[0] * self.target_lams[1] * (1 - self.trim_long_probs[0]) * (1 - self.trim_long_probs[1])
                 + self.target_lams[0] * (1 - self.trim_long_probs[0]) * self.trim_long_probs[1]
                 + self.target_lams[1] * self.trim_long_probs[0] * (1 - self.trim_long_probs[1]))
         self.assertTrue(np.isclose(hazard, q_mat[0, 1]))
 
-        hazard = (
+        hazard = self.double_cut_weight * (
                 self.target_lams[0] * self.target_lams[3] * (1 - self.trim_long_probs[0]) * (1 - self.trim_long_probs[1])
                 + self.target_lams[0] * (1 - self.trim_long_probs[0]) * self.target_lams[2] * self.trim_long_probs[1]
                 + self.target_lams[1] * self.trim_long_probs[0] * self.target_lams[3] * (1 - self.trim_long_probs[1])
@@ -69,18 +71,19 @@ class CLTTransitionProbTestCase(unittest.TestCase):
         self.assertTrue(np.isclose(hazard, q_mat[0, 2]))
 
         hazard = (
-                self.target_lams[2] * self.target_lams[3] * (1 - self.trim_long_probs[1])
+                self.double_cut_weight * self.target_lams[2] * self.target_lams[3] * (1 - self.trim_long_probs[1])
                 + self.target_lams[3] * self.trim_long_probs[0] * (1 - self.trim_long_probs[1])
                 + self.target_lams[2] * self.trim_long_probs[1])
         self.assertTrue(np.isclose(hazard, q_mat[1, 2]))
         self.assertTrue(np.isclose(0, q_mat[1, 0]))
 
         hazard = (
-                0.5 * np.power(np.sum(self.target_lams[4:9]), 2)
-                - 0.5 * np.sum(np.power(self.target_lams[4:9], 2))
+                self.double_cut_weight * (
+                    0.5 * np.power(np.sum(self.target_lams[4:9]), 2)
+                    - 0.5 * np.sum(np.power(self.target_lams[4:9], 2)))
                 + np.sum(self.target_lams[4:9])
                 + self.target_lams[9] * (1 - self.trim_long_probs[1])
-                + np.sum(self.target_lams[4:9]) * self.target_lams[9] * (1 - self.trim_long_probs[1]))
+                + self.double_cut_weight * np.sum(self.target_lams[4:9]) * self.target_lams[9] * (1 - self.trim_long_probs[1]))
         self.assertTrue(np.isclose(-hazard, q_mat[2, 2]))
         self.assertTrue(np.isclose(0, q_mat[2, 0]))
         self.assertTrue(np.isclose(0, q_mat[2, 1]))
@@ -102,6 +105,23 @@ class CLTTransitionProbTestCase(unittest.TestCase):
             -self.target_lams[9] * (1 - self.trim_long_probs[1]),
             q_mat[1, 1]))
 
+    def test_create_transition_matrix_away_two_targs(self):
+        target_stat_start = TargetStatus()
+        target_stat_end = TargetStatus(TargetDeactTract(0,7))
+        anc_state = AncState([SingletonWC(0, 300, 0, 0, 7, 7)])
+        transition_wrapper = TransitionWrapper([target_stat_start, target_stat_end], anc_state, is_leaf=True)
+        q_mat_node = self.mdl._create_transition_matrix(transition_wrapper)
+        q_mat = self.sess.run(q_mat_node)
+
+        for i in range(q_mat.shape[0]):
+            self.assertTrue(np.isclose(0, np.sum(q_mat[i,:])))
+
+        self.assertTrue(np.isclose(
+            -self.target_lams[9] * (1 - self.trim_long_probs[1])
+            -self.target_lams[8]
+            -self.target_lams[8] * self.target_lams[9] * (1 - self.trim_long_probs[1]) * self.double_cut_weight,
+            q_mat[1, 1]))
+
     def test_create_transition_matrix_with_singletonwc(self):
         target_stat_start = TargetStatus()
         target_stat_end = TargetStatus(TargetDeactTract(0,9))
@@ -114,17 +134,19 @@ class CLTTransitionProbTestCase(unittest.TestCase):
             self.assertTrue(np.isclose(0, np.sum(q_mat[i,:])))
 
         self.assertTrue(np.isclose(
-            self.target_lams[0] * self.target_lams[9] * (1 - self.trim_long_probs[0]) * (1 - self.trim_long_probs[1]),
+            self.double_cut_weight * self.target_lams[0] * self.target_lams[9] * (1 - self.trim_long_probs[0]) * (1 - self.trim_long_probs[1]),
             q_mat[0, 1]))
 
-        hazard_away = (0.5 * np.power(np.sum(self.target_lams[1:9]), 2)
-                - 0.5 * np.sum(np.power(self.target_lams[1:9], 2))
+        hazard_away = (
+                self.double_cut_weight * (
+                    0.5 * np.power(np.sum(self.target_lams[1:9]), 2)
+                    - 0.5 * np.sum(np.power(self.target_lams[1:9], 2)))
                 + np.sum(self.target_lams[1:9])
                 + self.target_lams[0] * (1 - self.trim_long_probs[0])
-                + self.target_lams[0] * (1 - self.trim_long_probs[0]) * np.sum(self.target_lams[1:9])
+                + self.double_cut_weight * self.target_lams[0] * (1 - self.trim_long_probs[0]) * np.sum(self.target_lams[1:9])
                 + self.target_lams[9] * (1 - self.trim_long_probs[1])
-                + self.target_lams[9] * (1 - self.trim_long_probs[1]) * np.sum(self.target_lams[1:9])
-                + self.target_lams[0] * self.target_lams[9] * (1 - self.trim_long_probs[0]) * (1 - self.trim_long_probs[1]))
+                + self.double_cut_weight * self.target_lams[9] * (1 - self.trim_long_probs[1]) * np.sum(self.target_lams[1:9])
+                + self.double_cut_weight * self.target_lams[0] * self.target_lams[9] * (1 - self.trim_long_probs[0]) * (1 - self.trim_long_probs[1]))
         self.assertTrue(np.isclose(-hazard_away, q_mat[0, 0]))
 
         self.assertEqual(q_mat[1,1], 0)
@@ -147,7 +169,7 @@ class CLTTransitionProbTestCase(unittest.TestCase):
             self.assertTrue(np.isclose(0, np.sum(q_mat[i,:])))
 
         self.assertTrue(np.isclose(
-            self.target_lams[2] * self.target_lams[3] * (1 - self.trim_long_probs[0]) * (1 - self.trim_long_probs[1]),
+            self.double_cut_weight * self.target_lams[2] * self.target_lams[3] * (1 - self.trim_long_probs[0]) * (1 - self.trim_long_probs[1]),
             q_mat[0, 1]))
         self.assertTrue(np.isclose(
             self.target_lams[5] * (1 - self.trim_long_probs[0]) * (1 - self.trim_long_probs[1]),

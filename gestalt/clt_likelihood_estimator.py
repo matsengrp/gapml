@@ -53,6 +53,7 @@ class CLTPenalizedEstimator(CLTEstimator):
     def fit(self,
             max_iters: int,
             print_iter: int = 1,
+            save_iter: int = 20,
             step_size: float = 0.01,
             dist_measurers: TreeDistanceMeasurerAgg = None):
         """
@@ -68,19 +69,6 @@ class CLTPenalizedEstimator(CLTEstimator):
                     self.model.tot_time_ph: self.model.tot_time
                 }
 
-        # THIS IS FOR DEBUGGING
-        #Lprobs = self.model.sess.run(
-        #    [self.model.Lprob[node.node_id] for node in self.model.topology.traverse()],
-        #    feed_dict=feed_dict)
-        #for i, node in enumerate(self.model.topology.traverse()):
-        #    print("Lprob", node.node_id, Lprobs[i])
-        #down_probs = self.model.sess.run(
-        #    [self.model.down_probs_dict[key] for key in self.model.down_probs_dict.keys()],
-        #    feed_dict=feed_dict)
-        #for idx, key in enumerate(self.model.down_probs_dict.keys()):
-        #    print("down prob", key, down_probs[idx])
-        #    if np.sum(down_probs[idx]) == 0:
-        #        print("BAD DOWN PROB", key)
         pen_log_lik = self.model.sess.run(
             self.model.smooth_log_lik,
             feed_dict=feed_dict)
@@ -88,32 +76,39 @@ class CLTPenalizedEstimator(CLTEstimator):
         assert not np.isnan(pen_log_lik)
         train_history = []
         for i in range(max_iters):
-            _, log_lik, pen_log_lik, log_barr, log_lik_alleles, log_lik_cell_type = self.model.sess.run(
+            var_dict = self.model.get_vars_as_dict()
+            logging.info("target %s", var_dict["target_lams"])
+            logging.info("double cut %s", var_dict["double_cut_weight"])
+            logging.info("trim long %s", var_dict["trim_long_probs"])
+            logging.info("trim poiss %s", var_dict["trim_poissons"])
+            logging.info("insert zero %s", var_dict["insert_zero_prob"])
+            logging.info("insert poiss %s", var_dict["insert_poisson"])
+            _, pen_log_lik, log_lik, log_barr, branch_lens = self.model.sess.run(
                     [
                         self.model.adam_train_op,
-                        self.model.log_lik,
                         self.model.smooth_log_lik,
+                        self.model.log_lik,
                         self.model.branch_log_barr,
-                        self.model.log_lik_alleles,
-                        self.model.log_lik_cell_type],
+                        self.model.branch_lens],
                     feed_dict=feed_dict)
-            if pen_log_lik == -np.inf:
-                raise ValueError("Penalized log lik not finite, failed on iteration %d" % i)
 
             iter_info = {
                     "iter": i,
-                    "pen_ll": pen_log_lik,
                     "log_barr": log_barr,
-                    "log_lik": log_lik}
-            prev_pen_log_lik = pen_log_lik
+                    "log_lik": log_lik,
+                    "pen_log_lik": pen_log_lik,
+                    "branch_lens": branch_lens}
             if i % print_iter == (print_iter - 1):
                 logging.info(
-                    "iter %d pen log lik %f log lik %f log barr %f alleles %f cell type %f",
-                    i, pen_log_lik, log_lik, log_barr, log_lik_alleles, log_lik_cell_type)
+                    "iter %d pen log lik %f log lik %f log barr %f min branch len %f",
+                    i, pen_log_lik, log_lik, log_barr, np.min(branch_lens[1:]))
+
+            if i % save_iter == (save_iter - 1):
                 if dist_measurers is not None:
                     tree_dist = dist_measurers.get_tree_dists([self.model.get_fitted_bifurcating_tree()])[0]
                     logging.info("iter %d tree dists: %s", i, tree_dist)
                     iter_info["tree_dists"] = tree_dist
+                    iter_info["var"] = var_dict
             train_history.append(iter_info)
 
         return train_history
