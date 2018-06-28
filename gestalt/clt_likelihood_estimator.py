@@ -80,6 +80,7 @@ class CLTPenalizedEstimator(CLTEstimator):
             logging.info("target %s", var_dict["target_lams"])
             logging.info("double cut %s", var_dict["double_cut_weight"])
             logging.info("trim long %s", var_dict["trim_long_probs"])
+            logging.info("trim zero %s", var_dict["trim_zero_probs"])
             logging.info("trim poiss %s", var_dict["trim_poissons"])
             logging.info("insert zero %s", var_dict["insert_zero_prob"])
             logging.info("insert poiss %s", var_dict["insert_poisson"])

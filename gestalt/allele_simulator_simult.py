@@ -128,6 +128,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             do_insertion = random() > self.model.insert_zero_prob.eval()
             do_deletion  = random() > self.model.trim_zero_prob.eval()
 
+        # TODO: update this code to reflect the CLT Likelihood model
         insertion_length = self.insertion_distribution.rvs() if do_insertion else 0
         left_del_len = self.left_del_distributions[target1][left_long].rvs() if do_deletion else 0
         right_del_len = self.right_del_distributions[target2][right_long].rvs() if do_deletion else 0

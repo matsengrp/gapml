@@ -13,6 +13,8 @@ from transition_wrapper_maker import TransitionWrapper
 from anc_state import AncState
 
 class CLTTrimProbTestCase(unittest.TestCase):
+    # TODO: add more tests to trimming code!
+
     def setUp(self):
         self.num_targets = 10
         self.bcode_metadata = BarcodeMetadata()
@@ -23,7 +25,9 @@ class CLTTrimProbTestCase(unittest.TestCase):
                 self.sess,
                 target_lams = 0.1 + np.arange(self.bcode_metadata.n_targets))
         tf.global_variables_initializer().run()
-        self.trim_zero_prob = self.mdl.trim_zero_prob.eval()
+        self.trim_zero_probs = self.mdl.trim_zero_probs.eval()
+        # Suppose left and right are the same for now...
+        self.trim_zero_prob = self.trim_zero_probs[0]
         self.trim_pois = self.mdl.trim_poissons.eval()
 
     def test_get_trim_probs(self):
@@ -39,7 +43,7 @@ class CLTTrimProbTestCase(unittest.TestCase):
         log_del_prob = log_del_prob_node.eval()
         pois_left = BoundedPoisson(0, self.bcode_metadata.left_max_trim[0], self.trim_pois[0])
         pois_right = BoundedPoisson(0, self.bcode_metadata.right_long_trim_min[0], self.trim_pois[1])
-        log_del = np.log((1 - self.trim_zero_prob) * pois_left.pmf(left_trim) * pois_right.pmf(right_trim))
+        log_del = np.log(np.power(1 - self.trim_zero_prob, 2) * pois_left.pmf(left_trim) * pois_right.pmf(right_trim))
         self.assertTrue(np.isclose(
             log_del,
             log_del_prob[0]))
@@ -56,7 +60,9 @@ class CLTTrimProbTestCase(unittest.TestCase):
         log_del_prob = log_del_prob_node.eval()
         pois_left = BoundedPoisson(0, self.bcode_metadata.left_long_trim_min[9], self.trim_pois[0])
         pois_right = BoundedPoisson(0, self.bcode_metadata.right_long_trim_min[0] - 1, self.trim_pois[1])
-        log_del = np.log((1 - self.trim_zero_prob) * pois_left.pmf(left_trim) * pois_right.pmf(right_trim))
+        log_del = np.log(
+            (1 - self.trim_zero_prob) * pois_right.pmf(right_trim) * (
+            self.trim_zero_prob + (1 - self.trim_zero_prob) * pois_left.pmf(left_trim)))
         self.assertTrue(np.isclose(
             log_del,
             log_del_prob[0]))
