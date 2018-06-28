@@ -34,7 +34,7 @@ class CLTLikelihoodModel:
             target_lams: ndarray,
             target_lams_known: bool = False,
             trim_long_probs: ndarray = 0.05 * np.ones(2),
-            trim_zero_prob: float = 0.5,
+            trim_zero_probs: ndarray = 0.5 * np.ones(2),
             trim_poissons: ndarray = 2.5 * np.ones(2),
             insert_zero_prob: float = 0.5,
             insert_poisson: float = 0.2,
@@ -100,7 +100,7 @@ class CLTLikelihoodModel:
                 target_lams,
                 [double_cut_weight],
                 trim_long_probs,
-                [trim_zero_prob],
+                trim_zero_probs,
                 trim_poissons,
                 [insert_zero_prob],
                 [insert_poisson],
@@ -124,7 +124,7 @@ class CLTLikelihoodModel:
             target_lams: ndarray,
             double_cut_weight: List[float], # list of length one
             trim_long_probs: ndarray,
-            trim_zero_prob: List[float],
+            trim_zero_probs: ndarray,
             trim_poissons: ndarray,
             insert_zero_prob: List[float],
             insert_poisson: List[float],
@@ -135,7 +135,6 @@ class CLTLikelihoodModel:
         Creates the tensorflow nodes for each of the model parameters
         """
         assert len(double_cut_weight) == 1
-        assert len(trim_zero_prob) == 1
         assert len(insert_zero_prob) == 1
         assert len(insert_poisson) == 1
 
@@ -144,7 +143,7 @@ class CLTLikelihoodModel:
                     [] if self.target_lams_known else np.log(target_lams),
                     np.log(double_cut_weight),
                     inv_sigmoid(trim_long_probs),
-                    inv_sigmoid(trim_zero_prob),
+                    inv_sigmoid(trim_zero_probs),
                     np.log(trim_poissons),
                     inv_sigmoid(insert_zero_prob),
                     np.log(insert_poisson),
@@ -171,8 +170,10 @@ class CLTLikelihoodModel:
         self.trim_long_probs = tf.sigmoid(self.all_vars[prev_size: up_to_size])
         self.trim_short_probs = tf.ones(1, dtype=tf.float64) - self.trim_long_probs
         prev_size = up_to_size
-        up_to_size += 1
-        self.trim_zero_prob = tf.sigmoid(self.all_vars[prev_size: up_to_size])
+        up_to_size += trim_zero_probs.size
+        self.trim_zero_probs = tf.sigmoid(self.all_vars[prev_size: up_to_size])
+        self.trim_zero_prob_left = self.trim_zero_probs[0]
+        self.trim_zero_prob_right = self.trim_zero_probs[1]
         prev_size = up_to_size
         up_to_size += trim_poissons.size
         self.trim_poissons = tf.exp(self.all_vars[prev_size: up_to_size])
@@ -243,7 +244,7 @@ class CLTLikelihoodModel:
                 param_dict["target_lams"],
                 param_dict["double_cut_weight"],
                 param_dict["trim_long_probs"],
-                param_dict["trim_zero_prob"],
+                param_dict["trim_zero_probs"],
                 param_dict["trim_poissons"],
                 param_dict["insert_zero_prob"],
                 param_dict["insert_poisson"],
@@ -256,7 +257,7 @@ class CLTLikelihoodModel:
             target_lams: ndarray,
             double_cut_weight: float,
             trim_long_probs: ndarray,
-            trim_zero_prob: float,
+            trim_zero_probs: ndarray,
             trim_poissons: ndarray,
             insert_zero_prob: float,
             insert_poisson: float,
@@ -276,7 +277,7 @@ class CLTLikelihoodModel:
             [] if self.target_lams_known else np.log(target_lams),
             np.log(double_cut_weight),
             inv_sigmoid(trim_long_probs),
-            inv_sigmoid(trim_zero_prob),
+            inv_sigmoid(trim_zero_probs),
             np.log(trim_poissons),
             inv_sigmoid(insert_zero_prob),
             np.log(insert_poisson),
@@ -293,7 +294,7 @@ class CLTLikelihoodModel:
             self.target_lams,
             self.double_cut_weight,
             self.trim_long_probs,
-            self.trim_zero_prob,
+            self.trim_zero_probs,
             self.trim_poissons,
             self.insert_zero_prob,
             self.insert_poisson,
@@ -310,7 +311,7 @@ class CLTLikelihoodModel:
             "target_lams",
             "double_cut_weight",
             "trim_long_probs",
-            "trim_zero_prob",
+            "trim_zero_probs",
             "trim_poissons",
             "insert_zero_prob",
             "insert_poisson",
@@ -555,28 +556,35 @@ class CLTLikelihoodModel:
         check_left_min = tf.cast(tf.less_equal(min_left_trim, left_trim_len), tf.float64)
         # The probability of a left trim for length zero in our truncated poisson is assigned to be (for a normal poisson) Pr(0) + Pr(X > max_trim)
         # The other probabilities for the truncated poisson are therefore equal to the usual poisson distribution
-        left_prob = check_left_max * check_left_min * tf_common.ifelse(
+        short_left_prob = tf_common.ifelse(
                 tf_common.equal_float(left_trim_len, 0),
-                self.poiss_left.prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_left.cdf(max_left_trim),
-                self.poiss_left.prob(left_trim_len))
+                self.trim_zero_prob_left + (1 - self.trim_zero_prob_left) * (
+                    self.poiss_left.prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_left.cdf(max_left_trim)),
+                (1 - self.trim_zero_prob_left) * self.poiss_left.prob(left_trim_len))
+        num_positions = tf.constant(1.0, dtype=tf.float64) + max_left_trim - min_left_trim
+        long_left_prob = self.poiss_left.prob(left_trim_len - min_left_trim) + (tf.constant(1, dtype=tf.float64) - self.poiss_left.cdf(max_left_trim - min_left_trim)) * 1.0/num_positions
+        left_prob = check_left_max * check_left_min * tf_common.ifelse(
+                is_left_longs,
+                long_left_prob,
+                short_left_prob)
+
         check_right_max = tf.cast(tf.less_equal(right_trim_len, max_right_trim), tf.float64)
         check_right_min = tf.cast(tf.less_equal(min_right_trim, right_trim_len), tf.float64)
         # The probability of a right trim for length zero in our truncated poisson is assigned to be (for a normal poisson) Pr(0) + Pr(X > max_trim)
         # The other probabilities for the truncated poisson are therefore equal to the usual poisson distribution
-        right_prob = check_right_max * check_right_min * tf_common.ifelse(
+        short_right_prob = tf_common.ifelse(
                 tf_common.equal_float(right_trim_len, 0),
-                self.poiss_right.prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_right.cdf(max_right_trim),
-                self.poiss_right.prob(right_trim_len))
+                self.trim_zero_prob_right + (1 - self.trim_zero_prob_right) * (
+                    self.poiss_right.prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_right.cdf(max_right_trim)),
+                (1 - self.trim_zero_prob_right) * self.poiss_right.prob(right_trim_len))
+        num_positions = tf.constant(1.0, dtype=tf.float64) + max_right_trim - min_right_trim
+        long_right_prob = self.poiss_right.prob(right_trim_len - min_right_trim) + (tf.constant(1, dtype=tf.float64) - self.poiss_right.cdf(max_right_trim - min_right_trim)) * 1.0/num_positions
+        right_prob = check_right_max * check_right_min * tf_common.ifelse(
+                is_right_longs,
+                long_right_prob,
+                short_right_prob)
 
-        lr_prob = left_prob * right_prob
-        is_short_indel = tf_common.equal_float(is_left_longs + is_right_longs, 0)
-        is_len_zero = tf_common.equal_float(del_len, 0)
-        del_prob = tf_common.ifelse(is_short_indel,
-                tf_common.ifelse(is_len_zero,
-                    self.trim_zero_prob + (1.0 - self.trim_zero_prob) * lr_prob,
-                    (1.0 - self.trim_zero_prob) * lr_prob),
-                lr_prob)
-        return tf.log(del_prob)
+        return tf.log(left_prob) + tf.log(right_prob)
 
     def _create_log_insert_probs(self, singletons: List[Singleton]):
         """
