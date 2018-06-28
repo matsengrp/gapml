@@ -77,12 +77,6 @@ class CLTPenalizedEstimator(CLTEstimator):
         train_history = []
         for i in range(max_iters):
             var_dict = self.model.get_vars_as_dict()
-            iter_info = {
-                    "iter": i,
-                    "log_barr": log_barr,
-                    "log_lik": log_lik,
-                    "pen_log_lik": pen_log_lik}
-
             _, pen_log_lik, log_lik, log_barr = self.model.sess.run(
                     [
                         self.model.adam_train_op,
@@ -91,6 +85,11 @@ class CLTPenalizedEstimator(CLTEstimator):
                         self.model.branch_log_barr],
                     feed_dict=feed_dict)
 
+            iter_info = {
+                    "iter": i,
+                    "log_barr": log_barr,
+                    "log_lik": log_lik,
+                    "pen_log_lik": pen_log_lik}
             if i % print_iter == (print_iter - 1):
                 logging.info(
                     "iter %d pen log lik %f log lik %f log barr %f",
