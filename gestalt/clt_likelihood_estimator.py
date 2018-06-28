@@ -77,23 +77,31 @@ class CLTPenalizedEstimator(CLTEstimator):
         train_history = []
         for i in range(max_iters):
             var_dict = self.model.get_vars_as_dict()
-            _, pen_log_lik, log_lik, log_barr = self.model.sess.run(
+            logging.info("target %s", var_dict["target_lams"])
+            logging.info("double cut %s", var_dict["double_cut_weight"])
+            logging.info("trim long %s", var_dict["trim_long_probs"])
+            logging.info("trim poiss %s", var_dict["trim_poissons"])
+            logging.info("insert zero %s", var_dict["insert_zero_prob"])
+            logging.info("insert poiss %s", var_dict["insert_poisson"])
+            _, pen_log_lik, log_lik, log_barr, branch_lens = self.model.sess.run(
                     [
                         self.model.adam_train_op,
                         self.model.smooth_log_lik,
                         self.model.log_lik,
-                        self.model.branch_log_barr],
+                        self.model.branch_log_barr,
+                        self.model.branch_lens],
                     feed_dict=feed_dict)
 
             iter_info = {
                     "iter": i,
                     "log_barr": log_barr,
                     "log_lik": log_lik,
-                    "pen_log_lik": pen_log_lik}
+                    "pen_log_lik": pen_log_lik,
+                    "branch_lens": branch_lens}
             if i % print_iter == (print_iter - 1):
                 logging.info(
-                    "iter %d pen log lik %f log lik %f log barr %f",
-                    i, pen_log_lik, log_lik, log_barr)
+                    "iter %d pen log lik %f log lik %f log barr %f min branch len %f",
+                    i, pen_log_lik, log_lik, log_barr, np.min(branch_lens[1:]))
 
             if i % save_iter == (save_iter - 1):
                 if dist_measurers is not None:

@@ -273,7 +273,7 @@ class CLTLikelihoodModel:
             cell_type_lams = np.array([])
 
         init_val = np.concatenate([
-            [] if self.target_lams_known else np.log(target_lams[1:]),
+            [] if self.target_lams_known else np.log(target_lams),
             np.log(double_cut_weight),
             inv_sigmoid(trim_long_probs),
             inv_sigmoid(trim_zero_prob),
@@ -439,7 +439,7 @@ class CLTLikelihoodModel:
         left_hazards = self._create_hazard_list(True, False, left_trimmables, right_trimmables)[:, :self.num_targets - 1]
         right_hazards = self._create_hazard_list(False, True, left_trimmables, right_trimmables)[:, 1:]
         left_cum_hazards = tf.cumsum(left_hazards, axis=1)
-        inter_target_hazards = tf.multiply(left_cum_hazards, right_hazards)
+        inter_target_hazards = tf.multiply(left_cum_hazards, right_hazards) * self.double_cut_weight
         hazard_away_nodes = tf.add(
                 tf.reduce_sum(focal_hazards, axis=1),
                 tf.reduce_sum(inter_target_hazards, axis=1),

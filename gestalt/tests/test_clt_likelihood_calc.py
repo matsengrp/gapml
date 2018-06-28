@@ -22,7 +22,14 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             crucial_pos_len = [3,3])
         self.num_targets = self.bcode_metadata.n_targets
 
-    def _create_bifurc_model(self, topology, bcode_metadata, branch_len, branch_lens = [], target_lams = None):
+    def _create_bifurc_model(
+            self,
+            topology,
+            bcode_metadata,
+            branch_len,
+            branch_lens = [],
+            double_cut_weight = 0.3,
+            target_lams = None):
         sess = tf.InteractiveSession()
         num_nodes = topology.get_num_nodes()
         if len(branch_lens) == 0:
@@ -52,6 +59,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
                 trim_poissons = np.ones(2),
                 insert_zero_prob = 0.5,
                 insert_poisson = 2,
+                double_cut_weight = double_cut_weight,
                 tot_time = tot_time)
         tf.global_variables_initializer().run()
         return model
@@ -62,6 +70,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             branch_len_inners,
             branch_len_offsets,
             tot_time = 1,
+            double_cut_weight = 0.3,
             target_lams = None):
         sess = tf.InteractiveSession()
         num_nodes = topology.get_num_nodes()
@@ -82,6 +91,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
                 trim_poissons = np.ones(2),
                 insert_zero_prob = 0.5,
                 insert_poisson = 2,
+                double_cut_weight = double_cut_weight,
                 tot_time = tot_time)
         tf.global_variables_initializer().run()
         return model, target_lams
@@ -439,7 +449,12 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         topology.add_child(child)
 
         branch_len = 10
-        model = self._create_bifurc_model(topology, self.bcode_metadata, branch_len)
+        double_cut_weight  = 0.3
+        model = self._create_bifurc_model(
+                topology,
+                self.bcode_metadata,
+                branch_len,
+                double_cut_weight = double_cut_weight)
         target_lams = model.target_lams.eval()
         trim_long_probs = model.trim_long_probs.eval()
 
@@ -455,7 +470,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             hazard_away_dict[TargetStatus(TargetDeactTract(0,2))],
             ])
         hazard_to_cut1 = target_lams[1] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
-        hazard_to_cut02 = target_lams[0] * target_lams[2] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
+        hazard_to_cut02 = double_cut_weight * target_lams[0] * target_lams[2] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
 
         q_mat = np.matrix([
             [-hazard_away, hazard_to_cut1, hazard_to_cut02, hazard_away - hazard_to_cut1 - hazard_to_cut02],
@@ -501,11 +516,13 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
 
         branch_len1 = 10
         branch_len2 = 5
+        double_cut_weight = 0.3
         model = self._create_bifurc_model(
                 topology,
                 self.bcode_metadata,
                 branch_len=None,
-                branch_lens=[branch_len1, branch_len2])
+                branch_lens=[branch_len1, branch_len2],
+                double_cut_weight = double_cut_weight)
         target_lams = model.target_lams.eval()
         trim_long_probs = model.trim_long_probs.eval()
 
@@ -520,7 +537,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             hazard_away_dict[TargetStatus()],
             hazard_away_dict[TargetStatus(TargetDeactTract(1,1))]])
         hazard_to_cut1 = target_lams[1] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
-        hazard_to_cut02 = target_lams[0] * target_lams[2] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
+        hazard_to_cut02 = double_cut_weight * target_lams[0] * target_lams[2] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
 
         q_mat = np.matrix([
             [-hazard_away, hazard_to_cut1, hazard_to_cut02, hazard_away - hazard_to_cut1 - hazard_to_cut02],
