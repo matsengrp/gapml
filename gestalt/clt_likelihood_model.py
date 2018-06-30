@@ -8,6 +8,7 @@ from typing import List, Dict
 from numpy import ndarray
 from tensorflow import Session
 
+import collapsed_tree
 from cell_lineage_tree import CellLineageTree
 from cell_state import CellTypeTree
 from barcode_metadata import BarcodeMetadata
@@ -979,6 +980,7 @@ class CLTLikelihoodModel:
             elif node.node_id is not None:
                 node.dist = br_lens[node.node_id]
 
+        collapsed_tree._remove_single_child_unobs_nodes(scratch_tree)
         # Just checking that the tree is ultrametric
         for leaf in scratch_tree:
             assert np.isclose(self.tot_time, leaf.get_distance(scratch_tree))

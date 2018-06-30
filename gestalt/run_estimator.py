@@ -51,8 +51,6 @@ def parse_args():
     parser.add_argument(
         '--time', type=float, default=1.2, help='how much time to fit for')
     parser.add_argument(
-        '--debug', action='store_true', help='debug tensorflow')
-    parser.add_argument(
             '--seed',
             type=int,
             default=40)
@@ -63,6 +61,10 @@ def parse_args():
             help="log barrier parameter on the branch lengths")
     parser.add_argument('--max-iters', type=int, default=20)
     parser.add_argument('--num-inits', type=int, default=1)
+    parser.add_argument(
+        '--is-refit',
+        action='store_true',
+        help='flag this as a refitting procedure')
 
     parser.set_defaults(use_cell_state=False)
     args = parser.parse_args()
@@ -91,9 +93,12 @@ def main(args=sys.argv[1:]):
     logging.info("Barcode cut sites %s", str(bcode_meta.abs_cut_sites))
 
     with open(args.tree_topology_pkl, "rb") as f:
-        tree_topology_dict = six.moves.cPickle.load(f)
-        tree = tree_topology_dict["tree"]
-    logging.info("Tree topology info: %s", tree_topology_dict)
+        tree_topology_info = six.moves.cPickle.load(f)
+        if args.is_refit:
+            tree = tree_topology_info.fitted_bifurc_tree
+        else:
+            tree = tree_topology_info["tree"]
+    logging.info("Tree topology info: %s", tree_topology_info)
 
     true_model_dict = None
     oracle_dist_measurers = None
@@ -145,7 +150,6 @@ def main(args=sys.argv[1:]):
                 true_target_lambdas - res.model_params_dict["target_lams"])
     else:
         result_print_dict = {}
-    result_print_dict["selection_type"] = tree_topology_dict["selection_type"]
     result_print_dict["log_lik"] = res.train_history[-1]["log_lik"][0]
 
     # Save distance data as csv

@@ -246,7 +246,7 @@ def main(args=sys.argv[1:]):
             sess,
             target_lams = np.array(args.target_lambdas),
             trim_long_probs = np.array(args.repair_long_probability),
-            trim_zero_prob = args.repair_indel_probability,
+            trim_zero_probs = np.array([args.repair_indel_probability, args.repair_indel_probability]),
             trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
             insert_zero_prob = args.repair_indel_probability,
             insert_poisson = args.repair_insertion_lambda,
