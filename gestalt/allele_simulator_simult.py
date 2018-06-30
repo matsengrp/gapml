@@ -10,7 +10,7 @@ from indel_sets import TargetTract
 from target_status import TargetStatus
 from allele_simulator import AlleleSimulator
 from barcode_metadata import BarcodeMetadata
-from bounded_poisson import BoundedPoisson
+from bounded_poisson import ZeroInflatedBoundedPoisson, PaddedBoundedPoisson
 
 from clt_likelihood_model import CLTLikelihoodModel
 
@@ -26,6 +26,8 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         self.bcode_meta = model.bcode_meta
         self.model = model
         self.all_target_tract_hazards = model.get_all_target_tract_hazards()
+        self.insert_zero_prob = self.model.insert_zero_prob.eval()
+        self.trim_zero_probs = self.model.trim_zero_probs.eval()
 
         self.left_del_distributions = self._create_bounded_poissons(
             min_vals = self.bcode_meta.left_long_trim_min,
@@ -53,14 +55,11 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         """
         dstns = []
         for i in range(self.bcode_meta.n_targets):
-            long_min = min_vals[i]
-            long_short_dstns = {}
-            for is_long in [True, False]:
-                min_trim = min_vals[i] if is_long else 0
-                max_trim = max_vals[i] if is_long else min_vals[i] - 1
-
-                dstn = BoundedPoisson(min_trim, max_trim, poiss_lambda)
-                long_short_dstns[is_long] = dstn
+            long_short_dstns = {
+                    # Long trim
+                    True: PaddedBoundedPoisson(min_vals[i], max_vals[i], poiss_lambda),
+                    # Short trim
+                    False: ZeroInflatedBoundedPoisson(0, min_vals[i] - 1, poiss_lambda)}
             dstns.append(long_short_dstns)
         return dstns
 
@@ -125,13 +124,12 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         else:
             # Serves as zero-inflation for deletion/insertion process
             # Draw a separate RVs for each deletion/insertion process
-            do_insertion = random() > self.model.insert_zero_prob.eval()
-            do_deletion  = random() > self.model.trim_zero_prob.eval()
+            do_insertion = random() > self.insert_zero_prob
+            do_deletion  = random(2) > self.trim_zero_probs
 
-        # TODO: update this code to reflect the CLT Likelihood model
         insertion_length = self.insertion_distribution.rvs() if do_insertion else 0
-        left_del_len = self.left_del_distributions[target1][left_long].rvs() if do_deletion else 0
-        right_del_len = self.right_del_distributions[target2][right_long].rvs() if do_deletion else 0
+        left_del_len = self.left_del_distributions[target1][left_long].rvs() if do_deletion[0] else 0
+        right_del_len = self.right_del_distributions[target2][right_long].rvs() if do_deletion[1] else 0
         if left_long:
             assert(left_del_len > 0)
         if right_long:
