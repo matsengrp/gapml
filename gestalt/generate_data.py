@@ -17,6 +17,7 @@ from clt_likelihood_model import CLTLikelihoodModel
 from allele_simulator_simult import AlleleSimulatorSimultaneous
 from clt_observer import CLTObserver
 from barcode_metadata import BarcodeMetadata
+from plot_mrca_matrices import plot_mrca_matrix
 
 from constants import NUM_BARCODE_V7_TARGETS, BARCODE_V7
 
@@ -290,6 +291,10 @@ def main(args=sys.argv[1:]):
             "bcode_meta": bcode_meta,
             "args": args}
         six.moves.cPickle.dump(out_dict, f, protocol = 2)
+
+    plot_mrca_matrix(
+        true_subtree,
+        args.out_true_model.replace(".pkl", "_mrca.png"))
 
 if __name__ == "__main__":
     main()

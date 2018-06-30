@@ -190,9 +190,10 @@ class MRCADistanceMeasurer(TreeDistanceMeasurer):
 
         # Number the leaves because we need to represent each tree by its pairwise
         # MRCA distance matrix
+        leaf_str_sorted = sorted([leaf.allele_events_list_str for leaf in ref_tree])
         self.leaf_dict = {}
-        for idx, leaf in enumerate(ref_tree):
-            self.leaf_dict[leaf.allele_events_list_str] = idx
+        for idx, leaf_str in enumerate(leaf_str_sorted):
+            self.leaf_dict[leaf_str] = idx
         self.num_leaves = len(ref_tree)
 
         self.ref_tree_mrca_matrix = self._get_mrca_matrix(ref_tree)
