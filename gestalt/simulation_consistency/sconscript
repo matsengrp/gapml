@@ -1,4 +1,4 @@
-# Test model fits against one another - data generated from a survival model
+# Check that as we increase number of barcodes, we converge to the truth
 
 import os
 
@@ -54,7 +54,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [5, 10, 20, 40, 80, 160],
+    [5, 10, 20, 40, 80],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 

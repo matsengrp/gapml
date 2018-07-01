@@ -1,4 +1,5 @@
-# Test model fits against one another - data generated from a survival model
+# Test how well we can estimate the tree with only one barcode
+# Using parameters we fit on real data
 
 import os
 
@@ -25,6 +26,7 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def generate(env, outdir, c):
+    # These parameters are taken from parameters fit on GESTALT data
     targ_lams = [
 	0.67076792,
 	0.15538075,
