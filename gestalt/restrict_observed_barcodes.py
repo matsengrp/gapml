@@ -84,6 +84,7 @@ def collapse_tree_by_first_alleles(true_subtree: CellLineageTree, num_barcodes: 
 
 def main(args=sys.argv[1:]):
     args = parse_args()
+    logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
 
     with open(args.obs_file, "rb") as f:
@@ -104,6 +105,8 @@ def main(args=sys.argv[1:]):
         "Number of uniq obs after restricting to first %d alleles: %d",
         args.num_barcodes,
         len(obs_data_dict["obs_leaves"]))
+    if args.num_barcodes == bcode_meta.num_barcodes:
+        assert len(obs_data_dict["obs_leaves"]) == len(obs_leaves)
     save_data(obs_data_dict, args.out_obs_file)
 
     # Generate the true collapsed tree

@@ -99,6 +99,7 @@ def main(args=sys.argv[1:]):
         else:
             tree = tree_topology_info["tree"]
     logging.info("Tree topology info: %s", tree_topology_info)
+    logging.info("Tree topology num leaves: %d", len(tree))
 
     true_model_dict = None
     oracle_dist_measurers = None

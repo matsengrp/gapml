@@ -90,7 +90,7 @@ def parse_args():
 
     args.out_folder = os.path.dirname(args.out_template_file)
     assert os.path.join(args.out_folder, "parsimony_tree0.pkl") == args.out_template_file
-    args.log_file = "%s/parsimony_log.txt" % args.out_folder
+    args.log_file = "%s/log_parsimony.txt" % args.out_folder
     print("Log file", args.log_file)
 
     # check that there is no infile in the current folder -- this will

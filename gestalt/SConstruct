@@ -37,3 +37,6 @@ env.SConsignFile()
 
 flag = 'simulation_consistency'
 SConscript(flag + '/sconscript', exports=['flag'])
+
+flag = 'simulation_one_barcode'
+SConscript(flag + '/sconscript', exports=['flag'])

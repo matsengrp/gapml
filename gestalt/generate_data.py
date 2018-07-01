@@ -44,15 +44,19 @@ def parse_args():
         help="number of independent barcodes. we assume all the same")
     parser.add_argument(
         '--target-lambdas',
-        type=float,
-        nargs=2,
-        default=[0.02] * 10,
+        type=str,
+        default=",".join(["0.02"] * 10),
         help='target cut rates -- will get slightly perturbed for the true value')
     parser.add_argument(
-        '--variance-target-lambdas',
+        '--perturb-target-lambdas-variance',
         type=float,
         default=0.0008,
-        help='variance of target cut rates (so variance of perturbations)')
+        help='variance of perturbations to target lambdas (so variance of perturbations)')
+    parser.add_argument(
+        '--double-cut-weight',
+        type=float,
+        default=1,
+        help='Weight for double cuts')
     parser.add_argument(
         '--trim-long-probs',
         type=float,
@@ -60,16 +64,23 @@ def parse_args():
         default=[0.001] * 2,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
-        '--indel-zero-prob',
+        '--trim-zero-probs',
+        type=float,
+        nargs=2,
+        default=[0.3] * 2,
+        help='probability of doing no deletion/insertion during repair')
+    parser.add_argument(
+        '--trim-poissons',
+        type=float,
+        nargs=2,
+        default=[5] * 2,
+        help='poisson parameter for distribution of symmetric deltion about cut site(s)'
+    )
+    parser.add_argument(
+        '--insert-zero-prob',
         type=float,
         default=0.1,
         help='probability of doing no deletion/insertion during repair')
-    parser.add_argument(
-        '--trim-poisson',
-        type=float,
-        default=3,
-        help='poisson parameter for distribution of symmetric deltion about cut site(s)'
-    )
     parser.add_argument(
         '--insert-poisson',
         type=float,
@@ -104,13 +115,13 @@ def parse_args():
     parser.add_argument(
         '--max-abundance',
         type=int,
-        default=1,
+        default=None,
         help="Maximum abundance of the observed leaves")
 
     parser.set_defaults()
     args = parser.parse_args()
+    args.target_lambdas = [float(x) for x in args.target_lambdas.split(",")]
     args.num_targets = len(args.target_lambdas)
-
     return args
 
 def create_cell_type_tree(args):
@@ -142,7 +153,7 @@ def create_cell_lineage_tree(
         args,
         clt_model: CLTLikelihoodModel,
         max_tries: int = 20,
-        time_incr: float = 0.02,
+        time_incr: float = 0.05,
         time_min: float = 1e-3):
     """
     @return original clt, the set of observed leaves, and the true topology for the observed leaves
@@ -150,7 +161,6 @@ def create_cell_lineage_tree(
     clt_simulator, observer = create_simulators(args, clt_model)
 
     # Keep trying to make CLT until enough leaves in observed tree by modifying the max time of the tree
-    obs_leaves = set()
     tot_time = args.time
     for i in range(max_tries):
         args.model_seed += 1
@@ -201,7 +211,7 @@ def initialize_lambda_rates(args, boost: float = 0.00001):
 
     # initialize the target lambdas with some perturbation to ensure we don't have eigenvalues that are exactly equal
     perturbations = np.random.uniform(size=args.num_targets) - 0.5
-    perturbations = perturbations / np.sqrt(np.var(perturbations)) * np.sqrt(args.variance_target_lambdas)
+    perturbations = perturbations / np.sqrt(np.var(perturbations)) * np.sqrt(args.perturb_target_lambdas_variance)
     target_lambdas = np.array(args.target_lambdas) + perturbations
     min_lambda = np.min(target_lambdas)
     if min_lambda < 0:
@@ -209,7 +219,6 @@ def initialize_lambda_rates(args, boost: float = 0.00001):
         target_lambdas = target_lambdas - min_lambda + boost
         birth_lambda += -min_lambda + boost
         death_lambda += -min_lambda + boost
-    assert np.isclose(np.var(target_lambdas), args.variance_target_lambdas)
     return target_lambdas, birth_lambda, death_lambda
 
 def main(args=sys.argv[1:]):
@@ -237,11 +246,12 @@ def main(args=sys.argv[1:]):
             bcode_meta,
             sess,
             target_lams = np.array(args.target_lambdas),
+            double_cut_weight = args.double_cut_weight,
             trim_long_probs = np.array(args.trim_long_probs),
-            trim_zero_probs = np.array([args.indel_zero_prob, args.indel_zero_prob]),
-            trim_short_poissons = np.array([args.trim_poisson, args.trim_poisson]),
-            trim_long_poissons = np.array([args.trim_poisson, args.trim_poisson]),
-            insert_zero_prob = args.indel_zero_prob,
+            trim_zero_probs = np.array(args.trim_zero_probs),
+            trim_short_poissons = np.array(args.trim_poissons),
+            trim_long_poissons = np.array(args.trim_poissons),
+            insert_zero_prob = args.insert_zero_prob,
             insert_poisson = args.insert_poisson,
             cell_type_tree = cell_type_tree,
             tot_time = args.time)
@@ -254,9 +264,11 @@ def main(args=sys.argv[1:]):
             clt_model)
 
     # Check that the the abundance of the leaves is not too high
-    for obs in obs_leaves:
-        if obs.abundance > args.max_abundance:
-            raise ValueError("Number of barcodes does not seem to be enough. There are leaves with %d abundance" % obs.abundance)
+    if args.max_abundance is not None:
+        for obs in obs_leaves:
+            if obs.abundance > args.max_abundance:
+                raise ValueError(
+                    "Number of barcodes does not seem to be enough. There are leaves with %d abundance" % obs.abundance)
 
     logging.info("Number of uniq obs alleles %d", len(obs_leaves))
 

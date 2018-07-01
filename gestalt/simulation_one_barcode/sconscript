@@ -25,6 +25,18 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def generate(env, outdir, c):
+    targ_lams = [
+	0.67076792,
+	0.15538075,
+	0.00287668,
+	0.38409894,
+	0.08062923,
+	0.14737477,
+	0.3349348,
+	0.00490911,
+	0.84342738,
+	0.03428745]
+
     cmd = [
         'python generate_data.py',
         '--model-seed',
@@ -34,29 +46,37 @@ def generate(env, outdir, c):
         '--out-obs-file ${TARGETS[0]}',
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
-        '--time 1.2',
+        '--time 2.9',
+        '--target-lambdas',
+        ",".join(map(lambda x: str(x), targ_lams)),
+	'--trim-long-probs',
+        "0.04 0.09",
+        '--trim-zero-probs',
+        "0.4 0.05",
+        '--trim-poissons',
+        "5 5",
+        '--insert-zero-prob',
+        "0.9",
+        '--insert-poisson',
+        "0.04",
+        '--double-cut-weight',
+        "3.3",
         '--num-barcodes',
-        160,
+        1,
         '--min-uniq-alleles',
-        5,
+        50,
         '--max-uniq-alleles',
-        30,
-        # TODO: uncomment this eventually... anyways, we've assumed this as the default
-        #'--max-abundance 1'
+        100,
+        '--max-abundance',
+        200,
     ]
     return env.Command(
         [
             join(outdir, 'obs_data.pkl'),
             join(outdir, 'true_model.pkl'),
-            join(outdir, 'log.txt')],
+            join(outdir, 'log_generate.txt')],
         [],
         ' '.join(map(str, cmd)))
-
-nest.add(
-    'num_barcodes',
-    [5, 10, 20, 40, 80, 160],
-    label_func=lambda c: "num_barcodes%d" % c,
-)
 
 @nest.add_target_with_env(localenv)
 def restrict_observed_alleles(env, outdir, c):
@@ -64,15 +84,14 @@ def restrict_observed_alleles(env, outdir, c):
         'python restrict_observed_barcodes.py',
         '--obs-file ${SOURCES[0]}',
         '--model-file ${SOURCES[1]}',
-        '--num-barcodes',
-        c['num_barcodes'],
+        '--num-barcodes 1',
         '--out-obs-file ${TARGETS[0]}',
         '--out-collapsed-tree-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
     ]
     return env.Command(
         [
-            join(outdir, 'obs_data.pkl'),
+            join(outdir, 'obs_data_restrict.pkl'),
             join(outdir, 'collapsed_tree.pkl'),
             join(outdir, 'log_restrict.txt')],
         c['generate'],
@@ -84,14 +103,16 @@ def run_parsimony(env, outdir, c):
         'python get_parsimony_topologies.py',
         '--obs-file ${SOURCES[0]}',
         '--out-template-file ${TARGETS[0]}',
+        '--num-jumbles 1',
         '--max-random',
         0,
         '--max-random-multifurc',
-        1,
+        10,
     ]
     return env.Command(
         [
-            join(outdir, 'parsimony_tree0.pkl')],
+            join(outdir, 'parsimony_tree0.pkl'),
+            join(outdir, 'log_parsimony.txt')],
         c['restrict_observed_alleles'],
         ' '.join(map(str, cmd)))
 
@@ -108,7 +129,8 @@ def run_MLE(env, outdir, c):
     ]
     return env.Command(
         [
-            join(outdir, 'parsimony_tree0_fitted.pkl')],
+            join(outdir, 'parsimony_tree0_fitted.pkl'),
+            join(outdir, 'parsimony_tree0_fit_log.txt')],
         [
             c['restrict_observed_alleles'][0],
             c['run_parsimony'][0],
