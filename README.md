@@ -8,7 +8,8 @@ Install PyQt5 (`sudo apt-get` on linux, `brew install` on mac. For mac, see http
 Then run `pip install PyQt5` in your virtual environment.
 
 We use nestly + SCons to run simulations/analyses.
-To install SCons into the virtual env, use `pip install --egg SCons`.
+You should install scons outside the virtual environment, for a python 2.* or a 3.5+ environment.
+Then activate the virtual environment and then run `scons ___`.
 
 # Running tests
 To run all the tests:
