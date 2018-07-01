@@ -53,9 +53,7 @@ class CellLineageTree(TreeNode):
         super().__init__()
         self.dist = dist
         if allele_list is not None:
-            self.add_feature("allele_list", allele_list)
-            self.add_feature("allele_events_list", [
-                allele.get_event_encoding() for allele in allele_list.alleles])
+            self.set_allele_list(allele_list)
         elif allele_events_list is not None:
             self.add_feature("allele_events_list", allele_events_list)
             # Maybe we'll need this conversion someday. For now we leave it empty.
@@ -68,6 +66,10 @@ class CellLineageTree(TreeNode):
         self.add_feature("dead", dead)
         self.add_feature("abundance", abundance)
         self.add_feature("resolved_multifurcation", resolved_multifurcation)
+
+    def set_allele_list(self, allele_list: AlleleList):
+        self.add_feature("allele_list", allele_list)
+        self.add_feature("allele_events_list", allele_list.get_event_encoding())
 
     def sync_allele_events_list_str(self):
         """

@@ -20,6 +20,17 @@ class AlleleList:
         self.alleles = [Allele(a, bcode_meta) for a in allele_strs]
         self.bcode_meta = bcode_meta
 
+    def create_truncated_version(self, num_barcodes: int):
+        assert num_barcodes <= self.bcode_meta.num_barcodes
+        bcode_meta = BarcodeMetadata(
+                self.bcode_meta.unedited_barcode,
+                num_barcodes,
+                self.bcode_meta.cut_site,
+                self.bcode_meta.crucial_pos_len)
+        return AlleleList(
+                [a.allele for a in self.alleles[:num_barcodes]],
+                bcode_meta)
+
     def get_event_encoding(self, aligner: Aligner = None):
         """
         @return Tuple of AlleleEvents, each position in tuple for each barcode

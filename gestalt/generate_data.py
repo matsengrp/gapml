@@ -17,17 +17,26 @@ from clt_likelihood_model import CLTLikelihoodModel
 from allele_simulator_simult import AlleleSimulatorSimultaneous
 from clt_observer import CLTObserver
 from barcode_metadata import BarcodeMetadata
-from plot_mrca_matrices import plot_mrca_matrix
 
 from constants import NUM_BARCODE_V7_TARGETS, BARCODE_V7
 
 def parse_args():
     parser = argparse.ArgumentParser(description='simulate GESTALT')
     parser.add_argument(
-        '--out-folder',
+        '--out-obs-file',
         type=str,
-        default="_output",
-        help='folder to put output in')
+        default="_output/obs_data.pkl",
+        help='pkl file name for output file with observations')
+    parser.add_argument(
+        '--out-model-file',
+        type=str,
+        default="_output/true_model.pkl",
+        help='pkl file name for output file with true_model')
+    parser.add_argument(
+        '--log-file',
+        type=str,
+        default="_output/generate_log.txt",
+        help='name of log file')
     parser.add_argument(
         '--num-barcodes',
         type=int,
@@ -76,31 +85,32 @@ def parse_args():
     parser.add_argument(
         '--sampling-rate',
         type=float,
-        default=0.9,
+        default=0.3,
         help='proportion cells sampled/alleles successfully sequenced')
     parser.add_argument(
         '--debug', action='store_true', help='debug tensorflow')
     parser.add_argument(
-            '--model-seed',
-            type=int,
-            default=0,
-            help="Seed for generating the model")
+        '--model-seed',
+        type=int,
+        default=0,
+        help="Seed for generating the model")
     parser.add_argument(
-            '--data-seed',
-            type=int,
-            default=0,
-            help="Seed for generating data")
+        '--data-seed',
+        type=int,
+        default=0,
+        help="Seed for generating data")
     parser.add_argument('--min-leaves', type=int, default=2)
     parser.add_argument('--max-leaves', type=int, default=10)
     parser.add_argument('--max-clt-nodes', type=int, default=40000)
+    parser.add_argument(
+        '--max-abundance',
+        type=int,
+        default=1,
+        help="Maximum abundance of the observed leaves")
 
     parser.set_defaults()
     args = parser.parse_args()
     args.num_targets = len(args.target_lambdas)
-    args.log_file = "%s/generate_log.txt" % args.out_folder
-    print("Log file", args.log_file)
-    args.out_obs_data = "%s/obs_data.pkl" % args.out_folder
-    args.out_true_model = "%s/true_model.pkl" % args.out_folder
 
     return args
 
@@ -133,47 +143,39 @@ def create_cell_lineage_tree(
         args,
         clt_model: CLTLikelihoodModel,
         max_tries: int = 20,
-        sampling_rate_incr: float = 0.02,
-        sampling_rate_min: float = 1e-3):
+        time_incr: float = 0.02,
+        time_min: float = 1e-3):
     """
     @return original clt, the set of observed leaves, and the true topology for the observed leaves
     """
     clt_simulator, observer = create_simulators(args, clt_model)
 
-    # Keep trying to make CLT until enough leaves in observed tree
+    # Keep trying to make CLT until enough leaves in observed tree by modifying the max time of the tree
     obs_leaves = set()
+    tot_time = args.time
     for i in range(max_tries):
         args.model_seed += 1
         try:
             clt = clt_simulator.simulate(
                 tree_seed = args.model_seed,
                 data_seed = args.data_seed,
-                time = args.time,
+                time = tot_time,
                 max_nodes = args.max_clt_nodes)
             clt.label_node_ids()
-            clt.label_tree_with_strs()
-            logging.info(clt.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
-            sampling_rate = args.sampling_rate
-            while (len(obs_leaves) < args.min_leaves or len(obs_leaves) >= args.max_leaves) and sampling_rate > 0 and sampling_rate <= 1:
-                # Now sample the leaves and create the true topology
-                # Keep changing the sampling rate if we can't get the right number of leaves
-                obs_leaves, true_subtree, collapsed_subtree = observer.observe_leaves(
-                        sampling_rate,
-                        clt,
-                        seed=args.model_seed)
+            # Now sample the leaves and create the true topology
+            obs_leaves, true_subtree, obs_idx_to_leaves = observer.observe_leaves(
+                    args.sampling_rate,
+                    clt,
+                    seed=args.model_seed)
 
-                logging.info("sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
-                if len(obs_leaves) < args.min_leaves:
-                    sampling_rate += sampling_rate_incr
-                elif len(obs_leaves) >= args.max_leaves:
-                    sampling_rate -= sampling_rate_incr
-                else:
-                    break
-
-            logging.info("final? sampling rate %f, num leaves %d", sampling_rate, len(obs_leaves))
-            if len(obs_leaves) >= args.min_leaves and len(obs_leaves) <= args.max_leaves:
-                # Done creating the tree
+            logging.info("time %f, num uniq alleles %d, num tot leaves %d", tot_time, len(obs_leaves), len(clt))
+            if len(obs_leaves) < args.min_leaves:
+                tot_time += time_incr
+            elif len(obs_leaves) >= args.max_leaves:
+                tot_time -= time_incr
+            else:
+                # We got a good number of leaves! Stop trying
                 break
         except ValueError as e:
             logging.info("ValueError warning.... %s", str(e))
@@ -185,23 +187,13 @@ def create_cell_lineage_tree(
     if len(obs_leaves) < args.min_leaves:
         raise Exception("Could not manage to get enough leaves")
 
-    logging.info("True subtree for the observed nodes")
+    logging.info("True subtree for the observed nodes, time %f", tot_time)
+
+    true_subtree.label_tree_with_strs()
     logging.info(true_subtree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-    logging.info("Collapsed subtree for the observed nodes")
-    logging.info(collapsed_subtree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    logging.info(true_subtree.get_ascii(attributes=["node_id"], show_internal=True))
 
-    # Check all leaves unique because rf distance code requires leaves to be unique
-    # The only reason leaves wouldn't be unique is if we are observing cell state OR
-    # we happen to have the same allele arise spontaneously in different parts of the tree.
-    uniq_leaves = set()
-    for n in collapsed_subtree:
-        if n.allele_events_list_str in uniq_leaves:
-            logging.info("repeated leaf %s", n.allele_events_list_str)
-        else:
-            uniq_leaves.add(n.allele_events_list_str)
-    assert len(set([n.allele_events_list_str for n in collapsed_subtree])) == len(collapsed_subtree), "leaves must be unique"
-
-    return clt, obs_leaves, true_subtree, collapsed_subtree
+    return obs_leaves, true_subtree, obs_idx_to_leaves, tot_time
 
 def initialize_lambda_rates(args, boost: float = 0.00001):
     birth_lambda = args.birth_lambda
@@ -219,7 +211,6 @@ def initialize_lambda_rates(args, boost: float = 0.00001):
         death_lambda += -min_lambda + boost
     assert np.isclose(np.var(target_lambdas), args.variance_target_lambdas)
     return target_lambdas, birth_lambda, death_lambda
-
 
 def main(args=sys.argv[1:]):
     args = parse_args()
@@ -256,45 +247,37 @@ def main(args=sys.argv[1:]):
     tf.global_variables_initializer().run()
     logging.info("Done creating model")
 
-    _, obs_leaves, true_subtree, collapsed_subtree = create_cell_lineage_tree(
+    # Generate data!
+    obs_leaves, true_subtree, obs_idx_to_leaves, tot_time = create_cell_lineage_tree(
             args,
             clt_model)
 
-    true_subtree.label_node_ids(CLTLikelihoodModel.NODE_ORDER)
-    collapsed_subtree.label_node_ids(CLTLikelihoodModel.NODE_ORDER)
+    # Check that the the abundance of the leaves is not too high
+    for obs in obs_leaves:
+        if obs.abundance > args.max_abundance:
+            raise ValueError("Number of barcodes does not seem to be enough. There are leaves with %d abundance" % obs.abundance)
 
-    # Print fun facts about the data
-    num_leaves = len(collapsed_subtree)
-    logging.info("Collapsed subtree topology, num leaves %d" % num_leaves)
-    logging.info(collapsed_subtree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-    logging.info(collapsed_subtree.get_ascii(attributes=["cell_state"], show_internal=True))
-    logging.info(collapsed_subtree.get_ascii(attributes=["observed"], show_internal=True))
     logging.info("Number of uniq obs alleles %d", len(obs_leaves))
-    # Get parsimony score of true tree
-    pars_score = collapsed_subtree.get_parsimony_score()
-    logging.info("Oracle tree parsimony score %d", pars_score)
 
     # Save the observed data
-    with open(args.out_obs_data, "wb") as f:
+    with open(args.out_obs_file, "wb") as f:
         out_dict = {
             "bcode_meta": bcode_meta,
             "obs_leaves": obs_leaves,
+            "time": tot_time,
         }
         six.moves.cPickle.dump(out_dict, f, protocol = 2)
 
     # Save the true data
-    with open(args.out_true_model, "wb") as f:
+    with open(args.out_model_file, "wb") as f:
         out_dict = {
             "true_model_params": clt_model.get_vars_as_dict(),
             "true_subtree": true_subtree,
-            "collapsed_subtree": collapsed_subtree,
+            "obs_idx_to_leaves": obs_idx_to_leaves,
             "bcode_meta": bcode_meta,
+            "time": tot_time,
             "args": args}
         six.moves.cPickle.dump(out_dict, f, protocol = 2)
-
-    plot_mrca_matrix(
-        true_subtree,
-        args.out_true_model.replace(".pkl", "_mrca.png"))
 
 if __name__ == "__main__":
     main()

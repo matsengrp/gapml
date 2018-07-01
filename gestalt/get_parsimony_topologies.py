@@ -22,72 +22,74 @@ from collapsed_tree import collapse_zero_lens
 from constants import *
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='fit topology and branch lengths for GESTALT')
+    parser = argparse.ArgumentParser(description='generate possible tree topologies using MIX')
     parser.add_argument(
-        '--obs-data-pkl',
+        '--obs-file',
         type=str,
         default="_output/obs_data.pkl",
         help='pkl file with observed sequence data, should be a dict with ObservedAlignSeq')
     parser.add_argument(
-        '--true-model-pkl',
+        '--model-file',
         type=str,
         default=None,
         help='pkl file with true model if available')
     parser.add_argument(
-        '--out-folder',
+        '--out-template-file',
         type=str,
-        default="_output",
-        help='folder to put output in')
+        default="_output/parsimony_tree0.pkl",
+        help='template file name for outputs. this code will replace 0 with other tree indices')
     parser.add_argument(
-            '--seed',
-            type=int,
-            default=5,
-            help="Random number generator seed. Also used as seed for MIX. Must be odd")
+        '--seed',
+        type=int,
+        default=5,
+        help="Random number generator seed. Also used as seed for MIX. Must be odd")
     parser.add_argument(
-            '--num-jumbles',
-            type=int,
-            default=5,
-            help="Number of times to jumble. (This is an input to MIX)")
+        '--num-jumbles',
+        type=int,
+        default=5,
+        help="Number of times to jumble. (This is an input to MIX)")
     parser.add_argument(
-            '--mix-path',
-            type=str,
-            default=MIX_PATH)
+        '--mix-path',
+        type=str,
+        default=MIX_PATH)
     parser.add_argument('--max-random',
-            type=int,
-            default=1,
-            help="""
-                Output `max-random` bifurcating trees estimated from parsimony
-                Random selection among those estimated from parsimony.
-                """)
+        type=int,
+        default=1,
+        help="""
+            Output `max-random` bifurcating trees estimated from parsimony
+            Random selection among those estimated from parsimony.
+            """)
     parser.add_argument('--max-random-multifurc',
-            type=int,
-            default=1,
-            help="""
-                Output `max-random-multifurc` different multifurcating trees estimated from parsimony,
-                i.e. collapse the bifurcating trees and output the multifurcating versions.
-                """)
+        type=int,
+        default=1,
+        help="""
+            Output `max-random-multifurc` different multifurcating trees estimated from parsimony,
+            i.e. collapse the bifurcating trees and output the multifurcating versions.
+            """)
     parser.add_argument('--max-best',
-            type=int,
-            default=0,
-            help="""
-                Output the top `max-best` bifurcating trees from parsimony.
-                Right now, 'best' is measured by distance to the collapsed oracle tree.
-                """)
+        type=int,
+        default=0,
+        help="""
+            Output the top `max-best` bifurcating trees from parsimony.
+            Right now, 'best' is measured by distance to the collapsed oracle tree.
+            """)
     parser.add_argument('--max-best-multifurc',
-            type=int,
-            default=0,
-            help="""
-                Output the top `max-best` multifurcating trees from parsimony.
-                Right now, 'best' is measured by distance to the collapsed oracle tree.
-                So we find the closest bifurcating trees and then collapse them.
-                """)
+        type=int,
+        default=0,
+        help="""
+            Output the top `max-best` multifurcating trees from parsimony.
+            Right now, 'best' is measured by distance to the collapsed oracle tree.
+            So we find the closest bifurcating trees and then collapse them.
+            """)
 
     args = parser.parse_args()
     assert args.seed % 2 == 1
     if args.max_best_multifurc or args.max_best:
         # Require having true tree to know what is a "best" tree
-        assert args.true_model_pkl is not None
+        assert args.model_file is not None
 
+    args.out_folder = os.path.dirname(args.out_template_file)
+    assert os.path.join(args.out_folder, "parsimony_tree0.pkl") == args.out_template_file
     args.log_file = "%s/parsimony_log.txt" % args.out_folder
     print("Log file", args.log_file)
 
@@ -215,7 +217,7 @@ def main(args=sys.argv[1:]):
 
     np.random.seed(seed=args.seed)
 
-    with open(args.obs_data_pkl, "rb") as f:
+    with open(args.obs_file, "rb") as f:
         obs_data_dict = six.moves.cPickle.load(f)
         bcode_meta = obs_data_dict["bcode_meta"]
         obs_leaves = obs_data_dict["obs_leaves"]
@@ -224,10 +226,10 @@ def main(args=sys.argv[1:]):
     true_model_dict = None
     oracle_measurer = None
     distance_cls = UnrootRFDistanceMeasurer
-    if args.true_model_pkl is not None:
+    if args.model_file is not None:
         # TODO: we might not think that the best tree is the collapsed tree. Need to add more flexibility
         #       if we want to use a different tree metric and oracle tree
-        with open(args.true_model_pkl, "rb") as f:
+        with open(args.model_file, "rb") as f:
             true_model_dict = six.moves.cPickle.load(f)
             oracle_measurer = distance_cls(true_model_dict["collapsed_subtree"], args.scratch_dir)
 
