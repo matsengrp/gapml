@@ -7,6 +7,9 @@ Note: to get tree visualizations from ete3, you will need to do something specia
 Install PyQt5 (`sudo apt-get` on linux, `brew install` on mac. For mac, see https://stackoverflow.com/questions/39821177/python-pyqt-on-macos-sierra).
 Then run `pip install PyQt5` in your virtual environment.
 
+We use nestly + SCons to run simulations/analyses.
+To install SCons into the virtual env, use `pip install --egg SCons`.
+
 # Running tests
 To run all the tests:
 ```
