@@ -629,7 +629,7 @@ class CLTLikelihoodModel:
         self.branch_log_barr = tf.reduce_sum(tf.log(branch_lens_to_penalize))
         self.smooth_log_lik = tf.add(
                 self.log_lik,
-                self.log_barr_ph * self.branch_log_barr)
+                self.log_barr_ph * self.branch_log_barr /self.bcode_meta.num_barcodes)
 
         logging.info("Computing gradients....")
         st_time = time.time()
