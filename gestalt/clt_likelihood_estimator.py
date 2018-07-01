@@ -56,7 +56,8 @@ class CLTPenalizedEstimator(CLTEstimator):
             save_iter: int = 20,
             step_size: float = 0.01,
             dist_measurers: TreeDistanceMeasurerAgg = None,
-            conv_thres: float = 1e-5):
+            conv_thres: float = 1e-5,
+            min_iters: int = 10):
         """
         Finds the best model parameters
         @param max_iters: number of iterations of gradient descent
@@ -73,7 +74,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         pen_log_lik = self.model.sess.run(
             self.model.smooth_log_lik,
             feed_dict=feed_dict)
-        prev_pen_log_lik = pen_log_lik
+        prev_pen_log_lik = pen_log_lik[0]
         logging.info("initial penalized log lik %f", pen_log_lik)
         assert not np.isnan(pen_log_lik)
         train_history = []
@@ -114,10 +115,11 @@ class CLTPenalizedEstimator(CLTEstimator):
                     iter_info["var"] = var_dict
             train_history.append(iter_info)
 
-            if np.abs((prev_pen_log_lik - pen_log_lik)/prev_pen_log_lik) < conv_thres:
+            if i > min_iters and np.abs((prev_pen_log_lik - pen_log_lik[0])/prev_pen_log_lik) < conv_thres:
                 # Convergence reached
+                logging.info("Convergence reached")
                 break
-            prev_pen_log_lik = pen_log_lik
+            prev_pen_log_lik = pen_log_lik[0]
 
         return train_history
 
