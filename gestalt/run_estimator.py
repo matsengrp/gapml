@@ -34,15 +34,20 @@ def parse_args():
         default="_output/obs_data.pkl",
         help='pkl file with observed sequence data, should be a dict with ObservedAlignSeq')
     parser.add_argument(
-        '--tree-file',
+        '--topology-file',
         type=str,
         default="_output/parsimony_tree0.pkl",
         help='pkl file with tree topology')
     parser.add_argument(
-        '--model-file',
+        '--true-model-file',
         type=str,
         default=None,
         help='pkl file with true model if available')
+    parser.add_argument(
+        '--true-collapsed-tree-file',
+        type=str,
+        default=None,
+        help='pkl file with collapsed tree if available')
     parser.add_argument(
         '--seed',
         type=int,
@@ -61,11 +66,11 @@ def parse_args():
 
     parser.set_defaults()
     args = parser.parse_args()
-    args.log_file = args.tree_file.replace(".pkl", "_fit_log.txt")
+    args.log_file = args.topology_file.replace(".pkl", "_fit_log.txt")
     print("Log file", args.log_file)
-    args.pickle_out = args.tree_file.replace(".pkl", "_fitted.pkl")
-    args.csv_out = args.tree_file.replace(".pkl", "_fitted.csv")
-    args.out_folder = os.path.dirname(args.tree_file)
+    args.pickle_out = args.topology_file.replace(".pkl", "_fitted.pkl")
+    args.csv_out = args.topology_file.replace(".pkl", "_fitted.csv")
+    args.out_folder = os.path.dirname(args.topology_file)
     args.scratch_dir = os.path.join(args.out_folder, "scratch")
     if not os.path.exists(args.scratch_dir):
         os.mkdir(args.scratch_dir)
@@ -87,7 +92,7 @@ def main(args=sys.argv[1:]):
     logging.info("Number of uniq obs alleles %d", len(obs_leaves))
     logging.info("Barcode cut sites %s", str(bcode_meta.abs_cut_sites))
 
-    with open(args.tree_file, "rb") as f:
+    with open(args.topology_file, "rb") as f:
         tree_topology_info = six.moves.cPickle.load(f)
         if args.is_refit:
             tree = tree_topology_info.fitted_bifurc_tree
@@ -97,16 +102,19 @@ def main(args=sys.argv[1:]):
 
     true_model_dict = None
     oracle_dist_measurers = None
-    if args.model_file is not None:
-        with open(args.model_file, "rb") as f:
+    if args.true_model_file is not None and args.true_collapsed_tree_file is not None:
+        with open(args.true_collapsed_tree_file, "rb") as f:
+            collapsed_true_subtree = six.moves.cPickle.load(f)
+        with open(args.true_model_file, "rb") as f:
             true_model_dict = six.moves.cPickle.load(f)
-            oracle_dist_measurers = TreeDistanceMeasurerAgg([
-                UnrootRFDistanceMeasurer,
-                RootRFDistanceMeasurer,
-                #SPRDistanceMeasurer,
-                MRCADistanceMeasurer],
-                true_model_dict["collapsed_subtree"],
-                args.scratch_dir)
+
+        oracle_dist_measurers = TreeDistanceMeasurerAgg([
+            UnrootRFDistanceMeasurer,
+            RootRFDistanceMeasurer,
+            #SPRDistanceMeasurer,
+            MRCADistanceMeasurer],
+            collapsed_true_subtree,
+            args.scratch_dir)
 
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
