@@ -190,6 +190,7 @@ def create_cell_lineage_tree(
 
     true_subtree.label_tree_with_strs()
     logging.info(true_subtree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    logging.info(true_subtree.get_ascii(attributes=["dist"], show_internal=True))
     logging.info(true_subtree.get_ascii(attributes=["node_id"], show_internal=True))
 
     return obs_leaves, true_subtree, obs_idx_to_leaves, tot_time
@@ -237,7 +238,7 @@ def main(args=sys.argv[1:]):
             sess,
             target_lams = np.array(args.target_lambdas),
             trim_long_probs = np.array(args.trim_long_probs),
-            indel_zero_probs = np.array([args.indel_zero_prob, args.indel_zero_prob]),
+            trim_zero_probs = np.array([args.indel_zero_prob, args.indel_zero_prob]),
             trim_poissons = np.array([args.trim_poisson, args.trim_poisson]),
             insert_zero_prob = args.indel_zero_prob,
             insert_poisson = args.insert_poisson,
