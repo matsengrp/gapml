@@ -629,7 +629,7 @@ class CLTLikelihoodModel:
         self.branch_log_barr = tf.reduce_sum(tf.log(branch_lens_to_penalize))
         self.smooth_log_lik = tf.add(
                 self.log_lik,
-                self.log_barr_ph * self.branch_log_barr)
+                self.log_barr_ph * self.branch_log_barr /self.bcode_meta.num_barcodes)
 
         logging.info("Computing gradients....")
         st_time = time.time()
@@ -663,7 +663,7 @@ class CLTLikelihoodModel:
             log_lik_alleles, Ddiags = self._create_topology_log_lik_barcode(transition_wrappers, bcode_idx)
             self.log_lik_alleles_list.append(log_lik_alleles)
             self.Ddiags_list.append(Ddiags)
-        self.log_lik_alleles = tf.add_n(self.log_lik_alleles_list)
+        self.log_lik_alleles = tf.add_n(self.log_lik_alleles_list)/self.bcode_meta.num_barcodes
 
     def _initialize_lower_prob(self,
             transition_wrappers: Dict[int, List[TransitionWrapper]],

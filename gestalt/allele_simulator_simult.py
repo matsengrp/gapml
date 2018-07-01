@@ -120,7 +120,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         if left_long or right_long:
             # No zero inflation if we decided to do a long left or right trim
             do_insertion = True
-            do_deletion = True
+            do_deletion = [True, True]
         else:
             # Serves as zero-inflation for deletion/insertion process
             # Draw a separate RVs for each deletion/insertion process
@@ -130,10 +130,6 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         insertion_length = self.insertion_distribution.rvs() if do_insertion else 0
         left_del_len = self.left_del_distributions[target1][left_long].rvs() if do_deletion[0] else 0
         right_del_len = self.right_del_distributions[target2][right_long].rvs() if do_deletion[1] else 0
-        if left_long:
-            assert(left_del_len > 0)
-        if right_long:
-            assert(right_del_len > 0)
 
         # TODO: make this more realistic. right now just random DNA inserted
         insertion = ''.join(choice(list('acgt'), insertion_length))

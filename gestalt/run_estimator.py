@@ -55,7 +55,7 @@ def parse_args():
     parser.add_argument(
         '--log-barr',
         type=float,
-        default=0.0001,
+        default=0.001,
         help="log barrier parameter on the branch lengths")
     parser.add_argument('--max-iters', type=int, default=20)
     parser.add_argument('--num-inits', type=int, default=1)

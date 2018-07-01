@@ -54,25 +54,24 @@ def parse_args():
         default=0.0008,
         help='variance of target cut rates (so variance of perturbations)')
     parser.add_argument(
-        '--repair-long-probability',
+        '--trim-long-probs',
         type=float,
         nargs=2,
         default=[0.001] * 2,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
-        '--repair-indel-probability',
+        '--indel-zero-prob',
         type=float,
         default=0.1,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
-        '--repair-deletion-lambda',
+        '--trim-poisson',
         type=float,
         default=3,
-        help=
-        'poisson parameter for distribution of symmetric deltion about cut site(s)'
+        help='poisson parameter for distribution of symmetric deltion about cut site(s)'
     )
     parser.add_argument(
-        '--repair-insertion-lambda',
+        '--insert-poisson',
         type=float,
         default=1,
         help='poisson parameter for distribution of insertion in cut site(s)')
@@ -99,8 +98,8 @@ def parse_args():
         type=int,
         default=0,
         help="Seed for generating data")
-    parser.add_argument('--min-leaves', type=int, default=2)
-    parser.add_argument('--max-leaves', type=int, default=10)
+    parser.add_argument('--min-uniq-alleles', type=int, default=2)
+    parser.add_argument('--max-uniq-alleles', type=int, default=10)
     parser.add_argument('--max-clt-nodes', type=int, default=40000)
     parser.add_argument(
         '--max-abundance',
@@ -170,9 +169,9 @@ def create_cell_lineage_tree(
                     seed=args.model_seed)
 
             logging.info("time %f, num uniq alleles %d, num tot leaves %d", tot_time, len(obs_leaves), len(clt))
-            if len(obs_leaves) < args.min_leaves:
+            if len(obs_leaves) < args.min_uniq_alleles:
                 tot_time += time_incr
-            elif len(obs_leaves) >= args.max_leaves:
+            elif len(obs_leaves) >= args.max_uniq_alleles:
                 tot_time -= time_incr
             else:
                 # We got a good number of leaves! Stop trying
@@ -184,13 +183,14 @@ def create_cell_lineage_tree(
             logging.info("AssertionError warning ... %s", str(e))
             continue
 
-    if len(obs_leaves) < args.min_leaves:
+    if len(obs_leaves) < args.min_uniq_alleles:
         raise Exception("Could not manage to get enough leaves")
 
     logging.info("True subtree for the observed nodes, time %f", tot_time)
 
     true_subtree.label_tree_with_strs()
     logging.info(true_subtree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    logging.info(true_subtree.get_ascii(attributes=["dist"], show_internal=True))
     logging.info(true_subtree.get_ascii(attributes=["node_id"], show_internal=True))
 
     return obs_leaves, true_subtree, obs_idx_to_leaves, tot_time
@@ -237,11 +237,11 @@ def main(args=sys.argv[1:]):
             bcode_meta,
             sess,
             target_lams = np.array(args.target_lambdas),
-            trim_long_probs = np.array(args.repair_long_probability),
-            trim_zero_probs = np.array([args.repair_indel_probability, args.repair_indel_probability]),
-            trim_poissons = np.array([args.repair_deletion_lambda, args.repair_deletion_lambda]),
-            insert_zero_prob = args.repair_indel_probability,
-            insert_poisson = args.repair_insertion_lambda,
+            trim_long_probs = np.array(args.trim_long_probs),
+            trim_zero_probs = np.array([args.indel_zero_prob, args.indel_zero_prob]),
+            trim_poissons = np.array([args.trim_poisson, args.trim_poisson]),
+            insert_zero_prob = args.indel_zero_prob,
+            insert_poisson = args.insert_poisson,
             cell_type_tree = cell_type_tree,
             tot_time = args.time)
     tf.global_variables_initializer().run()

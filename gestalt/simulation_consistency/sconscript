@@ -34,10 +34,13 @@ def generate(env, outdir, c):
         '--out-obs-file ${TARGETS[0]}',
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
+        '--time 1.2',
         '--num-barcodes',
-        20,
-        '--max-leaves',
-        20,
+        160,
+        '--min-uniq-alleles',
+        5,
+        '--max-uniq-alleles',
+        30,
     ]
     return env.Command(
         [
@@ -49,7 +52,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [5],
+    [5, 10, 20, 40, 80, 160],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -63,11 +66,13 @@ def restrict_observed_alleles(env, outdir, c):
         c['num_barcodes'],
         '--out-obs-file ${TARGETS[0]}',
         '--out-collapsed-tree-file ${TARGETS[1]}',
+        '--log-file ${TARGETS[2]}',
     ]
     return env.Command(
         [
             join(outdir, 'obs_data.pkl'),
-            join(outdir, 'collapsed_tree.pkl')],
+            join(outdir, 'collapsed_tree.pkl'),
+            join(outdir, 'log_restrict.txt')],
         c['generate'],
         ' '.join(map(str, cmd)))
 
@@ -97,7 +102,7 @@ def run_MLE(env, outdir, c):
         '--true-model-file ${SOURCES[2]}',
         '--true-collapsed-tree-file ${SOURCES[3]}',
         '--seed 40',
-        '--max-iters 5',
+        '--max-iters 6000',
     ]
     return env.Command(
         [

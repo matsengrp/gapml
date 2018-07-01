@@ -28,6 +28,11 @@ def parse_args():
         default="_output/true_model.pkl",
         help='pkl file with true model')
     parser.add_argument(
+        '--log-file',
+        type=str,
+        default="_output/restrict_log.txt",
+        help='pkl file with true model')
+    parser.add_argument(
         '--num-barcodes',
         type=int,
         default=1,
