@@ -37,10 +37,6 @@ class CLTSimulator:
                 if not node.is_root():
                     self._simulate_branch_allele(node, bcode_idx)
 
-        for node in tree.traverse('preorder'):
-            if not node.is_root():
-                node.allele_events_list = node.allele_list.get_event_encoding()
-
     def _simulate_branch_allele(self, node: CellLineageTree, bcode_idx: int):
         """
         Simulate allele for the branch with end node `node`
@@ -56,7 +52,7 @@ class CLTSimulator:
                 new_allele_list,
                 allele.bcode_meta)
 
-        node.allele_list = branch_end_allele_list
+        node.set_allele_list(branch_end_allele_list)
 
     def _simulate_cell_states(self, tree: CellLineageTree):
         """

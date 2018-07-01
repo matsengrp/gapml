@@ -1,4 +1,5 @@
 import numpy as np
+import six
 import pickle
 import logging
 
@@ -23,3 +24,7 @@ def inv_sigmoid(prob: float):
     @return x for prob = 1/(1 + exp(-x))
     """
     return -np.log(np.divide(1.0, prob) - 1.0)
+
+def save_data(data, out_file: str):
+    with open(out_file, "wb") as f:
+        six.moves.cPickle.dump(data, f, protocol = 2)

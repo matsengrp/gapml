@@ -26,6 +26,10 @@ class ObservedAlignedSeq:
         self.cell_state = cell_state
         self.abundance = abundance
 
+    def set_allele_list(self, allele_list: AlleleList):
+        self.allele_list = allele_list
+        self.allele_events_list = allele_list.get_event_encoding()
+
     def __str__(self):
         return "||".join([str(allele_evts) for allele_evts in self.allele_events_list])
 
@@ -70,7 +74,7 @@ class CLTObserver:
         for node in clt.iter_descendants():
             if sum((node2.node_id in observed_leaf_ids) for node2 in node.traverse()) == 0:
                 node.detach()
-
+        collapsed_tree._remove_single_child_unobs_nodes(clt)
         return clt
 
     def _observe_leaf_with_error(self, leaf):
@@ -109,65 +113,41 @@ class CLTObserver:
         @return Tuple with
                     1. a list of the sampled observations (List[ObservedAlignedSeq])
                     2. the subtree of the full cell lineage tree with the sampled leaves
-                    2. a collapsed cell lineage tree for the sampled tree
+                    3. List[leaf node ids that observation at this index maps to]
         """
         assert (0 < sampling_rate <= 1)
         np.random.seed(seed)
         sampled_clt = self._sample_leaves(cell_lineage_tree, sampling_rate)
 
-        # Collapse the tree per ultrametric constraints
-        collapsed_clt = collapsed_tree.collapse_ultrametric(sampled_clt)
-
         observations = {}
         # When observing each leaf, observe with specified error rate
         # Gather observed leaves, calculating abundance
-        for leaf in collapsed_clt:
+        for leaf in sampled_clt:
             allele_list_with_errors = self._observe_leaf_with_error(leaf)
+            allele_events_list_with_errors = allele_list_with_errors.get_event_encoding()
 
-            allele_str_id = leaf.allele_events_list_str
+            allele_str_id = str(allele_events_list_with_errors)
             if observe_cell_state:
-                cell_id = (allele_str_id, str(leaf.cell_state))
+                collapse_id = (allele_str_id, str(leaf.cell_state))
             else:
-                cell_id = (allele_str_id,)
+                collapse_id = (allele_str_id,)
 
-            if cell_id in observations:
-                observations[cell_id].abundance += 1
+            if collapse_id in observations:
+                observations[collapse_id][0].abundance += 1
+                observations[collapse_id][1].append(leaf.node_id)
             else:
-                observations[cell_id] = ObservedAlignedSeq(
+                obs_seq = ObservedAlignedSeq(
                     allele_list=allele_list_with_errors,
-                    allele_events_list=leaf.allele_events_list,
+                    allele_events_list=allele_events_list_with_errors,
                     cell_state=leaf.cell_state if observe_cell_state else None,
                     abundance=1,
                 )
+                observations[collapse_id] = (obs_seq, [leaf.node_id])
 
         if len(observations) == 0:
             raise RuntimeError('all lineages extinct, nothing to observe')
 
-        obs_vals = list(observations.values())
-        random.shuffle(obs_vals)
+        obs_vals = [obs[0] for obs in observations.values()]
+        obs_idx_to_leaves = [obs[1] for obs in observations.values()]
 
-        self._check_collapsed_data(obs_vals, sampled_clt, collapsed_clt, cell_lineage_tree)
-
-        return obs_vals, sampled_clt, collapsed_clt
-
-    def _check_collapsed_data(self,
-            obs_vals: List[ObservedAlignedSeq],
-            sampled_clt: CellLineageTree,
-            collapsed_clt: CellLineageTree,
-            clt_orig: CellLineageTree):
-        """
-        Perform basic checks that the collapsing procedure is correct
-        """
-        obs_evts = set([str(o) for o in obs_vals])
-        tree_evts = set([leaf.allele_events_list_str for leaf in collapsed_clt])
-        logging.info("diff events? %s", str(obs_evts - tree_evts))
-        logging.info("diff events? %s", str(tree_evts - obs_evts))
-        assert tree_evts == obs_evts, "the two sets are not equal"
-
-        for leaf in clt_orig:
-            time = clt_orig.get_distance(leaf)
-            break
-        for leaf in sampled_clt:
-            assert np.isclose(leaf.get_distance(sampled_clt), time)
-        for leaf in collapsed_clt:
-            assert np.isclose(leaf.get_distance(collapsed_clt), time)
+        return obs_vals, sampled_clt, obs_idx_to_leaves

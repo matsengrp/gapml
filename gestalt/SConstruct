@@ -1,0 +1,39 @@
+#!/usr/bin/env scons
+
+# Simulate data under various different settings and fit models
+
+import os
+
+from os.path import join
+from nestly.scons import SConsWrap
+from nestly import Nest
+from SCons.Script import Environment
+from SCons.Script import AddOption
+
+# Command line options
+
+AddOption('--nreps',
+          dest='nreps',
+          default=1,
+          type='int',
+          nargs=1,
+          action='store',
+          help='number of replicates')
+
+AddOption('--output_name',
+          dest='output_name',
+          default='output',
+          type='str',
+          nargs=1,
+          help='name of output directory')
+
+env = Environment(ENV=os.environ,
+                  NREPS = GetOption('nreps'),
+                  OUTPUT_NAME = GetOption('output_name'))
+
+Export('env')
+
+env.SConsignFile()
+
+flag = 'simulation_consistency'
+SConscript(flag + '/sconscript', exports=['flag'])

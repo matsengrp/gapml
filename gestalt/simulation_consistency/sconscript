@@ -1,0 +1,106 @@
+# Test model fits against one another - data generated from a survival model
+
+import os
+
+from os.path import join
+from nestly.scons import SConsWrap
+from nestly import Nest
+from SCons.Script import Environment, Command, AddOption
+import numpy as np
+
+Import('env')
+localenv = env.Clone()
+
+# Set up state
+base = {'nreps': localenv['NREPS'],
+        'output_name': localenv['OUTPUT_NAME']}
+
+nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
+
+nest.add(
+    'seed',
+    range(1),
+    label_func=lambda c: "seed%d" % c,
+)
+
+@nest.add_target_with_env(localenv)
+def generate(env, outdir, c):
+    cmd = [
+        'python generate_data.py',
+        '--model-seed',
+        c['seed'],
+        '--data-seed',
+        c['seed'],
+        '--out-obs-file ${TARGETS[0]}',
+        '--out-model-file ${TARGETS[1]}',
+        '--log-file ${TARGETS[2]}',
+        '--num-barcodes',
+        20,
+        '--max-leaves',
+        20,
+    ]
+    return env.Command(
+        [
+            join(outdir, 'obs_data.pkl'),
+            join(outdir, 'true_model.pkl'),
+            join(outdir, 'log.txt')],
+        [],
+        ' '.join(map(str, cmd)))
+
+nest.add(
+    'num_barcodes',
+    [5,10,15,20],
+    label_func=lambda c: "num_barcodes%d" % c,
+)
+
+@nest.add_target_with_env(localenv)
+def restrict_observed_alleles(env, outdir, c):
+    cmd = [
+        'python restrict_observed_barcodes.py',
+        '--obs-file ${SOURCES[0]}',
+        '--model-file ${SOURCES[1]}',
+        '--num-barcodes',
+        c['num_barcodes'],
+        '--out-obs-file ${TARGETS[0]}',
+        '--out-collapsed-tree-file ${TARGETS[1]}',
+    ]
+    return env.Command(
+        [
+            join(outdir, 'obs_data.pkl'),
+            join(outdir, 'collapsed_tree.pkl')],
+        c['generate'],
+        ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def run_parsimony(env, outdir, c):
+    cmd = [
+        'python get_parsimony_topologies.py',
+        '--obs-file ${SOURCES[0]}',
+        '--out-template-file ${TARGETS[0]}',
+        '--max-random',
+        0,
+        '--max-random-multifurc',
+        1,
+    ]
+    return env.Command(
+        [
+            join(outdir, 'parsimony_tree0.pkl')],
+        c['restrict_observed_alleles'],
+        ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def run_MLE(env, outdir, c):
+    cmd = [
+        'python run_estimator.py',
+        '--obs-file ${SOURCES[0]}',
+        '--tree-file ${SOURCES[1]}',
+        '--seed 40',
+        '--max-iters 10',
+    ]
+    return env.Command(
+        [
+            join(outdir, 'parsimony_tree0_fitted.pkl')],
+        [
+            join(outdir, 'obs_data.pkl'),
+            join(outdir, 'parsimony_tree0.pkl')],
+        ' '.join(map(str, cmd)))

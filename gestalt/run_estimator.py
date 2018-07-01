@@ -29,36 +29,29 @@ from common import *
 def parse_args():
     parser = argparse.ArgumentParser(description='fit topology and branch lengths for GESTALT')
     parser.add_argument(
-        '--obs-data',
+        '--obs-file',
         type=str,
         default="_output/obs_data.pkl",
         help='pkl file with observed sequence data, should be a dict with ObservedAlignSeq')
     parser.add_argument(
-        '--tree-topology-pkl',
+        '--tree-file',
         type=str,
         default="_output/parsimony_tree0.pkl",
         help='pkl file with tree topology')
     parser.add_argument(
-        '--true-model-pkl',
+        '--model-file',
         type=str,
         default=None,
         help='pkl file with true model if available')
     parser.add_argument(
-        '--out-folder',
-        type=str,
-        default="_output",
-        help='folder to put output in')
+        '--seed',
+        type=int,
+        default=40)
     parser.add_argument(
-        '--time', type=float, default=1.2, help='how much time to fit for')
-    parser.add_argument(
-            '--seed',
-            type=int,
-            default=40)
-    parser.add_argument(
-            '--log-barr',
-            type=float,
-            default=0.001,
-            help="log barrier parameter on the branch lengths")
+        '--log-barr',
+        type=float,
+        default=0.0001,
+        help="log barrier parameter on the branch lengths")
     parser.add_argument('--max-iters', type=int, default=20)
     parser.add_argument('--num-inits', type=int, default=1)
     parser.add_argument(
@@ -66,12 +59,13 @@ def parse_args():
         action='store_true',
         help='flag this as a refitting procedure')
 
-    parser.set_defaults(use_cell_state=False)
+    parser.set_defaults()
     args = parser.parse_args()
-    args.log_file = args.tree_topology_pkl.replace(".pkl", "_fit_log.txt")
+    args.log_file = args.tree_file.replace(".pkl", "_fit_log.txt")
     print("Log file", args.log_file)
-    args.pickle_out = args.tree_topology_pkl.replace(".pkl", "_fitted.pkl")
-    args.csv_out = args.tree_topology_pkl.replace(".pkl", "_fitted.csv")
+    args.pickle_out = args.tree_file.replace(".pkl", "_fitted.pkl")
+    args.csv_out = args.tree_file.replace(".pkl", "_fitted.csv")
+    args.out_folder = os.path.dirname(args.tree_file)
     args.scratch_dir = os.path.join(args.out_folder, "scratch")
     if not os.path.exists(args.scratch_dir):
         os.mkdir(args.scratch_dir)
@@ -85,14 +79,15 @@ def main(args=sys.argv[1:]):
 
     np.random.seed(seed=args.seed)
 
-    with open(args.obs_data, "rb") as f:
+    with open(args.obs_file, "rb") as f:
         obs_data_dict = six.moves.cPickle.load(f)
         bcode_meta = obs_data_dict["bcode_meta"]
         obs_leaves = obs_data_dict["obs_leaves"]
+        tot_time = obs_data_dict["time"]
     logging.info("Number of uniq obs alleles %d", len(obs_leaves))
     logging.info("Barcode cut sites %s", str(bcode_meta.abs_cut_sites))
 
-    with open(args.tree_topology_pkl, "rb") as f:
+    with open(args.tree_file, "rb") as f:
         tree_topology_info = six.moves.cPickle.load(f)
         if args.is_refit:
             tree = tree_topology_info.fitted_bifurc_tree
@@ -102,8 +97,8 @@ def main(args=sys.argv[1:]):
 
     true_model_dict = None
     oracle_dist_measurers = None
-    if args.true_model_pkl is not None:
-        with open(args.true_model_pkl, "rb") as f:
+    if args.model_file is not None:
+        with open(args.model_file, "rb") as f:
             true_model_dict = six.moves.cPickle.load(f)
             oracle_dist_measurers = TreeDistanceMeasurerAgg([
                 UnrootRFDistanceMeasurer,
@@ -128,7 +123,7 @@ def main(args=sys.argv[1:]):
        args.log_barr,
        args.max_iters,
        transition_wrap_maker,
-       tot_time = args.time,
+       tot_time = tot_time,
        dist_measurers = oracle_dist_measurers)
 
     res = worker.do_work_directly(sess)

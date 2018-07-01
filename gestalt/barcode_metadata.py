@@ -26,6 +26,7 @@ class BarcodeMetadata:
         self.orig_length = sum(self.orig_substr_lens)
         self.n_targets = (len(self.unedited_barcode) - 1) // 2
 
+        self.cut_site = cut_site
         self.cut_sites = [cut_site] * self.n_targets
         # absolute positions of cut locations
         self.abs_cut_sites = [
@@ -33,6 +34,7 @@ class BarcodeMetadata:
             for i in range(self.n_targets)
         ]
 
+        self.crucial_pos_len = crucial_pos_len
         # Range of positions for each target
         # regarding which positions must be unedited
         # for this target to still be active.

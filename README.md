@@ -21,6 +21,8 @@ python3 -m unittest tests.<test_me>
 
 `generate_data.py`: make data
 
+`restrict_observed_barcodes.py`: restrict to observing the first K alleles
+
 `get_parsimony_trees.py` or `get_collapsed_oracle.py`: create tree topologies to fit to
 
 `run_estimator.py`: fit the estimator for a given topology, run statistics if given the true tree
