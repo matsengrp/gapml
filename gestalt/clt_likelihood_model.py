@@ -36,7 +36,8 @@ class CLTLikelihoodModel:
             target_lams_known: bool = False,
             trim_long_probs: ndarray = 0.05 * np.ones(2),
             trim_zero_probs: ndarray = 0.5 * np.ones(2),
-            trim_poissons: ndarray = 2.5 * np.ones(2),
+            trim_short_poissons: ndarray = 2.5 * np.ones(2),
+            trim_long_poissons: ndarray = 2.5 * np.ones(2),
             insert_zero_prob: float = 0.5,
             insert_poisson: float = 0.2,
             double_cut_weight: float = 1.0,
@@ -102,7 +103,8 @@ class CLTLikelihoodModel:
                 [double_cut_weight],
                 trim_long_probs,
                 trim_zero_probs,
-                trim_poissons,
+                trim_short_poissons,
+                trim_long_poissons,
                 [insert_zero_prob],
                 [insert_poisson],
                 branch_len_inners,
@@ -126,7 +128,8 @@ class CLTLikelihoodModel:
             double_cut_weight: List[float], # list of length one
             trim_long_probs: ndarray,
             trim_zero_probs: ndarray,
-            trim_poissons: ndarray,
+            trim_short_poissons: ndarray,
+            trim_long_poissons: ndarray,
             insert_zero_prob: List[float],
             insert_poisson: List[float],
             branch_len_inners: ndarray,
@@ -145,7 +148,8 @@ class CLTLikelihoodModel:
                     np.log(double_cut_weight),
                     inv_sigmoid(trim_long_probs),
                     inv_sigmoid(trim_zero_probs),
-                    np.log(trim_poissons),
+                    np.log(trim_short_poissons),
+                    np.log(trim_long_poissons),
                     inv_sigmoid(insert_zero_prob),
                     np.log(insert_poisson),
                     np.log(branch_len_inners),
@@ -176,8 +180,11 @@ class CLTLikelihoodModel:
         self.trim_zero_prob_left = self.trim_zero_probs[0]
         self.trim_zero_prob_right = self.trim_zero_probs[1]
         prev_size = up_to_size
-        up_to_size += trim_poissons.size
-        self.trim_poissons = tf.exp(self.all_vars[prev_size: up_to_size])
+        up_to_size += trim_short_poissons.size
+        self.trim_short_poissons = tf.exp(self.all_vars[prev_size: up_to_size])
+        prev_size = up_to_size
+        up_to_size += trim_long_poissons.size
+        self.trim_long_poissons = tf.exp(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
         up_to_size += 1
         self.insert_zero_prob = tf.sigmoid(self.all_vars[prev_size: up_to_size])
@@ -202,8 +209,12 @@ class CLTLikelihoodModel:
             self.cell_type_lams = tf.zeros([])
 
         # Create my poisson distributions
-        self.poiss_left = tf.contrib.distributions.Poisson(self.trim_poissons[0])
-        self.poiss_right = tf.contrib.distributions.Poisson(self.trim_poissons[1])
+        self.poiss_short = [
+                tf.contrib.distributions.Poisson(self.trim_short_poissons[0]),
+                tf.contrib.distributions.Poisson(self.trim_short_poissons[1])]
+        self.poiss_long = [
+                tf.contrib.distributions.Poisson(self.trim_long_poissons[0]),
+                tf.contrib.distributions.Poisson(self.trim_long_poissons[1])]
         self.poiss_insert = tf.contrib.distributions.Poisson(self.insert_poisson)
 
     def _create_branch_lens(self):
@@ -246,7 +257,8 @@ class CLTLikelihoodModel:
                 param_dict["double_cut_weight"],
                 param_dict["trim_long_probs"],
                 param_dict["trim_zero_probs"],
-                param_dict["trim_poissons"],
+                param_dict["trim_short_poissons"],
+                param_dict["trim_long_poissons"],
                 param_dict["insert_zero_prob"],
                 param_dict["insert_poisson"],
                 param_dict["branch_len_inners"],
@@ -259,7 +271,8 @@ class CLTLikelihoodModel:
             double_cut_weight: float,
             trim_long_probs: ndarray,
             trim_zero_probs: ndarray,
-            trim_poissons: ndarray,
+            trim_short_poissons: ndarray,
+            trim_long_poissons: ndarray,
             insert_zero_prob: float,
             insert_poisson: float,
             branch_len_inners: ndarray,
@@ -279,7 +292,8 @@ class CLTLikelihoodModel:
             np.log(double_cut_weight),
             inv_sigmoid(trim_long_probs),
             inv_sigmoid(trim_zero_probs),
-            np.log(trim_poissons),
+            np.log(trim_short_poissons),
+            np.log(trim_long_poissons),
             inv_sigmoid(insert_zero_prob),
             np.log(insert_poisson),
             np.log(branch_len_inners),
@@ -296,7 +310,8 @@ class CLTLikelihoodModel:
             self.double_cut_weight,
             self.trim_long_probs,
             self.trim_zero_probs,
-            self.trim_poissons,
+            self.trim_short_poissons,
+            self.trim_long_poissons,
             self.insert_zero_prob,
             self.insert_poisson,
             self.branch_len_inners,
@@ -313,7 +328,8 @@ class CLTLikelihoodModel:
             "double_cut_weight",
             "trim_long_probs",
             "trim_zero_probs",
-            "trim_poissons",
+            "trim_short_poissons",
+            "trim_long_poissons",
             "insert_zero_prob",
             "insert_poisson",
             "branch_len_inners",
@@ -560,10 +576,10 @@ class CLTLikelihoodModel:
         short_left_prob = tf_common.ifelse(
                 tf_common.equal_float(left_trim_len, 0),
                 self.trim_zero_prob_left + (1 - self.trim_zero_prob_left) * (
-                    self.poiss_left.prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_left.cdf(max_left_trim)),
-                (1 - self.trim_zero_prob_left) * self.poiss_left.prob(left_trim_len))
+                    self.poiss_short[0].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_short[0].cdf(max_left_trim)),
+                (1 - self.trim_zero_prob_left) * self.poiss_short[0].prob(left_trim_len))
         num_positions = tf.constant(1.0, dtype=tf.float64) + max_left_trim - min_left_trim
-        long_left_prob = self.poiss_left.prob(left_trim_len - min_left_trim) + (tf.constant(1, dtype=tf.float64) - self.poiss_left.cdf(max_left_trim - min_left_trim)) * 1.0/num_positions
+        long_left_prob = self.poiss_long[0].prob(left_trim_len - min_left_trim) + (tf.constant(1, dtype=tf.float64) - self.poiss_long[0].cdf(max_left_trim - min_left_trim))/num_positions
         left_prob = check_left_max * check_left_min * tf_common.ifelse(
                 is_left_longs,
                 long_left_prob,
@@ -576,10 +592,10 @@ class CLTLikelihoodModel:
         short_right_prob = tf_common.ifelse(
                 tf_common.equal_float(right_trim_len, 0),
                 self.trim_zero_prob_right + (1 - self.trim_zero_prob_right) * (
-                    self.poiss_right.prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_right.cdf(max_right_trim)),
-                (1 - self.trim_zero_prob_right) * self.poiss_right.prob(right_trim_len))
+                    self.poiss_short[1].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_short[1].cdf(max_right_trim)),
+                (1 - self.trim_zero_prob_right) * self.poiss_short[1].prob(right_trim_len))
         num_positions = tf.constant(1.0, dtype=tf.float64) + max_right_trim - min_right_trim
-        long_right_prob = self.poiss_right.prob(right_trim_len - min_right_trim) + (tf.constant(1, dtype=tf.float64) - self.poiss_right.cdf(max_right_trim - min_right_trim)) * 1.0/num_positions
+        long_right_prob = self.poiss_long[1].prob(right_trim_len - min_right_trim) + (tf.constant(1, dtype=tf.float64) - self.poiss_long[1].cdf(max_right_trim - min_right_trim))/num_positions
         right_prob = check_right_max * check_right_min * tf_common.ifelse(
                 is_right_longs,
                 long_right_prob,

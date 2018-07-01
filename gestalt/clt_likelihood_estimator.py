@@ -84,7 +84,8 @@ class CLTPenalizedEstimator(CLTEstimator):
             logging.info("double cut %s", var_dict["double_cut_weight"])
             logging.info("trim long %s", var_dict["trim_long_probs"])
             logging.info("trim zero %s", var_dict["trim_zero_probs"])
-            logging.info("trim poiss %s", var_dict["trim_poissons"])
+            logging.info("trim short poiss %s", var_dict["trim_short_poissons"])
+            logging.info("trim long poiss %s", var_dict["trim_long_poissons"])
             logging.info("insert zero %s", var_dict["insert_zero_prob"])
             logging.info("insert poiss %s", var_dict["insert_poisson"])
             _, pen_log_lik, log_lik, log_barr, branch_lens = self.model.sess.run(

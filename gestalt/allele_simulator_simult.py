@@ -32,11 +32,13 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         self.left_del_distributions = self._create_bounded_poissons(
             min_vals = self.bcode_meta.left_long_trim_min,
             max_vals = self.bcode_meta.left_max_trim,
-            poiss_lambda = self.model.trim_poissons[0].eval())
+            poiss_short = self.model.trim_short_poissons[0].eval(),
+            poiss_long = self.model.trim_long_poissons[0].eval())
         self.right_del_distributions = self._create_bounded_poissons(
             min_vals = self.bcode_meta.right_long_trim_min,
             max_vals = self.bcode_meta.right_max_trim,
-            poiss_lambda = self.model.trim_poissons[1].eval())
+            poiss_short = self.model.trim_short_poissons[1].eval(),
+            poiss_long = self.model.trim_long_poissons[1].eval())
         self.insertion_distribution = poisson(mu=self.model.insert_poisson.eval())
 
     def get_root(self):
@@ -44,11 +46,16 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
                 [self.bcode_meta.unedited_barcode] * self.bcode_meta.num_barcodes,
                 self.bcode_meta)
 
-    def _create_bounded_poissons(self, min_vals: List[float], max_vals: List[float], poiss_lambda: float):
+    def _create_bounded_poissons(self,
+            min_vals: List[float],
+            max_vals: List[float],
+            poiss_short: float,
+            poiss_long: float):
         """
         @param min_vals: the min long trim length for this target (left or right)
         @param max_vals: the max trim length for this target (left or right)
-        @param poisson_lambda: poisson parameter for long and short trims (right now they are the same)
+        @param poisson_short: poisson parameter for short trims
+        @param poisson_long: poisson parameter for long trims
 
         @return bounded poisson distributions for each target, for long and short trims
                 List[Dict[bool, BoundedPoisson]]
@@ -57,9 +64,9 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         for i in range(self.bcode_meta.n_targets):
             long_short_dstns = {
                     # Long trim
-                    True: PaddedBoundedPoisson(min_vals[i], max_vals[i], poiss_lambda),
+                    True: PaddedBoundedPoisson(min_vals[i], max_vals[i], poiss_long),
                     # Short trim
-                    False: ZeroInflatedBoundedPoisson(0, min_vals[i] - 1, poiss_lambda)}
+                    False: ZeroInflatedBoundedPoisson(0, min_vals[i] - 1, poiss_short)}
             dstns.append(long_short_dstns)
         return dstns
 

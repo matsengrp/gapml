@@ -7,7 +7,7 @@ from indel_sets import Singleton, TargetTract, Wildcard, SingletonWC
 from clt_likelihood_model import CLTLikelihoodModel
 from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
-from bounded_poisson import BoundedPoisson
+from bounded_poisson import ZeroInflatedBoundedPoisson, PaddedBoundedPoisson
 from target_status import TargetStatus, TargetDeactTract
 from transition_wrapper_maker import TransitionWrapper
 from anc_state import AncState
@@ -28,9 +28,10 @@ class CLTTrimProbTestCase(unittest.TestCase):
         self.trim_zero_probs = self.mdl.trim_zero_probs.eval()
         # Suppose left and right are the same for now...
         self.trim_zero_prob = self.trim_zero_probs[0]
-        self.trim_pois = self.mdl.trim_poissons.eval()
+        self.trim_short_poiss = self.mdl.trim_short_poissons.eval()
+        self.trim_long_poiss = self.mdl.trim_long_poissons.eval()
 
-    def test_get_trim_probs(self):
+    def test_get_short_trim_probs(self):
         sg = Singleton(
                 start_pos = 0,
                 del_len = 20,
@@ -41,8 +42,8 @@ class CLTTrimProbTestCase(unittest.TestCase):
         left_trim, right_trim = sg.get_trim_lens(self.bcode_metadata)
         log_del_prob_node = self.mdl._create_log_del_probs([sg])
         log_del_prob = log_del_prob_node.eval()
-        pois_left = BoundedPoisson(0, self.bcode_metadata.left_max_trim[0], self.trim_pois[0])
-        pois_right = BoundedPoisson(0, self.bcode_metadata.right_long_trim_min[0], self.trim_pois[1])
+        pois_left = ZeroInflatedBoundedPoisson(0, self.bcode_metadata.left_max_trim[0], self.trim_short_poiss[0])
+        pois_right = ZeroInflatedBoundedPoisson(0, self.bcode_metadata.right_long_trim_min[0], self.trim_short_poiss[1])
         log_del = np.log(np.power(1 - self.trim_zero_prob, 2) * pois_left.pmf(left_trim) * pois_right.pmf(right_trim))
         self.assertTrue(np.isclose(
             log_del,
@@ -58,11 +59,56 @@ class CLTTrimProbTestCase(unittest.TestCase):
         left_trim, right_trim = sg.get_trim_lens(self.bcode_metadata)
         log_del_prob_node = self.mdl._create_log_del_probs([sg])
         log_del_prob = log_del_prob_node.eval()
-        pois_left = BoundedPoisson(0, self.bcode_metadata.left_long_trim_min[9], self.trim_pois[0])
-        pois_right = BoundedPoisson(0, self.bcode_metadata.right_long_trim_min[0] - 1, self.trim_pois[1])
+        pois_left = ZeroInflatedBoundedPoisson(0, self.bcode_metadata.left_long_trim_min[9], self.trim_short_poiss[0])
+        pois_right = ZeroInflatedBoundedPoisson(0, self.bcode_metadata.right_long_trim_min[0] - 1, self.trim_short_poiss[1])
         log_del = np.log(
             (1 - self.trim_zero_prob) * pois_right.pmf(right_trim) * (
             self.trim_zero_prob + (1 - self.trim_zero_prob) * pois_left.pmf(left_trim)))
+        self.assertTrue(np.isclose(
+            log_del,
+            log_del_prob[0]))
+
+    def test_get_long_trim_probs(self):
+        sg = Singleton(
+                start_pos = 0,
+                del_len = 42,
+                min_deact_target = 0,
+                min_target = 0,
+                max_target = 0,
+                max_deact_target = 1)
+        left_trim, right_trim = sg.get_trim_lens(self.bcode_metadata)
+        log_del_prob_node = self.mdl._create_log_del_probs([sg])
+        log_del_prob = log_del_prob_node.eval()
+        pois_left = ZeroInflatedBoundedPoisson(0, self.bcode_metadata.left_max_trim[0], self.trim_short_poiss[0])
+        pois_right = PaddedBoundedPoisson(
+                self.bcode_metadata.right_long_trim_min[0],
+                self.bcode_metadata.right_max_trim[0],
+                self.trim_long_poiss[1])
+        log_del = np.log(
+                (1 - self.trim_zero_prob) * pois_left.pmf(left_trim) * pois_right.pmf(right_trim))
+        self.assertTrue(np.isclose(
+            log_del,
+            log_del_prob[0]))
+
+        sg = Singleton(
+                start_pos = 24,
+                del_len = 45,
+                min_deact_target = 0,
+                min_target = 1,
+                max_target = 1,
+                max_deact_target = 2)
+        left_trim, right_trim = sg.get_trim_lens(self.bcode_metadata)
+        log_del_prob_node = self.mdl._create_log_del_probs([sg])
+        log_del_prob = log_del_prob_node.eval()
+        pois_left = PaddedBoundedPoisson(
+                self.bcode_metadata.left_long_trim_min[sg.min_target],
+                self.bcode_metadata.left_max_trim[sg.min_target],
+                self.trim_short_poiss[0])
+        pois_right = PaddedBoundedPoisson(
+                self.bcode_metadata.right_long_trim_min[sg.max_target],
+                self.bcode_metadata.right_max_trim[sg.max_target],
+                self.trim_long_poiss[1])
+        log_del = np.log(pois_left.pmf(left_trim) * pois_right.pmf(right_trim))
         self.assertTrue(np.isclose(
             log_del,
             log_del_prob[0]))
