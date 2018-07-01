@@ -663,7 +663,7 @@ class CLTLikelihoodModel:
             log_lik_alleles, Ddiags = self._create_topology_log_lik_barcode(transition_wrappers, bcode_idx)
             self.log_lik_alleles_list.append(log_lik_alleles)
             self.Ddiags_list.append(Ddiags)
-        self.log_lik_alleles = tf.add_n(self.log_lik_alleles_list)
+        self.log_lik_alleles = tf.add_n(self.log_lik_alleles_list)/self.bcode_meta.num_barcodes
 
     def _initialize_lower_prob(self,
             transition_wrappers: Dict[int, List[TransitionWrapper]],
