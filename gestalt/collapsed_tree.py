@@ -49,8 +49,9 @@ def collapse_ultrametric(raw_tree: CellLineageTree):
     tree.label_node_ids()
     max_dist = _label_dist_to_root(tree)
 
-    print(tree.get_ascii(attributes=["dist"], show_internal=True))
-    print(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    #print(tree.get_ascii(attributes=["dist"], show_internal=True))
+    #print(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    #print(tree.get_ascii(attributes=["node_id"], show_internal=True))
 
     # Get all the branches in the original tree and sort them by time
     branches = []
@@ -83,9 +84,6 @@ def collapse_ultrametric(raw_tree: CellLineageTree):
                 allele_events_list = child.allele_events_list,
                 cell_state = child.cell_state,
                 dist = child.dist)
-            parent_collapsed_node.add_child(new_child_collapsed_node)
-            node_to_collapsed_node_dict[child.node_id] = new_child_collapsed_node
-            latest_allele_node_dict[child.allele_events_list_str] = (new_child_collapsed_node, child.dist_to_root)
         else:
             # If the child allele same as parent, attach the new collapsed child
             # to the latest node with that same allele
@@ -96,14 +94,14 @@ def collapse_ultrametric(raw_tree: CellLineageTree):
                 allele_events_list = child.allele_events_list,
                 cell_state = child.cell_state,
                 dist = collapsed_child_dist)
-            parent_collapsed_node.add_child(new_child_collapsed_node)
-            node_to_collapsed_node_dict[child.node_id] = new_child_collapsed_node
-            latest_allele_node_dict[child.allele_events_list_str] = (new_child_collapsed_node, child.dist_to_root)
+        parent_collapsed_node.add_child(new_child_collapsed_node)
+        node_to_collapsed_node_dict[child.node_id] = new_child_collapsed_node
+        latest_allele_node_dict[child.allele_events_list_str] = (new_child_collapsed_node, child.dist_to_root)
 
     _remove_single_child_unobs_nodes(collapsed_tree)
 
-    print(collapsed_tree.get_ascii(attributes=["dist"], show_internal=True))
-    print(collapsed_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    #print(collapsed_tree.get_ascii(attributes=["dist"], show_internal=True))
+    #print(collapsed_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
     for leaf in tree:
         assert np.isclose(leaf.get_distance(tree), max_dist)
 

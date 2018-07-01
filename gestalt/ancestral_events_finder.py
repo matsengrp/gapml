@@ -27,10 +27,10 @@ def annotate_ancestral_states(tree: CellLineageTree, bcode_meta: BarcodeMetadata
             node_anc_state = get_possible_anc_states(node)
             node.add_feature("anc_state_list", node_anc_state)
         node.add_feature("anc_state_list_str", [str(k) for k in node.anc_state_list])
-    logging.info("Ancestral state")
-    logging.info(node.get_ascii(attributes=["anc_state_list_str"], show_internal=True))
-    logging.info("node id tree")
-    logging.info(node.get_ascii(attributes=["node_id"], show_internal=True))
+    #logging.info("Ancestral state")
+    #logging.info(node.get_ascii(attributes=["anc_state_list_str"], show_internal=True))
+    #logging.info("node id tree")
+    #logging.info(node.get_ascii(attributes=["node_id"], show_internal=True))
 
 def get_possible_anc_states(tree: CellLineageTree):
     children = tree.get_children()

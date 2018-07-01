@@ -626,7 +626,7 @@ class CLTLikelihoodModel:
     LOG LIKELIHOOD CALCULATION section
     """
     @profile
-    def create_log_lik(self, transition_wrappers: Dict):
+    def create_log_lik(self, transition_wrappers: Dict, create_gradient: bool = True):
         """
         Creates tensorflow nodes that calculate the log likelihood of the observed data
         """
@@ -647,13 +647,14 @@ class CLTLikelihoodModel:
                 self.log_lik,
                 self.log_barr_ph * self.branch_log_barr /self.bcode_meta.num_barcodes)
 
-        logging.info("Computing gradients....")
-        st_time = time.time()
-        self.smooth_log_lik_grad = self.adam_opt.compute_gradients(
-            self.smooth_log_lik,
-            var_list=[self.all_vars])
-        self.adam_train_op = self.adam_opt.minimize(-self.smooth_log_lik, var_list=self.all_vars)
-        logging.info("Finished making me an optimizer, time: %d", time.time() - st_time)
+        if create_gradient:
+            logging.info("Computing gradients....")
+            st_time = time.time()
+            self.smooth_log_lik_grad = self.adam_opt.compute_gradients(
+                self.smooth_log_lik,
+                var_list=[self.all_vars])
+            self.adam_train_op = self.adam_opt.minimize(-self.smooth_log_lik, var_list=self.all_vars)
+            logging.info("Finished making me an optimizer, time: %d", time.time() - st_time)
 
     def _init_singleton_probs(self, singletons: List[Singleton]):
         # Get all the conditional probabilities of the trims
