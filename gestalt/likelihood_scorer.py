@@ -36,7 +36,8 @@ class LikelihoodScorer(ParallelWorker):
             max_iters: int,
             transition_wrap_maker: TransitionWrapperMaker,
             init_model_params: Dict,
-            dist_measurers: TreeDistanceMeasurerAgg = None):
+            dist_measurers: TreeDistanceMeasurerAgg = None,
+            name: str = "likelihood scorer"):
         """
         @param seed: required to set the seed of each parallel worker
         @param tree: the cell lineage tree topology to fit the likelihood for
@@ -56,6 +57,7 @@ class LikelihoodScorer(ParallelWorker):
         self.transition_wrap_maker = transition_wrap_maker
         self.init_model_params = init_model_params
         self.dist_measurers = dist_measurers
+        self.name = name
 
     def run_worker(self, shared_obj):
         """
@@ -76,7 +78,6 @@ class LikelihoodScorer(ParallelWorker):
 
         @return LikelihoodScorerResult
         """
-        self.tree.label_node_ids()
         res_model = CLTLikelihoodModel(
             self.tree,
             self.bcode_meta,
@@ -95,6 +96,10 @@ class LikelihoodScorer(ParallelWorker):
         res_model.initialize_branch_lens()
         full_init_model_params = res_model.get_vars_as_dict()
         for key, val in self.init_model_params.items():
+            if key != "tot_time" and val.shape != full_init_model_params[key].shape:
+                raise ValueError(
+                        "Something went wrong. not same shape for key %s (%s vs %s)" %
+                        (key, val.shape, full_init_model_params[key].shape))
             full_init_model_params[key] = val
         res_model.set_params_from_dict(full_init_model_params)
 
@@ -110,4 +115,4 @@ class LikelihoodScorer(ParallelWorker):
                 train_history)
 
     def __str__(self):
-        return str(self.seed)
+        return self.name

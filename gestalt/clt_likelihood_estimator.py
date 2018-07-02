@@ -84,6 +84,11 @@ class CLTPenalizedEstimator(CLTEstimator):
         train_history = [{
                     "iter": -1,
                     "pen_log_lik": pen_log_lik}]
+
+        if dist_measurers is not None:
+            train_history[0]["tree_dists"] = dist_measurers.get_tree_dists([self.model.get_fitted_bifurcating_tree()])[0]
+            logging.info("initial tree dists: %s", train_history[0]["tree_dists"])
+
         for i in range(self.max_iters):
             var_dict = self.model.get_vars_as_dict()
             logging.info("target %s", var_dict["target_lams"])

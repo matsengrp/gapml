@@ -98,6 +98,7 @@ def main(args=sys.argv[1:]):
             tree = tree_topology_info.fitted_bifurc_tree
         else:
             tree = tree_topology_info["tree"]
+    tree.label_node_ids()
     logging.info("Tree topology info: %s", tree_topology_info)
     logging.info("Tree topology num leaves: %d", len(tree))
 
