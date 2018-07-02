@@ -17,6 +17,7 @@ from cell_lineage_tree import CellLineageTree
 from clt_likelihood_model import CLTLikelihoodModel
 from clt_observer import ObservedAlignedSeq
 from transition_wrapper_maker import TransitionWrapperMaker
+from parallel_worker import BatchSubmissionManager
 from plot_mrca_matrices import plot_mrca_matrix
 from common import save_data
 
@@ -54,6 +55,7 @@ def parse_args():
         help='name of the output pkl file with collapsed tree')
 
     args = parser.parse_args()
+    args.scratch_dir = "_output/scratch"
     return args
 
 def collapse_obs_leaves_by_first_alleles(
@@ -122,7 +124,7 @@ def get_log_likelihood(true_topology: CellLineageTree, true_model_dict: Dict):
 
     return log_lik
 
-def get_highest_likelihood_single_appearance_tree(coll_tree: CellLineageTree, true_model_dict: Dict):
+def get_highest_likelihood_single_appearance_tree(coll_tree: CellLineageTree, true_model_dict: Dict, args):
     """
     @param tree: a collapsed tree where each allele may appear more than once because they arose independently in the tree
     @param true_model_dict: a Dict containing all the parameters needed to instantiate the CLTLikelihoodModel
@@ -166,28 +168,40 @@ def get_highest_likelihood_single_appearance_tree(coll_tree: CellLineageTree, tr
         return coll_tree
 
     # There are duplicates. So let's consider all ways to drop duplicates
-    leaves_kept_combos = itertools.product(*duplicate_indpt_alleles)
+    leaves_kept_combos = list(itertools.product(*duplicate_indpt_alleles))
 
-    best_leaves_kept = None
-    best_log_lik = -np.inf
+    #best_leaves_kept = leaves_kept_combos[0]
+    scorers = []
     for keep_idx, leaves_kept in enumerate(leaves_kept_combos):
         # Detach the designated leaves
         _detach_leaves(leaves_kept, duplicate_indpt_alleles)
 
-        # Now calculate our likelihood
-        log_lik = get_log_likelihood(coll_tree, true_model_dict)
-        logging.info("Keep idx %d: log lik %f", keep_idx, log_lik)
-
-        if best_leaves_kept is None or log_lik > best_log_lik:
-            best_log_lik = log_lik
-            best_leaves_kept = leaves_kept
+        bcode_meta = true_model_dict["bcode_meta"]
+        new_tree = coll_tree.copy()
+        scorer = LikelihoodScorer(
+            0,
+            new_tree,
+            true_model_dict["bcode_meta"],
+            log_barr = 0,
+            max_iters = 0,
+            transition_wrap_maker = TransitionWrapperMaker(new_tree, bcode_meta),
+            init_model_params = true_model_dict["true_model_params"])
+        scorers.append(scorer)
 
         # Undo our changes to the tree
         _reattach_leaves(leaves_kept, duplicate_indpt_alleles)
 
-    # Detach the duplicate independent leaves that correspond to making the largest likelihood
-    _detach_leaves(best_leaves_kept, duplicate_indpt_alleles)
-    return coll_tree
+    job_manager = BatchSubmissionManager(scorers, None, len(leaves_kept_combos), args.scratch_dir)
+    scorer_results = job_manager.run(successful_only=True)
+
+    best_leaves_kept = None
+    best_log_lik = -np.inf
+    for (res, scorer) in scorer_results:
+        if res.train_history[-1].pen_log_lik > best_log_lik:
+            best_coll_tree = scorer.tree
+            best_log_lik = res.train_history[-1].pen_log_lik
+
+    return best_coll_tree
 
 def collapse_tree_by_first_alleles(true_model_dict: Dict, num_barcodes: int):
     """
@@ -236,7 +250,8 @@ def main(args=sys.argv[1:]):
 
     selected_collapsed_clt = get_highest_likelihood_single_appearance_tree(
         collapsed_clt,
-        true_model_dict)
+        true_model_dict,
+        args)
 
     # Assert no duplicate alleles in the collapsed tree
     assert len(selected_collapsed_clt) == len(obs_data_dict["obs_leaves"])

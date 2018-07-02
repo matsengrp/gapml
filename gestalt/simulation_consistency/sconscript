@@ -41,8 +41,7 @@ def generate(env, outdir, c):
         5,
         '--max-uniq-alleles',
         30,
-        # TODO: uncomment this eventually... anyways, we've assumed this as the default
-        #'--max-abundance 1'
+        '--max-abundance 1'
     ]
     return env.Command(
         [

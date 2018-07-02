@@ -113,7 +113,8 @@ def main(args=sys.argv[1:]):
             UnrootRFDistanceMeasurer,
             RootRFDistanceMeasurer,
             #SPRDistanceMeasurer,
-            MRCADistanceMeasurer],
+            MRCADistanceMeasurer,
+            MRCASpearmanMeasurer],
             collapsed_true_subtree,
             args.scratch_dir)
 
@@ -126,13 +127,12 @@ def main(args=sys.argv[1:]):
        args.seed,
        tree,
        bcode_meta,
-       None, # Do not use cell type info
-       False, # Do not know cell type lambdas
-       None, # Do not know target lambdas
        args.log_barr,
        args.max_iters,
        transition_wrap_maker,
-       tot_time = tot_time,
+       init_model_params = {
+           "target_lams": 0.04 * np.ones(bcode_meta.n_targets) + np.random.uniform(size=bcode_meta.n_targets) * 0.02,
+           "time": tot_time},
        dist_measurers = oracle_dist_measurers)
 
     res = worker.do_work_directly(sess)

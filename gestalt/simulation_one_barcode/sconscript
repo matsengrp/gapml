@@ -27,16 +27,17 @@ nest.add(
 @nest.add_target_with_env(localenv)
 def generate(env, outdir, c):
     # These parameters are taken from parameters fit on GESTALT data
+    # I tempered the target lambdas down a bit.
     targ_lams = [
-	0.67076792,
-	0.15538075,
-	0.00287668,
-	0.38409894,
+	0.07076792,
+	0.04342738,
+	0.05538075,
+	0.08409894,
+	0.04737477,
+	0.0349348,
+	0.0287668,
 	0.08062923,
-	0.14737477,
-	0.3349348,
-	0.00490911,
-	0.84342738,
+	0.0490911,
 	0.03428745]
 
     cmd = [
@@ -48,9 +49,11 @@ def generate(env, outdir, c):
         '--out-obs-file ${TARGETS[0]}',
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
-        '--time 2.9',
+        '--time 2.3',
         '--target-lambdas',
         ",".join(map(lambda x: str(x), targ_lams)),
+        '--sampling-rate',
+	'0.3',
 	'--trim-long-probs',
         "0.04 0.09",
         '--trim-zero-probs',
@@ -62,13 +65,13 @@ def generate(env, outdir, c):
         '--insert-poisson',
         "0.04",
         '--double-cut-weight',
-        "3.3",
+        "1.3",
         '--num-barcodes',
         1,
         '--min-uniq-alleles',
-        50,
+        30,
         '--max-uniq-alleles',
-        100,
+        60,
         '--max-abundance',
         200,
     ]
@@ -127,7 +130,7 @@ def run_MLE(env, outdir, c):
         '--true-model-file ${SOURCES[2]}',
         '--true-collapsed-tree-file ${SOURCES[3]}',
         '--seed 40',
-        '--max-iters 6000',
+        '--max-iters 2000',
     ]
     return env.Command(
         [
