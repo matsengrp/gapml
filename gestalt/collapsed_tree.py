@@ -49,8 +49,16 @@ def collapse_ultrametric(raw_tree: CellLineageTree):
     tree.label_node_ids()
     max_dist = _label_dist_to_root(tree)
 
-    print(tree.get_ascii(attributes=["dist"], show_internal=True))
-    print(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    #print(tree.get_ascii(attributes=["dist"], show_internal=True))
+    #print(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    #print(tree.get_ascii(attributes=["node_id"], show_internal=True))
+
+    tree.add_feature("earliest_ancestor_node_id", tree.node_id)
+    for node in tree.iter_descendants():
+        if node.up.allele_events_list_str == node.allele_events_list_str:
+            node.add_feature("earliest_ancestor_node_id", node.up.earliest_ancestor_node_id)
+        else:
+            node.add_feature("earliest_ancestor_node_id", node.node_id)
 
     # Get all the branches in the original tree and sort them by time
     branches = []
@@ -68,7 +76,7 @@ def collapse_ultrametric(raw_tree: CellLineageTree):
             allele_events_list = tree.allele_events_list,
             cell_state = tree.cell_state)
     node_to_collapsed_node_dict = {tree.node_id: collapsed_tree}
-    latest_allele_node_dict = {tree.allele_events_list_str: (collapsed_tree, 0)}
+    latest_node_dict = {tree.earliest_ancestor_node_id: (collapsed_tree, 0)}
     for branch in sorted_branches:
         child = branch["child"]
         parent = branch["parent"]
@@ -83,27 +91,24 @@ def collapse_ultrametric(raw_tree: CellLineageTree):
                 allele_events_list = child.allele_events_list,
                 cell_state = child.cell_state,
                 dist = child.dist)
-            parent_collapsed_node.add_child(new_child_collapsed_node)
-            node_to_collapsed_node_dict[child.node_id] = new_child_collapsed_node
-            latest_allele_node_dict[child.allele_events_list_str] = (new_child_collapsed_node, child.dist_to_root)
         else:
             # If the child allele same as parent, attach the new collapsed child
             # to the latest node with that same allele
-            parent_collapsed_node, parent_dist_to_root = latest_allele_node_dict[parent.allele_events_list_str]
+            parent_collapsed_node, parent_dist_to_root = latest_node_dict[child.earliest_ancestor_node_id]
             collapsed_child_dist = child.dist_to_root - parent_dist_to_root
             new_child_collapsed_node = CellLineageTree(
                 allele_list = child.allele_list,
                 allele_events_list = child.allele_events_list,
                 cell_state = child.cell_state,
                 dist = collapsed_child_dist)
-            parent_collapsed_node.add_child(new_child_collapsed_node)
-            node_to_collapsed_node_dict[child.node_id] = new_child_collapsed_node
-            latest_allele_node_dict[child.allele_events_list_str] = (new_child_collapsed_node, child.dist_to_root)
+        parent_collapsed_node.add_child(new_child_collapsed_node)
+        node_to_collapsed_node_dict[child.node_id] = new_child_collapsed_node
+        latest_node_dict[child.earliest_ancestor_node_id] = (new_child_collapsed_node, child.dist_to_root)
 
     _remove_single_child_unobs_nodes(collapsed_tree)
 
-    print(collapsed_tree.get_ascii(attributes=["dist"], show_internal=True))
-    print(collapsed_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    #print(collapsed_tree.get_ascii(attributes=["dist"], show_internal=True))
+    #print(collapsed_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
     for leaf in tree:
         assert np.isclose(leaf.get_distance(tree), max_dist)
 

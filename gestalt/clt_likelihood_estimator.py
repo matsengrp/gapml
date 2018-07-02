@@ -24,6 +24,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         self,
         model: CLTLikelihoodModel,
         transition_wrapper_maker: TransitionWrapperMaker,
+        max_iters: int,
         log_barr: float):
         """
         @param model: initial CLT model params
@@ -32,11 +33,14 @@ class CLTPenalizedEstimator(CLTEstimator):
         """
         self.model = model
         self.log_barr = log_barr
+        self.max_iters = max_iters
 
         # Create the skeletons for the transition matrices -- via state sum approximation
         transition_wrappers = transition_wrapper_maker.create_transition_wrappers()
         logging.info("Done creating transition wrappers")
-        self.model.create_log_lik(transition_wrappers)
+        self.model.create_log_lik(
+                transition_wrappers,
+                create_gradient = max_iters > 0)
         logging.info("Done creating tensorflow graph")
         tf.global_variables_initializer().run()
 
@@ -51,7 +55,6 @@ class CLTPenalizedEstimator(CLTEstimator):
         #self.model.check_grad(transition_wrappers)
 
     def fit(self,
-            max_iters: int,
             print_iter: int = 1,
             save_iter: int = 20,
             step_size: float = 0.01,
@@ -74,11 +77,19 @@ class CLTPenalizedEstimator(CLTEstimator):
         pen_log_lik = self.model.sess.run(
             self.model.smooth_log_lik,
             feed_dict=feed_dict)
+
         prev_pen_log_lik = pen_log_lik[0]
         logging.info("initial penalized log lik %f", pen_log_lik)
         assert not np.isnan(pen_log_lik)
-        train_history = []
-        for i in range(max_iters):
+        train_history = [{
+                    "iter": -1,
+                    "pen_log_lik": pen_log_lik}]
+
+        if dist_measurers is not None:
+            train_history[0]["tree_dists"] = dist_measurers.get_tree_dists([self.model.get_fitted_bifurcating_tree()])[0]
+            logging.info("initial tree dists: %s", train_history[0]["tree_dists"])
+
+        for i in range(self.max_iters):
             var_dict = self.model.get_vars_as_dict()
             logging.info("target %s", var_dict["target_lams"])
             logging.info("double cut %s", var_dict["double_cut_weight"])

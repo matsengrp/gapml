@@ -98,7 +98,9 @@ def main(args=sys.argv[1:]):
             tree = tree_topology_info.fitted_bifurc_tree
         else:
             tree = tree_topology_info["tree"]
+    tree.label_node_ids()
     logging.info("Tree topology info: %s", tree_topology_info)
+    logging.info("Tree topology num leaves: %d", len(tree))
 
     true_model_dict = None
     oracle_dist_measurers = None
@@ -112,7 +114,8 @@ def main(args=sys.argv[1:]):
             UnrootRFDistanceMeasurer,
             RootRFDistanceMeasurer,
             #SPRDistanceMeasurer,
-            MRCADistanceMeasurer],
+            MRCADistanceMeasurer,
+            MRCASpearmanMeasurer],
             collapsed_true_subtree,
             args.scratch_dir)
 
@@ -125,13 +128,12 @@ def main(args=sys.argv[1:]):
        args.seed,
        tree,
        bcode_meta,
-       None, # Do not use cell type info
-       False, # Do not know cell type lambdas
-       None, # Do not know target lambdas
        args.log_barr,
        args.max_iters,
        transition_wrap_maker,
-       tot_time = tot_time,
+       init_model_params = {
+           "target_lams": 0.04 * np.ones(bcode_meta.n_targets) + np.random.uniform(size=bcode_meta.n_targets) * 0.02,
+           "tot_time": tot_time},
        dist_measurers = oracle_dist_measurers)
 
     res = worker.do_work_directly(sess)

@@ -203,7 +203,7 @@ class Allele:
                 insert_str=evt[2],
             ))
 
-        return AlleleEvents(events)
+        return AlleleEvents(list(sorted(events, key=lambda x: x.start_pos)))
 
     def process_events(self, events: List[Tuple[int, int, str]]):
         """

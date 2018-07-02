@@ -118,6 +118,7 @@ class CLTObserver:
         assert (0 < sampling_rate <= 1)
         np.random.seed(seed)
         sampled_clt = self._sample_leaves(cell_lineage_tree, sampling_rate)
+        sampled_clt.label_tree_with_strs()
 
         observations = {}
         # When observing each leaf, observe with specified error rate
@@ -126,11 +127,10 @@ class CLTObserver:
             allele_list_with_errors = self._observe_leaf_with_error(leaf)
             allele_events_list_with_errors = allele_list_with_errors.get_event_encoding()
 
-            allele_str_id = str(allele_events_list_with_errors)
             if observe_cell_state:
-                collapse_id = (allele_str_id, str(leaf.cell_state))
+                collapse_id = (leaf.allele_events_list_str, str(leaf.cell_state))
             else:
-                collapse_id = (allele_str_id,)
+                collapse_id = leaf.allele_events_list_str
 
             if collapse_id in observations:
                 observations[collapse_id][0].abundance += 1

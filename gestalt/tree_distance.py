@@ -4,7 +4,7 @@ import typing
 from typing import List
 import random
 
-import scipy.stats
+from scipy.stats import spearmanr
 from cell_lineage_tree import CellLineageTree
 from constants import RSPR_PATH
 
@@ -224,3 +224,21 @@ class MRCADistanceMeasurer(TreeDistanceMeasurer):
         norm_diff = np.linalg.norm(self.ref_tree_mrca_matrix - tree_mrca_matrix, ord="fro")
         num_entries = (self.num_leaves - 1) * self.num_leaves / 2 + self.num_leaves
         return norm_diff/np.sqrt(num_entries)
+
+class MRCASpearmanMeasurer(MRCADistanceMeasurer):
+    """
+    Using rank correlation of the MRCA distance matrix
+    This is an adhoc measure, but maybe provides a good idea
+    """
+    name = "mrca_spearman"
+    @staticmethod
+    def get_upper_half(matrix):
+        m_shape = matrix.shape[0]
+        return np.array([matrix[i,j] for i in range(m_shape) for j in range(i, m_shape)])
+
+    def get_dist(self, tree):
+        tree_mrca_matrix = self._get_mrca_matrix(tree)
+        tree_mrca_matrix_half = MRCASpearmanMeasurer.get_upper_half(tree_mrca_matrix)
+        ref_mrca_matrix_half = MRCASpearmanMeasurer.get_upper_half(self.ref_tree_mrca_matrix)
+        spearman_corr, _ = spearmanr(tree_mrca_matrix_half, ref_mrca_matrix_half)
+        return spearman_corr

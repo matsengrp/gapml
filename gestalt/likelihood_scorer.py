@@ -21,7 +21,7 @@ class LikelihoodScorerResult:
         self.model_params_dict = model_params_dict
         self.fitted_bifurc_tree = fitted_bifurc_tree
         self.train_history = train_history
-
+        self.pen_log_lik = train_history[-1]["pen_log_lik"]
 
 class LikelihoodScorer(ParallelWorker):
     """
@@ -32,21 +32,16 @@ class LikelihoodScorer(ParallelWorker):
             seed: int,
             tree: CellLineageTree,
             bcode_meta: BarcodeMetadata,
-            cell_type_tree: CellTypeTree,
-            know_cell_lams: bool,
-            target_lams: ndarray,
             log_barr: float,
             max_iters: int,
             transition_wrap_maker: TransitionWrapperMaker,
-            tot_time: float,
-            dist_measurers: TreeDistanceMeasurerAgg = None):
+            init_model_params: Dict,
+            dist_measurers: TreeDistanceMeasurerAgg = None,
+            name: str = "likelihood scorer"):
         """
         @param seed: required to set the seed of each parallel worker
         @param tree: the cell lineage tree topology to fit the likelihood for
         @param bcode_meta: BarcodeMetadata
-        @param cell_type_tree: pass this in if the likelihood includes cell type information
-        @param know_cell_lams: whether or not to use the cell type transition rates in `cell_type_tree`
-        @param target_lams: if this is not None, then we will use these fixed target lambda rates
         @param log_barr: log barrier penalty parameter, i.e. how much to scale the penalty
         @param max_iters: maximum number of iterations for MLE
         @param transition_wrap_maker: TransitionWrapperMaker
@@ -57,14 +52,12 @@ class LikelihoodScorer(ParallelWorker):
         self.seed = seed
         self.tree = tree
         self.bcode_meta = bcode_meta
-        self.cell_type_tree = cell_type_tree
-        self.know_cell_lams = know_cell_lams
-        self.target_lams = target_lams
         self.log_barr = log_barr
         self.max_iters = max_iters
         self.transition_wrap_maker = transition_wrap_maker
-        self.tot_time = tot_time
+        self.init_model_params = init_model_params
         self.dist_measurers = dist_measurers
+        self.name = name
 
     def run_worker(self, shared_obj):
         """
@@ -85,35 +78,41 @@ class LikelihoodScorer(ParallelWorker):
 
         @return LikelihoodScorerResult
         """
-        target_lams_known = self.target_lams is not None
-        init_target_lams = self.target_lams
-        if not target_lams_known:
-            # TODO: magic numbers
-            init_target_lams = 0.04 * np.ones(self.bcode_meta.n_targets) + np.random.uniform(size=self.bcode_meta.n_targets) * 0.02
-
-        self.tree.label_node_ids()
         res_model = CLTLikelihoodModel(
             self.tree,
             self.bcode_meta,
             sess,
-            target_lams = init_target_lams,
-            target_lams_known = target_lams_known,
-            cell_type_tree = self.cell_type_tree,
-            cell_lambdas_known = self.know_cell_lams,
-            tot_time = self.tot_time)
+            target_lams = self.init_model_params["target_lams"],
+            target_lams_known = False,
+            cell_type_tree = None,
+            cell_lambdas_known = False)
         estimator = CLTPenalizedEstimator(
                 res_model,
                 self.transition_wrap_maker,
+                self.max_iters,
                 self.log_barr)
 
         # Initialize with parameters such that the branch lengths are positive
         res_model.initialize_branch_lens()
+        full_init_model_params = res_model.get_vars_as_dict()
+        for key, val in self.init_model_params.items():
+            if key != "tot_time" and val.shape != full_init_model_params[key].shape:
+                raise ValueError(
+                        "Something went wrong. not same shape for key %s (%s vs %s)" %
+                        (key, val.shape, full_init_model_params[key].shape))
+            full_init_model_params[key] = val
+        res_model.set_params_from_dict(full_init_model_params)
 
-        train_history = estimator.fit(self.max_iters, dist_measurers = self.dist_measurers)
+        br_lens = res_model.get_branch_lens()[1:]
+        if not np.all(br_lens > 0):
+            raise ValueError("not all positive %s" % br_lens)
+        assert res_model._are_all_branch_lens_positive()
+
+        train_history = estimator.fit(dist_measurers = self.dist_measurers)
         return LikelihoodScorerResult(
                 res_model.get_vars_as_dict(),
                 res_model.get_fitted_bifurcating_tree(),
                 train_history)
 
     def __str__(self):
-        return str(self.seed)
+        return self.name
