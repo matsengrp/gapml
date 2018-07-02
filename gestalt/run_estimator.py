@@ -132,7 +132,7 @@ def main(args=sys.argv[1:]):
        transition_wrap_maker,
        init_model_params = {
            "target_lams": 0.04 * np.ones(bcode_meta.n_targets) + np.random.uniform(size=bcode_meta.n_targets) * 0.02,
-           "time": tot_time},
+           "tot_time": tot_time},
        dist_measurers = oracle_dist_measurers)
 
     res = worker.do_work_directly(sess)
