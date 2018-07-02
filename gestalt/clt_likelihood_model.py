@@ -346,6 +346,9 @@ class CLTLikelihoodModel:
         return self.sess.run(self.branch_lens, feed_dict={
             self.tot_time_ph: self.tot_time})
 
+    def _are_all_branch_lens_positive(self):
+        return np.all(self.get_branch_lens()[1:] > 0)
+
     def initialize_branch_lens(self,
             max_attempts: int=10,
             br_len_scale: float=0.5,
@@ -354,9 +357,6 @@ class CLTLikelihoodModel:
         Will randomly initialize branch lengths if they are not all positive already
         @param max_attempts: will try at most this many times to initialize branch lengths
         """
-        def _are_all_branch_lens_positive():
-            return all([b > 0 for b in self.get_branch_lens()[1:]])
-
         for j in range(max_attempts):
             print("attempt %d to make br lens all positive" % j)
             # Keep initializing branch lengths until they are all positive
@@ -367,13 +367,13 @@ class CLTLikelihoodModel:
             model_vars["branch_len_offsets_proportion"] = np.ones(self.num_nodes) * 0.25
 
             # If all branch length positive, then we are good to go
-            if _are_all_branch_lens_positive():
+            if self._are_all_branch_lens_positive():
                 break
             br_len_scale *= br_len_shrink
 
             self.set_params_from_dict(model_vars)
 
-        assert _are_all_branch_lens_positive()
+        assert self._are_all_branch_lens_positive()
         # This line is just to check that the tree is initialized to be ultrametric
         self.get_fitted_bifurcating_tree()
 

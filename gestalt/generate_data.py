@@ -253,8 +253,7 @@ def main(args=sys.argv[1:]):
             trim_long_poissons = np.array(args.trim_poissons),
             insert_zero_prob = args.insert_zero_prob,
             insert_poisson = args.insert_poisson,
-            cell_type_tree = cell_type_tree,
-            tot_time = args.time)
+            cell_type_tree = cell_type_tree)
     tf.global_variables_initializer().run()
     logging.info("Done creating model")
 
@@ -283,6 +282,7 @@ def main(args=sys.argv[1:]):
 
     # Save the true data
     with open(args.out_model_file, "wb") as f:
+        clt_model.tot_time = tot_time
         out_dict = {
             "true_model_params": clt_model.get_vars_as_dict(),
             "true_subtree": true_subtree,

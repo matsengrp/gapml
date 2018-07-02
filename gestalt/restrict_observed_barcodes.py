@@ -15,6 +15,7 @@ from typing import Dict, List
 import collapsed_tree
 from cell_lineage_tree import CellLineageTree
 from clt_likelihood_model import CLTLikelihoodModel
+from likelihood_scorer import LikelihoodScorer
 from clt_observer import ObservedAlignedSeq
 from transition_wrapper_maker import TransitionWrapperMaker
 from parallel_worker import BatchSubmissionManager
@@ -124,10 +125,32 @@ def get_log_likelihood(true_topology: CellLineageTree, true_model_dict: Dict):
 
     return log_lik
 
-def get_highest_likelihood_single_appearance_tree(coll_tree: CellLineageTree, true_model_dict: Dict, args):
+def get_duplicate_indpt_alleles(coll_tree: CellLineageTree):
+    # Map each allele to the leaves with the same allele
+    uniq_alleles = dict()
+    for leaf in coll_tree:
+        if leaf.allele_events_list_str in uniq_alleles:
+            uniq_alleles[leaf.allele_events_list_str].append(leaf)
+        else:
+            uniq_alleles[leaf.allele_events_list_str] = [leaf]
+
+    # Find the alleles that map to more than one leaf
+    duplicate_indpt_alleles = []
+    for key, leaves in uniq_alleles.items():
+        if len(leaves) > 1:
+            duplicate_indpt_alleles.append([
+                (i, leaf, leaf.up) for i, leaf in enumerate(leaves)])
+    return duplicate_indpt_alleles
+
+def get_highest_likelihood_single_appearance_tree(
+        coll_tree: CellLineageTree,
+        true_model_dict: Dict,
+        scratch_dir: str):
     """
     @param tree: a collapsed tree where each allele may appear more than once because they arose independently in the tree
     @param true_model_dict: a Dict containing all the parameters needed to instantiate the CLTLikelihoodModel
+
+    To get the likelihoods of the different collapsed trees, we submit jobs to slurm
 
     @return CellLineageTree where each allele appears once in the leaves.
             We pick the tree by finding the subtree with the highest likelihood according to the true model params
@@ -146,21 +169,8 @@ def get_highest_likelihood_single_appearance_tree(coll_tree: CellLineageTree, tr
                 if leaf_kept_idx != leaf_idx:
                     other_leaf_parent.add_child(other_leaf)
 
-    # Map each allele to the leaves with the same allele
-    uniq_alleles = dict()
-    for leaf in coll_tree:
-        if leaf.allele_events_list_str in uniq_alleles:
-            uniq_alleles[leaf.allele_events_list_str].append(leaf)
-        else:
-            uniq_alleles[leaf.allele_events_list_str] = [leaf]
-
-    # Find the alleles that map to more than one leaf
-    duplicate_indpt_alleles = []
-    for key, leaves in uniq_alleles.items():
-        if len(leaves) > 1:
-            duplicate_indpt_alleles.append([
-                (i, leaf, leaf.up) for i, leaf in enumerate(leaves)])
-
+    # Get the duplicate independent alleles
+    duplicate_indpt_alleles = get_duplicate_indpt_alleles(coll_tree)
     num_indpt_groups = len(duplicate_indpt_alleles)
     logging.info("There are %d groups of independently arisen, identical alleles", num_indpt_groups)
     if num_indpt_groups == 0:
@@ -169,37 +179,53 @@ def get_highest_likelihood_single_appearance_tree(coll_tree: CellLineageTree, tr
 
     # There are duplicates. So let's consider all ways to drop duplicates
     leaves_kept_combos = list(itertools.product(*duplicate_indpt_alleles))
+    logging.info("There are a total of %d trees to compare", len(leaves_kept_combos))
 
-    #best_leaves_kept = leaves_kept_combos[0]
     scorers = []
     for keep_idx, leaves_kept in enumerate(leaves_kept_combos):
         # Detach the designated leaves
         _detach_leaves(leaves_kept, duplicate_indpt_alleles)
 
-        bcode_meta = true_model_dict["bcode_meta"]
         new_tree = coll_tree.copy()
+        new_tree.label_node_ids()
+        num_nodes = new_tree.get_num_nodes()
+        bcode_meta = true_model_dict["bcode_meta"]
+
+        # Plug in the true branch lengths into the dictionary
+        param_dict = true_model_dict["true_model_params"]
+        br_lens = np.zeros(num_nodes)
+        for node in new_tree.traverse():
+            br_lens[node.node_id] = node.dist
+            node.resolved_multifurcation = True
+        param_dict["branch_len_inners"] = br_lens
+        param_dict["branch_len_offsets_proportion"] = np.zeros(num_nodes)
+
         scorer = LikelihoodScorer(
-            0,
+            0, # seed
             new_tree,
             true_model_dict["bcode_meta"],
-            log_barr = 0,
+            log_barr = 0, # no penalty
             max_iters = 0,
             transition_wrap_maker = TransitionWrapperMaker(new_tree, bcode_meta),
-            init_model_params = true_model_dict["true_model_params"])
+            init_model_params = param_dict)
         scorers.append(scorer)
 
         # Undo our changes to the tree
         _reattach_leaves(leaves_kept, duplicate_indpt_alleles)
 
-    job_manager = BatchSubmissionManager(scorers, None, len(leaves_kept_combos), args.scratch_dir)
+    # Submit jobs to slurm
+    job_manager = BatchSubmissionManager(scorers, None, len(leaves_kept_combos), scratch_dir)
     scorer_results = job_manager.run(successful_only=True)
+    assert len(scorer_results) > 0
+    logging.info([res.pen_log_lik for (res, _) in scorer_results])
 
+    # Get the one with the highest log likelihood
     best_leaves_kept = None
     best_log_lik = -np.inf
     for (res, scorer) in scorer_results:
-        if res.train_history[-1].pen_log_lik > best_log_lik:
+        if res.pen_log_lik > best_log_lik:
             best_coll_tree = scorer.tree
-            best_log_lik = res.train_history[-1].pen_log_lik
+            best_log_lik = res.pen_log_lik
 
     return best_coll_tree
 
@@ -251,7 +277,7 @@ def main(args=sys.argv[1:]):
     selected_collapsed_clt = get_highest_likelihood_single_appearance_tree(
         collapsed_clt,
         true_model_dict,
-        args)
+        args.scratch_dir)
 
     # Assert no duplicate alleles in the collapsed tree
     assert len(selected_collapsed_clt) == len(obs_data_dict["obs_leaves"])

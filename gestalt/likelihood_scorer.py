@@ -21,7 +21,7 @@ class LikelihoodScorerResult:
         self.model_params_dict = model_params_dict
         self.fitted_bifurc_tree = fitted_bifurc_tree
         self.train_history = train_history
-
+        self.pen_log_lik = train_history[-1]["pen_log_lik"]
 
 class LikelihoodScorer(ParallelWorker):
     """
@@ -97,6 +97,11 @@ class LikelihoodScorer(ParallelWorker):
         for key, val in self.init_model_params.items():
             full_init_model_params[key] = val
         res_model.set_params_from_dict(full_init_model_params)
+
+        br_lens = res_model.get_branch_lens()[1:]
+        if not np.all(br_lens > 0):
+            raise ValueError("not all positive %s" % br_lens)
+        assert res_model._are_all_branch_lens_positive()
 
         train_history = estimator.fit(dist_measurers = self.dist_measurers)
         return LikelihoodScorerResult(
