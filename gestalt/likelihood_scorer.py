@@ -78,6 +78,7 @@ class LikelihoodScorer(ParallelWorker):
 
         @return LikelihoodScorerResult
         """
+        np.random.seed(self.seed)
         res_model = CLTLikelihoodModel(
             self.tree,
             self.bcode_meta,
