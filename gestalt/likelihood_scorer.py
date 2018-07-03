@@ -33,6 +33,7 @@ class LikelihoodScorer(ParallelWorker):
             tree: CellLineageTree,
             bcode_meta: BarcodeMetadata,
             log_barr: float,
+            target_lam_pen: float,
             max_iters: int,
             transition_wrap_maker: TransitionWrapperMaker,
             init_model_params: Dict,
@@ -53,6 +54,7 @@ class LikelihoodScorer(ParallelWorker):
         self.tree = tree
         self.bcode_meta = bcode_meta
         self.log_barr = log_barr
+        self.target_lam_pen = target_lam_pen
         self.max_iters = max_iters
         self.transition_wrap_maker = transition_wrap_maker
         self.init_model_params = init_model_params
@@ -91,7 +93,8 @@ class LikelihoodScorer(ParallelWorker):
                 res_model,
                 self.transition_wrap_maker,
                 self.max_iters,
-                self.log_barr)
+                self.log_barr,
+                self.target_lam_pen)
 
         # Initialize with parameters such that the branch lengths are positive
         res_model.initialize_branch_lens()

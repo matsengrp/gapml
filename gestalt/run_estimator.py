@@ -57,6 +57,11 @@ def parse_args():
         type=float,
         default=0.001,
         help="log barrier parameter on the branch lengths")
+    parser.add_argument(
+        '--target-lam-pen',
+        type=float,
+        default=0.1,
+        help="penalty parameter on the target lambdas")
     parser.add_argument('--max-iters', type=int, default=20)
     parser.add_argument('--num-inits', type=int, default=1)
     parser.add_argument(
@@ -75,6 +80,8 @@ def parse_args():
     if not os.path.exists(args.scratch_dir):
         os.mkdir(args.scratch_dir)
 
+    assert args.log_barr >= 0
+    assert args.target_lam_pen >= 0
     return args
 
 def main(args=sys.argv[1:]):
@@ -129,6 +136,7 @@ def main(args=sys.argv[1:]):
        tree,
        bcode_meta,
        args.log_barr,
+       args.target_lam_pen,
        args.max_iters,
        transition_wrap_maker,
        init_model_params = {
