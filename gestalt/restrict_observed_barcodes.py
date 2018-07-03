@@ -279,7 +279,8 @@ def main(args=sys.argv[1:]):
         obs_data_dict = six.moves.cPickle.load(f)
 
     bcode_meta = obs_data_dict["bcode_meta"]
-    assert args.num_barcodes <= bcode_meta.num_barcodes
+    orig_num_barcodes = bcode_meta.num_barcodes
+    assert args.num_barcodes <= orig_num_barcodes
 
     # Update the barcode metadata to have the collapsed number of barcodes
     bcode_meta.num_barcodes = args.num_barcodes
@@ -312,7 +313,7 @@ def main(args=sys.argv[1:]):
 
     # Assert no duplicate alleles in the collapsed tree
     assert len(selected_collapsed_clt) == len(obs_data_dict["obs_leaves"])
-    if args.num_barcodes == bcode_meta.num_barcodes:
+    if args.num_barcodes == orig_num_barcodes:
         assert len(obs_data_dict["obs_leaves"]) == len(raw_obs_leaves)
 
     save_data(selected_collapsed_clt, args.out_collapsed_tree_file)
