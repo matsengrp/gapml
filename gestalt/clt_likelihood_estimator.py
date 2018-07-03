@@ -25,14 +25,18 @@ class CLTPenalizedEstimator(CLTEstimator):
         model: CLTLikelihoodModel,
         transition_wrapper_maker: TransitionWrapperMaker,
         max_iters: int,
-        log_barr: float):
+        log_barr: float,
+        target_lam_pen: float = 0):
         """
         @param model: initial CLT model params
         @param transition_wrapper_maker: TransitionWrapperMaker
-        @param log_barr: penalty parameter for the log barrier function (or just the penalty in general)
+        @param max_iters: maximum number of training iterations
+        @param log_barr: penalty parameter for the log barrier function
+        @param target_lam_pen: penalty parameter for the log target lambda difference from the mean
         """
         self.model = model
         self.log_barr = log_barr
+        self.target_lam_pen = target_lam_pen
         self.max_iters = max_iters
 
         # Create the skeletons for the transition matrices -- via state sum approximation
@@ -71,6 +75,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         """
         feed_dict = {
                     self.model.log_barr_ph: self.log_barr,
+                    self.model.target_lam_pen_ph: self.target_lam_pen,
                     self.model.tot_time_ph: self.model.tot_time
                 }
 
@@ -99,11 +104,12 @@ class CLTPenalizedEstimator(CLTEstimator):
             logging.info("trim long poiss %s", var_dict["trim_long_poissons"])
             logging.info("insert zero %s", var_dict["insert_zero_prob"])
             logging.info("insert poiss %s", var_dict["insert_poisson"])
-            _, pen_log_lik, log_lik, log_barr, branch_lens = self.model.sess.run(
+            _, pen_log_lik, log_lik, targ_pen, log_barr, branch_lens = self.model.sess.run(
                     [
                         self.model.adam_train_op,
                         self.model.smooth_log_lik,
                         self.model.log_lik,
+                        self.model.target_lam_penalty,
                         self.model.branch_log_barr,
                         self.model.branch_lens],
                     feed_dict=feed_dict)
@@ -116,8 +122,8 @@ class CLTPenalizedEstimator(CLTEstimator):
                     "branch_lens": branch_lens}
             if i % print_iter == (print_iter - 1):
                 logging.info(
-                    "iter %d pen log lik %f log lik %f log barr %f min branch len %f",
-                    i, pen_log_lik, log_lik, log_barr, np.min(branch_lens[1:]))
+                    "iter %d pen log lik %f log lik %f targ pen %f log barr %f min branch len %f",
+                    i, pen_log_lik, log_lik, targ_pen, log_barr, np.min(branch_lens[1:]))
 
             if i % save_iter == (save_iter - 1):
                 if dist_measurers is not None:

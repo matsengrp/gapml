@@ -85,10 +85,12 @@ class CLTLikelihoodModel:
         self.sess = sess
 
         self.target_lams_known = target_lams_known
+        assert not target_lams_known
         self.cell_lambdas_known = cell_lambdas_known
 
-        # Stores the penalty parameter
+        # Stores the penalty parameters
         self.log_barr_ph = tf.placeholder(tf.float64)
+        self.target_lam_pen_ph = tf.placeholder(tf.float64)
         self.tot_time_ph = tf.placeholder(tf.float64)
         self.tot_time = tot_time
 
@@ -143,8 +145,10 @@ class CLTLikelihoodModel:
         assert len(insert_poisson) == 1
 
         # Fix the first target value -- not for optimization
+        log_target_lam_mean = np.mean(np.log(target_lams))
         model_params = np.concatenate([
-                    [] if self.target_lams_known else np.log(target_lams),
+                    [] if self.target_lams_known else [log_target_lam_mean],
+                    [] if self.target_lams_known else (np.log(target_lams) - log_target_lam_mean),
                     np.log(double_cut_weight),
                     inv_sigmoid(trim_long_probs),
                     inv_sigmoid(trim_zero_probs),
@@ -165,8 +169,9 @@ class CLTLikelihoodModel:
             up_to_size = 0
             self.target_lams = tf.constant(target_lams, dtype=tf.float64)
         else:
-            up_to_size = target_lams.size
-            self.target_lams = tf.exp(self.all_vars[:up_to_size])
+            up_to_size = target_lams.size + 1
+            self.log_target_lam_diffs = self.all_vars[1:up_to_size]
+            self.target_lams = tf.exp(self.all_vars[0] + self.log_target_lam_diffs)
         prev_size = up_to_size
         up_to_size += 1
         self.double_cut_weight = tf.exp(self.all_vars[prev_size: up_to_size])
@@ -287,8 +292,10 @@ class CLTLikelihoodModel:
         if self.cell_type_tree is None:
             cell_type_lams = np.array([])
 
+        log_target_lams_mean = np.mean(np.log(target_lams))
         init_val = np.concatenate([
-            [] if self.target_lams_known else np.log(target_lams),
+            [] if self.target_lams_known else [log_target_lams_mean],
+            [] if self.target_lams_known else np.log(target_lams) - log_target_lams_mean,
             np.log(double_cut_weight),
             inv_sigmoid(trim_long_probs),
             inv_sigmoid(trim_zero_probs),
@@ -643,9 +650,13 @@ class CLTLikelihoodModel:
             self.branch_lens,
             indices = [node.node_id for node in self.topology])
         self.branch_log_barr = tf.reduce_sum(tf.log(branch_lens_to_penalize))
+        # Penalize target lambda differences -- try to keep lambdas close to each other
+        self.target_lam_penalty = tf.reduce_mean(tf.pow(self.log_target_lam_diffs, 2))
+        self.penalties = self.log_barr_ph * self.branch_log_barr - self.target_lam_pen_ph * self.target_lam_penalty
+
         self.smooth_log_lik = tf.add(
                 self.log_lik,
-                self.log_barr_ph * self.branch_log_barr /self.bcode_meta.num_barcodes)
+                self.penalties / self.bcode_meta.num_barcodes)
 
         if create_gradient:
             logging.info("Computing gradients....")

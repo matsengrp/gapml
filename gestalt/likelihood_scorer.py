@@ -33,6 +33,7 @@ class LikelihoodScorer(ParallelWorker):
             tree: CellLineageTree,
             bcode_meta: BarcodeMetadata,
             log_barr: float,
+            target_lam_pen: float,
             max_iters: int,
             transition_wrap_maker: TransitionWrapperMaker,
             init_model_params: Dict,
@@ -43,6 +44,8 @@ class LikelihoodScorer(ParallelWorker):
         @param tree: the cell lineage tree topology to fit the likelihood for
         @param bcode_meta: BarcodeMetadata
         @param log_barr: log barrier penalty parameter, i.e. how much to scale the penalty
+        @param target_lam_pen: penalty parameter for log target lambda difference, i.e. how much to scale the penalty
+                                (penalty tries to keep target lambdas the same)
         @param max_iters: maximum number of iterations for MLE
         @param transition_wrap_maker: TransitionWrapperMaker
         @param tot_time: total height of the tree
@@ -53,6 +56,7 @@ class LikelihoodScorer(ParallelWorker):
         self.tree = tree
         self.bcode_meta = bcode_meta
         self.log_barr = log_barr
+        self.target_lam_pen = target_lam_pen
         self.max_iters = max_iters
         self.transition_wrap_maker = transition_wrap_maker
         self.init_model_params = init_model_params
@@ -91,7 +95,8 @@ class LikelihoodScorer(ParallelWorker):
                 res_model,
                 self.transition_wrap_maker,
                 self.max_iters,
-                self.log_barr)
+                self.log_barr,
+                self.target_lam_pen)
 
         # Initialize with parameters such that the branch lengths are positive
         res_model.initialize_branch_lens()
