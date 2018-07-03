@@ -26,11 +26,13 @@ class CLTPenalizedEstimator(CLTEstimator):
         transition_wrapper_maker: TransitionWrapperMaker,
         max_iters: int,
         log_barr: float,
-        target_lam_pen: float = 0.1):
+        target_lam_pen: float = 0):
         """
         @param model: initial CLT model params
         @param transition_wrapper_maker: TransitionWrapperMaker
-        @param log_barr: penalty parameter for the log barrier function (or just the penalty in general)
+        @param max_iters: maximum number of training iterations
+        @param log_barr: penalty parameter for the log barrier function
+        @param target_lam_pen: penalty parameter for the log target lambda difference from the mean
         """
         self.model = model
         self.log_barr = log_barr

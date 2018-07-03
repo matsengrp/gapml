@@ -88,7 +88,7 @@ class CLTLikelihoodModel:
         assert not target_lams_known
         self.cell_lambdas_known = cell_lambdas_known
 
-        # Stores the penalty parameter
+        # Stores the penalty parameters
         self.log_barr_ph = tf.placeholder(tf.float64)
         self.target_lam_pen_ph = tf.placeholder(tf.float64)
         self.tot_time_ph = tf.placeholder(tf.float64)
@@ -650,6 +650,7 @@ class CLTLikelihoodModel:
             self.branch_lens,
             indices = [node.node_id for node in self.topology])
         self.branch_log_barr = tf.reduce_sum(tf.log(branch_lens_to_penalize))
+        # Penalize target lambda differences -- try to keep lambdas close to each other
         self.target_lam_penalty = tf.reduce_mean(tf.pow(self.log_target_lam_diffs, 2))
         self.penalties = self.log_barr_ph * self.branch_log_barr - self.target_lam_pen_ph * self.target_lam_penalty
 

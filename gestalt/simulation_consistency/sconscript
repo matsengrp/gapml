@@ -104,7 +104,7 @@ def run_MLE(env, outdir, c):
         '--true-collapsed-tree-file ${SOURCES[3]}',
         '--seed 40',
         '--log-barr 0.001',
-        '--target-lam-pen 0.3',
+        '--target-lam-pen 5.0',
         '--max-iters 6000',
     ]
     return env.Command(

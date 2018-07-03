@@ -44,6 +44,8 @@ class LikelihoodScorer(ParallelWorker):
         @param tree: the cell lineage tree topology to fit the likelihood for
         @param bcode_meta: BarcodeMetadata
         @param log_barr: log barrier penalty parameter, i.e. how much to scale the penalty
+        @param target_lam_pen: penalty parameter for log target lambda difference, i.e. how much to scale the penalty
+                                (penalty tries to keep target lambdas the same)
         @param max_iters: maximum number of iterations for MLE
         @param transition_wrap_maker: TransitionWrapperMaker
         @param tot_time: total height of the tree
