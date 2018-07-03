@@ -170,9 +170,8 @@ class CLTLikelihoodModel:
             self.target_lams = tf.constant(target_lams, dtype=tf.float64)
         else:
             up_to_size = target_lams.size + 1
-            self.log_target_lams_mean = self.all_vars[0]
-            self.log_target_lams = self.all_vars[1:up_to_size]
-            self.target_lams = tf.exp(self.all_vars[0] + self.all_vars[1:up_to_size])
+            self.log_target_lam_diffs = self.all_vars[1:up_to_size]
+            self.target_lams = tf.exp(self.all_vars[0] + self.log_target_lam_diffs)
         prev_size = up_to_size
         up_to_size += 1
         self.double_cut_weight = tf.exp(self.all_vars[prev_size: up_to_size])
@@ -651,7 +650,7 @@ class CLTLikelihoodModel:
             self.branch_lens,
             indices = [node.node_id for node in self.topology])
         self.branch_log_barr = tf.reduce_sum(tf.log(branch_lens_to_penalize))
-        self.target_lam_penalty = tf.reduce_mean(tf.pow(self.log_target_lams - self.log_target_lams_mean, 2))
+        self.target_lam_penalty = tf.reduce_mean(tf.pow(self.log_target_lam_diffs, 2))
         self.penalties = self.log_barr_ph * self.branch_log_barr - self.target_lam_pen_ph * self.target_lam_penalty
 
         self.smooth_log_lik = tf.add(
