@@ -119,6 +119,13 @@ def main(args=sys.argv[1:]):
     logging.info("Tree topology info: %s", tree_topology_info)
     logging.info("Tree topology num leaves: %d", len(tree))
 
+    has_unresolved_multifurcs = False
+    for node in tree.traverse():
+        if not node.is_resolved_multifurcation():
+            has_unresolved_multifurcs = True
+            break
+    logging.info("Tree has unresolved mulfirucs? %d", has_unresolved_multifurcs)
+
     true_model_dict = None
     oracle_dist_measurers = None
     if args.true_model_file is not None and args.true_collapsed_tree_file is not None:
@@ -160,8 +167,11 @@ def main(args=sys.argv[1:]):
        dist_measurers = oracle_dist_measurers)
 
     raw_res = worker.do_work_directly(sess)
+    refit_res = None
 
-    if args.do_refit:
+    if not has_unresolved_multifurcs:
+        refit_res = raw_res
+    elif has_unresolved_multifurcs and args.do_refit:
         logging.info("Doing refit")
         # Now we need to refit using the bifurcating tree
         # Copy over the latest model parameters for warm start
@@ -193,16 +203,17 @@ def main(args=sys.argv[1:]):
                 refit_transition_wrap_maker,
                 init_model_params = param_dict,
                 dist_measurers = oracle_dist_measurers)
-        res = refit_worker.do_work_directly(sess)
-    else:
-        res = raw_res
+        refit_res = refit_worker.do_work_directly(sess)
 
+    #### Mostly a section for printing
+    res = refit_res if refit_res is not None else raw_res
     print(res.model_params_dict)
     logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["node_id"], show_internal=True))
     logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
     logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
     logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["cell_state"]))
 
+    # Also create a dictionaty as a summary of what happened
     if oracle_dist_measurers is not None:
         result_print_dict = oracle_dist_measurers.get_tree_dists([res.fitted_bifurc_tree])[0]
         true_target_lambdas = true_model_dict["true_model_params"]["target_lams"]
@@ -223,14 +234,14 @@ def main(args=sys.argv[1:]):
 
     # Save the data
     with open(args.pickle_out, "wb") as f:
-        save_dict = {"raw": raw_res}
-        if args.do_refit:
-            save_dict["refit"] = res
+        save_dict = {
+                "raw": raw_res,
+                "refit": refit_res}
         six.moves.cPickle.dump(save_dict, f, protocol = 2)
 
-    plot_mrca_matrix(
-        res.fitted_bifurc_tree,
-        args.pickle_out.replace(".pkl", "_mrca.png"))
+    #plot_mrca_matrix(
+    #    res.fitted_bifurc_tree,
+    #    args.pickle_out.replace(".pkl", "_mrca.png"))
 
 if __name__ == "__main__":
     main()
