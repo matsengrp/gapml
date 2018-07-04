@@ -126,24 +126,28 @@ def run_parsimony(env, outdir, c):
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
     cmd = [
-        'python run_estimator.py',
+        'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
-        '--topology-file ${SOURCES[1]}',
+        '--topology-file-template ${SOURCES[1]}',
+        '--out-model-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
         '--true-model-file ${SOURCES[2]}',
         '--true-collapsed-tree-file ${SOURCES[3]}',
         '--seed',
-	c['seed'] + 100,
-        '--target-lam-pen',
-        5.0,
+	c['seed'] + 110,
         '--log-barr',
         0.001,
-        '--max-sum-states 50',
+        '--target-lam-pen',
+        5.0,
         '--max-iters 2000',
+        '--num-inits 1',
+        '--max-sum-states 50',
+        '--max-extra-steps 1',
     ]
     return env.Command(
         [
-            join(outdir, 'parsimony_tree0_fitted.pkl'),
-            join(outdir, 'parsimony_tree0_fit_log.txt')],
+            join(outdir, 'tune_topology_fitted.pkl'),
+            join(outdir, 'log_tune_topology.txt')],
         [
             c['restrict_observed_alleles'][0],
             c['run_parsimony'][0],

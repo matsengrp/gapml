@@ -187,6 +187,7 @@ def get_bifurc_multifurc_trees(
                     'idx': num_multifurc,
                     'aux': None,
                     'tree': coll_tree})
+    logging.info("Number of multifurcating trees selected, %s : %d", selection_type, num_multifurc)
     return trees_to_output
 
 def get_parsimony_trees(

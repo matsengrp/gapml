@@ -48,12 +48,6 @@ class ParallelWorker:
         """
         raise NotImplementedError()
 
-    def  __str__(self):
-        """
-        @return: string for identifying this worker in an error
-        """
-        raise NotImplementedError()
-
 class ParallelWorkerManager:
     """
     Runs many ParallelWorkers
