@@ -80,7 +80,9 @@ def parse_args():
         help='maximum number of extra steps to explore possible ancestral states')
     parser.add_argument(
         '--scratch-dir',
-        type=str)
+        type=str,
+        default='_output/scratch',
+        help='not used at the moment... eventually used by SPR')
 
     parser.set_defaults(is_refit=False)
     args = parser.parse_args()
