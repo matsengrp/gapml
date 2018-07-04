@@ -47,6 +47,11 @@ class TargetDeactTract(tuple):
                     self.max_deact_target))
             target_statuses.append(
                     TargetStatus(*deact_targs))
+
+        # Sort the target statuses by number of deactivated targets...
+        # Maybe this will help computation since the matrix becomes upper triangular
+        target_statuses = list(sorted(target_statuses, key = lambda x: x.num_deact_targets))
+
         return target_statuses
 
 class TargetStatus(tuple):
@@ -71,6 +76,10 @@ class TargetStatus(tuple):
         for deact_tract in self:
             deact_targs += list(range(deact_tract.min_deact_target, deact_tract.max_deact_target + 1))
         return deact_targs
+
+    @property
+    def num_deact_targets(self):
+        return len(self.deact_targets)
 
     def merge(self, other_targ_stat):
         """

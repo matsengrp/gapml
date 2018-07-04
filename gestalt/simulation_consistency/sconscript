@@ -53,7 +53,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [5, 10, 20, 40, 80],
+    [5, 10, 20],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -102,7 +102,7 @@ def run_MLE(env, outdir, c):
         '--topology-file ${SOURCES[1]}',
         '--true-model-file ${SOURCES[2]}',
         '--true-collapsed-tree-file ${SOURCES[3]}',
-        '--seed 40',
+        '--seed 400',
         '--log-barr 0.001',
         '--target-lam-pen 10.0',
         '--max-iters 6000',

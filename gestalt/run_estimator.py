@@ -68,6 +68,16 @@ def parse_args():
         '--is-refit',
         action='store_true',
         help='flag this as a refitting procedure')
+    parser.add_argument(
+        '--max-sum-states',
+        type=int,
+        default=None,
+        help='maximum number of internal states to marginalize over')
+    parser.add_argument(
+        '--max-extra-steps',
+        type=int,
+        default=1,
+        help='maximum number of extra steps to explore possible ancestral states')
 
     parser.set_defaults()
     args = parser.parse_args()
@@ -129,7 +139,11 @@ def main(args=sys.argv[1:]):
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
 
-    transition_wrap_maker = TransitionWrapperMaker(tree, bcode_meta)
+    transition_wrap_maker = TransitionWrapperMaker(
+            tree,
+            bcode_meta,
+            args.max_extra_steps,
+            args.max_sum_states)
 
     worker = LikelihoodScorer(
        args.seed,
