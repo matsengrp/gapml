@@ -25,6 +25,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         model: CLTLikelihoodModel,
         transition_wrapper_maker: TransitionWrapperMaker,
         max_iters: int,
+        num_inits: int,
         log_barr: float,
         target_lam_pen: float = 0):
         """
@@ -38,6 +39,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         self.log_barr = log_barr
         self.target_lam_pen = target_lam_pen
         self.max_iters = max_iters
+        self.num_inits = num_inits
 
         # Create the skeletons for the transition matrices -- via state sum approximation
         transition_wrappers = transition_wrapper_maker.create_transition_wrappers()

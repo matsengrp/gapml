@@ -35,6 +35,7 @@ class LikelihoodScorer(ParallelWorker):
             log_barr: float,
             target_lam_pen: float,
             max_iters: int,
+            num_inits: int,
             transition_wrap_maker: TransitionWrapperMaker,
             init_model_params: Dict,
             dist_measurers: TreeDistanceMeasurerAgg = None,
@@ -58,6 +59,7 @@ class LikelihoodScorer(ParallelWorker):
         self.log_barr = log_barr
         self.target_lam_pen = target_lam_pen
         self.max_iters = max_iters
+        self.num_inits = num_inits
         self.transition_wrap_maker = transition_wrap_maker
         self.init_model_params = init_model_params
         self.dist_measurers = dist_measurers

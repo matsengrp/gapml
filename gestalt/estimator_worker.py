@@ -18,7 +18,8 @@ class RunEstimatorWorker(ParallelWorker):
             num_inits: int,
             do_refit: bool,
             max_sum_states: int,
-            max_extra_steps: int):
+            max_extra_steps: int,
+            scratch_dir: str):
         self.obs_file = obs_file
         self.topology_file = topology_file
         self.out_model_file = topology_file.replace(".pkl", "_fitted.pkl")
@@ -33,6 +34,7 @@ class RunEstimatorWorker(ParallelWorker):
         self.do_refit = do_refit
         self.max_sum_states = max_sum_states
         self.max_extra_steps = max_extra_steps
+        self.scratch_dir = scratch_dir
 
     def run_worker(self, shared_obj):
         """
@@ -58,6 +60,8 @@ class RunEstimatorWorker(ParallelWorker):
             '--do-refit' if self.do_refit else '',
             '--max-extra-steps',
             self.max_extra_steps,
+            '--scratch-dir',
+            self.scratch_dir,
         ]
         def _add_more_args(arg_val, arg_key):
             if arg_val is not None:

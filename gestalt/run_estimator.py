@@ -152,13 +152,51 @@ def main(args=sys.argv[1:]):
        args.log_barr,
        args.target_lam_pen,
        args.max_iters,
+       args.num_inits,
        transition_wrap_maker,
        init_model_params = {
            "target_lams": 0.04 * np.ones(bcode_meta.n_targets) + np.random.uniform(size=bcode_meta.n_targets) * 0.02,
            "tot_time": tot_time},
        dist_measurers = oracle_dist_measurers)
 
-    res = worker.do_work_directly(sess)
+    raw_res = worker.do_work_directly(sess)
+
+    if args.do_refit:
+        logging.info("Doing refit")
+        # Now we need to refit using the bifurcating tree
+        # Copy over the latest model parameters for warm start
+        param_dict = {k: v for k,v in raw_res.model_params_dict.items()}
+        refit_bifurc_tree = raw_res.fitted_bifurc_tree.copy()
+        refit_bifurc_tree.label_node_ids()
+        num_nodes = refit_bifurc_tree.get_num_nodes()
+        # Copy over the branch lengths
+        br_lens = np.zeros(num_nodes)
+        for node in refit_bifurc_tree.traverse():
+            br_lens[node.node_id] = node.dist
+            node.resolved_multifurcation = True
+        param_dict["branch_len_inners"] = br_lens
+        param_dict["branch_len_offsets_proportion"] = np.zeros(num_nodes)
+        # Create the new likelihood worker and make it work!
+        refit_transition_wrap_maker = TransitionWrapperMaker(
+                refit_bifurc_tree,
+                bcode_meta,
+                args.max_extra_steps,
+                args.max_sum_states)
+        refit_worker = LikelihoodScorer(
+                args.seed + 1,
+                refit_bifurc_tree,
+                bcode_meta,
+                args.log_barr,
+                args.target_lam_pen,
+                args.max_iters,
+                args.num_inits,
+                refit_transition_wrap_maker,
+                init_model_params = param_dict,
+                dist_measurers = oracle_dist_measurers)
+        res = refit_worker.do_work_directly(sess)
+    else:
+        res = raw_res
+
     print(res.model_params_dict)
     logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["node_id"], show_internal=True))
     logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
@@ -185,7 +223,10 @@ def main(args=sys.argv[1:]):
 
     # Save the data
     with open(args.pickle_out, "wb") as f:
-        six.moves.cPickle.dump(res, f, protocol = 2)
+        save_dict = {"raw": raw_res}
+        if args.do_refit:
+            save_dict["refit"] = res
+        six.moves.cPickle.dump(save_dict, f, protocol = 2)
 
     plot_mrca_matrix(
         res.fitted_bifurc_tree,

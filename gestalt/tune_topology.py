@@ -8,7 +8,7 @@ import os
 import glob
 import argparse
 import logging
-from shutil import copyfile
+import six
 
 from parallel_worker import BatchSubmissionManager
 from estimator_worker import RunEstimatorWorker
@@ -76,13 +76,16 @@ def parse_args():
     parser.set_defaults()
     args = parser.parse_args()
 
+    assert args.log_barr >= 0
+    assert args.target_lam_pen >= 0
+
     args.topology_folder = os.path.dirname(args.topology_file_template)
     args.scratch_dir = os.path.join(
             args.topology_folder,
             'scratch')
+    if not os.path.exists(args.scratch_dir):
+        os.mkdir(args.scratch_dir)
 
-    assert args.log_barr >= 0
-    assert args.target_lam_pen >= 0
     return args
 
 def main(args=sys.argv[1:]):
@@ -106,12 +109,9 @@ def main(args=sys.argv[1:]):
             args.num_inits,
             True, # do refitting
             args.max_sum_states,
-            args.max_extra_steps)
+            args.max_extra_steps,
+            args.scratch_dir)
         worker_list.append(worker)
-
-    scratch_exists = os.path.exists(args.scratch_dir)
-    if not scratch_exists:
-        os.mkdir(args.scratch_dir)
 
     job_manager = BatchSubmissionManager(
             worker_list,
@@ -119,6 +119,7 @@ def main(args=sys.argv[1:]):
             len(worker_list),
             args.scratch_dir)
     successful_workers = job_manager.run(successful_only=True)
+    assert len(successful_workers) > 0
 
     best_log_lik = successful_workers[0][0]["log_lik"]
     best_worker = successful_workers[0][1]
@@ -128,8 +129,10 @@ def main(args=sys.argv[1:]):
             best_worker = succ_worker
 
     logging.info("Best worker %s", best_worker.out_model_file)
-    # TODO: copying file since making a symlink makes scons a bit unhappy.
-    copyfile(best_worker.out_model_file, args.out_model_file)
+    with open(best_worker.out_model_file, "rb") as f:
+        results = six.moves.cPickle.load(f)
+    with open(args.out_model_file, "wb") as f:
+        six.moves.cPickle.dump(results["refit"], f, protocol = 2)
 
 if __name__ == "__main__":
     main()
