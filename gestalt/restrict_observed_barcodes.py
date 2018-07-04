@@ -189,6 +189,7 @@ def make_likelihood_scorer(tree: CellLineageTree, true_model_dict: Dict, name: s
         tree,
         true_model_dict["bcode_meta"],
         log_barr = 0, # no penalty
+        target_lam_pen = 0, # no penalty
         max_iters = 0,
         transition_wrap_maker = TransitionWrapperMaker(tree, bcode_meta),
         init_model_params = param_dict,

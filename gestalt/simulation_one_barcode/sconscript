@@ -121,6 +121,8 @@ def run_parsimony(env, outdir, c):
         c['restrict_observed_alleles'],
         ' '.join(map(str, cmd)))
 
+# TODO: this currently only just takes the first tree and optimizes it.
+# doesn't actually search over topologies...
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
     cmd = [
@@ -129,7 +131,11 @@ def run_MLE(env, outdir, c):
         '--topology-file ${SOURCES[1]}',
         '--true-model-file ${SOURCES[2]}',
         '--true-collapsed-tree-file ${SOURCES[3]}',
-        '--seed 40',
+        '--seed 1',
+        '--target-lam-pen',
+        5.0,
+        '--log-barr',
+        0.001,
         '--max-iters 2000',
     ]
     return env.Command(
