@@ -213,9 +213,12 @@ class TargetStatus(tuple):
     @staticmethod
     def get_all_transitions(bcode_meta: BarcodeMetadata):
         """
-        @return Dict[start TargetStatus, Dict[end TargetStatus, List[TargetTract] that can be introduced to the start TargetStatus to create the end TargetStatus]
+        @return tuple of two Dicts:
+            1. Dict[start TargetStatus, Dict[end TargetStatus, List[TargetTract] that can be introduced to the start TargetStatus to create the end TargetStatus]
+            2. Dict[end TargetStatus, Set[start TargetStatus]]: maps each end target status to all the possible start target statuses (within one step)
         """
         target_status_transition_dict = dict()
+        target_status_inverse_transition_dict = dict()
         deact_targs = TargetDeactTract(0, bcode_meta.n_targets - 1)
         target_statuses = deact_targs.get_contained_target_statuses()
         for targ_stat in target_statuses:
@@ -228,5 +231,13 @@ class TargetStatus(tuple):
                     targ_stat_start_dict[new_targ_stat].append(target_tract)
                 else:
                     targ_stat_start_dict[new_targ_stat] = [target_tract]
+
+                # Also update the inverse dictionary -- maps new state to possible previous states
+                if new_targ_stat in target_status_inverse_transition_dict:
+                    target_status_inverse_transition_dict[new_targ_stat].add(targ_stat)
+                else:
+                    target_status_inverse_transition_dict[new_targ_stat] = set([targ_stat])
+
             target_status_transition_dict[targ_stat] = targ_stat_start_dict
-        return target_status_transition_dict
+
+        return target_status_transition_dict, target_status_inverse_transition_dict

@@ -99,7 +99,8 @@ class LikelihoodScorer(ParallelWorker):
                 self.target_lam_pen)
 
         # Initialize with parameters such that the branch lengths are positive
-        res_model.initialize_branch_lens()
+        if 'branch_len_inners' not in self.init_model_params or 'branch_len_offsets_proportion' not in self.init_model_params:
+            res_model.initialize_branch_lens()
         full_init_model_params = res_model.get_vars_as_dict()
         for key, val in self.init_model_params.items():
             if key != "tot_time" and val.shape != full_init_model_params[key].shape:

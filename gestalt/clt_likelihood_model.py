@@ -62,7 +62,7 @@ class CLTLikelihoodModel:
             assert self.root_node_id == 0
             self.num_nodes = self.topology.get_num_nodes()
         self.bcode_meta = bcode_meta
-        self.targ_stat_transitions_dict = TargetStatus.get_all_transitions(self.bcode_meta)
+        self.targ_stat_transitions_dict, _ = TargetStatus.get_all_transitions(self.bcode_meta)
 
         self.num_targets = bcode_meta.n_targets
 

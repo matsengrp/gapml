@@ -137,6 +137,7 @@ def run_MLE(env, outdir, c):
         5.0,
         '--log-barr',
         0.001,
+        '--max-sum-states 50',
         '--max-iters 2000',
     ]
     return env.Command(
