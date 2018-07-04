@@ -9,7 +9,7 @@ Suppose constant events when resolving multifurcations.
 from __future__ import division, print_function
 import os
 import sys
-import csv
+import json
 import numpy as np
 import argparse
 import time
@@ -65,9 +65,9 @@ def parse_args():
     parser.add_argument('--max-iters', type=int, default=20)
     parser.add_argument('--num-inits', type=int, default=1)
     parser.add_argument(
-        '--is-refit',
+        '--do-refit',
         action='store_true',
-        help='flag this as a refitting procedure')
+        help='refit after tuning over the compatible bifurcating trees')
     parser.add_argument(
         '--max-sum-states',
         type=int,
@@ -78,17 +78,17 @@ def parse_args():
         type=int,
         default=1,
         help='maximum number of extra steps to explore possible ancestral states')
+    parser.add_argument(
+        '--scratch-dir',
+        type=str)
 
-    parser.set_defaults()
+    parser.set_defaults(is_refit=False)
     args = parser.parse_args()
     args.log_file = args.topology_file.replace(".pkl", "_fit_log.txt")
     print("Log file", args.log_file)
     args.pickle_out = args.topology_file.replace(".pkl", "_fitted.pkl")
-    args.csv_out = args.topology_file.replace(".pkl", "_fitted.csv")
+    args.json_out = args.topology_file.replace(".pkl", "_fitted.json")
     args.out_folder = os.path.dirname(args.topology_file)
-    args.scratch_dir = os.path.join(args.out_folder, "scratch")
-    if not os.path.exists(args.scratch_dir):
-        os.mkdir(args.scratch_dir)
 
     assert args.log_barr >= 0
     assert args.target_lam_pen >= 0
@@ -179,12 +179,9 @@ def main(args=sys.argv[1:]):
         result_print_dict = {}
     result_print_dict["log_lik"] = res.train_history[-1]["log_lik"][0]
 
-    # Save distance data as csv
-    with open(args.csv_out, 'w') as csvfile:
-        fieldnames = list(result_print_dict.keys())
-        writer = csv.DictWriter(csvfile, fieldnames = fieldnames)
-        writer.writeheader()
-        writer.writerow(result_print_dict)
+    # Save quick summary data as json
+    with open(args.json_out, 'w') as outfile:
+        json.dump(result_print_dict, outfile)
 
     # Save the data
     with open(args.pickle_out, "wb") as f:

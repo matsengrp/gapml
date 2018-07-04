@@ -3,6 +3,7 @@ import numpy as np
 import typing
 from typing import List
 import random
+import time
 
 from scipy.stats import spearmanr
 from cell_lineage_tree import CellLineageTree
@@ -159,7 +160,9 @@ class SPRDistanceMeasurer(TreeDistanceMeasurer):
             n.name = n.allele_events_list_str
 
         # Write tree out in newick format
-        tree_in_file = "%s/tree_newick.txt" % self.scratch_dir
+        suffix = "%d%d" % (int(time.time()),np.random.randint(1000000))
+        tree_in_file = "%s/tree_newick%s.txt" % (
+                self.scratch_dir, suffix)
         with open(tree_in_file, "w") as f:
             f.write(self.ref_tree.write(format=9))
             f.write("\n")
@@ -167,7 +170,7 @@ class SPRDistanceMeasurer(TreeDistanceMeasurer):
             f.write("\n")
 
         # Run rspr
-        rspr_out_file = "%s/tree_spr.txt" % self.scratch_dir
+        rspr_out_file = "%s/tree_spr%s.txt" % (self.scratch_dir, suffix)
         subprocess.check_output(
                 "%s -fpt < %s > %s" % (RSPR_PATH, tree_in_file, rspr_out_file),
                 shell=True)
@@ -176,6 +179,9 @@ class SPRDistanceMeasurer(TreeDistanceMeasurer):
         with open(rspr_out_file, "r") as f:
             lines = f.readlines()
             spr_dist = int(lines[-1].split("=")[-1])
+
+        os.remove(tree_in_file)
+        os.remove(rspr_out_file)
 
         return spr_dist
 
