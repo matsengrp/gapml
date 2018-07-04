@@ -112,7 +112,7 @@ def run_parsimony(env, outdir, c):
         '--max-random',
         0,
         '--max-random-multifurc',
-        10,
+        1,
     ]
     return env.Command(
         [
@@ -131,7 +131,8 @@ def run_MLE(env, outdir, c):
         '--topology-file ${SOURCES[1]}',
         '--true-model-file ${SOURCES[2]}',
         '--true-collapsed-tree-file ${SOURCES[3]}',
-        '--seed 1',
+        '--seed',
+	c['seed'] + 100,
         '--target-lam-pen',
         5.0,
         '--log-barr',
