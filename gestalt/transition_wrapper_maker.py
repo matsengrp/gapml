@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Set
 import random
 import logging
 import numpy as np
@@ -6,7 +6,7 @@ import numpy as np
 from anc_state import AncState
 from cell_lineage_tree import CellLineageTree
 from target_status import TargetStatus
-from indel_sets import TargetTract
+from indel_sets import TargetTract, SingletonWC
 from barcode_metadata import BarcodeMetadata
 import ancestral_events_finder as anc_evt_finder
 
@@ -64,7 +64,8 @@ class TransitionWrapperMaker:
         @return Dict[node id, List[TransitionWrapperMaker]]: a dictionary that stores the
                 list of TransitionWrapperMakers (one for each barcode) for each node
         """
-        targ_stat_transitions_dict = TargetStatus.get_all_transitions(self.bcode_meta)
+        targ_stat_transitions_dict, targ_stat_inv_transitions_dict = TargetStatus.get_all_transitions(
+                self.bcode_meta)
         # Annotate with ancestral states using the efficient upper bounding algo
         anc_evt_finder.annotate_ancestral_states(self.tree, self.bcode_meta)
 
@@ -75,17 +76,22 @@ class TransitionWrapperMaker:
             for idx, anc_state in enumerate(node.anc_state_list):
                 possible_targ_statuses = anc_state.generate_possible_target_statuses()
                 num_possible_states = len(possible_targ_statuses)
-                if node.is_leaf() and num_possible_states > self.max_num_states:
+                only_sgwcs = [evt.__class__ == SingletonWC for evt in node.allele_events_list[idx].events]
+                if only_sgwcs and num_possible_states > self.max_num_states:
                     # Subset the possible internal states as lower bound
-                    # We only do this for leaves since this is easy to deal with
-                    # (subsetting internal node ancestral states seems tricky -- the approx error propagates)
                     # The subset is going to be those within a small number of steps
+                    # We will only subset for ancestral states corresponding to singleton wcs since we are
+                    # relatively confident that the most likely ancestral states have the singleton wc
+                    # at this internal node and it is most likely the singleton wcs were reached via a small
+                    # number of steps
                     parent_statuses = transition_matrix_states[node.up.node_id][idx].states
+                    max_target_status = anc_state.to_max_target_status()
 
                     close_states = self.get_states_close_by(
-                            possible_targ_statuses,
                             parent_statuses,
-                            targ_stat_transitions_dict)
+                            targ_stat_transitions_dict,
+                            targ_stat_inv_transitions_dict,
+                            max_target_status)
 
                     target_statuses = list(
                             set(parent_statuses) | close_states | set([anc_state.to_max_target_status()]))
@@ -95,13 +101,14 @@ class TransitionWrapperMaker:
                         len(parent_statuses),
                         num_possible_states,
                         len(target_statuses))
+                    assert num_possible_states >= len(target_statuses)
                 else:
                     target_statuses = anc_state.generate_possible_target_statuses()
 
                 if len(target_statuses) > self.max_num_states:
                     logging.info(
                         "WARNING: (too many?) possible states at this ancestral node: %d states",
-                        num_possible_states)
+                        len(target_statuses))
 
                 wrapper_list.append(TransitionWrapper(
                     target_statuses,
@@ -113,36 +120,50 @@ class TransitionWrapperMaker:
 
     def get_states_close_by(
             self,
-            possible_targ_statuses: List[TargetStatus],
             parent_statuses: List[TargetStatus],
-            targ_stat_transitions_dict: Dict[TargetStatus, Dict[TargetStatus, List[TargetTract]]]):
+            targ_stat_transitions_dict: Dict[TargetStatus, Dict[TargetStatus, List[TargetTract]]],
+            targ_stat_inv_transitions_dict: Dict[TargetStatus, Set[TargetStatus]],
+            end_target_status: TargetStatus):
         """
-        @param possible_targ_statuses: possible target statuses
         @param parent_statuses: the parent target statuses
         @param targ_stat_transitions_dict: dictionary specifying all possible transitions between target statuses
+        @param targ_stat_inv_transitions_dict: dictionary specifying all possible inverse/backwards transitions between target statuses
+        @param end_target_status: the ending target status
 
-        @return List[TargetStatus] -- a subset of `possible_states` that are within `self.max_extra_steps`
-                steps away from a state in `parent_statuses`.
-                Code performs a BFS search essentially.
+        @return Set[TargetStatus] -- target statuses that are within `self.max_extra_steps` steps away from `end_target_status`
+                when starting at any state in `parent_statuses`.
         """
-        possible_states = set(possible_targ_statuses)
-
-        # store the previously seen states that we no longer need to explore again
-        prev_seen_states = set(parent_statuses)
-        # store the states we need to explore still
-        states_to_expand = set(parent_statuses)
+        # label all nodes starting from the parent statuses with their closest distance (up to the max distance)
+        dist_to_start_dict = {p: 0 for p in parent_statuses}
+        states_to_explore = set(parent_statuses)
         for i in range(self.max_extra_steps):
-            next_step_states = set()
-
-            for state in states_to_expand:
+            new_states = set()
+            for state in states_to_explore:
                 one_step_states = set(list(targ_stat_transitions_dict[state].keys()))
-                # The states to look at next must be one step away, is a possible ancestral state,
-                # and not previously seen
-                steps_to_expand = (one_step_states & possible_states) - prev_seen_states
-                next_step_states.update(steps_to_expand)
+                for c in one_step_states:
+                    if c not in dist_to_start_dict:
+                        dist_to_start_dict[c] = i + 1
+                new_states.update(one_step_states)
+            states_to_expore = new_states
 
-            # update the previously seen states and the states we still need to explore
-            states_to_expand = next_step_states
-            prev_seen_states.update(states_to_expand)
+        # label all nodes starting from the end target status with their closest distance (up to the max distance)
+        dist_to_max_dict = {end_target_status: 0}
+        states_to_explore = set(end_target_status)
+        for i in range(self.max_extra_steps):
+            new_states = set()
+            for state in states_to_explore:
+                if state in targ_stat_inv_transitions_dict:
+                    one_step_inv_states = targ_stat_inv_transitions_dict[state]
+                    for c in one_step_inv_states:
+                        if c not in dist_to_start_dict:
+                            dist_to_max_dict[c] = i + 1
+                    new_states.update(one_step_states)
+            states_to_expore = new_states
 
-        return prev_seen_states
+        # Now just take the nodes that have the sum of the "from" and "to" distance to be no more than the max distance
+        good_states = set()
+        for state, dist_to_start in dist_to_start_dict.items():
+            if state in dist_to_max_dict:
+                if dist_to_max_dict[state] + dist_to_start <= self.max_extra_steps + 1:
+                    good_states.add(state)
+        return good_states

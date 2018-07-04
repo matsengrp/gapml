@@ -102,9 +102,11 @@ def run_MLE(env, outdir, c):
         '--topology-file ${SOURCES[1]}',
         '--true-model-file ${SOURCES[2]}',
         '--true-collapsed-tree-file ${SOURCES[3]}',
-        '--seed 400',
+        '--seed',
+	c['seed'] + 100,
         '--log-barr 0.001',
         '--target-lam-pen 10.0',
+        '--max-sum-states 50',
         '--max-iters 6000',
     ]
     return env.Command(
