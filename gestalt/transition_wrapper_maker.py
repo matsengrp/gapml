@@ -91,10 +91,11 @@ class TransitionWrapperMaker:
                             parent_statuses,
                             targ_stat_transitions_dict,
                             targ_stat_inv_transitions_dict,
-                            max_target_status)
+                            max_target_status,
+                            possible_targ_statuses)
+                    assert max_target_status in close_states
 
-                    target_statuses = list(
-                            set(parent_statuses) | close_states | set([anc_state.to_max_target_status()]))
+                    target_statuses = list(set(parent_statuses) | close_states)
                     logging.info(
                         "Subsampling states for node %d, parent # states %d, node # states %d, reduced to # states %d",
                         node.node_id,
@@ -103,12 +104,16 @@ class TransitionWrapperMaker:
                         len(target_statuses))
                     assert num_possible_states >= len(target_statuses)
                 else:
-                    target_statuses = anc_state.generate_possible_target_statuses()
+                    target_statuses = possible_targ_statuses
 
                 if len(target_statuses) > self.max_num_states:
                     logging.info(
                         "WARNING: (too many?) possible states at this ancestral node: %d states",
                         len(target_statuses))
+
+                if only_sgwcs:
+                    max_target_status = anc_state.to_max_target_status()
+                    assert max_target_status in target_statuses
 
                 wrapper_list.append(TransitionWrapper(
                     target_statuses,
@@ -123,47 +128,66 @@ class TransitionWrapperMaker:
             parent_statuses: List[TargetStatus],
             targ_stat_transitions_dict: Dict[TargetStatus, Dict[TargetStatus, List[TargetTract]]],
             targ_stat_inv_transitions_dict: Dict[TargetStatus, Set[TargetStatus]],
-            end_target_status: TargetStatus):
+            end_target_status: TargetStatus,
+            possible_targ_statuses: List[TargetStatus]):
         """
         @param parent_statuses: the parent target statuses
         @param targ_stat_transitions_dict: dictionary specifying all possible transitions between target statuses
         @param targ_stat_inv_transitions_dict: dictionary specifying all possible inverse/backwards transitions between target statuses
         @param end_target_status: the ending target status
+        @param possible_targ_statuses: a list of the possible target statuses
 
-        @return Set[TargetStatus] -- target statuses that are within `self.max_extra_steps` steps away from `end_target_status`
-                when starting at any state in `parent_statuses`.
+        @return Set[TargetStatus] -- target statuses that are within an EXTRA `self.max_extra_steps` steps away from `end_target_status`
+                when starting at any state in `parent_statuses`. (extra meaning more than the minimum required to go from some parent
+                state to the end state)
         """
         # label all nodes starting from the parent statuses with their closest distance (up to the max distance)
         dist_to_start_dict = {p: 0 for p in parent_statuses}
         states_to_explore = set(parent_statuses)
-        for i in range(self.max_extra_steps):
+        # Use the following two vars to track minimum number of steps from any parent state to the end target status
+        end_targ_found = end_target_status in states_to_explore
+        min_steps_to_end_targ = 0
+        i = 0
+        while not end_targ_found or i < self.max_extra_steps + min_steps_to_end_targ:
             new_states = set()
             for state in states_to_explore:
                 one_step_states = set(list(targ_stat_transitions_dict[state].keys()))
+
+                if not end_targ_found and end_target_status in one_step_states:
+                    # Aha! We found the min number of steps to go from a parent to the end targ stat
+                    min_steps_to_end_targ = i
+                    end_targ_found = True
+
                 for c in one_step_states:
                     if c not in dist_to_start_dict:
                         dist_to_start_dict[c] = i + 1
-                new_states.update(one_step_states)
-            states_to_expore = new_states
+                        new_states.add(c)
+            states_to_explore = new_states
+            i = i + 1
+
+        assert end_targ_found
 
         # label all nodes starting from the end target status with their closest distance (up to the max distance)
-        dist_to_max_dict = {end_target_status: 0}
-        states_to_explore = set(end_target_status)
-        for i in range(self.max_extra_steps):
+        dist_to_end_dict = {end_target_status: 0}
+        states_to_explore = set([end_target_status])
+        # We should search backwards the (max extra + min steps) since we need to consider all states along the
+        # transition path
+        for i in range(self.max_extra_steps + min_steps_to_end_targ):
             new_states = set()
             for state in states_to_explore:
                 if state in targ_stat_inv_transitions_dict:
                     one_step_inv_states = targ_stat_inv_transitions_dict[state]
                     for c in one_step_inv_states:
-                        if c not in dist_to_start_dict:
-                            dist_to_max_dict[c] = i + 1
-                    new_states.update(one_step_states)
-            states_to_expore = new_states
+                        if c not in dist_to_end_dict:
+                            dist_to_end_dict[c] = i + 1
+                            new_states.add(c)
+            states_to_explore = new_states
 
         # Now just take the nodes that have the sum of the "from" and "to" distance to be no more than the max distance
         good_states = set()
         for state, dist_to_start in dist_to_start_dict.items():
-            if state in dist_to_max_dict:
-                if dist_to_max_dict[state] + dist_to_start <= self.max_extra_steps + 1:
+            if state in dist_to_end_dict:
+                assert(dist_to_end_dict[state] + dist_to_start < 11)
+                if dist_to_end_dict[state] + dist_to_start <= min_steps_to_end_targ + self.max_extra_steps + 1:
                     good_states.add(state)
-        return good_states
+        return good_states.intersection(set(possible_targ_statuses))
