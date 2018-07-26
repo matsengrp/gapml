@@ -1,0 +1,103 @@
+# Check that as we increase number of barcodes, we converge to the truth
+
+import os
+
+from os.path import join
+from nestly.scons import SConsWrap
+from nestly import Nest
+from SCons.Script import Environment, Command, AddOption
+import numpy as np
+
+Import('env')
+localenv = env.Clone()
+
+# Set up state
+base = {'nreps': localenv['NREPS'],
+        'output_name': localenv['OUTPUT_NAME']}
+
+nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
+
+nest.add(
+    'abundance_thres',
+    [400],
+    label_func=lambda c: "min_abund_%d" % c,
+)
+
+@nest.add_target_with_env(localenv)
+def read_gestalt(env, outdir, c):
+    cmd = [
+        'python read_gestalt_data.py',
+        '--out-obs-data ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+        '--abundance-thres',
+	c['abundance_thres'],
+	'--time 1',
+    ]
+    return env.Command(
+        [
+            join(outdir, 'fish_data.pkl'),
+            join(outdir, 'log.txt')],
+        [],
+        ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def restrict_observed_alleles(env, outdir, c):
+    cmd = [
+        'python restrict_observed_barcodes.py',
+        '--obs-file ${SOURCES[0]}',
+        '--num-barcodes 1',
+        '--out-obs-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+    ]
+    return env.Command(
+        [
+            join(outdir, 'fish_data_restrict.pkl'),
+            join(outdir, 'log_restrict.txt'),
+	],
+        c['read_gestalt'],
+        ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def run_parsimony(env, outdir, c):
+    cmd = [
+        'python get_parsimony_topologies.py',
+        '--obs-file ${SOURCES[0]}',
+        '--out-template-file ${TARGETS[0]}',
+        '--num-jumbles',
+	1,
+        '--max-random',
+        0,
+        '--max-random-multifurc',
+        1,
+    ]
+    return env.Command(
+        [
+            join(outdir, 'parsimony_tree0.pkl')],
+        c['restrict_observed_alleles'],
+        ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def run_MLE(env, outdir, c):
+    cmd = [
+        'python tune_topology.py',
+        '--obs-file ${SOURCES[0]}',
+        '--topology-file-template ${SOURCES[1]}',
+        '--out-model-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+        '--seed 100',
+        '--log-barr 0.001',
+        '--target-lam-pen 10.0',
+        '--max-sum-states 800',
+        '--max-extra-steps 10',
+        '--max-iters 0',
+    ]
+    return env.Command(
+        [
+            join(outdir, 'tune_topology_fitted.pkl'),
+            join(outdir, 'log_tune_topology.txt'),
+	],
+        [
+            c['restrict_observed_alleles'][0],
+            c['run_parsimony'][0],
+	],
+        ' '.join(map(str, cmd)))

@@ -46,7 +46,7 @@ def parse_args():
     parser.add_argument(
         '--num-jumbles',
         type=int,
-        default=5,
+        default=1,
         help="Number of times to jumble. (This is an input to MIX)")
     parser.add_argument(
         '--mix-path',

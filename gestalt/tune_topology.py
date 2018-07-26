@@ -113,13 +113,19 @@ def main(args=sys.argv[1:]):
             args.scratch_dir)
         worker_list.append(worker)
 
-    job_manager = BatchSubmissionManager(
-            worker_list,
-            None,
-            len(worker_list),
-            args.scratch_dir)
-    successful_workers = job_manager.run(successful_only=True)
-    assert len(successful_workers) > 0
+    if len(worker_list) > 1:
+        print("Submitting jobs")
+        job_manager = BatchSubmissionManager(
+                worker_list,
+                None,
+                len(worker_list),
+                args.scratch_dir)
+        successful_workers = job_manager.run(successful_only=True)
+        assert len(successful_workers) > 0
+    else:
+        successful_workers = [(
+            worker_list[0].run_worker(None),
+            worker_list[0])]
 
     best_log_lik = successful_workers[0][0]["log_lik"]
     best_worker = successful_workers[0][1]
