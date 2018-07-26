@@ -43,6 +43,11 @@ def parse_args():
         type=int,
         default=5,
         help='Only include the alleles that have appeared at least this number of times')
+    parser.add_argument(
+        '--time',
+        type=float,
+        default=1,
+        help='how much time we will say has elapsed')
     return parser.parse_args()
 
 def process_observed_seq_format7B(
@@ -222,6 +227,7 @@ def main():
             "bcode_meta": bcode_meta,
             "obs_leaves": obs_leaves,
             "organ_dict": organ_dict,
+            "time": args.time,
         }
         six.moves.cPickle.dump(out_dict, f, protocol = 2)
 

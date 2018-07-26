@@ -32,8 +32,7 @@ def parse_args():
     parser.add_argument(
         '--model-file',
         type=str,
-        default="_output/true_model.pkl",
-        help='pkl file with true model')
+        help='pkl file with true model (optional)')
     parser.add_argument(
         '--log-file',
         type=str,
@@ -68,7 +67,10 @@ def collapse_obs_leaves_by_first_alleles(
     """
     obs_dict = {}
     for obs in obs_leaves:
-        obs.set_allele_list(obs.allele_list.create_truncated_version(num_barcodes))
+        if obs.allele_list is not None:
+            obs.set_allele_list(obs.allele_list.create_truncated_version(num_barcodes))
+        else:
+            obs.allele_events_list = obs.allele_events_list[:num_barcodes]
 
         # Make sure to keep unique observations and update abundance accordingly
         obs_key = str(obs)
@@ -298,30 +300,31 @@ def main(args=sys.argv[1:]):
     save_data(obs_data_dict, args.out_obs_file)
 
     # Generate the true collapsed tree
-    with open(args.model_file, "rb") as f:
-        true_model_dict = six.moves.cPickle.load(f)
-    collapsed_clt = collapse_tree_by_first_alleles(
+    if args.model_file is not None:
+        with open(args.model_file, "rb") as f:
+            true_model_dict = six.moves.cPickle.load(f)
+        collapsed_clt = collapse_tree_by_first_alleles(
+                true_model_dict,
+                args.num_barcodes)
+        logging.info(collapsed_clt.get_ascii(
+            attributes=["allele_events_list_str"],
+            show_internal=True))
+
+        selected_collapsed_clt = get_highest_likelihood_single_appearance_tree(
+            collapsed_clt,
             true_model_dict,
-            args.num_barcodes)
-    logging.info(collapsed_clt.get_ascii(
-        attributes=["allele_events_list_str"],
-        show_internal=True))
+            args.scratch_dir)
 
-    selected_collapsed_clt = get_highest_likelihood_single_appearance_tree(
-        collapsed_clt,
-        true_model_dict,
-        args.scratch_dir)
+        # Assert no duplicate alleles in the collapsed tree
+        assert len(selected_collapsed_clt) == len(obs_data_dict["obs_leaves"])
+        if args.num_barcodes == orig_num_barcodes:
+            assert len(obs_data_dict["obs_leaves"]) == len(raw_obs_leaves)
 
-    # Assert no duplicate alleles in the collapsed tree
-    assert len(selected_collapsed_clt) == len(obs_data_dict["obs_leaves"])
-    if args.num_barcodes == orig_num_barcodes:
-        assert len(obs_data_dict["obs_leaves"]) == len(raw_obs_leaves)
+        save_data(selected_collapsed_clt, args.out_collapsed_tree_file)
 
-    save_data(selected_collapsed_clt, args.out_collapsed_tree_file)
-
-    # Plot the MRCA matrix of the true collapsed tree for fun
-    out_png = args.out_collapsed_tree_file.replace(".pkl", "_mrca.png")
-    plot_mrca_matrix(selected_collapsed_clt, out_png)
+        # Plot the MRCA matrix of the true collapsed tree for fun
+        out_png = args.out_collapsed_tree_file.replace(".pkl", "_mrca.png")
+        plot_mrca_matrix(selected_collapsed_clt, out_png)
 
 if __name__ == "__main__":
     main()
