@@ -87,6 +87,7 @@ class CLTPenalizedEstimator(CLTEstimator):
 
         prev_pen_log_lik = pen_log_lik[0]
         logging.info("initial penalized log lik %f, unpen log lik %f", pen_log_lik, log_lik)
+        print("initial penalized log lik obtained %f" % pen_log_lik)
         assert not np.isnan(pen_log_lik)
         train_history = [{
                     "iter": -1,

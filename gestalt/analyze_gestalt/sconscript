@@ -87,8 +87,8 @@ def run_MLE(env, outdir, c):
         '--seed 100',
         '--log-barr 0.001',
         '--target-lam-pen 10.0',
-        '--max-sum-states 800',
-        '--max-extra-steps 10',
+        '--max-sum-states 20',
+        '--max-extra-steps 0',
         '--max-iters 0',
     ]
     return env.Command(
