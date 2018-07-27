@@ -119,7 +119,7 @@ def parse_args():
         default=None,
         help="Maximum abundance of the observed leaves")
     parser.add_argument(
-        '--two-consecutive-nodes',
+        '--is-cherry',
         action='store_true',
         help="special tree structure for tests")
 
@@ -146,7 +146,7 @@ def create_cell_type_tree(args):
 def create_simulators(args, clt_model):
     allele_simulator = AlleleSimulatorSimultaneous(clt_model)
     cell_type_simulator = CellTypeSimulator(clt_model.cell_type_tree)
-    if args.two_consecutive_nodes:
+    if args.is_cherry:
         clt_simulator = CLTSimulatorSimple(
                 cell_type_simulator,
                 allele_simulator)
