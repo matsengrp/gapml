@@ -85,6 +85,8 @@ class Allele:
         # TODO: right now this code is pretty inefficient... but only used by simulator i think?
         events = self.get_event_encoding().events
         target_status = TargetStatus()
+        # Note that this code adds the events to the target status in some arbitrary, potentially incorrect, order
+        # This is fine for getting a target status
         for evt in events:
             min_deact, max_deact = evt.get_min_max_deact_targets(self.bcode_meta)
             target_status = target_status.add_target_tract(

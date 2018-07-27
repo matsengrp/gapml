@@ -101,6 +101,8 @@ class TargetStatus(tuple):
 
     def add_target_tract(self, target_tract: TargetTract):
         """
+        This ignores any ordering of the target tract (so will add the target tract even if
+        the ordering that they are introduced makes no sense)
         @return TargetStatus that results after adding this `target_tract`
         """
         if len(self) == 0:
@@ -111,8 +113,8 @@ class TargetStatus(tuple):
 
         max_targets = max(target_tract.max_deact_target + 1, self[-1].max_deact_target + 1)
         binary_status = self._get_binary_status(max_targets)
-        assert binary_status[target_tract.min_target] == 0
-        assert binary_status[target_tract.max_target] == 0
+        #assert binary_status[target_tract.min_target] == 0
+        #assert binary_status[target_tract.max_target] == 0
         binary_status[target_tract.min_deact_target: target_tract.max_deact_target + 1] = 1
         return TargetStatus._binary_status_to_target_status(binary_status.tolist())
 

@@ -45,12 +45,12 @@ def parse_args():
     parser.add_argument(
         '--target-lambdas',
         type=str,
-        default=",".join(["0.02"] * 10),
+        default=",".join(["0.05"] * 10),
         help='target cut rates -- will get slightly perturbed for the true value')
     parser.add_argument(
         '--perturb-target-lambdas-variance',
         type=float,
-        default=0.0008,
+        default=0.002,
         help='variance of perturbations to target lambdas (so variance of perturbations)')
     parser.add_argument(
         '--double-cut-weight',
@@ -61,30 +61,30 @@ def parse_args():
         '--trim-long-probs',
         type=float,
         nargs=2,
-        default=[0.001] * 2,
+        default=[0.05] * 2,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
         '--trim-zero-probs',
         type=float,
         nargs=2,
-        default=[0.3] * 2,
+        default=[0.4] * 2,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
         '--trim-poissons',
         type=float,
         nargs=2,
-        default=[5] * 2,
+        default=[4] * 2,
         help='poisson parameter for distribution of symmetric deltion about cut site(s)'
     )
     parser.add_argument(
         '--insert-zero-prob',
         type=float,
-        default=0.1,
+        default=0.4,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
         '--insert-poisson',
         type=float,
-        default=1,
+        default=0.3,
         help='poisson parameter for distribution of insertion in cut site(s)')
     parser.add_argument(
         '--birth-lambda', type=float, default=1.8, help='birth rate')
@@ -189,9 +189,9 @@ def create_cell_lineage_tree(
         except ValueError as e:
             logging.info("ValueError warning.... %s", str(e))
             continue
-        except AssertionError as e:
-            logging.info("AssertionError warning ... %s", str(e))
-            continue
+        #except AssertionError as e:
+        #    logging.info("AssertionError warning ... %s", str(e))
+        #    continue
 
     if len(obs_leaves) < args.min_uniq_alleles:
         raise Exception("Could not manage to get enough leaves")

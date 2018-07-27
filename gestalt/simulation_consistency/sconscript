@@ -19,8 +19,14 @@ nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_enviro
 
 nest.add(
     'seed',
-    range(1),
+    range(100,103),
     label_func=lambda c: "seed%d" % c,
+)
+
+nest.add(
+    'double_cut',
+    [1.0],
+    label_func=lambda c: "double_cut_%d" % int(c * 10),
 )
 
 @nest.add_target_with_env(localenv)
@@ -34,14 +40,16 @@ def generate(env, outdir, c):
         '--out-obs-file ${TARGETS[0]}',
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
-        '--time 1.2',
+        '--time 1.5',
         '--num-barcodes',
-        160,
+        80,
         '--min-uniq-alleles',
         5,
         '--max-uniq-alleles',
-        30,
-        '--max-abundance 1'
+        12,
+        '--max-abundance 10',
+        '--double-cut-weight',
+        c['double_cut'],
     ]
     return env.Command(
         [
@@ -105,16 +113,18 @@ def run_MLE(env, outdir, c):
         '--true-collapsed-tree-file ${SOURCES[3]}',
         '--seed',
 	c['seed'] + 100,
-        '--log-barr 0.001',
+        '--log-barr 0.1',
         '--target-lam-pens',
 	penalty_params,
-        '--max-sum-states 30',
+        '--max-sum-states 50',
         '--max-extra-steps 1',
-        '--max-iters 400',
+        '--max-iters 3000',
+        '--train-split 0.75',
     ]
     return env.Command(
         [
-            join(outdir, 'parsimony_tree0_fitted.pkl')],
+            join(outdir, 'parsimony_tree0_fitted.pkl'),
+            join(outdir, 'parsimony_tree0_fit_log.txt')],
         [
             c['restrict_observed_alleles'][0],
             c['run_parsimony'][0],

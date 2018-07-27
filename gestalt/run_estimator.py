@@ -134,7 +134,7 @@ def fit_tree(
         init_model_params = init_model_params,
         dist_measurers = oracle_dist_measurers,
         target_lams_known = target_lams_known)
-    res = worker.do_work_directly(args.sess)
+    res = worker.run_worker(None)
     return res
 
 def tune_hyperparams(
@@ -343,7 +343,7 @@ def refit_bifurc_tree(
             refit_transition_wrap_maker,
             init_model_params = param_dict,
             target_lams_known = False,
-            dist_measurers = oracle_dist_measurers)
+            oracle_dist_measurers = oracle_dist_measurers)
     return refit_res
 
 def write_output_json_summary(
@@ -386,9 +386,6 @@ def main(args=sys.argv[1:]):
 
     has_unresolved_multifurcs = check_has_unresolved_multifurcs(tree)
     logging.info("Tree has unresolved mulfirucs? %d", has_unresolved_multifurcs)
-
-    args.sess = tf.InteractiveSession()
-    tf.global_variables_initializer().run()
 
     # Tune penalty params for the target lambdas
     best_targ_lam_pen, init_target_lams = tune_hyperparams(tree, bcode_meta, args)
