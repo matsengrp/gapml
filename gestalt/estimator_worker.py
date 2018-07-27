@@ -13,7 +13,7 @@ class RunEstimatorWorker(ParallelWorker):
             true_collapsed_tree_file: str,
             seed: int,
             log_barr: float,
-            target_lam_pen: float,
+            target_lam_pens: str,
             max_iters: int,
             num_inits: int,
             do_refit: bool,
@@ -28,7 +28,7 @@ class RunEstimatorWorker(ParallelWorker):
         self.true_collapsed_tree_file = true_collapsed_tree_file
         self.seed = seed
         self.log_barr = log_barr
-        self.target_lam_pen = target_lam_pen
+        self.target_lam_pens = target_lam_pens
         self.max_iters = max_iters
         self.num_inits = num_inits
         self.do_refit = do_refit
@@ -51,8 +51,8 @@ class RunEstimatorWorker(ParallelWorker):
             self.seed,
             '--log-barr',
             self.log_barr,
-            '--target-lam-pen',
-            self.target_lam_pen,
+            '--target-lam-pens',
+            self.target_lam_pens,
             '--max-iters',
             self.max_iters,
             '--num-inits',

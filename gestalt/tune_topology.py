@@ -56,9 +56,9 @@ def parse_args():
         default=0.001,
         help="log barrier parameter on the branch lengths")
     parser.add_argument(
-        '--target-lam-pen',
-        type=float,
-        default=10,
+        '--target-lam-pens',
+        type=str,
+        default='10',
         help="comma-separated string with penalty parameters on the target lambdas")
     parser.add_argument('--max-iters', type=int, default=20)
     parser.add_argument('--num-inits', type=int, default=1)
@@ -77,7 +77,6 @@ def parse_args():
     args = parser.parse_args()
 
     assert args.log_barr >= 0
-    assert args.target_lam_pen >= 0
 
     args.topology_folder = os.path.dirname(args.topology_file_template)
     args.scratch_dir = os.path.join(
@@ -104,7 +103,7 @@ def main(args=sys.argv[1:]):
             args.true_collapsed_tree_file,
             args.seed,
             args.log_barr,
-            args.target_lam_pen,
+            args.target_lam_pens,
             args.max_iters,
             args.num_inits,
             True, # do refitting
