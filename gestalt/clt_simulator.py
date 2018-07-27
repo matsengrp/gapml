@@ -25,7 +25,7 @@ class CLTSimulator:
         self.cell_state_simulator = cell_state_simulator
         self.allele_simulator = allele_simulator
 
-    def simulate(self, root_allele: Allele, root_cell_state: CellState, time: float, max_nodes: int = 50):
+    def simulate(self, root_allele: Allele, root_cell_state: CellState, tot_time: float, max_nodes: int = 50):
         raise NotImplementedError()
 
     def _simulate_alleles(self, tree: CellLineageTree):
@@ -237,7 +237,7 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
     def simulate(self,
             tree_seed: int,
             data_seed: int,
-            time: float,
+            tot_time: float,
             max_nodes: int = 10):
         """
         Generates a CLT based on the model
@@ -250,7 +250,7 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
         # Run the simulation to just create the tree topology
         tree = self.bd_tree_simulator.simulate(
                 root_allele,
-                time,
+                tot_time,
                 max_nodes)
         tree.cell_state = root_cell_state
 

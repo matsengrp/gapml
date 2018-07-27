@@ -13,6 +13,7 @@ from cell_state import CellState, CellTypeTree
 from cell_lineage_tree import CellLineageTree
 from cell_state_simulator import CellTypeSimulator
 from clt_simulator import CLTSimulatorBifurcating
+from clt_simulator_simple import CLTSimulatorSimple
 from clt_likelihood_model import CLTLikelihoodModel
 from allele_simulator_simult import AlleleSimulatorSimultaneous
 from clt_observer import CLTObserver
@@ -117,6 +118,10 @@ def parse_args():
         type=int,
         default=None,
         help="Maximum abundance of the observed leaves")
+    parser.add_argument(
+        '--two-consecutive-nodes',
+        action='store_true',
+        help="special tree structure for tests")
 
     parser.set_defaults()
     args = parser.parse_args()
@@ -141,7 +146,12 @@ def create_cell_type_tree(args):
 def create_simulators(args, clt_model):
     allele_simulator = AlleleSimulatorSimultaneous(clt_model)
     cell_type_simulator = CellTypeSimulator(clt_model.cell_type_tree)
-    clt_simulator = CLTSimulatorBifurcating(
+    if args.two_consecutive_nodes:
+        clt_simulator = CLTSimulatorSimple(
+                cell_type_simulator,
+                allele_simulator)
+    else:
+        clt_simulator = CLTSimulatorBifurcating(
             args.birth_lambda,
             args.death_lambda,
             cell_type_simulator,
@@ -168,7 +178,7 @@ def create_cell_lineage_tree(
             clt = clt_simulator.simulate(
                 tree_seed = args.model_seed,
                 data_seed = args.data_seed,
-                time = tot_time,
+                tot_time = tot_time,
                 max_nodes = args.max_clt_nodes)
             clt.label_node_ids()
 
