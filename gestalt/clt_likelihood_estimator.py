@@ -129,6 +129,10 @@ class CLTPenalizedEstimator(CLTEstimator):
                     "iter %d pen log lik %f log lik %f targ pen %f log barr %f min branch len %f",
                     i, pen_log_lik, log_lik, targ_pen, log_barr, np.min(branch_lens[1:]))
 
+            if np.isnan(pen_log_lik):
+                logging.info("ERROR: pen log like is nan. branch lengths are negative?")
+                break
+
             if i % save_iter == (save_iter - 1):
                 if dist_measurers is not None:
                     tree_dist = dist_measurers.get_tree_dists([self.model.get_fitted_bifurcating_tree()])[0]

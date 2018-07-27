@@ -28,3 +28,6 @@ def inv_sigmoid(prob: float):
 def save_data(data, out_file: str):
     with open(out_file, "wb") as f:
         six.moves.cPickle.dump(data, f, protocol = 2)
+
+def get_randint():
+    return np.random.randint(low=0, high=10000)

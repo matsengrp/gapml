@@ -35,6 +35,9 @@ Export('env')
 
 env.SConsignFile()
 
+flag = 'simulation_sanity'
+SConscript(flag + '/sconscript', exports=['flag'])
+
 flag = 'simulation_consistency'
 SConscript(flag + '/sconscript', exports=['flag'])
 

@@ -5,12 +5,15 @@ constrained to the multifurcating tree topology.
 Searches over bifurcating trees with the same multifurcating tree
 by using a continuous parameterization.
 Suppose constant events when resolving multifurcations.
+
+Performs training/validation split to pick the target lambda penalty parameter
 """
 from __future__ import division, print_function
 import os
 import sys
 import json
 import numpy as np
+from numpy import ndarray
 import argparse
 import time
 import tensorflow as tf
@@ -20,8 +23,10 @@ import logging
 import six
 
 from transition_wrapper_maker import TransitionWrapperMaker
-from likelihood_scorer import LikelihoodScorer
+from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from plot_mrca_matrices import plot_mrca_matrix
+from split_data import create_train_val_tree
+from barcode_metadata import BarcodeMetadata
 from tree_distance import *
 from constants import *
 from common import *
@@ -58,10 +63,15 @@ def parse_args():
         default=0.001,
         help="log barrier parameter on the branch lengths")
     parser.add_argument(
-        '--target-lam-pen',
+        '--target-lam-pens',
+        type=str,
+        default="10.0,1.0",
+        help="comma separated penalty parameters on the target lambdas")
+    parser.add_argument(
+        '--train-split',
         type=float,
-        default=0.1,
-        help="penalty parameter on the target lambdas")
+        default=0.5,
+        help="fraction of data for training data. for tuning penalty param")
     parser.add_argument('--max-iters', type=int, default=20)
     parser.add_argument('--num-inits', type=int, default=1)
     parser.add_argument(
@@ -92,22 +102,163 @@ def parse_args():
     args.json_out = args.topology_file.replace(".pkl", "_fitted.json")
     args.out_folder = os.path.dirname(args.topology_file)
 
+    args.target_lam_pens = list(sorted(
+        [float(lam) for lam in args.target_lam_pens.split(",")],
+        reverse=True))
+
     assert args.log_barr >= 0
-    assert args.target_lam_pen >= 0
+    assert all(lam > 0 for lam in args.target_lam_pens)
     return args
 
-def main(args=sys.argv[1:]):
-    args = parse_args()
-    logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
-    logging.info(str(args))
+def fit_tree(
+        tree: CellLineageTree,
+        bcode_meta: BarcodeMetadata,
+        args,
+        target_lam: float,
+        transition_wrap_maker: TransitionWrapperMaker,
+        init_model_params: Dict,
+        target_lams_known: bool,
+        oracle_dist_measurers = None):
+    """
+    Fits the model params for the given tree and a given penalty param
+    """
+    worker = LikelihoodScorer(
+        get_randint(),
+        tree,
+        bcode_meta,
+        args.log_barr,
+        target_lam,
+        args.max_iters,
+        args.num_inits,
+        transition_wrap_maker,
+        init_model_params = init_model_params,
+        dist_measurers = oracle_dist_measurers,
+        target_lams_known = target_lams_known)
+    res = worker.do_work_directly(args.sess)
+    return res
 
-    np.random.seed(seed=args.seed)
+def tune_hyperparams(
+        tree: CellLineageTree,
+        bcode_meta: BarcodeMetadata,
+        args):
+    """
+    Tunes the penalty param for the target lambda
+    """
+    init_target_lams = get_init_target_lams(bcode_meta)
+    if len(args.target_lam_pens) == 1:
+        # Nothing to tune.
+        best_targ_lam_pen = args.target_lam_pens[0]
+        return best_targ_lam_pen, init_target_lams
 
+    train_tree, val_tree, train_bcode_meta, val_bcode_meta = create_train_val_tree(
+            tree,
+            bcode_meta,
+            args.train_split)
+
+    train_transition_wrap_maker = TransitionWrapperMaker(
+            train_tree,
+            train_bcode_meta,
+            args.max_extra_steps,
+            args.max_sum_states)
+    val_transition_wrap_maker = TransitionWrapperMaker(
+            val_tree,
+            val_bcode_meta,
+            args.max_extra_steps,
+            args.max_sum_states)
+
+    best_targ_lam_pen = args.target_lam_pens[0]
+    best_target_lams = init_target_lams
+    best_val_log_lik = None
+    for i, target_lam_pen in enumerate(args.target_lam_pens):
+        logging.info("TUNING %f", target_lam_pen)
+        # Train the model using only the training data
+        init_model_params = {
+            "target_lams": get_init_target_lams(bcode_meta),
+            "tot_time": args.tot_time}
+        res_train = fit_tree(
+            train_tree,
+            train_bcode_meta,
+            args,
+            target_lam_pen,
+            train_transition_wrap_maker,
+            init_model_params,
+            target_lams_known = False)
+        logging.info("Done training pen param %f", target_lam_pen)
+
+        # Copy over the trained model params except for branch length things
+        fixed_params = {}
+        for k, v in res_train.model_params_dict.items():
+            if k not in ['branch_len_inners', 'branch_len_offsets_proportion']:
+                fixed_params[k] = v
+
+        # Now fit the validation tree with model params fixed
+        res_val = fit_tree(
+            val_tree,
+            val_bcode_meta,
+            args,
+            0, # target pen lam = zero
+            val_transition_wrap_maker,
+            init_model_params = fixed_params,
+            target_lams_known = True)
+        curr_val_log_lik = res_val.train_history[-1]["log_lik"]
+        curr_val_pen_log_lik = res_val.train_history[-1]["pen_log_lik"]
+        logging.info(
+                "Pen param %f val log lik %f target lams %s",
+                target_lam_pen,
+                curr_val_log_lik,
+                fixed_params['target_lams'])
+
+        if not np.isnan(curr_val_pen_log_lik) and (best_val_log_lik is None or best_val_log_lik < curr_val_log_lik):
+            best_val_log_lik = curr_val_log_lik
+            best_targ_lam_pen = target_lam_pen
+            best_target_lams = fixed_params['target_lams']
+
+    logging.info("Best penalty param %s", best_targ_lam_pen)
+    return best_targ_lam_pen, best_target_lams
+
+def get_init_target_lams(bcode_meta):
+    return 0.04 * np.ones(bcode_meta.n_targets) + np.random.uniform(size=bcode_meta.n_targets) * 0.02
+
+def check_has_unresolved_multifurcs(tree: CellLineageTree):
+    """
+    @return whether or not this tree is an unresolved multifurcating tree
+    """
+    for node in tree.traverse():
+        if not node.is_resolved_multifurcation():
+            return True
+    return False
+
+def read_true_model_files(args):
+    """
+    If true model files available, read them
+    """
+    if args.true_model_file is None or args.true_collapsed_tree_file is None:
+        return None, None
+
+    with open(args.true_collapsed_tree_file, "rb") as f:
+        collapsed_true_subtree = six.moves.cPickle.load(f)
+    with open(args.true_model_file, "rb") as f:
+        true_model_dict = six.moves.cPickle.load(f)
+
+    oracle_dist_measurers = TreeDistanceMeasurerAgg([
+        UnrootRFDistanceMeasurer,
+        RootRFDistanceMeasurer,
+        #SPRDistanceMeasurer,
+        MRCADistanceMeasurer,
+        MRCASpearmanMeasurer],
+        collapsed_true_subtree,
+        args.scratch_dir)
+    return true_model_dict, oracle_dist_measurers
+
+def read_data(args):
+    """
+    Read the data files...
+    """
     with open(args.obs_file, "rb") as f:
         obs_data_dict = six.moves.cPickle.load(f)
         bcode_meta = obs_data_dict["bcode_meta"]
         obs_leaves = obs_data_dict["obs_leaves"]
-        tot_time = obs_data_dict["time"]
+        args.tot_time = obs_data_dict["time"]
     logging.info("Number of uniq obs alleles %d", len(obs_leaves))
     logging.info("Barcode cut sites %s", str(bcode_meta.abs_cut_sites))
 
@@ -121,102 +272,86 @@ def main(args=sys.argv[1:]):
     logging.info("Tree topology info: %s", tree_topology_info)
     logging.info("Tree topology num leaves: %d", len(tree))
 
-    has_unresolved_multifurcs = False
-    for node in tree.traverse():
-        if not node.is_resolved_multifurcation():
-            has_unresolved_multifurcs = True
-            break
-    logging.info("Tree has unresolved mulfirucs? %d", has_unresolved_multifurcs)
+    return bcode_meta, tree
 
-    true_model_dict = None
-    oracle_dist_measurers = None
-    if args.true_model_file is not None and args.true_collapsed_tree_file is not None:
-        with open(args.true_collapsed_tree_file, "rb") as f:
-            collapsed_true_subtree = six.moves.cPickle.load(f)
-        with open(args.true_model_file, "rb") as f:
-            true_model_dict = six.moves.cPickle.load(f)
-
-        oracle_dist_measurers = TreeDistanceMeasurerAgg([
-            UnrootRFDistanceMeasurer,
-            RootRFDistanceMeasurer,
-            #SPRDistanceMeasurer,
-            MRCADistanceMeasurer,
-            MRCASpearmanMeasurer],
-            collapsed_true_subtree,
-            args.scratch_dir)
-
-    sess = tf.InteractiveSession()
-    tf.global_variables_initializer().run()
-
-    transition_wrap_maker = TransitionWrapperMaker(
+def fit_multifurc_tree(
+        tree: CellLineageTree,
+        bcode_meta: BarcodeMetadata,
+        args,
+        init_target_lams: ndarray,
+        best_targ_lam_pen: float,
+        oracle_dist_measurers: TreeDistanceMeasurerAgg = None):
+    """
+    @return LikelihoodScorerResult from fitting model on multifurcating tree
+    """
+    transition_wraps_multifurc = TransitionWrapperMaker(
             tree,
             bcode_meta,
             args.max_extra_steps,
             args.max_sum_states)
+    init_model_params = {
+        "target_lams": init_target_lams,
+        "tot_time": args.tot_time}
+    raw_res = fit_tree(
+            tree,
+            bcode_meta,
+            args,
+            best_targ_lam_pen,
+            transition_wraps_multifurc,
+            init_model_params,
+            target_lams_known = False,
+            oracle_dist_measurers = oracle_dist_measurers)
+    return raw_res
 
-    worker = LikelihoodScorer(
-       args.seed,
-       tree,
-       bcode_meta,
-       args.log_barr,
-       args.target_lam_pen,
-       args.max_iters,
-       args.num_inits,
-       transition_wrap_maker,
-       init_model_params = {
-           "target_lams": 0.04 * np.ones(bcode_meta.n_targets) + np.random.uniform(size=bcode_meta.n_targets) * 0.02,
-           "tot_time": tot_time},
-       dist_measurers = oracle_dist_measurers)
+def refit_bifurc_tree(
+        raw_res: LikelihoodScorerResult,
+        bcode_meta: BarcodeMetadata,
+        args,
+        best_targ_lam_pen: float,
+        oracle_dist_measurers: TreeDistanceMeasurerAgg = None):
+    """
+    we need to refit using the bifurcating tree
+    """
+    # Copy over the latest model parameters for warm start
+    param_dict = {k: v for k,v in raw_res.model_params_dict.items()}
+    refit_bifurc_tree = raw_res.fitted_bifurc_tree.copy()
+    refit_bifurc_tree.label_node_ids()
+    num_nodes = refit_bifurc_tree.get_num_nodes()
+    # Copy over the branch lengths
+    br_lens = np.zeros(num_nodes)
+    for node in refit_bifurc_tree.traverse():
+        br_lens[node.node_id] = node.dist
+        node.resolved_multifurcation = True
+    param_dict["branch_len_inners"] = br_lens
+    param_dict["branch_len_offsets_proportion"] = np.zeros(num_nodes)
 
-    raw_res = worker.do_work_directly(sess)
-    refit_res = None
+    # Fit the bifurcating tree
+    refit_transition_wrap_maker = TransitionWrapperMaker(
+            refit_bifurc_tree,
+            bcode_meta,
+            args.max_extra_steps,
+            args.max_sum_states)
+    refit_res = fit_tree(
+            refit_bifurc_tree,
+            bcode_meta,
+            args,
+            best_targ_lam_pen,
+            refit_transition_wrap_maker,
+            init_model_params = param_dict,
+            target_lams_known = False,
+            dist_measurers = oracle_dist_measurers)
+    return refit_res
 
-    if not has_unresolved_multifurcs:
-        refit_res = raw_res
-    elif has_unresolved_multifurcs and args.do_refit:
-        logging.info("Doing refit")
-        # Now we need to refit using the bifurcating tree
-        # Copy over the latest model parameters for warm start
-        param_dict = {k: v for k,v in raw_res.model_params_dict.items()}
-        refit_bifurc_tree = raw_res.fitted_bifurc_tree.copy()
-        refit_bifurc_tree.label_node_ids()
-        num_nodes = refit_bifurc_tree.get_num_nodes()
-        # Copy over the branch lengths
-        br_lens = np.zeros(num_nodes)
-        for node in refit_bifurc_tree.traverse():
-            br_lens[node.node_id] = node.dist
-            node.resolved_multifurcation = True
-        param_dict["branch_len_inners"] = br_lens
-        param_dict["branch_len_offsets_proportion"] = np.zeros(num_nodes)
-        # Create the new likelihood worker and make it work!
-        refit_transition_wrap_maker = TransitionWrapperMaker(
-                refit_bifurc_tree,
-                bcode_meta,
-                args.max_extra_steps,
-                args.max_sum_states)
-        refit_worker = LikelihoodScorer(
-                args.seed + 1,
-                refit_bifurc_tree,
-                bcode_meta,
-                args.log_barr,
-                args.target_lam_pen,
-                args.max_iters,
-                args.num_inits,
-                refit_transition_wrap_maker,
-                init_model_params = param_dict,
-                dist_measurers = oracle_dist_measurers)
-        refit_res = refit_worker.do_work_directly(sess)
-
-    #### Mostly a section for printing
-    res = refit_res if refit_res is not None else raw_res
-    print(res.model_params_dict)
-    logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["node_id"], show_internal=True))
-    logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
-    logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-    logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["cell_state"]))
-
-    # Also create a dictionaty as a summary of what happened
+def write_output_json_summary(
+        res: LikelihoodScorerResult,
+        args,
+        oracle_dist_measurers: TreeDistanceMeasurerAgg = None,
+        true_model_dict: Dict = None):
+    """
+    Writes a json file that summaries what results we got
+    """
     if oracle_dist_measurers is not None:
+        # do some comparisons against the true model if available
         result_print_dict = oracle_dist_measurers.get_tree_dists([res.fitted_bifurc_tree])[0]
         true_target_lambdas = true_model_dict["true_model_params"]["target_lams"]
         pearson_target = pearsonr(
@@ -234,6 +369,59 @@ def main(args=sys.argv[1:]):
     with open(args.json_out, 'w') as outfile:
         json.dump(result_print_dict, outfile)
 
+def main(args=sys.argv[1:]):
+    args = parse_args()
+    logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
+    logging.info(str(args))
+
+    np.random.seed(seed=args.seed)
+
+    # Read input files
+    bcode_meta, tree = read_data(args)
+    true_model_dict, oracle_dist_measurers = read_true_model_files(args)
+
+    has_unresolved_multifurcs = check_has_unresolved_multifurcs(tree)
+    logging.info("Tree has unresolved mulfirucs? %d", has_unresolved_multifurcs)
+
+    args.sess = tf.InteractiveSession()
+    tf.global_variables_initializer().run()
+
+    # Tune penalty params for the target lambdas
+    best_targ_lam_pen, init_target_lams = tune_hyperparams(tree, bcode_meta, args)
+
+    # Now we can actually train the multifurc tree with the target lambda penalty param fixed
+    raw_res = fit_multifurc_tree(
+            tree,
+            bcode_meta,
+            args,
+            init_target_lams,
+            best_targ_lam_pen,
+            oracle_dist_measurers)
+
+    # Refit the bifurcating tree if needed
+    refit_res = None
+    if not has_unresolved_multifurcs:
+        # The tree is already fully resolved. No refitting to do
+        refit_res = raw_res
+    elif has_unresolved_multifurcs and args.do_refit:
+        logging.info("Doing refit")
+        refit_res = refit_bifurc_tree(
+                raw_res,
+                bcode_meta,
+                args,
+                best_targ_lam_pen,
+                oracle_dist_measurers)
+
+    #### Mostly a section for printing
+    res = refit_res if refit_res is not None else raw_res
+    print(res.model_params_dict)
+    logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["node_id"], show_internal=True))
+    logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
+    logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["cell_state"]))
+
+    write_output_json_summary(res, args, oracle_dist_measurers, true_model_dict)
+
     # Save the data
     with open(args.pickle_out, "wb") as f:
         save_dict = {
@@ -241,6 +429,7 @@ def main(args=sys.argv[1:]):
                 "refit": refit_res}
         six.moves.cPickle.dump(save_dict, f, protocol = 2)
 
+    logging.info("Complete!")
     #plot_mrca_matrix(
     #    res.fitted_bifurc_tree,
     #    args.pickle_out.replace(".pkl", "_mrca.png"))
