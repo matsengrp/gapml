@@ -81,6 +81,7 @@ def run_parsimony(env, outdir, c):
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
+    penalty_params = ",".join(map(str, np.power(10, np.arange(0.5, -3.0, step=-.5)).tolist()))
     cmd = [
         'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
@@ -89,10 +90,11 @@ def run_MLE(env, outdir, c):
         '--log-file ${TARGETS[1]}',
         '--seed 100',
         '--log-barr 0.001',
-        '--target-lam-pen 10.0',
-        '--max-sum-states 20',
-        '--max-extra-steps 0',
-        '--max-iters 0',
+        '--target-lam-pens',
+        penalty_params,
+        '--max-sum-states 30',
+        '--max-extra-steps 1',
+        '--max-iters 400',
     ]
     return env.Command(
         [

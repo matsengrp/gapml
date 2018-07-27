@@ -214,6 +214,8 @@ def tune_hyperparams(
             best_val_log_lik = curr_val_log_lik
             best_targ_lam_pen = target_lam_pen
             best_target_lams = fixed_params['target_lams']
+        else:
+            break
 
     logging.info("Best penalty param %s", best_targ_lam_pen)
     return best_targ_lam_pen, best_target_lams
