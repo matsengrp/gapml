@@ -648,7 +648,6 @@ class CLTLikelihoodModel:
         branch_lens_to_penalize = tf.gather(
             self.branch_lens,
             indices = [node.node_id for node in self.topology])
-        self.branch_lens_to_penalize = branch_lens_to_penalize
         self.branch_log_barr = tf.reduce_mean(tf.log(branch_lens_to_penalize))
         self.penalties = self.log_barr_ph * self.branch_log_barr
         self.target_lam_penalty = tf.constant(0, dtype=tf.float64)

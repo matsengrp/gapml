@@ -192,6 +192,8 @@ def tune_hyperparams(
                 fixed_params[k] = v
 
         # Now fit the validation tree with model params fixed
+        # TODO: this only keeps the target lambda values fixed and nothing else
+        #       We should probably keep more things fixed.
         res_val = fit_tree(
             val_tree,
             val_bcode_meta,

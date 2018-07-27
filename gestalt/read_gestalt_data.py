@@ -218,6 +218,8 @@ def main():
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
 
+    # Pad the barcode on the left and right in case there are long left/right deletions
+    # at the ends of the barcode
     barcode_padded = (
             ('A' * args.bcode_pad_length + BARCODE_V6[0],)
             + BARCODE_V6[1:-1]

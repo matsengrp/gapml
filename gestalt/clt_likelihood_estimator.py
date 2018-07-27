@@ -40,6 +40,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         self.target_lam_pen = target_lam_pen
         self.max_iters = max_iters
         self.num_inits = num_inits
+        assert num_inits == 1
 
         # Create the skeletons for the transition matrices -- via state sum approximation
         transition_wrappers = transition_wrapper_maker.create_transition_wrappers()
