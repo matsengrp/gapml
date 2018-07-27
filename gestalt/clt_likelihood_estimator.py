@@ -40,6 +40,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         self.target_lam_pen = target_lam_pen
         self.max_iters = max_iters
         self.num_inits = num_inits
+        assert num_inits == 1
 
         # Create the skeletons for the transition matrices -- via state sum approximation
         transition_wrappers = transition_wrapper_maker.create_transition_wrappers()
@@ -128,6 +129,10 @@ class CLTPenalizedEstimator(CLTEstimator):
                 logging.info(
                     "iter %d pen log lik %f log lik %f targ pen %f log barr %f min branch len %f",
                     i, pen_log_lik, log_lik, targ_pen, log_barr, np.min(branch_lens[1:]))
+
+            if np.isnan(pen_log_lik):
+                logging.info("ERROR: pen log like is nan. branch lengths are negative?")
+                break
 
             if i % save_iter == (save_iter - 1):
                 if dist_measurers is not None:

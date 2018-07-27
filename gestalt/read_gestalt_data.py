@@ -20,7 +20,7 @@ from cell_state import CellState, CellTypeTree
 from allele_events import AlleleEvents, Event
 from constants import CONTROL_ORGANS
 from constants import NO_EVENT_STRS
-from constants import BARCODE_V7, NUM_BARCODE_V7_TARGETS
+from constants import BARCODE_V6, NUM_BARCODE_V6_TARGETS
 
 def parse_args():
     parser = argparse.ArgumentParser(description='read cell file')
@@ -48,13 +48,23 @@ def parse_args():
         type=float,
         default=1,
         help='how much time we will say has elapsed')
+    parser.add_argument(
+        '--bcode-pad-length',
+        type=int,
+        default=20,
+        help='barcode pad length')
+    parser.add_argument(
+        '--bcode-min-pos',
+        type=int,
+        default=122,
+        help='barcode index offset')
     return parser.parse_args()
 
 def process_observed_seq_format7B(
         target_str_list: List[str],
         cell_state: CellState,
         bcode_meta: BarcodeMetadata,
-        min_pos: int = 122):
+        min_pos: int):
     """
     Converts new format allele to python repr allele
 
@@ -144,16 +154,19 @@ def process_observed_seq_format7B(
         else:
             non_clashing_events.append(evt)
 
-    return ObservedAlignedSeq(
+    obs = ObservedAlignedSeq(
             None,
             [AlleleEvents(non_clashing_events)],
             cell_state,
             abundance=1)
+    #obs.orig_seq = target_str_list
+    return obs
 
 def parse_reads_file_format7B(file_name,
                               bcode_meta: BarcodeMetadata,
-                              target_hdr_fmt="target%d",
-                              max_read=None):
+                              bcode_min_pos: int,
+                              target_hdr_fmt: str="target%d",
+                              max_read: int = None):
     """
     @param max_read: maximum number of alleles to read (for debugging purposes)
 
@@ -183,10 +196,11 @@ def parse_reads_file_format7B(file_name,
                 obs_aligned_seq = process_observed_seq_format7B(
                     [
                         row[target_start_idx + i]
-                        for i in range(NUM_BARCODE_V7_TARGETS)
+                        for i in range(NUM_BARCODE_V6_TARGETS)
                     ],
                     cell_state,
-                    bcode_meta)
+                    bcode_meta,
+                    bcode_min_pos)
                 if str(obs_aligned_seq) not in observed_alleles:
                     observed_alleles[str(obs_aligned_seq)] = obs_aligned_seq
                 else:
@@ -204,20 +218,32 @@ def main():
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
 
+    # Pad the barcode on the left and right in case there are long left/right deletions
+    # at the ends of the barcode
+    barcode_padded = (
+            ('A' * args.bcode_pad_length + BARCODE_V6[0],)
+            + BARCODE_V6[1:-1]
+            + (BARCODE_V6[-1] + 'A' * args.bcode_pad_length,))
+
     bcode_meta = BarcodeMetadata(
-            unedited_barcode = BARCODE_V7,
+            unedited_barcode = barcode_padded,
             num_barcodes = 1,
             # TODO: is this correct?
             cut_site = 6,
             # TODO: is this correct?
             crucial_pos_len=[6,6])
 
-    obs_leaves, organ_dict = parse_reads_file_format7B(args.reads_file, bcode_meta)
+    obs_leaves, organ_dict = parse_reads_file_format7B(
+            args.reads_file,
+            bcode_meta,
+            args.bcode_min_pos - args.bcode_pad_length)
     obs_leaves = [obs for obs in obs_leaves if obs.abundance >= args.abundance_thres]
     logging.info("Number of leaves %d", len(obs_leaves))
 
     # Check trim length assignments
     for obs in obs_leaves:
+        #print(obs.orig_seq)
+        #print(obs.allele_events_list[0])
         for evt in obs.allele_events_list[0].events:
             evt.get_trim_lens(bcode_meta)
 

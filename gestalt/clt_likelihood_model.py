@@ -85,7 +85,6 @@ class CLTLikelihoodModel:
         self.sess = sess
 
         self.target_lams_known = target_lams_known
-        assert not target_lams_known
         self.cell_lambdas_known = cell_lambdas_known
 
         # Stores the penalty parameters
@@ -123,7 +122,7 @@ class CLTLikelihoodModel:
         # Calculate hazard for transitioning away from all target statuses beforehand. Speeds up future computation.
         self.hazard_away_dict = self._create_hazard_away_dict()
 
-        self.adam_opt = tf.train.AdamOptimizer(learning_rate=0.005)
+        self.adam_opt = tf.train.AdamOptimizer(learning_rate=0.001)
 
     def _create_parameters(self,
             target_lams: ndarray,
@@ -649,10 +648,13 @@ class CLTLikelihoodModel:
         branch_lens_to_penalize = tf.gather(
             self.branch_lens,
             indices = [node.node_id for node in self.topology])
-        self.branch_log_barr = tf.reduce_sum(tf.log(branch_lens_to_penalize))
+        self.branch_log_barr = tf.reduce_mean(tf.log(branch_lens_to_penalize))
+        self.penalties = self.log_barr_ph * self.branch_log_barr
+        self.target_lam_penalty = tf.constant(0, dtype=tf.float64)
         # Penalize target lambda differences -- try to keep lambdas close to each other
-        self.target_lam_penalty = tf.reduce_mean(tf.pow(self.log_target_lam_diffs, 2))
-        self.penalties = self.log_barr_ph * self.branch_log_barr - self.target_lam_pen_ph * self.target_lam_penalty
+        if not self.target_lams_known:
+            self.target_lam_penalty = tf.reduce_mean(tf.pow(self.log_target_lam_diffs, 2))
+            self.penalties -= self.target_lam_pen_ph * self.target_lam_penalty
 
         self.smooth_log_lik = tf.add(
                 self.log_lik,
