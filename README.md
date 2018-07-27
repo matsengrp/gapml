@@ -30,3 +30,5 @@ python3 -m unittest tests.<test_me>
 `get_parsimony_trees.py` or `get_collapsed_oracle.py`: create tree topologies to fit to
 
 `run_estimator.py`: fit the estimator for a given topology, run statistics if given the true tree
+
+`tune_topologies.py`: to select the best topology given a set of possible topologies
