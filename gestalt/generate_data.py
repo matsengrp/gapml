@@ -46,7 +46,7 @@ def parse_args():
     parser.add_argument(
         '--target-lambdas',
         type=str,
-        default=",".join(["0.05"] * 10),
+        default=",".join(["0.05", "0.04", "0.01"]),
         help='target cut rates -- will get slightly perturbed for the true value')
     parser.add_argument(
         '--perturb-target-lambdas-variance',
@@ -62,7 +62,7 @@ def parse_args():
         '--trim-long-probs',
         type=float,
         nargs=2,
-        default=[0.05] * 2,
+        default=[0.001] * 2,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
         '--trim-zero-probs',
@@ -125,6 +125,10 @@ def parse_args():
 
     parser.set_defaults()
     args = parser.parse_args()
+
+    if args.is_cherry:
+        assert args.sampling_rate == 1
+
     args.target_lambdas = [float(x) for x in args.target_lambdas.split(",")]
     args.num_targets = len(args.target_lambdas)
     return args
@@ -243,6 +247,7 @@ def main(args=sys.argv[1:]):
     # initialize the target lambdas with some perturbation to ensure we don't have eigenvalues that are exactly equal
     args.target_lambdas, args.birth_lambda, args.death_lambda = initialize_lambda_rates(args)
     logging.info("args.target_lambdas %s" % str(args.target_lambdas))
+    print("args.target_lambdas %s" % str(args.target_lambdas))
 
     # Create a cell-type tree
     cell_type_tree = create_cell_type_tree(args)

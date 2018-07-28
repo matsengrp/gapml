@@ -44,6 +44,11 @@ def parse_args():
         default="_output/parsimony_tree0.pkl",
         help='pkl file with tree topology')
     parser.add_argument(
+        '--pickle-out',
+        type=str,
+        default=None,
+        help='pkl file with output')
+    parser.add_argument(
         '--true-model-file',
         type=str,
         default=None,
@@ -96,11 +101,16 @@ def parse_args():
 
     parser.set_defaults(is_refit=False)
     args = parser.parse_args()
-    args.log_file = args.topology_file.replace(".pkl", "_fit_log.txt")
+    if args.pickle_out is None:
+        args.pickle_out = args.topology_file.replace(".pkl", "_fitted.pkl")
+        args.json_out = args.topology_file.replace(".pkl", "_fitted.json")
+        args.out_folder = os.path.dirname(args.topology_file)
+        args.log_file = args.topology_file.replace(".pkl", "_fit_log.txt")
+    else:
+        args.json_out = args.pickle_out.replace(".pkl", ".json")
+        args.out_folder = os.path.dirname(args.pickle_out)
+        args.log_file = args.pickle_out.replace(".pkl", "_log.txt")
     print("Log file", args.log_file)
-    args.pickle_out = args.topology_file.replace(".pkl", "_fitted.pkl")
-    args.json_out = args.topology_file.replace(".pkl", "_fitted.json")
-    args.out_folder = os.path.dirname(args.topology_file)
 
     args.target_lam_pens = list(sorted(
         [float(lam) for lam in args.target_lam_pens.split(",")],
@@ -131,6 +141,7 @@ def fit_tree(
         args.max_iters,
         args.num_inits,
         transition_wrap_maker,
+        tot_time = args.tot_time,
         init_model_params = init_model_params,
         dist_measurers = oracle_dist_measurers,
         target_lams_known = target_lams_known)
@@ -214,14 +225,12 @@ def tune_hyperparams(
             best_val_log_lik = curr_val_log_lik
             best_targ_lam_pen = target_lam_pen
             best_target_lams = fixed_params['target_lams']
-        else:
-            break
 
     logging.info("Best penalty param %s", best_targ_lam_pen)
     return best_targ_lam_pen, best_target_lams
 
 def get_init_target_lams(bcode_meta):
-    return 0.04 * np.ones(bcode_meta.n_targets) + np.random.uniform(size=bcode_meta.n_targets) * 0.02
+    return 0.2 * np.ones(bcode_meta.n_targets) + np.random.uniform(size=bcode_meta.n_targets) * 0.02
 
 def check_has_unresolved_multifurcs(tree: CellLineageTree):
     """

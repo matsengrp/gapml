@@ -43,6 +43,7 @@ class CLTLikelihoodModel:
             double_cut_weight: float = 1.0,
             branch_len_inners: ndarray = np.array([]),
             branch_len_offsets_proportion: ndarray = np.array([]),
+            branch_lens_known: bool = False,
             cell_type_tree: CellTypeTree = None,
             cell_lambdas_known: bool = False,
             tot_time: float = 1):
@@ -93,6 +94,7 @@ class CLTLikelihoodModel:
         self.tot_time_ph = tf.placeholder(tf.float64)
         self.tot_time = tot_time
 
+        self.branch_lens_known = branch_lens_known
         if branch_len_inners.size == 0:
             branch_len_inners = np.ones(self.num_nodes)
         if branch_len_offsets_proportion.size == 0:
@@ -155,8 +157,8 @@ class CLTLikelihoodModel:
                     np.log(trim_long_poissons),
                     inv_sigmoid(insert_zero_prob),
                     np.log(insert_poisson),
-                    np.log(branch_len_inners),
-                    inv_sigmoid(branch_len_offsets_proportion),
+                    [] if self.branch_lens_known else np.log(branch_len_inners),
+                    [] if self.branch_lens_known else inv_sigmoid(branch_len_offsets_proportion),
                     [] if self.cell_lambdas_known else np.log(cell_type_lams)])
         self.all_vars = tf.Variable(model_params, dtype=tf.float64)
         self.all_vars_ph = tf.placeholder(tf.float64, shape=self.all_vars.shape)
@@ -196,14 +198,21 @@ class CLTLikelihoodModel:
         up_to_size += 1
         self.insert_poisson = tf.exp(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
-        up_to_size += branch_len_inners.size
-        self.branch_len_inners = tf.exp(self.all_vars[prev_size: up_to_size])
-        prev_size = up_to_size
-        up_to_size += branch_len_offsets_proportion.size
-        self.branch_len_offsets_proportion = tf.sigmoid(self.all_vars[prev_size: up_to_size])
-        self.branch_len_offsets = tf.multiply(
-                self.branch_len_inners,
-                self.branch_len_offsets_proportion)
+        if self.branch_lens_known:
+            self.branch_len_inners = tf.constant(branch_len_inners)
+            self.branch_len_offsets_proportion = tf.constant(branch_len_offsets_proportion)
+            self.branch_len_offsets = tf.multiply(
+                    self.branch_len_inners,
+                    self.branch_len_offsets_proportion)
+        else:
+            up_to_size += branch_len_inners.size
+            self.branch_len_inners = tf.exp(self.all_vars[prev_size: up_to_size])
+            prev_size = up_to_size
+            up_to_size += branch_len_offsets_proportion.size
+            self.branch_len_offsets_proportion = tf.sigmoid(self.all_vars[prev_size: up_to_size])
+            self.branch_len_offsets = tf.multiply(
+                    self.branch_len_inners,
+                    self.branch_len_offsets_proportion)
         if self.cell_type_tree:
             if self.cell_lambdas_known:
                 self.cell_type_lams = tf.constant(cell_type_lams, dtype=tf.float64)
@@ -302,8 +311,8 @@ class CLTLikelihoodModel:
             np.log(trim_long_poissons),
             inv_sigmoid(insert_zero_prob),
             np.log(insert_poisson),
-            np.log(branch_len_inners),
-            inv_sigmoid(branch_len_offsets_proportion),
+            [] if self.branch_lens_known else np.log(branch_len_inners),
+            [] if self.branch_lens_known else inv_sigmoid(branch_len_offsets_proportion),
             [] if self.cell_lambdas_known else np.log(cell_type_lams)])
         self.sess.run(self.assign_op, feed_dict={self.all_vars_ph: init_val})
 

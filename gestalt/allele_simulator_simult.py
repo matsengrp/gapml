@@ -84,9 +84,10 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             all_hazards = [
                 self.all_target_tract_hazards[self.model.target_tract_dict[tt]]
                 for tt in target_tracts]
-            tt_times = [expon.rvs(scale=1.0 / hz) for hz in all_hazards]
-            race_winner = target_tracts[np.argmin(tt_times)]
-            min_time = np.min(tt_times)
+            all_haz_sum = np.sum(all_hazards)
+            min_time = expon.rvs(scale=1.0/all_haz_sum)
+            race_winner = target_tracts[
+                np.random.choice(len(target_tracts), p=np.array(all_hazards)/all_haz_sum)]
             return race_winner, min_time
         else:
             return None, None

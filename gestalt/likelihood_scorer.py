@@ -37,9 +37,11 @@ class LikelihoodScorer(ParallelWorker):
             max_iters: int,
             num_inits: int,
             transition_wrap_maker: TransitionWrapperMaker,
+            tot_time: float,
             init_model_params: Dict,
             dist_measurers: TreeDistanceMeasurerAgg = None,
             target_lams_known: bool = False,
+            branch_lengths_known: bool = False,
             name: str = "likelihood scorer"):
         """
         @param seed: required to set the seed of each parallel worker
@@ -62,9 +64,11 @@ class LikelihoodScorer(ParallelWorker):
         self.max_iters = max_iters
         self.num_inits = num_inits
         self.transition_wrap_maker = transition_wrap_maker
+        self.tot_time = tot_time
         self.init_model_params = init_model_params
         self.dist_measurers = dist_measurers
         self.target_lams_known = target_lams_known
+        self.branch_lengths_known = branch_lengths_known
         self.name = name
 
     def run_worker(self, shared_obj):
@@ -94,7 +98,9 @@ class LikelihoodScorer(ParallelWorker):
             target_lams = self.init_model_params["target_lams"],
             target_lams_known = self.target_lams_known,
             cell_type_tree = None,
-            cell_lambdas_known = False)
+            cell_lambdas_known = False,
+            branch_lens_known = self.branch_lengths_known,
+            tot_time = self.tot_time)
         estimator = CLTPenalizedEstimator(
                 res_model,
                 self.transition_wrap_maker,

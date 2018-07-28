@@ -4,6 +4,7 @@ import typing
 from typing import List
 import random
 import time
+import logging
 
 from scipy.stats import spearmanr
 from cell_lineage_tree import CellLineageTree
