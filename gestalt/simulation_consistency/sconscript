@@ -1,4 +1,4 @@
-# Check that as we increase number of barcodes, we converge to the truth
+# Test if we have any sort of consistency
 
 import os
 
@@ -17,39 +17,133 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
+TARGET_LAMBDA_DICT = {
+    "sorted": [
+         [0.3,0.25,0.2,0.15,0.1,0.05],
+	 [0.45,0.37,0.29,0.21,0.13,0.05]],
+    "random": [
+         [0.25,0.1,0.2,0.05,0.3,0.15],
+	 [0.37,0.13,0.29,0.05,0.45,0.21]],
+}
+
 nest.add(
     'seed',
-    range(100,103),
-    label_func=lambda c: "seed%d" % c,
+    range(400,402),
+)
+
+nest.add(
+    'lambda_seq',
+    [
+	'sorted',
+	'random',
+    ])
+
+nest.add(
+    'lambda_scale',
+    [0], #[0,1]
+    label_func=lambda c: "lam_scale%d" % c,
 )
 
 nest.add(
     'double_cut',
-    [1.0],
-    label_func=lambda c: "double_cut_%d" % int(c * 10),
+    [
+         #0.3,
+         1,
+    ],
+    label_func=lambda c: "double%d" % int(c * 10),
+)
+
+nest.add(
+    'trim_zero_probs',
+    [
+	[0.1,0.1],
+    	#[0.4,0.4],
+    ],
+    label_func=lambda c: "trim_zero_pr%d_%d" % (int(c[0] * 10), int(c[1] * 10)),
+)
+
+nest.add(
+    'trim_poissons',
+    [
+    	(3,3),
+	#(8,8),
+    ],
+    label_func=lambda c: "trim_poiss%d_%d" % c,
+)
+
+nest.add(
+    'trim_long_probs',
+    [[0.01,0.01]],
+    label_func=lambda c: "trim_long_pr%d_%d" % (int(c[0] * 10), int(c[1] * 10)),
+)
+
+
+nest.add(
+    'insert_zero_prob',
+    [
+         0.05,
+         #0.4,
+    ],
+    label_func=lambda c: "insert_zero_pr%d" % int(c * 10),
+)
+
+nest.add(
+    'insert_poisson',
+    [
+        1,
+        #4,
+    ],
+    label_func=lambda c: "insert_poiss%d" % c,
 )
 
 @nest.add_target_with_env(localenv)
 def generate(env, outdir, c):
+    targ_lambdas = ",".join(
+	map(str, TARGET_LAMBDA_DICT[c['lambda_seq']][c['lambda_scale']]))
+    cherry_flag = '--is-stupid-cherry'
+    sampling_rate = 1.0
+    min_uniq_alleles = 3
+    max_uniq_alleles = 5
+    tree_time = 1
+    birth_flag = ''
+
     cmd = [
         'python generate_data.py',
+	cherry_flag,
+	'--sampling-rate',
+        sampling_rate,
         '--model-seed',
-        c['seed'],
+        400,
         '--data-seed',
         c['seed'],
         '--out-obs-file ${TARGETS[0]}',
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
-        '--time 1.5',
+        '--time',
+        tree_time,
+        birth_flag,
         '--num-barcodes',
         80,
         '--min-uniq-alleles',
-        5,
+        min_uniq_alleles,
         '--max-uniq-alleles',
-        12,
+        max_uniq_alleles,
         '--max-abundance 10',
         '--double-cut-weight',
         c['double_cut'],
+        '--target-lambdas',
+        targ_lambdas,
+        '--trim-zero-probs',
+        ' '.join(map(str, c['trim_zero_probs'])),
+        '--trim-poissons',
+        ' '.join(map(str, c['trim_poissons'])),
+        '--trim-long-probs',
+        ' '.join(map(str, c['trim_long_probs'])),
+        '--insert-zero-prob',
+        c['insert_zero_prob'],
+        '--insert-poisson',
+        c['insert_poisson'],
+        '--perturb-target-lambdas-variance 0',
     ]
     return env.Command(
         [
@@ -61,7 +155,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [5, 10, 20],
+    [5, 10, 20, 40],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -86,48 +180,56 @@ def restrict_observed_alleles(env, outdir, c):
         ' '.join(map(str, cmd)))
 
 @nest.add_target_with_env(localenv)
-def run_parsimony(env, outdir, c):
+def run_topology(env, outdir, c):
     cmd = [
-        'python get_parsimony_topologies.py',
-        '--obs-file ${SOURCES[0]}',
+        'python get_collapsed_oracle.py',
+        '--obs-data-pkl ${SOURCES[0]}',
         '--out-template-file ${TARGETS[0]}',
-        '--max-random',
-        0,
-        '--max-random-multifurc',
-        1,
+    '--true-model-pkl ${SOURCES[1]}',
     ]
     return env.Command(
         [
-            join(outdir, 'parsimony_tree0.pkl')],
-        c['restrict_observed_alleles'],
+            join(outdir, 'oracle_tree0.pkl')],
+        [
+            c['restrict_observed_alleles'][0],
+            c['restrict_observed_alleles'][1]],
         ' '.join(map(str, cmd)))
+
+nest.add(
+    'sum_states',
+    [2000],
+    label_func=lambda c: "sum_states%d" % c,
+)
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = ",".join(map(str, np.power(10, np.arange(0.5, -3.0, step=-.5)).tolist()))
+    penalty_params = "0.01"
     cmd = [
         'python run_estimator.py',
         '--obs-file ${SOURCES[0]}',
         '--topology-file ${SOURCES[1]}',
         '--true-model-file ${SOURCES[2]}',
         '--true-collapsed-tree-file ${SOURCES[3]}',
+        '--pickle-out ${TARGETS[0]}',
         '--seed',
 	c['seed'] + 100,
-        '--log-barr 0.1',
+        '--log-barr 0.0000001',
         '--target-lam-pens',
 	penalty_params,
-        '--max-sum-states 50',
-        '--max-extra-steps 1',
-        '--max-iters 3000',
+        '--max-sum-states',
+	c['sum_states'],
+        '--max-extra-steps 2',
+        '--max-iters 10000',
         '--train-split 0.75',
+        '--num-inits 3'
     ]
     return env.Command(
         [
-            join(outdir, 'parsimony_tree0_fitted.pkl'),
-            join(outdir, 'parsimony_tree0_fit_log.txt')],
+            join(outdir, 'tree0_fitted.pkl'),
+            join(outdir, 'tree0_fitted_log.txt')],
         [
             c['restrict_observed_alleles'][0],
-            c['run_parsimony'][0],
+            c['run_topology'][0],
             c['generate'][1],
             c['restrict_observed_alleles'][1]],
         ' '.join(map(str, cmd)))

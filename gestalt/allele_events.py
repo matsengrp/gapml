@@ -82,6 +82,7 @@ class Event(tuple):
         assert left_trim_len >= 0
         assert right_trim_len >= 0
         assert left_trim_len <= bcode_meta.left_max_trim[self.min_target]
+        print(self.max_target, right_trim_len, bcode_meta.right_max_trim[self.max_target])
         assert right_trim_len <= bcode_meta.right_max_trim[self.max_target]
         return left_trim_len, right_trim_len
 

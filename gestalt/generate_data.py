@@ -13,7 +13,7 @@ from cell_state import CellState, CellTypeTree
 from cell_lineage_tree import CellLineageTree
 from cell_state_simulator import CellTypeSimulator
 from clt_simulator import CLTSimulatorBifurcating
-from clt_simulator_simple import CLTSimulatorSimple
+from clt_simulator_simple import CLTSimulatorSimple, CLTSimulatorSimpler
 from clt_likelihood_model import CLTLikelihoodModel
 from allele_simulator_simult import AlleleSimulatorSimultaneous
 from clt_observer import CLTObserver
@@ -122,11 +122,15 @@ def parse_args():
         '--is-cherry',
         action='store_true',
         help="special tree structure for tests")
+    parser.add_argument(
+        '--is-stupid-cherry',
+        action='store_true',
+        help="special tree structure for tests")
 
     parser.set_defaults()
     args = parser.parse_args()
 
-    if args.is_cherry:
+    if args.is_cherry or args.is_stupid_cherry:
         assert args.sampling_rate == 1
 
     args.target_lambdas = [float(x) for x in args.target_lambdas.split(",")]
@@ -152,6 +156,10 @@ def create_simulators(args, clt_model):
     cell_type_simulator = CellTypeSimulator(clt_model.cell_type_tree)
     if args.is_cherry:
         clt_simulator = CLTSimulatorSimple(
+                cell_type_simulator,
+                allele_simulator)
+    elif args.is_stupid_cherry:
+        clt_simulator = CLTSimulatorSimpler(
                 cell_type_simulator,
                 allele_simulator)
     else:

@@ -41,6 +41,7 @@ class CLTLikelihoodModel:
             insert_zero_prob: float = 0.5,
             insert_poisson: float = 0.2,
             double_cut_weight: float = 1.0,
+            double_cut_weight_known: bool = False,
             branch_len_inners: ndarray = np.array([]),
             branch_len_offsets_proportion: ndarray = np.array([]),
             branch_lens_known: bool = False,
@@ -100,6 +101,7 @@ class CLTLikelihoodModel:
         if branch_len_offsets_proportion.size == 0:
             branch_len_offsets_proportion = np.ones(self.num_nodes)
 
+        self.double_cut_weight_known = double_cut_weight_known
         # Create all the variables
         self._create_parameters(
                 target_lams,
@@ -150,7 +152,7 @@ class CLTLikelihoodModel:
         model_params = np.concatenate([
                     [] if self.target_lams_known else [log_target_lam_mean],
                     [] if self.target_lams_known else (np.log(target_lams) - log_target_lam_mean),
-                    np.log(double_cut_weight),
+                    [] if self.double_cut_weight_known else np.log(double_cut_weight),
                     inv_sigmoid(trim_long_probs),
                     inv_sigmoid(trim_zero_probs),
                     np.log(trim_short_poissons),
@@ -174,8 +176,11 @@ class CLTLikelihoodModel:
             self.log_target_lam_diffs = self.all_vars[1:up_to_size]
             self.target_lams = tf.exp(self.all_vars[0] + self.log_target_lam_diffs)
         prev_size = up_to_size
-        up_to_size += 1
-        self.double_cut_weight = tf.exp(self.all_vars[prev_size: up_to_size])
+        if self.double_cut_weight_known:
+            self.double_cut_weight = tf.constant(double_cut_weight, dtype=tf.float64)
+        else:
+            up_to_size += 1
+            self.double_cut_weight = tf.exp(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
         up_to_size += trim_long_probs.size
         self.trim_long_probs = tf.sigmoid(self.all_vars[prev_size: up_to_size])
@@ -304,7 +309,7 @@ class CLTLikelihoodModel:
         init_val = np.concatenate([
             [] if self.target_lams_known else [log_target_lams_mean],
             [] if self.target_lams_known else np.log(target_lams) - log_target_lams_mean,
-            np.log(double_cut_weight),
+            [] if self.double_cut_weight_known else np.log(double_cut_weight),
             inv_sigmoid(trim_long_probs),
             inv_sigmoid(trim_zero_probs),
             np.log(trim_short_poissons),
@@ -366,14 +371,14 @@ class CLTLikelihoodModel:
 
     def initialize_branch_lens(self,
             max_attempts: int=10,
-            br_len_scale: float=0.5,
+            br_len_scale: float=1.0,
             br_len_shrink: float=0.8):
         """
         Will randomly initialize branch lengths if they are not all positive already
         @param max_attempts: will try at most this many times to initialize branch lengths
         """
         for j in range(max_attempts):
-            print("attempt %d to make br lens all positive" % j)
+            print("initialize again?", br_len_scale)
             # Keep initializing branch lengths until they are all positive
             model_vars = self.get_vars_as_dict()
             model_vars["branch_len_inners"] = np.random.rand(self.num_nodes) * br_len_scale

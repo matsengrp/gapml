@@ -70,7 +70,7 @@ def parse_args():
     parser.add_argument(
         '--target-lam-pens',
         type=str,
-        default="10.0,1.0",
+        default="10.0",
         help="comma separated penalty parameters on the target lambdas")
     parser.add_argument(
         '--train-split',
@@ -282,6 +282,12 @@ def read_data(args):
         else:
             tree = tree_topology_info["tree"]
     tree.label_node_ids()
+
+    # If this tree is not unresolved, then mark all the multifurcations as resolved
+    if not tree_topology_info["multifurc"]:
+        for node in tree.traverse():
+            node.resolved_multifurcation = True
+
     logging.info("Tree topology info: %s", tree_topology_info)
     logging.info("Tree topology num leaves: %d", len(tree))
 
@@ -384,6 +390,7 @@ def write_output_json_summary(
 
 def main(args=sys.argv[1:]):
     args = parse_args()
+    args.double_cut_weight_known = False
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
 
@@ -399,6 +406,7 @@ def main(args=sys.argv[1:]):
     # Tune penalty params for the target lambdas
     best_targ_lam_pen, init_target_lams = tune_hyperparams(tree, bcode_meta, args)
 
+    logging.info(tree.get_ascii(attributes=["node_id"], show_internal=True))
     # Now we can actually train the multifurc tree with the target lambda penalty param fixed
     raw_res = fit_multifurc_tree(
             tree,
