@@ -2,6 +2,7 @@
 Get tree topologies based on the oracle
 """
 from __future__ import division, print_function
+import os
 import sys
 import argparse
 import logging
@@ -24,12 +25,15 @@ def parse_args():
         default="_output/true_model.pkl",
         help='pkl file with true model if available')
     parser.add_argument(
-        '--out-folder',
+        '--out-template-file',
         type=str,
-        default="_output",
-        help='folder to put output in')
+        default="_output/parsimony_tree0.pkl",
+        help='template file name for outputs. this code will replace 0 with other tree indices')
 
     args = parser.parse_args()
+    args.out_folder = os.path.dirname(args.out_template_file)
+    assert os.path.join(args.out_folder, "oracle_tree0.pkl") == args.out_template_file
+
     args.log_file = "%s/oracle_tree_log.txt" % args.out_folder
     print("Log file", args.log_file)
     return args
@@ -54,22 +58,24 @@ def main(args=sys.argv[1:]):
     with open(args.true_model_pkl, "rb") as f:
         true_model_dict = six.moves.cPickle.load(f)
 
-    oracle_multifurc_tree = collapse_internally_labelled_tree(true_model_dict["collapsed_subtree"])
-    logging.info(true_model_dict["collapsed_subtree"].get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-    logging.info(oracle_multifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    #oracle_multifurc_tree = collapse_internally_labelled_tree(true_model_dict["collapsed_subtree"])
+    #logging.info(true_model_dict["collapsed_subtree"].get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    #logging.info(oracle_multifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
     trees_to_output = [{
         'selection_type': 'oracle',
         'multifurc': False,
         'idx': 0,
         'aux': None,
-        'tree': true_model_dict["collapsed_subtree"],
-    }, {
-        'selection_type': 'oracle',
-        'multifurc': True,
-        'idx': 0,
-        'aux': None,
-        'tree': oracle_multifurc_tree}]
+        'tree': true_model_dict,
+    },
+    #{
+    #    'selection_type': 'oracle',
+    #    'multifurc': True,
+    #    'idx': 0,
+    #    'aux': None,
+    #    'tree': oracle_multifurc_tree}
+    ]
 
     # Save each tree as separate pickle file
     for i, tree_topology_dict in enumerate(trees_to_output):

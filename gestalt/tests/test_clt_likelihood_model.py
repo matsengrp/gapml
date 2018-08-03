@@ -30,6 +30,40 @@ class CLTTransitionProbTestCase(unittest.TestCase):
         self.target_lams = self.mdl.target_lams.eval()
         self.trim_long_probs = self.mdl.trim_long_probs.eval()
 
+    def test_get_hazard_away(self):
+        haz_away_node = self.mdl._create_hazard_away_target_statuses(
+                [TargetStatus(TargetDeactTract(0,9))])
+        haz_away = haz_away_node.eval()
+        self.assertTrue(np.isclose(haz_away, 0))
+
+        haz_away_node = self.mdl._create_hazard_away_target_statuses(
+                [TargetStatus(TargetDeactTract(0,1), TargetDeactTract(3,9))])
+        haz_away = haz_away_node.eval()
+        self.assertTrue(np.isclose(haz_away, self.target_lams[2]))
+
+        haz_away_node = self.mdl._create_hazard_away_target_statuses(
+                [TargetStatus(TargetDeactTract(0,1), TargetDeactTract(4,9))])
+        haz_away = haz_away_node.eval()
+        self.assertTrue(np.isclose(haz_away,
+            self.target_lams[2] + self.target_lams[3] +
+            self.target_lams[2] * self.target_lams[3] * self.double_cut_weight))
+
+        haz_away_node = self.mdl._create_hazard_away_target_statuses(
+            [TargetStatus(TargetDeactTract(0,1), TargetDeactTract(3,5), TargetDeactTract(7,9))])
+        haz_away = haz_away_node.eval()
+        self.assertTrue(np.isclose(haz_away,
+            self.target_lams[2] + self.target_lams[6] +
+            self.target_lams[2] * self.target_lams[6] * self.double_cut_weight))
+
+        haz_away_node = self.mdl._create_hazard_away_target_statuses(
+            [TargetStatus(TargetDeactTract(0,1), TargetDeactTract(4,4), TargetDeactTract(7,9))])
+        haz_away = haz_away_node.eval()
+        my_haz_away = (np.sum(self.target_lams[2:4]) + np.sum(self.target_lams[5:7])
+            + np.sum(self.target_lams[2:4]) * np.sum(self.target_lams[5:7]) * self.double_cut_weight
+            + self.target_lams[2] * self.target_lams[3] * self.double_cut_weight
+            + self.target_lams[5] * self.target_lams[6] * self.double_cut_weight)
+        self.assertTrue(np.isclose(haz_away, my_haz_away))
+
     def test_get_hazard(self):
         tt_hazards = self.mdl.get_all_target_tract_hazards()
         tt = TargetTract(2,2,2,2)

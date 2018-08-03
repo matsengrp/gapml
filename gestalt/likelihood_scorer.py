@@ -2,6 +2,7 @@ from typing import List, Tuple, Dict
 from numpy import ndarray
 import numpy as np
 import tensorflow as tf
+import logging
 
 from cell_lineage_tree import CellLineageTree
 from cell_state import CellTypeTree
@@ -37,9 +38,11 @@ class LikelihoodScorer(ParallelWorker):
             max_iters: int,
             num_inits: int,
             transition_wrap_maker: TransitionWrapperMaker,
+            tot_time: float,
             init_model_params: Dict,
             dist_measurers: TreeDistanceMeasurerAgg = None,
             target_lams_known: bool = False,
+            branch_lengths_known: bool = False,
             name: str = "likelihood scorer"):
         """
         @param seed: required to set the seed of each parallel worker
@@ -62,9 +65,11 @@ class LikelihoodScorer(ParallelWorker):
         self.max_iters = max_iters
         self.num_inits = num_inits
         self.transition_wrap_maker = transition_wrap_maker
+        self.tot_time = tot_time
         self.init_model_params = init_model_params
         self.dist_measurers = dist_measurers
         self.target_lams_known = target_lams_known
+        self.branch_lengths_known = branch_lengths_known
         self.name = name
 
     def run_worker(self, shared_obj):
@@ -94,37 +99,55 @@ class LikelihoodScorer(ParallelWorker):
             target_lams = self.init_model_params["target_lams"],
             target_lams_known = self.target_lams_known,
             cell_type_tree = None,
-            cell_lambdas_known = False)
+            cell_lambdas_known = False,
+            double_cut_weight_known = False,
+            branch_lens_known = self.branch_lengths_known,
+            tot_time = self.tot_time)
         estimator = CLTPenalizedEstimator(
                 res_model,
                 self.transition_wrap_maker,
                 self.max_iters,
-                self.num_inits,
                 self.log_barr,
                 self.target_lam_pen)
 
-        # Initialize with parameters such that the branch lengths are positive
-        if 'branch_len_inners' not in self.init_model_params or 'branch_len_offsets_proportion' not in self.init_model_params:
-            res_model.initialize_branch_lens()
-        full_init_model_params = res_model.get_vars_as_dict()
-        for key, val in self.init_model_params.items():
-            if key != "tot_time" and val.shape != full_init_model_params[key].shape:
-                raise ValueError(
-                        "Something went wrong. not same shape for key %s (%s vs %s)" %
-                        (key, val.shape, full_init_model_params[key].shape))
-            full_init_model_params[key] = val
-        res_model.set_params_from_dict(full_init_model_params)
+        # Fit multiple initializations
+        results = []
+        for i in range(self.num_inits):
+            # Initialize branch lengths if not provided
+            if 'branch_len_inners' not in self.init_model_params or 'branch_len_offsets_proportion' not in self.init_model_params:
+                res_model.initialize_branch_lens()
 
-        br_lens = res_model.get_branch_lens()[1:]
-        if not np.all(br_lens > 0):
-            raise ValueError("not all positive %s" % br_lens)
-        assert res_model._are_all_branch_lens_positive()
+            # Fill in the dictionary for initializing model params
+            full_init_model_params = res_model.get_vars_as_dict()
+            for key, val in self.init_model_params.items():
+                if key != "tot_time" and val.shape != full_init_model_params[key].shape:
+                    raise ValueError(
+                            "Something went wrong. not same shape for key %s (%s vs %s)" %
+                            (key, val.shape, full_init_model_params[key].shape))
+                full_init_model_params[key] = val
+            res_model.set_params_from_dict(full_init_model_params)
 
-        train_history = estimator.fit(dist_measurers = self.dist_measurers)
-        return LikelihoodScorerResult(
+            # Just checking branch lengths positive
+            br_lens = res_model.get_branch_lens()[1:]
+            if not np.all(br_lens > 0):
+                raise ValueError("not all positive %s" % br_lens)
+            assert res_model._are_all_branch_lens_positive()
+
+            # Actually fit the model
+            train_history = estimator.fit(dist_measurers = self.dist_measurers)
+            result = LikelihoodScorerResult(
                 res_model.get_vars_as_dict(),
                 res_model.get_fitted_bifurcating_tree(),
                 train_history)
+            logging.info("Initialization %d result: %f", i, result.pen_log_lik)
+            results.append(result)
+
+        # Pick out the best result
+        best_res = results[0]
+        for res in results:
+            if res.pen_log_lik > best_res.pen_log_lik:
+                best_res = res
+        return best_res
 
     def __str__(self):
         return self.name

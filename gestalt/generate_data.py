@@ -13,7 +13,7 @@ from cell_state import CellState, CellTypeTree
 from cell_lineage_tree import CellLineageTree
 from cell_state_simulator import CellTypeSimulator
 from clt_simulator import CLTSimulatorBifurcating
-from clt_simulator_simple import CLTSimulatorSimple
+from clt_simulator_simple import CLTSimulatorSimple, CLTSimulatorSimpler
 from clt_likelihood_model import CLTLikelihoodModel
 from allele_simulator_simult import AlleleSimulatorSimultaneous
 from clt_observer import CLTObserver
@@ -46,7 +46,7 @@ def parse_args():
     parser.add_argument(
         '--target-lambdas',
         type=str,
-        default=",".join(["0.05"] * 10),
+        default=",".join(["0.05", "0.04", "0.01"]),
         help='target cut rates -- will get slightly perturbed for the true value')
     parser.add_argument(
         '--perturb-target-lambdas-variance',
@@ -62,7 +62,7 @@ def parse_args():
         '--trim-long-probs',
         type=float,
         nargs=2,
-        default=[0.05] * 2,
+        default=[0.001] * 2,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
         '--trim-zero-probs',
@@ -122,9 +122,17 @@ def parse_args():
         '--is-cherry',
         action='store_true',
         help="special tree structure for tests")
+    parser.add_argument(
+        '--is-stupid-cherry',
+        action='store_true',
+        help="special tree structure for tests")
 
     parser.set_defaults()
     args = parser.parse_args()
+
+    if args.is_cherry or args.is_stupid_cherry:
+        assert args.sampling_rate == 1
+
     args.target_lambdas = [float(x) for x in args.target_lambdas.split(",")]
     args.num_targets = len(args.target_lambdas)
     return args
@@ -148,6 +156,10 @@ def create_simulators(args, clt_model):
     cell_type_simulator = CellTypeSimulator(clt_model.cell_type_tree)
     if args.is_cherry:
         clt_simulator = CLTSimulatorSimple(
+                cell_type_simulator,
+                allele_simulator)
+    elif args.is_stupid_cherry:
+        clt_simulator = CLTSimulatorSimpler(
                 cell_type_simulator,
                 allele_simulator)
     else:
@@ -243,6 +255,7 @@ def main(args=sys.argv[1:]):
     # initialize the target lambdas with some perturbation to ensure we don't have eigenvalues that are exactly equal
     args.target_lambdas, args.birth_lambda, args.death_lambda = initialize_lambda_rates(args)
     logging.info("args.target_lambdas %s" % str(args.target_lambdas))
+    print("args.target_lambdas %s" % str(args.target_lambdas))
 
     # Create a cell-type tree
     cell_type_tree = create_cell_type_tree(args)

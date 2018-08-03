@@ -40,6 +40,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         self.mix_path = mix_path
         self.outfile = "%s/outfile" % self.out_folder
         self.infile = "%s/infile" % self.out_folder
+        assert len(self.infile) < 200, 'Mix is super picky about string lengths'
         self.abundance_file = "%s/test.abundance" % self.out_folder
         self.dist_measurer = UnrootRFDistanceMeasurer(None, None)
 
@@ -190,6 +191,7 @@ class CLTParsimonyEstimator(CLTEstimator):
             self.outfile,
             self.mix_path,
             new_mix_cfg_file)]
+        print(cmd)
         res = subprocess.call(cmd, shell=True)
         # Check that mix ran properly
         assert res == 0, "Mix failed to run"
