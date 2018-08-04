@@ -1,4 +1,6 @@
 # Test if we have any sort of consistency
+# This simulates a very simple cherry tree with four leaves
+# The true topology is assumed to be known
 
 import os
 
@@ -28,7 +30,8 @@ TARGET_LAMBDA_DICT = {
 
 nest.add(
     'seed',
-    range(400,402),
+    range(400,410),
+    label_func=lambda c: "seed%d" % c,
 )
 
 nest.add(
@@ -41,7 +44,7 @@ nest.add(
 nest.add(
     'lambda_scale',
     [0], #[0,1]
-    label_func=lambda c: "lam_scale%d" % c,
+    label_func=lambda c: "lambda_scale_%d" % c,
 )
 
 nest.add(
@@ -50,7 +53,7 @@ nest.add(
          #0.3,
          1,
     ],
-    label_func=lambda c: "double%d" % int(c * 10),
+    label_func=lambda c: "double_cut_%d" % int(c * 10),
 )
 
 nest.add(
@@ -59,7 +62,7 @@ nest.add(
 	[0.1,0.1],
     	#[0.4,0.4],
     ],
-    label_func=lambda c: "trim_zero_pr%d_%d" % (int(c[0] * 10), int(c[1] * 10)),
+    label_func=lambda c: "trim_zero_prob_%d_%d" % (int(c[0] * 10), int(c[1] * 10)),
 )
 
 nest.add(
@@ -68,13 +71,13 @@ nest.add(
     	(3,3),
 	#(8,8),
     ],
-    label_func=lambda c: "trim_poiss%d_%d" % c,
+    label_func=lambda c: "trim_poissons_%d_%d" % c,
 )
 
 nest.add(
     'trim_long_probs',
     [[0.01,0.01]],
-    label_func=lambda c: "trim_long_pr%d_%d" % (int(c[0] * 10), int(c[1] * 10)),
+    label_func=lambda c: "trim_long_prob_%d_%d" % (int(c[0] * 10), int(c[1] * 10)),
 )
 
 
@@ -84,7 +87,7 @@ nest.add(
          0.05,
          #0.4,
     ],
-    label_func=lambda c: "insert_zero_pr%d" % int(c * 10),
+    label_func=lambda c: "insert_zero_prob_%d" % int(c * 10),
 )
 
 nest.add(
@@ -93,7 +96,13 @@ nest.add(
         1,
         #4,
     ],
-    label_func=lambda c: "insert_poiss%d" % c,
+    label_func=lambda c: "insert_poisson_%d" % c,
+)
+
+nest.add(
+    'num_inits',
+    [3],
+    label_func=lambda c: "num_inits_%d" % c,
 )
 
 @nest.add_target_with_env(localenv)
