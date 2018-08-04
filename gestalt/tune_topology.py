@@ -60,6 +60,11 @@ def parse_args():
         type=str,
         default='10',
         help="comma-separated string with penalty parameters on the target lambdas")
+    parser.add_argument(
+        '--train-split',
+        type=float,
+        default=0.75,
+        help="fraction of data for training data. for tuning penalty param")
     parser.add_argument('--max-iters', type=int, default=20)
     parser.add_argument('--num-inits', type=int, default=1)
     parser.add_argument(
@@ -72,6 +77,11 @@ def parse_args():
         type=int,
         default=1,
         help='maximum number of extra steps to explore possible ancestral states')
+    parser.add_argument(
+        '--cpu-threads',
+        type=int,
+        default=6,
+        help='number of cpu threads to request in srun when submitting jobs')
 
     parser.set_defaults()
     args = parser.parse_args()
@@ -109,19 +119,22 @@ def main(args=sys.argv[1:]):
             True, # do refitting
             args.max_sum_states,
             args.max_extra_steps,
+            args.train_split,
             args.scratch_dir)
         worker_list.append(worker)
 
     if len(worker_list) > 1:
-        print("Submitting jobs")
+        logging.info("Submitting jobs")
         job_manager = BatchSubmissionManager(
                 worker_list,
                 None,
                 len(worker_list),
-                args.scratch_dir)
+                args.scratch_dir,
+                threads=args.cpu_threads)
         successful_workers = job_manager.run(successful_only=True)
         assert len(successful_workers) > 0
     else:
+        logging.info("Running locally")
         successful_workers = [(
             worker_list[0].run_worker(None),
             worker_list[0])]
@@ -138,6 +151,7 @@ def main(args=sys.argv[1:]):
         results = six.moves.cPickle.load(f)
     with open(args.out_model_file, "wb") as f:
         six.moves.cPickle.dump(results["refit"], f, protocol = 2)
+    logging.info("Complete!!!")
 
 if __name__ == "__main__":
     main()

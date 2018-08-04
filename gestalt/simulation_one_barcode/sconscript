@@ -20,7 +20,7 @@ nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_enviro
 
 nest.add(
     'seed',
-    range(1),
+    range(100,101),
     label_func=lambda c: "seed%d" % c,
 )
 
@@ -49,7 +49,7 @@ def generate(env, outdir, c):
         '--out-obs-file ${TARGETS[0]}',
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
-        '--time 2.3',
+        '--time 1.3',
         '--target-lambdas',
         ",".join(map(lambda x: str(x), targ_lams)),
         '--sampling-rate',
@@ -65,15 +65,15 @@ def generate(env, outdir, c):
         '--insert-poisson',
         "0.04",
         '--double-cut-weight',
-        "1.3",
+        "1.0",
         '--num-barcodes',
         1,
         '--min-uniq-alleles',
-        30,
+        3,
         '--max-uniq-alleles',
-        60,
+        10,
         '--max-abundance',
-        200,
+        400,
     ]
     return env.Command(
         [
@@ -112,7 +112,7 @@ def run_parsimony(env, outdir, c):
         '--max-random',
         0,
         '--max-random-multifurc',
-        1,
+        2,
     ]
     return env.Command(
         [
@@ -139,7 +139,7 @@ def run_MLE(env, outdir, c):
         0.001,
         '--target-lam-pen',
         5.0,
-        '--max-iters 2000',
+        '--max-iters 2',
         '--num-inits 1',
         '--max-sum-states 50',
         '--max-extra-steps 1',

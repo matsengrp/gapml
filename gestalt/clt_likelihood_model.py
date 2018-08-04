@@ -41,8 +41,10 @@ class CLTLikelihoodModel:
             insert_zero_prob: float = 0.5,
             insert_poisson: float = 0.2,
             double_cut_weight: float = 1.0,
+            double_cut_weight_known: bool = False,
             branch_len_inners: ndarray = np.array([]),
             branch_len_offsets_proportion: ndarray = np.array([]),
+            branch_lens_known: bool = False,
             cell_type_tree: CellTypeTree = None,
             cell_lambdas_known: bool = False,
             tot_time: float = 1):
@@ -93,11 +95,13 @@ class CLTLikelihoodModel:
         self.tot_time_ph = tf.placeholder(tf.float64)
         self.tot_time = tot_time
 
+        self.branch_lens_known = branch_lens_known
         if branch_len_inners.size == 0:
             branch_len_inners = np.ones(self.num_nodes)
         if branch_len_offsets_proportion.size == 0:
             branch_len_offsets_proportion = np.ones(self.num_nodes)
 
+        self.double_cut_weight_known = double_cut_weight_known
         # Create all the variables
         self._create_parameters(
                 target_lams,
@@ -148,15 +152,15 @@ class CLTLikelihoodModel:
         model_params = np.concatenate([
                     [] if self.target_lams_known else [log_target_lam_mean],
                     [] if self.target_lams_known else (np.log(target_lams) - log_target_lam_mean),
-                    np.log(double_cut_weight),
+                    [] if self.double_cut_weight_known else np.log(double_cut_weight),
                     inv_sigmoid(trim_long_probs),
                     inv_sigmoid(trim_zero_probs),
                     np.log(trim_short_poissons),
                     np.log(trim_long_poissons),
                     inv_sigmoid(insert_zero_prob),
                     np.log(insert_poisson),
-                    np.log(branch_len_inners),
-                    inv_sigmoid(branch_len_offsets_proportion),
+                    [] if self.branch_lens_known else np.log(branch_len_inners),
+                    [] if self.branch_lens_known else inv_sigmoid(branch_len_offsets_proportion),
                     [] if self.cell_lambdas_known else np.log(cell_type_lams)])
         self.all_vars = tf.Variable(model_params, dtype=tf.float64)
         self.all_vars_ph = tf.placeholder(tf.float64, shape=self.all_vars.shape)
@@ -172,8 +176,11 @@ class CLTLikelihoodModel:
             self.log_target_lam_diffs = self.all_vars[1:up_to_size]
             self.target_lams = tf.exp(self.all_vars[0] + self.log_target_lam_diffs)
         prev_size = up_to_size
-        up_to_size += 1
-        self.double_cut_weight = tf.exp(self.all_vars[prev_size: up_to_size])
+        if self.double_cut_weight_known:
+            self.double_cut_weight = tf.constant(double_cut_weight, dtype=tf.float64)
+        else:
+            up_to_size += 1
+            self.double_cut_weight = tf.exp(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
         up_to_size += trim_long_probs.size
         self.trim_long_probs = tf.sigmoid(self.all_vars[prev_size: up_to_size])
@@ -196,14 +203,21 @@ class CLTLikelihoodModel:
         up_to_size += 1
         self.insert_poisson = tf.exp(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
-        up_to_size += branch_len_inners.size
-        self.branch_len_inners = tf.exp(self.all_vars[prev_size: up_to_size])
-        prev_size = up_to_size
-        up_to_size += branch_len_offsets_proportion.size
-        self.branch_len_offsets_proportion = tf.sigmoid(self.all_vars[prev_size: up_to_size])
-        self.branch_len_offsets = tf.multiply(
-                self.branch_len_inners,
-                self.branch_len_offsets_proportion)
+        if self.branch_lens_known:
+            self.branch_len_inners = tf.constant(branch_len_inners)
+            self.branch_len_offsets_proportion = tf.constant(branch_len_offsets_proportion)
+            self.branch_len_offsets = tf.multiply(
+                    self.branch_len_inners,
+                    self.branch_len_offsets_proportion)
+        else:
+            up_to_size += branch_len_inners.size
+            self.branch_len_inners = tf.exp(self.all_vars[prev_size: up_to_size])
+            prev_size = up_to_size
+            up_to_size += branch_len_offsets_proportion.size
+            self.branch_len_offsets_proportion = tf.sigmoid(self.all_vars[prev_size: up_to_size])
+            self.branch_len_offsets = tf.multiply(
+                    self.branch_len_inners,
+                    self.branch_len_offsets_proportion)
         if self.cell_type_tree:
             if self.cell_lambdas_known:
                 self.cell_type_lams = tf.constant(cell_type_lams, dtype=tf.float64)
@@ -227,6 +241,7 @@ class CLTLikelihoodModel:
         """
         branch_lens_dict = []
         dist_to_root = {self.root_node_id: 0}
+        print(self.topology.get_ascii(attributes=["node_id"], show_internal=True))
         for node in self.topology.traverse("preorder"):
             if node.is_root():
                 continue
@@ -295,15 +310,15 @@ class CLTLikelihoodModel:
         init_val = np.concatenate([
             [] if self.target_lams_known else [log_target_lams_mean],
             [] if self.target_lams_known else np.log(target_lams) - log_target_lams_mean,
-            np.log(double_cut_weight),
+            [] if self.double_cut_weight_known else np.log(double_cut_weight),
             inv_sigmoid(trim_long_probs),
             inv_sigmoid(trim_zero_probs),
             np.log(trim_short_poissons),
             np.log(trim_long_poissons),
             inv_sigmoid(insert_zero_prob),
             np.log(insert_poisson),
-            np.log(branch_len_inners),
-            inv_sigmoid(branch_len_offsets_proportion),
+            [] if self.branch_lens_known else np.log(branch_len_inners),
+            [] if self.branch_lens_known else inv_sigmoid(branch_len_offsets_proportion),
             [] if self.cell_lambdas_known else np.log(cell_type_lams)])
         self.sess.run(self.assign_op, feed_dict={self.all_vars_ph: init_val})
 
@@ -357,14 +372,14 @@ class CLTLikelihoodModel:
 
     def initialize_branch_lens(self,
             max_attempts: int=10,
-            br_len_scale: float=0.5,
+            br_len_scale: float=1.0,
             br_len_shrink: float=0.8):
         """
         Will randomly initialize branch lengths if they are not all positive already
         @param max_attempts: will try at most this many times to initialize branch lengths
         """
         for j in range(max_attempts):
-            print("attempt %d to make br lens all positive" % j)
+            print("initialize again?", br_len_scale)
             # Keep initializing branch lengths until they are all positive
             model_vars = self.get_vars_as_dict()
             model_vars["branch_len_inners"] = np.random.rand(self.num_nodes) * br_len_scale
@@ -773,6 +788,10 @@ class CLTLikelihoodModel:
                     # Get the trim probabilities
                     with tf.name_scope("trim_matrix%d" % node.node_id):
                         trim_probs[child.node_id] = self._create_trim_prob_matrix(child_wrapper)
+                        #log_trim_probs = tf.verify_tensor_all_finite(
+                        #        tf.log(trim_probs[child.node_id], name="log_trim_probs"),
+                        #        "trim%d has problem" % child.node_id)
+                        #trim_probs[child.node_id] = tf.exp(log_trim_probs)
 
                     # Create the probability matrix exp(Qt)
                     with tf.name_scope("expm_ops%d" % node.node_id):
@@ -802,8 +821,8 @@ class CLTLikelihoodModel:
                             # No need to reorder
                             ch_id = child_wrapper.key_dict[TargetStatus()]
                             down_probs = ch_ordered_down_probs[ch_id]
-                        down_probs_dict[child.node_id] = down_probs
 
+                        down_probs_dict[child.node_id] = down_probs
                         log_Lprob_node = log_Lprob_node + tf.log(down_probs)
 
                 # Handle numerical underflow

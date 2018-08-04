@@ -19,6 +19,7 @@ class RunEstimatorWorker(ParallelWorker):
             do_refit: bool,
             max_sum_states: int,
             max_extra_steps: int,
+            train_split: float,
             scratch_dir: str):
         self.obs_file = obs_file
         self.topology_file = topology_file
@@ -35,6 +36,7 @@ class RunEstimatorWorker(ParallelWorker):
         self.max_sum_states = max_sum_states
         self.max_extra_steps = max_extra_steps
         self.scratch_dir = scratch_dir
+        self.train_split = train_split
 
     def run_worker(self, shared_obj):
         """
@@ -62,6 +64,8 @@ class RunEstimatorWorker(ParallelWorker):
             self.max_extra_steps,
             '--scratch-dir',
             self.scratch_dir,
+            '--train-split',
+            self.train_split
         ]
         def _add_more_args(arg_val, arg_key):
             if arg_val is not None:

@@ -25,7 +25,6 @@ class CLTPenalizedEstimator(CLTEstimator):
         model: CLTLikelihoodModel,
         transition_wrapper_maker: TransitionWrapperMaker,
         max_iters: int,
-        num_inits: int,
         log_barr: float,
         target_lam_pen: float = 0):
         """
@@ -39,8 +38,6 @@ class CLTPenalizedEstimator(CLTEstimator):
         self.log_barr = log_barr
         self.target_lam_pen = target_lam_pen
         self.max_iters = max_iters
-        self.num_inits = num_inits
-        assert num_inits == 1
 
         # Create the skeletons for the transition matrices -- via state sum approximation
         transition_wrappers = transition_wrapper_maker.create_transition_wrappers()
@@ -82,13 +79,14 @@ class CLTPenalizedEstimator(CLTEstimator):
                     self.model.tot_time_ph: self.model.tot_time
                 }
 
-        pen_log_lik, log_lik = self.model.sess.run(
-            [self.model.smooth_log_lik, self.model.log_lik],
+        pen_log_lik, log_lik, penalties = self.model.sess.run(
+            [self.model.smooth_log_lik, self.model.log_lik, self.model.penalties],
             feed_dict=feed_dict)
 
         prev_pen_log_lik = pen_log_lik[0]
         logging.info("initial penalized log lik %f, unpen log lik %f", pen_log_lik, log_lik)
         print("initial penalized log lik obtained %f" % pen_log_lik)
+        logging.info("penalties %f" % penalties)
         assert not np.isnan(pen_log_lik)
         train_history = [{
                     "iter": -1,
@@ -129,6 +127,7 @@ class CLTPenalizedEstimator(CLTEstimator):
                 logging.info(
                     "iter %d pen log lik %f log lik %f targ pen %f log barr %f min branch len %f",
                     i, pen_log_lik, log_lik, targ_pen, log_barr, np.min(branch_lens[1:]))
+                logging.info("tot time %f", self.model.tot_time)
 
             if np.isnan(pen_log_lik):
                 logging.info("ERROR: pen log like is nan. branch lengths are negative?")
