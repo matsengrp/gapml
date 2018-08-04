@@ -1,4 +1,6 @@
 # Test if we have any sort of consistency
+# This simulates a very simple cherry tree with four leaves
+# The true topology is assumed to be known
 
 import os
 

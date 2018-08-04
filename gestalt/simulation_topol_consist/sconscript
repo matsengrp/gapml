@@ -1,4 +1,5 @@
 # Test if we have any sort of consistency
+# This simulates a larger tree and performs a topology search
 
 import os
 
