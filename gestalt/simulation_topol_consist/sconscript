@@ -28,21 +28,20 @@ TARGET_LAMBDA_DICT = {
 
 nest.add(
     'seed',
-    range(400,410),
-    label_func=lambda c: "seed%d" % c,
+    range(401,410),
 )
 
 nest.add(
     'lambda_seq',
     [
 	'sorted',
-	'random',
+	#'random',
     ])
 
 nest.add(
     'lambda_scale',
     [0], #[0,1]
-    label_func=lambda c: "lambda_scale_%d" % c,
+    label_func=lambda c: "lam_scale%d" % c,
 )
 
 nest.add(
@@ -51,7 +50,7 @@ nest.add(
          #0.3,
          1,
     ],
-    label_func=lambda c: "double_cut_%d" % int(c * 10),
+    label_func=lambda c: "double%d" % int(c * 10),
 )
 
 nest.add(
@@ -60,7 +59,7 @@ nest.add(
 	[0.1,0.1],
     	#[0.4,0.4],
     ],
-    label_func=lambda c: "trim_zero_prob_%d_%d" % (int(c[0] * 10), int(c[1] * 10)),
+    label_func=lambda c: "trim_zero_pr%d_%d" % (int(c[0] * 10), int(c[1] * 10)),
 )
 
 nest.add(
@@ -69,13 +68,13 @@ nest.add(
     	(3,3),
 	#(8,8),
     ],
-    label_func=lambda c: "trim_poissons_%d_%d" % c,
+    label_func=lambda c: "trim_poiss%d_%d" % c,
 )
 
 nest.add(
     'trim_long_probs',
     [[0.01,0.01]],
-    label_func=lambda c: "trim_long_prob_%d_%d" % (int(c[0] * 10), int(c[1] * 10)),
+    label_func=lambda c: "trim_long_pr%d_%d" % (int(c[0] * 10), int(c[1] * 10)),
 )
 
 
@@ -85,7 +84,7 @@ nest.add(
          0.05,
          #0.4,
     ],
-    label_func=lambda c: "insert_zero_prob_%d" % int(c * 10),
+    label_func=lambda c: "insert_zero_pr%d" % int(c * 10),
 )
 
 nest.add(
@@ -94,29 +93,22 @@ nest.add(
         1,
         #4,
     ],
-    label_func=lambda c: "insert_poisson_%d" % c,
-)
-
-nest.add(
-    'num_inits',
-    [3],
-    label_func=lambda c: "num_inits_%d" % c,
+    label_func=lambda c: "insert_poiss%d" % c,
 )
 
 @nest.add_target_with_env(localenv)
 def generate(env, outdir, c):
     targ_lambdas = ",".join(
 	map(str, TARGET_LAMBDA_DICT[c['lambda_seq']][c['lambda_scale']]))
-    cherry_flag = '--is-stupid-cherry'
-    sampling_rate = 1.0
-    min_uniq_alleles = 3
-    max_uniq_alleles = 5
+
+    sampling_rate = 0.4
+    min_uniq_alleles = 10
+    max_uniq_alleles = 30
     tree_time = 1
-    birth_flag = ''
+    birth_flag = '--birth-lambda 4'
 
     cmd = [
         'python generate_data.py',
-	cherry_flag,
 	'--sampling-rate',
         sampling_rate,
         '--model-seed',
@@ -189,17 +181,22 @@ def restrict_observed_alleles(env, outdir, c):
 @nest.add_target_with_env(localenv)
 def run_topology(env, outdir, c):
     cmd = [
-        'python get_collapsed_oracle.py',
-        '--obs-data-pkl ${SOURCES[0]}',
+        'python get_parsimony_topologies.py',
+        '--obs-file ${SOURCES[0]}',
         '--out-template-file ${TARGETS[0]}',
-    '--true-model-pkl ${SOURCES[1]}',
+        '--log-file ${TARGETS[1]}',
+        '--max-random',
+        0,
+        '--max-random-multifurc',
+        10,
+        '--num-jumbles 1'
     ]
     return env.Command(
         [
-            join(outdir, 'oracle_tree0.pkl')],
+            join(outdir, 'parsimony_tree0.pkl'),
+            join(outdir, 'log_parsimony.txt')],
         [
-            c['restrict_observed_alleles'][0],
-            c['restrict_observed_alleles'][1]],
+            c['restrict_observed_alleles'][0]],
         ' '.join(map(str, cmd)))
 
 nest.add(
@@ -210,14 +207,17 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
+    penalty_params = ",".join(map(str, np.power(10, np.arange(0.5, -3.0, step=-1)).tolist()))
     penalty_params = "0.01"
     cmd = [
-        'python run_estimator.py',
+	#'srun -p restart,matsen_e,campus --cpus-per-task 4',
+        'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
         '--topology-file ${SOURCES[1]}',
         '--true-model-file ${SOURCES[2]}',
         '--true-collapsed-tree-file ${SOURCES[3]}',
-        '--pickle-out ${TARGETS[0]}',
+        '--out-model-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
         '--seed',
 	c['seed'] + 100,
         '--log-barr 0.0000001',
@@ -232,8 +232,8 @@ def run_MLE(env, outdir, c):
     ]
     return env.Command(
         [
-            join(outdir, 'tree0_fitted.pkl'),
-            join(outdir, 'tree0_fitted_log.txt')],
+            join(outdir, 'tune_fitted.pkl'),
+            join(outdir, 'tune_fitted_log.txt')],
         [
             c['restrict_observed_alleles'][0],
             c['run_topology'][0],

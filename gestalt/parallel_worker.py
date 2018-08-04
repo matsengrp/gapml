@@ -59,12 +59,19 @@ class BatchSubmissionManager(ParallelWorkerManager):
     """
     Handles submitting jobs to a job submission system (e.g. slurm)
     """
-    def __init__(self, worker_list, shared_obj, num_approx_batches, worker_folder, retry=False):
+    def __init__(self,
+            worker_list,
+            shared_obj,
+            num_approx_batches,
+            worker_folder,
+            threads=None,
+            retry=False):
         """
         @param worker_list: List of ParallelWorkers
         @param shared_obj: object shared across parallel workers - useful to minimize disk space usage
         @param num_approx_batches: number of batches to make approximately (might be a bit more)
         @param worker_folder: the folder to make all the results from the workers
+        @param threads: number of threads to request per machine
         @param retry: whether to retry the jobs locally if they fail
         """
         self.retry = retry
@@ -74,6 +81,7 @@ class BatchSubmissionManager(ParallelWorkerManager):
         self.output_files = []
         self.worker_list = worker_list
         self.worker_folder = worker_folder
+        self.threads = threads
         self.create_batch_worker_cmds(worker_list, shared_obj, num_approx_batches, worker_folder)
 
     def run(self, successful_only=False):
@@ -138,8 +146,8 @@ class BatchSubmissionManager(ParallelWorkerManager):
                     cmd_str,
                     outfname=output_file_name,
                     logdir=worker_batch_folder,
+                    threads=self.threads,
                     env=os.environ.copy(),
-                    threads=3
                 )
                 self.batch_worker_cmds.append(batch_cmd)
 
