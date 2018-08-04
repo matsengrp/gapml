@@ -32,12 +32,18 @@ n_bcode_results = [[] for _ in num_barcodes]
 
 for seed in seeds:
     for idx, n_bcode in enumerate(num_barcodes):
-        true_model = get_true_model(seed, lambda_type, n_bcode)
+        try:
+            true_model = get_true_model(seed, lambda_type, n_bcode)
+        except FileNotFoundError:
+            continue
         true_model_meas = MRCADistanceMeasurer(true_model[1])
         print(true_model_meas.ref_tree_mrca_matrix.shape)
-        result = get_result(seed, lambda_type, n_bcode)
+        try:
+            result = get_result(seed, lambda_type, n_bcode)
+        except FileNotFoundError:
+            continue
         dist = true_model_meas.get_dist(result[1])
         n_bcode_results[idx].append(dist)
 
 for idx, all_res in enumerate(n_bcode_results):
-    print(num_barcodes[idx], np.mean(all_res), np.var(all_res))
+    print(num_barcodes[idx], np.mean(all_res), np.var(all_res), len(all_res))

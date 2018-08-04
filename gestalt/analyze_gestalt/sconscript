@@ -19,7 +19,7 @@ nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_enviro
 
 nest.add(
     'abundance_thres',
-    [200],
+    [50],
     label_func=lambda c: "min_abund_%d" % c,
 )
 
@@ -79,9 +79,23 @@ def run_parsimony(env, outdir, c):
         c['restrict_observed_alleles'],
         ' '.join(map(str, cmd)))
 
+nest.add(
+    'sum_states',
+    [10],
+    label_func=lambda c: "sum_states_%d" % c,
+)
+
+nest.add(
+    'penalty_params',
+    [
+	'50',
+    	#",".join(map(str, np.power(10, np.arange(1.0, -2.0, step=-1)).tolist())),
+    ],
+    label_func=lambda c: "penalty_params_%s" % c,
+)
+
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = ",".join(map(str, np.power(10, np.arange(1.0, -3.0, step=-.5)).tolist()))
     cmd = [
         'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
@@ -89,12 +103,15 @@ def run_MLE(env, outdir, c):
         '--out-model-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
         '--seed 100',
-        '--log-barr 0.001',
+        '--log-barr 0.0001',
         '--target-lam-pens',
-        penalty_params,
-        '--max-sum-states 30',
+        c['penalty_params'],
+        '--max-sum-states',
+        c['sum_states'],
         '--max-extra-steps 1',
-        '--max-iters 600',
+        '--max-iters 10000',
+        '--num-inits 1',
+        '--train-split 0.75',
     ]
     return env.Command(
         [

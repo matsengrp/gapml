@@ -63,7 +63,7 @@ def parse_args():
     parser.add_argument(
         '--train-split',
         type=float,
-        default=0.5,
+        default=0.75,
         help="fraction of data for training data. for tuning penalty param")
     parser.add_argument('--max-iters', type=int, default=20)
     parser.add_argument('--num-inits', type=int, default=1)
@@ -124,7 +124,7 @@ def main(args=sys.argv[1:]):
         worker_list.append(worker)
 
     if len(worker_list) > 1:
-        print("Submitting jobs")
+        logging.info("Submitting jobs")
         job_manager = BatchSubmissionManager(
                 worker_list,
                 None,
@@ -134,6 +134,7 @@ def main(args=sys.argv[1:]):
         successful_workers = job_manager.run(successful_only=True)
         assert len(successful_workers) > 0
     else:
+        logging.info("Running locally")
         successful_workers = [(
             worker_list[0].run_worker(None),
             worker_list[0])]

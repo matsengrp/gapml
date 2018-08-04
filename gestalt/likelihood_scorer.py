@@ -43,7 +43,7 @@ class LikelihoodScorer(ParallelWorker):
             dist_measurers: TreeDistanceMeasurerAgg = None,
             target_lams_known: bool = False,
             branch_lengths_known: bool = False,
-            name: str = "likelihood scorer"):
+            max_try_per_init: int = 2):
         """
         @param seed: required to set the seed of each parallel worker
         @param tree: the cell lineage tree topology to fit the likelihood for
@@ -70,7 +70,7 @@ class LikelihoodScorer(ParallelWorker):
         self.dist_measurers = dist_measurers
         self.target_lams_known = target_lams_known
         self.branch_lengths_known = branch_lengths_known
-        self.name = name
+        self.max_tries = max_try_per_init * num_inits
 
     def run_worker(self, shared_obj):
         """
@@ -80,6 +80,39 @@ class LikelihoodScorer(ParallelWorker):
         with sess.as_default():
             tf.global_variables_initializer().run()
             return self.do_work_directly(sess)
+
+    def fit_one_init(self, estimator: CLTPenalizedEstimator, res_model: CLTLikelihoodModel, init_index: int):
+        # Initialize branch lengths if not provided
+        if 'branch_len_inners' not in self.init_model_params or 'branch_len_offsets_proportion' not in self.init_model_params:
+            res_model.initialize_branch_lens()
+
+        # Fill in the dictionary for initializing model params
+        full_init_model_params = res_model.get_vars_as_dict()
+        for key, val in self.init_model_params.items():
+            if key != "tot_time" and val.shape != full_init_model_params[key].shape:
+                raise ValueError(
+                        "Something went wrong. not same shape for key %s (%s vs %s)" %
+                        (key, val.shape, full_init_model_params[key].shape))
+            full_init_model_params[key] = val
+        res_model.set_params_from_dict(full_init_model_params)
+
+        # Just checking branch lengths positive
+        br_lens = res_model.get_branch_lens()[1:]
+        if not np.all(br_lens > 0):
+            raise ValueError("not all positive %s" % br_lens)
+        assert res_model._are_all_branch_lens_positive()
+
+        # Actually fit the model
+        train_history = estimator.fit(dist_measurers = self.dist_measurers)
+        result = LikelihoodScorerResult(
+            res_model.get_vars_as_dict(),
+            res_model.get_fitted_bifurcating_tree(),
+            train_history)
+        logging.info("Initialization %d result: %f", init_index, result.pen_log_lik)
+        logging.info(result.fitted_bifurc_tree.get_ascii(attributes=["node_id"], show_internal=True))
+        logging.info(result.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
+        logging.info(result.fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+        return result
 
     def do_work_directly(self, sess):
         """
@@ -112,35 +145,20 @@ class LikelihoodScorer(ParallelWorker):
 
         # Fit multiple initializations
         results = []
-        for i in range(self.num_inits):
-            # Initialize branch lengths if not provided
-            if 'branch_len_inners' not in self.init_model_params or 'branch_len_offsets_proportion' not in self.init_model_params:
-                res_model.initialize_branch_lens()
-
-            # Fill in the dictionary for initializing model params
-            full_init_model_params = res_model.get_vars_as_dict()
-            for key, val in self.init_model_params.items():
-                if key != "tot_time" and val.shape != full_init_model_params[key].shape:
-                    raise ValueError(
-                            "Something went wrong. not same shape for key %s (%s vs %s)" %
-                            (key, val.shape, full_init_model_params[key].shape))
-                full_init_model_params[key] = val
-            res_model.set_params_from_dict(full_init_model_params)
-
-            # Just checking branch lengths positive
-            br_lens = res_model.get_branch_lens()[1:]
-            if not np.all(br_lens > 0):
-                raise ValueError("not all positive %s" % br_lens)
-            assert res_model._are_all_branch_lens_positive()
-
-            # Actually fit the model
-            train_history = estimator.fit(dist_measurers = self.dist_measurers)
-            result = LikelihoodScorerResult(
-                res_model.get_vars_as_dict(),
-                res_model.get_fitted_bifurcating_tree(),
-                train_history)
-            logging.info("Initialization %d result: %f", i, result.pen_log_lik)
+        for i in range(self.max_tries):
+            try:
+                # Note that we will be warm-starting from all the model params
+                # Except that we re-initialize branch lengths.
+                # Pretty reasonable assuming the target lambdas are relatively stable
+                result = self.fit_one_init(estimator, res_model, i)
+            except tf.errors.InvalidArgumentError as e:
+                logging.info(e)
+                continue
             results.append(result)
+            if len(results) >= self.num_inits:
+                break
+
+        assert len(results) > 0
 
         # Pick out the best result
         best_res = results[0]
