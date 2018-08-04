@@ -79,13 +79,14 @@ class CLTPenalizedEstimator(CLTEstimator):
                     self.model.tot_time_ph: self.model.tot_time
                 }
 
-        pen_log_lik, log_lik = self.model.sess.run(
-            [self.model.smooth_log_lik, self.model.log_lik],
+        pen_log_lik, log_lik, penalties = self.model.sess.run(
+            [self.model.smooth_log_lik, self.model.log_lik, self.model.penalties],
             feed_dict=feed_dict)
 
         prev_pen_log_lik = pen_log_lik[0]
         logging.info("initial penalized log lik %f, unpen log lik %f", pen_log_lik, log_lik)
         print("initial penalized log lik obtained %f" % pen_log_lik)
+        logging.info("penalties %f" % penalties)
         assert not np.isnan(pen_log_lik)
         train_history = [{
                     "iter": -1,

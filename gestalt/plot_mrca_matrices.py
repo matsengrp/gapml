@@ -32,6 +32,9 @@ def plot_tree(tree: CellLineageTree, file_name: str):
     tree.render(file_name, w=183, units="mm", tree_style=ts)
 
 ## Save the data
-#with open("tmp_mount/_output_worm2/parsimony_tree1_fitted.pkl", "rb") as f:
+#with open("analyze_gestalt/_output/min_abund_300/parsimony_tree0_fitted.pkl", "rb") as f:
 #    res = six.moves.cPickle.load(f)
-#plot_tree(res.fitted_bifurc_tree, "/Users/jeanfeng/Desktop/parsimony_tree1_fitted.png")
+#plot_tree(res["raw"].fitted_bifurc_tree, "/Users/jeanfeng/Desktop/parsimony_tree0_fitted_raw.png")
+#plot_mrca_matrix(res["raw"].fitted_bifurc_tree, "/Users/jeanfeng/Desktop/parsimony_tree0_fitted_raw_mrca.png")
+#plot_tree(res["refit"].fitted_bifurc_tree, "/Users/jeanfeng/Desktop/parsimony_tree0_fitted_refit.png")
+#plot_mrca_matrix(res["refit"].fitted_bifurc_tree, "/Users/jeanfeng/Desktop/parsimony_tree0_fitted_refit_mrca.png")

@@ -241,6 +241,7 @@ class CLTLikelihoodModel:
         """
         branch_lens_dict = []
         dist_to_root = {self.root_node_id: 0}
+        print(self.topology.get_ascii(attributes=["node_id"], show_internal=True))
         for node in self.topology.traverse("preorder"):
             if node.is_root():
                 continue
@@ -787,6 +788,10 @@ class CLTLikelihoodModel:
                     # Get the trim probabilities
                     with tf.name_scope("trim_matrix%d" % node.node_id):
                         trim_probs[child.node_id] = self._create_trim_prob_matrix(child_wrapper)
+                        #log_trim_probs = tf.verify_tensor_all_finite(
+                        #        tf.log(trim_probs[child.node_id], name="log_trim_probs"),
+                        #        "trim%d has problem" % child.node_id)
+                        #trim_probs[child.node_id] = tf.exp(log_trim_probs)
 
                     # Create the probability matrix exp(Qt)
                     with tf.name_scope("expm_ops%d" % node.node_id):
@@ -816,8 +821,8 @@ class CLTLikelihoodModel:
                             # No need to reorder
                             ch_id = child_wrapper.key_dict[TargetStatus()]
                             down_probs = ch_ordered_down_probs[ch_id]
-                        down_probs_dict[child.node_id] = down_probs
 
+                        down_probs_dict[child.node_id] = down_probs
                         log_Lprob_node = log_Lprob_node + tf.log(down_probs)
 
                 # Handle numerical underflow

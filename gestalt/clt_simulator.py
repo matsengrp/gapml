@@ -253,6 +253,7 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
                 tot_time,
                 max_nodes)
         tree.cell_state = root_cell_state
+        print("tree leaves", len(tree))
 
         np.random.seed(data_seed)
         # Run the simulation to create the alleles along the tree topology
