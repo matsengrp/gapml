@@ -83,6 +83,10 @@ def parse_args():
         type=int,
         default=6,
         help='number of cpu threads to request in srun when submitting jobs')
+    parser.add_argument(
+        '--submit-srun',
+        action='store_true',
+        help='is using slurm to submit jobs')
 
     parser.set_defaults()
     args = parser.parse_args()
@@ -125,7 +129,7 @@ def main(args=sys.argv[1:]):
             args.scratch_dir)
         worker_list.append(worker)
 
-    if len(worker_list) > 1:
+    if len(worker_list) > 1 and args.submit_srun:
         logging.info("Submitting jobs")
         job_manager = BatchSubmissionManager(
                 worker_list,
@@ -137,9 +141,7 @@ def main(args=sys.argv[1:]):
         assert len(successful_workers) > 0
     else:
         logging.info("Running locally")
-        successful_workers = [(
-            worker_list[0].run_worker(None),
-            worker_list[0])]
+        successful_workers = [(w.run_worker(None), w) for w in worker_list]
 
     best_log_lik = successful_workers[0][0]["log_lik"]
     best_worker = successful_workers[0][1]

@@ -54,6 +54,10 @@ def parse_args():
         type=str,
         default="_output/collapsed_tree_b1.pkl",
         help='name of the output pkl file with collapsed tree')
+    parser.add_argument(
+        '--submit-srun',
+        action='store_true',
+        help='is using slurm to submit jobs')
 
     args = parser.parse_args()
     args.scratch_dir = "_output/scratch"
@@ -195,9 +199,10 @@ def make_likelihood_scorer(tree: CellLineageTree, true_model_dict: Dict, name: s
         log_barr = 0, # no penalty
         target_lam_pen = 0, # no penalty
         max_iters = 0,
+        num_inits = 3,
         transition_wrap_maker = TransitionWrapperMaker(tree, bcode_meta),
-        init_model_params = param_dict,
-        name = name)
+        tot_time = true_model_dict["time"],
+        init_model_params = param_dict)
     return scorer
 
 def get_highest_likelihood_single_appearance_tree(
@@ -247,9 +252,13 @@ def get_highest_likelihood_single_appearance_tree(
         _reattach_leaves(leaves_kept, filtered_duplicate_indpt_alleles)
 
     # Submit jobs to slurm
-    job_manager = BatchSubmissionManager(scorers, None, len(leaves_kept_combos), scratch_dir)
-    scorer_results = job_manager.run(successful_only=True)
-    assert len(scorer_results) == len(leaves_kept_combos)
+    if args.submit_srun:
+        job_manager = BatchSubmissionManager(scorers, None, len(leaves_kept_combos), scratch_dir)
+        scorer_results = job_manager.run(successful_only=True)
+        assert len(scorer_results) == len(leaves_kept_combos)
+    else:
+        logging.info("Running locally")
+        scorer_results = [(w.run_worker(None), w) for w in scorers]
     logging.info([res.pen_log_lik for (res, _) in scorer_results])
 
     # Get the one with the highest log likelihood

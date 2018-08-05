@@ -7,7 +7,7 @@ import argparse
 
 batch = boto3.client('batch')
 jobQueue = "first-run-job-queue"
-jobDefinition = "gestaltamania:1"
+jobDefinition = "gestaltamania:2"
 script = "gestaltamania/gestalt/run_script.sh"
 command0 = "/efs/jjfeng/%s" % script
 jobNamePrefix = "test_job"

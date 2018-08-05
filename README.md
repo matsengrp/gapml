@@ -8,7 +8,7 @@ Install PyQt5 (`sudo apt-get` on linux, `brew install` on mac. For mac, see http
 Then run `pip install PyQt5` in your virtual environment.
 
 We use nestly + SCons to run simulations/analyses.
-You should install scons outside the virtual environment, for a python 2.* or a 3.5+ environment.
+You should install scons outside the virtual environment, for a python 2.\* or a 3.5+ environment.
 Then activate the virtual environment and then run `scons ___`.
 
 # Running tests
@@ -31,4 +31,12 @@ python3 -m unittest tests.<test_me>
 
 `run_estimator.py`: fit the estimator for a given topology, run statistics if given the true tree
 
-`tune_topologies.py`: to select the best topology given a set of possible topologies
+`tune_topology.py`: to select the best topology given a set of possible topologies
+
+# Submitting jobs to AWS Batch
+We rely on the `boto_run.py` script.
+We still run `scons` to submit to AWS batch.
+However to ensure dependencies between jobs are upheld, we run each nested command in scons one-by-one.
+So we run all `generate_data.py` commands for all seeds first by running `scons` but commenting out the other commands.
+Then we run all `restrict_observed_barcodes.py` commands by setting the `generate_data.py` command to an empty command. Then we run `scons`.
+This is really hacky but it works for now.
