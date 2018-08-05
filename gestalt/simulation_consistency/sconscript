@@ -30,7 +30,7 @@ TARGET_LAMBDA_DICT = {
 
 nest.add(
     'seed',
-    range(400,410),
+    range(400,401),
     label_func=lambda c: "seed%d" % c,
 )
 
@@ -38,39 +38,33 @@ nest.add(
     'lambda_seq',
     [
 	'sorted',
-	'random',
+	#'random',
     ])
 
 nest.add(
     'lambda_scale',
-    [0], #[0,1]
+    range(len(TARGET_LAMBDA_DICT["sorted"])),
     label_func=lambda c: "lambda_scale_%d" % c,
 )
 
+DOUBLE_CUTS = [0.3, 1]
 nest.add(
     'double_cut',
-    [
-         #0.3,
-         1,
-    ],
+    lambda c: DOUBLE_CUTS if c["lambda_scale"] == 0 else DOUBLE_CUTS[:1],
     label_func=lambda c: "double_cut_%d" % int(c * 10),
 )
 
+TRIM_ZERO_PROBS = [[0.1,0.1], [0.4,0.4]]
 nest.add(
     'trim_zero_probs',
-    [
-	[0.1,0.1],
-    	#[0.4,0.4],
-    ],
+    lambda c: TRIM_ZERO_PROBS if c["lambda_scale"] == 0 and c["double_cut"] == DOUBLE_CUTS[0] else TRIM_ZERO_PROBS[:1],
     label_func=lambda c: "trim_zero_prob_%d_%d" % (int(c[0] * 10), int(c[1] * 10)),
 )
 
+TRIM_POISSONS = [(3,3), (8,8)]
 nest.add(
     'trim_poissons',
-    [
-    	(3,3),
-	#(8,8),
-    ],
+    lambda c: TRIM_POISSONS if c["lambda_scale"] == 0 and c["double_cut"] == DOUBLE_CUTS[0] and c["trim_zero_probs"] == TRIM_ZERO_PROBS[0] else TRIM_POISSONS[:1],
     label_func=lambda c: "trim_poissons_%d_%d" % c,
 )
 
@@ -80,22 +74,17 @@ nest.add(
     label_func=lambda c: "trim_long_prob_%d_%d" % (int(c[0] * 10), int(c[1] * 10)),
 )
 
-
+INSERT_ZERO_PROBS = [0.05, 0.4]
 nest.add(
     'insert_zero_prob',
-    [
-         0.05,
-         #0.4,
-    ],
+    lambda c: INSERT_ZERO_PROBS if c["lambda_scale"] == 0 and c["double_cut"] == DOUBLE_CUTS[0] and c["trim_zero_probs"] == TRIM_ZERO_PROBS[0] and c["trim_poissons"] == TRIM_POISSONS[0] else INSERT_ZERO_PROBS[:1],
     label_func=lambda c: "insert_zero_prob_%d" % int(c * 10),
 )
 
+INSERT_POISSONS = [1,4]
 nest.add(
     'insert_poisson',
-    [
-        1,
-        #4,
-    ],
+    lambda c: INSERT_POISSONS if c["lambda_scale"] == 0 and c["double_cut"] == DOUBLE_CUTS[0] and c["trim_zero_probs"] == TRIM_ZERO_PROBS[0] and c["trim_poissons"] == TRIM_POISSONS[0] and c["insert_zero_prob"] == INSERT_ZERO_PROBS[0] else INSERT_POISSONS[:1],
     label_func=lambda c: "insert_poisson_%d" % c,
 )
 
@@ -117,7 +106,8 @@ def generate(env, outdir, c):
     birth_flag = ''
 
     cmd = [
-        'python generate_data.py',
+        'python boto_run.py generate_data.py',
+        #'python generate_data.py',
 	cherry_flag,
 	'--sampling-rate',
         sampling_rate,
@@ -164,7 +154,8 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [5, 10, 20, 40],
+    #[5, 10, 20, 40],
+    [5],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 

@@ -8,6 +8,8 @@ import time
 import tensorflow as tf
 import logging
 import six
+import pathlib
+import os
 
 from cell_state import CellState, CellTypeTree
 from cell_lineage_tree import CellLineageTree
@@ -19,6 +21,7 @@ from allele_simulator_simult import AlleleSimulatorSimultaneous
 from clt_observer import CLTObserver
 from barcode_metadata import BarcodeMetadata
 
+from common import create_directory
 from constants import NUM_BARCODE_V7_TARGETS, BARCODE_V7
 
 def parse_args():
@@ -129,6 +132,8 @@ def parse_args():
 
     parser.set_defaults()
     args = parser.parse_args()
+
+    create_directory(args.out_obs_file)
 
     if args.is_cherry or args.is_stupid_cherry:
         assert args.sampling_rate == 1

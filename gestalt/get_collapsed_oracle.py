@@ -11,6 +11,7 @@ import six
 
 from tree_distance import *
 from collapsed_tree import collapse_zero_lens
+from common import create_directory
 
 def parse_args():
     parser = argparse.ArgumentParser(description='fit topology and branch lengths for GESTALT')
@@ -33,6 +34,7 @@ def parse_args():
     args = parser.parse_args()
     args.out_folder = os.path.dirname(args.out_template_file)
     assert os.path.join(args.out_folder, "oracle_tree0.pkl") == args.out_template_file
+    create_directory(args.out_template_file)
 
     args.log_file = "%s/oracle_tree_log.txt" % args.out_folder
     print("Log file", args.log_file)

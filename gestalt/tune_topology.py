@@ -12,6 +12,7 @@ import six
 
 from parallel_worker import BatchSubmissionManager
 from estimator_worker import RunEstimatorWorker
+from common import create_directory
 
 def parse_args():
     parser = argparse.ArgumentParser(description='tune over many multifurcating topologies and fit model parameters')
@@ -94,6 +95,7 @@ def parse_args():
             'scratch')
     if not os.path.exists(args.scratch_dir):
         os.mkdir(args.scratch_dir)
+    create_directory(args.out_model_file)
 
     return args
 

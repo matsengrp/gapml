@@ -21,6 +21,7 @@ from transition_wrapper_maker import TransitionWrapperMaker
 from parallel_worker import BatchSubmissionManager
 from plot_mrca_matrices import plot_mrca_matrix
 from common import save_data
+from common import create_directory
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Collapse data based on first n alleles')
@@ -56,6 +57,7 @@ def parse_args():
 
     args = parser.parse_args()
     args.scratch_dir = "_output/scratch"
+    create_directory(args.out_obs_file)
     return args
 
 def collapse_obs_leaves_by_first_alleles(

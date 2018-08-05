@@ -111,6 +111,7 @@ def parse_args():
         args.out_folder = os.path.dirname(args.pickle_out)
         args.log_file = args.pickle_out.replace(".pkl", "_log.txt")
     print("Log file", args.log_file)
+    create_directory(args.pickle_out)
 
     args.target_lam_pens = list(sorted(
         [float(lam) for lam in args.target_lam_pens.split(",")],

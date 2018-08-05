@@ -31,3 +31,13 @@ def save_data(data, out_file: str):
 
 def get_randint():
     return np.random.randint(low=0, high=10000)
+
+def create_directory(file_name):
+    dir_path = os.path.dirname(file_name)
+    print(dir_path)
+    try:
+        if not os.path.exists(dir_path):
+            pathlib.Path(dir_path).mkdir(parents=True)
+            print("making directory")
+    except FileExistsError:
+        print("directory already exists")
