@@ -162,7 +162,10 @@ nest.add(
 @nest.add_target_with_env(localenv)
 def restrict_observed_alleles(env, outdir, c):
     cmd = [
-        'python restrict_observed_barcodes.py',
+        'python boto_run.py',
+        '2 2000',
+        'restrict_observed_barcodes.py',
+        #'python restrict_observed_barcodes.py',
         '--obs-file ${SOURCES[0]}',
         '--model-file ${SOURCES[1]}',
         '--num-barcodes',
@@ -182,10 +185,13 @@ def restrict_observed_alleles(env, outdir, c):
 @nest.add_target_with_env(localenv)
 def run_topology(env, outdir, c):
     cmd = [
-        'python get_collapsed_oracle.py',
+        'python boto_run.py',
+        '2 2000',
+        'get_collapsed_oracle.py',
+        #'python get_collapsed_oracle.py',
         '--obs-data-pkl ${SOURCES[0]}',
         '--out-template-file ${TARGETS[0]}',
-    '--true-model-pkl ${SOURCES[1]}',
+        '--true-model-pkl ${SOURCES[1]}',
     ]
     return env.Command(
         [
@@ -205,7 +211,10 @@ nest.add(
 def run_MLE(env, outdir, c):
     penalty_params = "0.01"
     cmd = [
-        'python run_estimator.py',
+        'python boto_run.py',
+        '18 25000',
+        'run_estimator.py',
+        #'python run_estimator.py',
         '--obs-file ${SOURCES[0]}',
         '--topology-file ${SOURCES[1]}',
         '--true-model-file ${SOURCES[2]}',

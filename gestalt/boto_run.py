@@ -13,7 +13,11 @@ command0 = "/efs/jjfeng/%s" % script
 jobNamePrefix = "test_job"
 
 def main(args=sys.argv[1:]):
-    command = [command0, "jjfeng"] + (" ".join(args)).split(" ")
+    vcpus = int(args[0])
+    assert vcpus >= 2
+    memory = int(args[1])
+    # For run_estimator, choose memory something like 20000
+    command = [command0, "jjfeng"] + (" ".join(args[2:])).split(" ")
     print(command)
     resp = batch.submit_job(
             jobName="%s-test" % jobNamePrefix,
@@ -21,9 +25,8 @@ def main(args=sys.argv[1:]):
             jobDefinition=jobDefinition,
             containerOverrides = {
                 "command": command,
-                "vcpus": 36,
-                #"memory": 20000
-                "memory": 2000
+                "vcpus": vcpus,
+                "memory": memory
             }
             )
     print("Job ID %s" % resp['jobId'])

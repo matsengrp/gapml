@@ -23,8 +23,8 @@ def parse_args():
     parser.add_argument(
         '--true-model-pkl',
         type=str,
-        default="_output/true_model.pkl",
-        help='pkl file with true model if available')
+        default="_output/collapsed_tree_b1.pkl",
+        help='pkl file with true collapsed tree (from restrict_observed_barcodes.py)')
     parser.add_argument(
         '--out-template-file',
         type=str,
@@ -58,7 +58,7 @@ def main(args=sys.argv[1:]):
     logging.info(str(args))
 
     with open(args.true_model_pkl, "rb") as f:
-        true_model_dict = six.moves.cPickle.load(f)
+        true_coll_tree = six.moves.cPickle.load(f)
 
     #oracle_multifurc_tree = collapse_internally_labelled_tree(true_model_dict["collapsed_subtree"])
     #logging.info(true_model_dict["collapsed_subtree"].get_ascii(attributes=["allele_events_list_str"], show_internal=True))
@@ -69,7 +69,7 @@ def main(args=sys.argv[1:]):
         'multifurc': False,
         'idx': 0,
         'aux': None,
-        'tree': true_model_dict["true_subtree"],
+        'tree': true_coll_tree,
     },
     #{
     #    'selection_type': 'oracle',
