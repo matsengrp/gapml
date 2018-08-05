@@ -21,6 +21,9 @@ def get_result(seed, lambda_type, n_bcodes):
 def get_target_lams(model_param_tuple):
     return model_param_tuple[0]["target_lams"]
 
+def get_double_cut_weight(model_param_tuple):
+    return model_param_tuple[0]["double_cut_weight"]
+
 def get_branch_lens(model_param_tuple, node_idxs = [1]):
     br_len_dict = {i: 0 for i in node_idxs}
     for node in model_param_tuple[1].traverse():
@@ -36,19 +39,35 @@ seeds = range(400,410)
 num_barcodes = [5, 10,20,40]
 lambda_type = "random"
 #lambda_type = "sorted"
-get_param_func = get_branch_lens
-get_param_func = get_target_lams
+get_param_func_dict = {
+        "br": get_branch_lens,
+        "targ": get_target_lams,
+        "double": get_double_cut_weight}
 
-n_bcode_results = [[] for _ in num_barcodes]
+n_bcode_results = {
+        key: [[] for _ in num_barcodes]
+        for key in get_param_func_dict.keys()}
 
-for seed in seeds:
-    true_model = get_true_model(seed, lambda_type)
-    true_model_val = get_param_func(true_model)
-    for idx, n_bcode in enumerate(num_barcodes):
-        result = get_result(seed, lambda_type, n_bcode)
-        fitted_val = get_param_func(result)
-        dist = np.linalg.norm(fitted_val - true_model_val)
-        n_bcode_results[idx].append(dist)
+for key in get_param_func_dict.keys():
+    get_param_func = get_param_func_dict[key]
+    for seed in seeds:
+        true_model = get_true_model(seed, lambda_type)
+        true_model_val = get_param_func(true_model)
+        for idx, n_bcode in enumerate(num_barcodes):
+            result = get_result(seed, lambda_type, n_bcode)
+            fitted_val = get_param_func(result)
+            dist = np.linalg.norm(fitted_val - true_model_val)
+            n_bcode_results[key][idx].append(dist)
 
-for idx, all_res in enumerate(n_bcode_results):
-    print(num_barcodes[idx], np.mean(all_res), np.var(all_res))
+for idx, n_bcode in enumerate(num_barcodes):
+    size = len(n_bcode_results["br"][idx])
+    print("%s & %d & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f)" % (
+        lambda_type,
+        n_bcode,
+        np.mean(n_bcode_results["br"][idx]),
+        np.sqrt(np.var(n_bcode_results["br"][idx])/size),
+        np.mean(n_bcode_results["targ"][idx]),
+        np.sqrt(np.var(n_bcode_results["targ"][idx])/size),
+        np.mean(n_bcode_results["double"][idx]),
+        np.sqrt(np.var(n_bcode_results["double"][idx])/size),
+    ))
