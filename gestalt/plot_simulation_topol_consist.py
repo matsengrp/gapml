@@ -53,7 +53,11 @@ for key in get_param_func_dict.keys():
         for idx, n_bcode in enumerate(num_barcodes):
             true_model = get_true_model(seed, lambda_type, n_bcode)
             true_model_val = get_param_func(true_model)
-            result = get_result(seed, lambda_type, n_bcode)
+            try:
+                result = get_result(seed, lambda_type, n_bcode)
+            except Exception:
+                # file not there
+                continue
             fitted_val = get_param_func(result)
             dist = np.linalg.norm(fitted_val - true_model_val)
             n_bcode_results[key][idx].append(dist)
@@ -63,7 +67,11 @@ for seed in seeds:
         true_model = get_true_model(seed, lambda_type, n_bcode)
         true_mrca_meas = MRCADistanceMeasurer(true_model[1])
         print(true_mrca_meas.ref_tree_mrca_matrix.shape)
-        result = get_result(seed, lambda_type, n_bcode)
+        try:
+            result = get_result(seed, lambda_type, n_bcode)
+        except Exception:
+            # file not there
+            continue
         dist = true_mrca_meas.get_dist(result[1])
         n_bcode_results["mrca"][idx].append(dist)
 

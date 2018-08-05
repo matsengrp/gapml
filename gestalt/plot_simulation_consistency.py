@@ -54,7 +54,11 @@ for key in get_param_func_dict.keys():
         true_model = get_true_model(seed, lambda_type)
         true_model_val = get_param_func(true_model)
         for idx, n_bcode in enumerate(num_barcodes):
-            result = get_result(seed, lambda_type, n_bcode)
+            try:
+                result = get_result(seed, lambda_type, n_bcode)
+            except Exception:
+                # File not there
+                continue
             fitted_val = get_param_func(result)
             dist = np.linalg.norm(fitted_val - true_model_val)
             n_bcode_results[key][idx].append(dist)
