@@ -27,7 +27,7 @@ def parse_args():
     parser.add_argument(
         '--out-template-file',
         type=str,
-        default="_output/parsimony_tree0.pkl",
+        default="_output/oracle_tree0.pkl",
         help='template file name for outputs. this code will replace 0 with other tree indices')
 
     args = parser.parse_args()
@@ -67,7 +67,7 @@ def main(args=sys.argv[1:]):
         'multifurc': False,
         'idx': 0,
         'aux': None,
-        'tree': true_model_dict,
+        'tree': true_model_dict["true_subtree"],
     },
     #{
     #    'selection_type': 'oracle',
