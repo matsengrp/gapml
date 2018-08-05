@@ -93,13 +93,13 @@ def parse_args():
 
     assert args.log_barr >= 0
 
+    create_directory(args.out_model_file)
     args.topology_folder = os.path.dirname(args.topology_file_template)
     args.scratch_dir = os.path.join(
             args.topology_folder,
             'scratch')
     if not os.path.exists(args.scratch_dir):
         os.mkdir(args.scratch_dir)
-    create_directory(args.out_model_file)
 
     return args
 
