@@ -208,7 +208,8 @@ def make_likelihood_scorer(tree: CellLineageTree, true_model_dict: Dict, name: s
 def get_highest_likelihood_single_appearance_tree(
         coll_tree: CellLineageTree,
         true_model_dict: Dict,
-        scratch_dir: str):
+        scratch_dir: str,
+        submit_srun: bool):
     """
     @param tree: a collapsed tree where each allele may appear more than once because they arose independently in the tree
     @param true_model_dict: a Dict containing all the parameters needed to instantiate the CLTLikelihoodModel
@@ -252,7 +253,7 @@ def get_highest_likelihood_single_appearance_tree(
         _reattach_leaves(leaves_kept, filtered_duplicate_indpt_alleles)
 
     # Submit jobs to slurm
-    if args.submit_srun:
+    if submit_srun:
         job_manager = BatchSubmissionManager(scorers, None, len(leaves_kept_combos), scratch_dir)
         scorer_results = job_manager.run(successful_only=True)
         assert len(scorer_results) == len(leaves_kept_combos)
@@ -324,7 +325,8 @@ def main(args=sys.argv[1:]):
         selected_collapsed_clt = get_highest_likelihood_single_appearance_tree(
             collapsed_clt,
             true_model_dict,
-            args.scratch_dir)
+            args.scratch_dir,
+            args.submit_srun)
 
         # Assert no duplicate alleles in the collapsed tree
         assert len(selected_collapsed_clt) == len(obs_data_dict["obs_leaves"])
