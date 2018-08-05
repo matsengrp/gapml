@@ -81,9 +81,10 @@ for seed in seeds:
 
 for idx, n_bcode in enumerate(num_barcodes):
     size = len(n_bcode_results["mrca"][idx])
-    print("%s & %d & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f)" % (
+    print("%s & %d & %d & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f)" % (
         lambda_type,
         n_bcode,
+        size,
         np.mean(n_bcode_results["mrca"][idx]),
         np.sqrt(np.var(n_bcode_results["mrca"][idx])/size),
         np.mean(n_bcode_results["rf"][idx]),

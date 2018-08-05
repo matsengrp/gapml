@@ -65,9 +65,10 @@ for key in get_param_func_dict.keys():
 
 for idx, n_bcode in enumerate(num_barcodes):
     size = len(n_bcode_results["br"][idx])
-    print("%s & %d & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f)" % (
+    print("%s & %d & %d & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f)" % (
         lambda_type,
         n_bcode,
+        size,
         np.mean(n_bcode_results["br"][idx]),
         np.sqrt(np.var(n_bcode_results["br"][idx])/size),
         np.mean(n_bcode_results["targ"][idx]),
