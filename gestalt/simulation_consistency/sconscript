@@ -30,7 +30,7 @@ TARGET_LAMBDA_DICT = {
 
 nest.add(
     'seed',
-    range(400,401),
+    range(400,410),
     label_func=lambda c: "seed%d" % c,
 )
 
@@ -38,7 +38,7 @@ nest.add(
     'lambda_seq',
     [
 	'sorted',
-	#'random',
+	'random',
     ])
 
 nest.add(
@@ -47,7 +47,7 @@ nest.add(
     label_func=lambda c: "lambda_scale_%d" % c,
 )
 
-DOUBLE_CUTS = [0.3, 1]
+DOUBLE_CUTS = [1, 0.3]
 nest.add(
     'double_cut',
     lambda c: DOUBLE_CUTS if c["lambda_scale"] == 0 else DOUBLE_CUTS[:1],
@@ -106,7 +106,9 @@ def generate(env, outdir, c):
     birth_flag = ''
 
     cmd = [
-        'python boto_run.py generate_data.py',
+        'python boto_run.py',
+        '2 2000',
+        'generate_data.py',
         #'python generate_data.py',
 	cherry_flag,
 	'--sampling-rate',
@@ -144,6 +146,8 @@ def generate(env, outdir, c):
         c['insert_poisson'],
         '--perturb-target-lambdas-variance 0',
     ]
+    # Following line is used if we already ran generate_data
+    cmd = []
     return env.Command(
         [
             join(outdir, 'obs_data.pkl'),
@@ -154,8 +158,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    #[5, 10, 20, 40],
-    [5],
+    [5, 10, 20, 40],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -174,6 +177,8 @@ def restrict_observed_alleles(env, outdir, c):
         '--out-collapsed-tree-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
     ]
+    # Following line is used if we already ran this command
+    cmd = []
     return env.Command(
         [
             join(outdir, 'obs_data.pkl'),
@@ -193,6 +198,8 @@ def run_topology(env, outdir, c):
         '--out-template-file ${TARGETS[0]}',
         '--true-model-pkl ${SOURCES[1]}',
     ]
+    # Following line is used if we already ran this command
+    cmd = []
     return env.Command(
         [
             join(outdir, 'oracle_tree0.pkl')],
@@ -232,6 +239,8 @@ def run_MLE(env, outdir, c):
         '--train-split 0.75',
         '--num-inits 3'
     ]
+    # Following line is used if we already ran this command
+    #cmd = []
     return env.Command(
         [
             join(outdir, 'tree0_fitted.pkl'),

@@ -29,46 +29,40 @@ TARGET_LAMBDA_DICT = {
 
 nest.add(
     'seed',
-    range(401,410),
+    range(401,405),
 )
 
 nest.add(
     'lambda_seq',
     [
 	'sorted',
-	#'random',
+	'random',
     ])
 
 nest.add(
     'lambda_scale',
-    [0], #[0,1]
+    range(len(TARGET_LAMBDA_DICT["sorted"])),
     label_func=lambda c: "lam_scale%d" % c,
 )
 
+DOUBLE_CUTS = [1, 0.3]
 nest.add(
     'double_cut',
-    [
-         #0.3,
-         1,
-    ],
+    lambda c: DOUBLE_CUTS if c["lambda_scale"] == 0 else DOUBLE_CUTS[:1],
     label_func=lambda c: "double%d" % int(c * 10),
 )
 
+TRIM_ZERO_PROBS = [[0.1,0.1], [0.4,0.4]]
 nest.add(
     'trim_zero_probs',
-    [
-	[0.1,0.1],
-    	#[0.4,0.4],
-    ],
+    lambda c: TRIM_ZERO_PROBS if c["lambda_scale"] == 0 and c["double_cut"] == DOUBLE_CUTS[0] else TRIM_ZERO_PROBS[:1],
     label_func=lambda c: "trim_zero_pr%d_%d" % (int(c[0] * 10), int(c[1] * 10)),
 )
 
+TRIM_POISSONS = [(3,3), (8,8)]
 nest.add(
     'trim_poissons',
-    [
-    	(3,3),
-	#(8,8),
-    ],
+    lambda c: TRIM_POISSONS if c["lambda_scale"] == 0 and c["double_cut"] == DOUBLE_CUTS[0] and c["trim_zero_probs"] == TRIM_ZERO_PROBS[0] else TRIM_POISSONS[:1],
     label_func=lambda c: "trim_poiss%d_%d" % c,
 )
 
@@ -78,22 +72,17 @@ nest.add(
     label_func=lambda c: "trim_long_pr%d_%d" % (int(c[0] * 10), int(c[1] * 10)),
 )
 
-
+INSERT_ZERO_PROBS = [0.05, 0.4]
 nest.add(
     'insert_zero_prob',
-    [
-         0.05,
-         #0.4,
-    ],
+    lambda c: INSERT_ZERO_PROBS if c["lambda_scale"] == 0 and c["double_cut"] == DOUBLE_CUTS[0] and c["trim_zero_probs"] == TRIM_ZERO_PROBS[0] and c["trim_poissons"] == TRIM_POISSONS[0] else INSERT_ZERO_PROBS[:1],
     label_func=lambda c: "insert_zero_pr%d" % int(c * 10),
 )
 
+INSERT_POISSONS = [1,4]
 nest.add(
     'insert_poisson',
-    [
-        1,
-        #4,
-    ],
+    lambda c: INSERT_POISSONS if c["lambda_scale"] == 0 and c["double_cut"] == DOUBLE_CUTS[0] and c["trim_zero_probs"] == TRIM_ZERO_PROBS[0] and c["trim_poissons"] == TRIM_POISSONS[0] and c["insert_zero_prob"] == INSERT_ZERO_PROBS[0] else INSERT_POISSONS[:1],
     label_func=lambda c: "insert_poiss%d" % c,
 )
 
@@ -109,7 +98,9 @@ def generate(env, outdir, c):
     birth_flag = '--birth-lambda 4'
 
     cmd = [
-        'python generate_data.py',
+        'python boto_run.py',
+	'2 2000',
+	'generate_data.py',
 	'--sampling-rate',
         sampling_rate,
         '--model-seed',
@@ -145,6 +136,8 @@ def generate(env, outdir, c):
         c['insert_poisson'],
         '--perturb-target-lambdas-variance 0',
     ]
+    # Just to make sure we dont rerun this command
+    cmd = []
     return env.Command(
         [
             join(outdir, 'obs_data.pkl'),
@@ -162,7 +155,9 @@ nest.add(
 @nest.add_target_with_env(localenv)
 def restrict_observed_alleles(env, outdir, c):
     cmd = [
-        'python restrict_observed_barcodes.py',
+        'python boto_run.py',
+	'2 2000',
+        'restrict_observed_barcodes.py',
         '--obs-file ${SOURCES[0]}',
         '--model-file ${SOURCES[1]}',
         '--num-barcodes',
@@ -171,6 +166,7 @@ def restrict_observed_alleles(env, outdir, c):
         '--out-collapsed-tree-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
     ]
+    cmd = []
     return env.Command(
         [
             join(outdir, 'obs_data.pkl'),
@@ -182,7 +178,9 @@ def restrict_observed_alleles(env, outdir, c):
 @nest.add_target_with_env(localenv)
 def run_topology(env, outdir, c):
     cmd = [
-        'python get_parsimony_topologies.py',
+        'python boto_run.py',
+	'2 6000',
+        'get_parsimony_topologies.py',
         '--obs-file ${SOURCES[0]}',
         '--out-template-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
@@ -192,6 +190,7 @@ def run_topology(env, outdir, c):
         10,
         '--num-jumbles 1'
     ]
+    cmd = []
     return env.Command(
         [
             join(outdir, 'parsimony_tree0.pkl'),
@@ -208,11 +207,12 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = ",".join(map(str, np.power(10, np.arange(0.5, -3.0, step=-1)).tolist()))
+    #penalty_params = ",".join(map(str, np.power(10, np.arange(0.5, -3.0, step=-1)).tolist()))
     penalty_params = "0.01"
     cmd = [
-	#'srun -p restart,matsen_e,campus --cpus-per-task 4',
-        'python tune_topology.py',
+        'python boto_run.py',
+	'18 25000',
+	'tune_topology.py',
         '--obs-file ${SOURCES[0]}',
         '--topology-file ${SOURCES[1]}',
         '--true-model-file ${SOURCES[2]}',
