@@ -108,7 +108,7 @@ def main(args=sys.argv[1:]):
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
 
-    topology_files = glob.glob(args.topology_file_template.replace("0", "*[0-9]"))
+    topology_files = glob.glob(args.topology_file_template.replace("parsimony_tree0", "parsimony_tree*[0-9]"))
     logging.info("Processing the tree files: %s", topology_files)
     worker_list = []
     for top_file in topology_files:
