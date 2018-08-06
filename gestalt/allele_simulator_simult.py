@@ -1,6 +1,7 @@
 from numpy import ndarray
 from typing import List
 import numpy as np
+from numpy import ndarray
 from scipy.stats import expon
 from numpy.random import choice, random
 from scipy.stats import poisson
@@ -20,6 +21,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
     """
     def __init__(self,
         model: CLTLikelihoodModel,
+        boost_probs: ndarray,
         boost_len: int = 1):
         """
         @param model
@@ -29,6 +31,8 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         self.all_target_tract_hazards = model.get_all_target_tract_hazards()
         self.insert_zero_prob = self.model.insert_zero_prob.eval()
         self.trim_zero_probs = self.model.trim_zero_probs.eval()
+
+        self.boost_probs = boost_probs
         self.boost_len = boost_len
 
         self.left_del_distributions = self._create_bounded_poissons(
@@ -143,7 +147,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             # No zero inflation if we decided to do a long left or right trim
             do_deletion = [True, True]
         else:
-            len_incr_rv = np.random.multinomial(1, [1/3.] * 3)
+            len_incr_rv = np.random.multinomial(1, self.boost_probs)
             if len_incr_rv[0] == 1:
                 insert_boost = self.boost_len
             elif len_incr_rv[1] == 1:

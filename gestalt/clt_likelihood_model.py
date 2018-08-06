@@ -34,6 +34,7 @@ class CLTLikelihoodModel:
             sess: Session,
             target_lams: ndarray,
             target_lams_known: bool = False,
+            boost_softmax_weights: ndarray = np.ones(3),
             trim_long_probs: ndarray = 0.05 * np.ones(2),
             trim_zero_probs: ndarray = 0.5 * np.ones(2),
             trim_short_poissons: ndarray = 2.5 * np.ones(2),
@@ -47,7 +48,8 @@ class CLTLikelihoodModel:
             branch_lens_known: bool = False,
             cell_type_tree: CellTypeTree = None,
             cell_lambdas_known: bool = False,
-            tot_time: float = 1):
+            tot_time: float = 1,
+            boost_len: int = 1):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
         @param double_cut_weight: a weight for inter-target indels
@@ -67,6 +69,8 @@ class CLTLikelihoodModel:
         self.targ_stat_transitions_dict, _ = TargetStatus.get_all_transitions(self.bcode_meta)
 
         self.num_targets = bcode_meta.n_targets
+        self.boost_len = boost_len
+        assert boost_len == 1
 
         # Process cell type tree
         self.cell_type_tree = cell_type_tree
@@ -106,6 +110,7 @@ class CLTLikelihoodModel:
         self._create_parameters(
                 target_lams,
                 [double_cut_weight],
+                boost_softmax_weights,
                 trim_long_probs,
                 trim_zero_probs,
                 trim_short_poissons,
@@ -131,6 +136,7 @@ class CLTLikelihoodModel:
     def _create_parameters(self,
             target_lams: ndarray,
             double_cut_weight: List[float], # list of length one
+            boost_softmax_weights: ndarray,
             trim_long_probs: ndarray,
             trim_zero_probs: ndarray,
             trim_short_poissons: ndarray,
@@ -146,6 +152,7 @@ class CLTLikelihoodModel:
         assert len(double_cut_weight) == 1
         assert len(insert_zero_prob) == 1
         assert len(insert_poisson) == 1
+        assert boost_softmax_weights.size == 3
 
         # Fix the first target value -- not for optimization
         log_target_lam_mean = np.mean(np.log(target_lams))
@@ -153,6 +160,7 @@ class CLTLikelihoodModel:
                     [] if self.target_lams_known else [log_target_lam_mean],
                     [] if self.target_lams_known else (np.log(target_lams) - log_target_lam_mean),
                     [] if self.double_cut_weight_known else np.log(double_cut_weight),
+                    boost_softmax_weights,
                     inv_sigmoid(trim_long_probs),
                     inv_sigmoid(trim_zero_probs),
                     np.log(trim_short_poissons),
@@ -181,6 +189,10 @@ class CLTLikelihoodModel:
         else:
             up_to_size += 1
             self.double_cut_weight = tf.exp(self.all_vars[prev_size: up_to_size])
+        prev_size = up_to_size
+        up_to_size += boost_softmax_weights.size
+        self.boost_softmax_weights = self.all_vars[prev_size: up_to_size]
+        self.boost_probs = tf.nn.softmax(self.boost_softmax_weights)
         prev_size = up_to_size
         up_to_size += trim_long_probs.size
         self.trim_long_probs = tf.sigmoid(self.all_vars[prev_size: up_to_size])
@@ -274,6 +286,7 @@ class CLTLikelihoodModel:
         self.set_params(
                 param_dict["target_lams"],
                 param_dict["double_cut_weight"],
+                param_dict["boost_softmax_weights"],
                 param_dict["trim_long_probs"],
                 param_dict["trim_zero_probs"],
                 param_dict["trim_short_poissons"],
@@ -288,6 +301,7 @@ class CLTLikelihoodModel:
     def set_params(self,
             target_lams: ndarray,
             double_cut_weight: float,
+            boost_softmax_weights: ndarray,
             trim_long_probs: ndarray,
             trim_zero_probs: ndarray,
             trim_short_poissons: ndarray,
@@ -311,6 +325,7 @@ class CLTLikelihoodModel:
             [] if self.target_lams_known else [log_target_lams_mean],
             [] if self.target_lams_known else np.log(target_lams) - log_target_lams_mean,
             [] if self.double_cut_weight_known else np.log(double_cut_weight),
+            boost_softmax_weights,
             inv_sigmoid(trim_long_probs),
             inv_sigmoid(trim_zero_probs),
             np.log(trim_short_poissons),
@@ -329,6 +344,7 @@ class CLTLikelihoodModel:
         return self.sess.run([
             self.target_lams,
             self.double_cut_weight,
+            self.boost_softmax_weights,
             self.trim_long_probs,
             self.trim_zero_probs,
             self.trim_short_poissons,
@@ -347,6 +363,7 @@ class CLTLikelihoodModel:
         var_labels = [
             "target_lams",
             "double_cut_weight",
+            "boost_softmax_weights",
             "trim_long_probs",
             "trim_zero_probs",
             "trim_short_poissons",
@@ -550,23 +567,20 @@ class CLTLikelihoodModel:
         if not singletons:
             return []
         else:
-            insert_probs = self._create_insert_probs(singletons, insert_boost_len = 1)
+            insert_probs_boost = self._create_insert_probs(singletons, insert_boost_len = self.boost_len)
+            insert_probs = self._create_insert_probs(singletons, insert_boost_len = 0)
+            left_del_probs_boost = self._create_left_del_probs(singletons, left_boost_len = self.boost_len)
             left_del_probs = self._create_left_del_probs(singletons, left_boost_len = 0)
+            right_del_probs_boost = self._create_right_del_probs(singletons, right_boost_len = self.boost_len)
             right_del_probs = self._create_right_del_probs(singletons, right_boost_len = 0)
             indel_probs0 = left_del_probs * right_del_probs * insert_probs
+            indel_probs1 = left_del_probs * right_del_probs * insert_probs
+            indel_probs2 = left_del_probs * right_del_probs * insert_probs
 
-            insert_probs = self._create_insert_probs(singletons, insert_boost_len = 0)
-            left_del_probs = self._create_left_del_probs(singletons, left_boost_len = 1)
-            right_del_probs = self._create_right_del_probs(singletons, right_boost_len = 0)
-            indel_probs1 = (left_del_probs * right_del_probs * insert_probs)
-
-            insert_probs = self._create_insert_probs(singletons, insert_boost_len = 0)
-            left_del_probs = self._create_left_del_probs(singletons, left_boost_len = 0)
-            right_del_probs = self._create_right_del_probs(singletons, right_boost_len = 1)
-            indel_probs2 = (left_del_probs * right_del_probs * insert_probs)
-
-            one_third = tf.constant(1/3., dtype=tf.float64)
-            return tf.log(one_third * (indel_probs0 + indel_probs1 + indel_probs2))
+            return tf.log(
+                    self.boost_probs[0] * left_del_probs * right_del_probs * insert_probs_boost
+                    + self.boost_probs[1] * left_del_probs_boost * right_del_probs * insert_probs
+                    + self.boost_probs[2] * left_del_probs * right_del_probs_boost * insert_probs)
 
     def _create_left_del_probs(self, singletons: List[Singleton], left_boost_len: int):
         """

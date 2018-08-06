@@ -62,6 +62,12 @@ def parse_args():
         default=1,
         help='Weight for double cuts')
     parser.add_argument(
+        '--boost-probs',
+        type=float,
+        nargs=3,
+        default=[0.1, 0.45, 0.45],
+        help='probability of doing no deletion/insertion during repair')
+    parser.add_argument(
         '--trim-long-probs',
         type=float,
         nargs=2,
@@ -95,11 +101,11 @@ def parse_args():
     parser.add_argument(
         '--death-lambda', type=float, default=0.001, help='death rate')
     parser.add_argument(
-        '--time', type=float, default=1.2, help='how much time to simulate')
+        '--time', type=float, default=1, help='how much time to simulate')
     parser.add_argument(
         '--sampling-rate',
         type=float,
-        default=0.3,
+        default=1.0,
         help='proportion cells sampled/alleles successfully sequenced')
     parser.add_argument(
         '--debug', action='store_true', help='debug tensorflow')
@@ -113,7 +119,7 @@ def parse_args():
         type=int,
         default=0,
         help="Seed for generating data")
-    parser.add_argument('--min-uniq-alleles', type=int, default=2)
+    parser.add_argument('--min-uniq-alleles', type=int, default=3)
     parser.add_argument('--max-uniq-alleles', type=int, default=10)
     parser.add_argument('--max-clt-nodes', type=int, default=40000)
     parser.add_argument(
@@ -157,7 +163,9 @@ def create_cell_type_tree(args):
     return cell_type_tree
 
 def create_simulators(args, clt_model):
-    allele_simulator = AlleleSimulatorSimultaneous(clt_model)
+    allele_simulator = AlleleSimulatorSimultaneous(
+            clt_model,
+            np.array(args.boost_probs))
     cell_type_simulator = CellTypeSimulator(clt_model.cell_type_tree)
     if args.is_cherry:
         clt_simulator = CLTSimulatorSimple(
