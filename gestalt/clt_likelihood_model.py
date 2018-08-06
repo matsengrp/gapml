@@ -52,6 +52,8 @@ class CLTLikelihoodModel:
             boost_len: int = 1):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
+        @param boost_softmax_weights: vals to plug into softmax to get the probability of boosting
+            insertion, left del, and right del
         @param double_cut_weight: a weight for inter-target indels
         @param target_lams: target lambda rates
         @param target_lams_known: if True, do not make target_lams a parameter that can be tuned. so target_lams would be fixed
@@ -587,6 +589,8 @@ class CLTLikelihoodModel:
         Creates tensorflow nodes that calculate the log conditional probability of the deletions found in
         each of the singletons
 
+        @param left_boost_len: the amount to boost the left short trim
+
         @return List[tensorflow nodes] for each singleton in `singletons`
         """
         min_targets = [sg.min_target for sg in singletons]
@@ -608,6 +612,12 @@ class CLTLikelihoodModel:
         check_left_max = tf.cast(tf.less_equal(left_trim_len, max_left_trim), tf.float64)
         check_left_min = tf.cast(tf.less_equal(min_left_trim, left_trim_len), tf.float64)
         if left_boost_len > 0:
+            # If there is a left boost, there are three possibilities:
+            # (1) the left trim is smaller than the left boost, so assign probability zero
+            # (2) the left trim is equal to the left boost, which means it is zero in the
+            # zero-inflated distribution (after we remove the boost)
+            # (3) the left trim is longer than the left boost, which is a nonzero value in the
+            # zero-inflated distribution (also still must correct for boost)
             short_left_prob = tf_common.ifelse(
                 tf_common.less_float(left_trim_len, left_boost_len),
                 tf.constant(0, dtype=tf.float64),
@@ -639,6 +649,8 @@ class CLTLikelihoodModel:
         Creates tensorflow nodes that calculate the log conditional probability of the deletions found in
         each of the singletons
 
+        @param right_boost_len: the amount to boost the right short trim
+
         @return List[tensorflow nodes] for each singleton in `singletons`
         """
         max_targets = [sg.max_target for sg in singletons]
@@ -660,6 +672,12 @@ class CLTLikelihoodModel:
         check_right_max = tf.cast(tf.less_equal(right_trim_len, max_right_trim), tf.float64)
         check_right_min = tf.cast(tf.less_equal(min_right_trim, right_trim_len), tf.float64)
         if right_boost_len > 0:
+            # If there is a right boost, there are three possibilities:
+            # (1) the right trim is smaller than the right boost, so assign probability zero
+            # (2) the right trim is equal to the right boost, which means it is zero in the
+            # zero-inflated distribution (after we remove the boost)
+            # (3) the right trim is longer than the right boost, which is a nonzero value in the
+            # zero-inflated distribution (also still must correct for boost)
             short_right_prob = tf_common.ifelse(
                 tf_common.less_float(right_trim_len, right_boost_len),
                 tf.constant(0, dtype=tf.float64),
@@ -698,6 +716,12 @@ class CLTLikelihoodModel:
         # Equal prob of all same length sequences
         insert_seq_prob = 1.0/tf.pow(tf.constant(4.0, dtype=tf.float64), insert_lens)
         if insert_boost_len > 0:
+            # If there is an insertion boost, there are three possibilities:
+            # (1) the insertion is smaller than the boost, so assign probability zero
+            # (2) the insertion is equal to the boost, which means it is zero in the
+            # zero-inflated poiss distribution (after we remove the boost)
+            # (3) the insertion is longer than the boost, which is a nonzero value in the
+            # zero-inflated poiss distribution (also still must correct for boost)
             insert_boost_len_prob = self.poiss_insert.prob(insert_lens - insert_boost_len)
             insert_prob = tf_common.ifelse(
                 tf_common.less_float(insert_lens, insert_boost_len),
@@ -708,6 +732,11 @@ class CLTLikelihoodModel:
                     (1 - self.insert_zero_prob) * insert_boost_len_prob * insert_seq_prob)
                 )
         else:
+            # If there is no boost, there are two possibilities:
+            # (1) the insertion is equal to zero, which means it is zero in the
+            # from coin flip or poiss RV
+            # (2) the insertion is nonzero, which is a nonzero value in the
+            # poiss distribution
             insert_len_prob = self.poiss_insert.prob(insert_lens)
             insert_prob = tf_common.ifelse(
                 tf_common.equal_float(insert_lens, 0),

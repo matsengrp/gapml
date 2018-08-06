@@ -66,7 +66,13 @@ def parse_args():
         type=float,
         nargs=3,
         default=[0.1, 0.45, 0.45],
-        help='probability of doing no deletion/insertion during repair')
+        help="""
+        probability of boosting the insertion, left deletion, right deletion lengths.
+        This boost is mutually exclusive -- the boost can be only applied to one of these categories.
+        The boost is of length one right now.
+        The boost is to ensure the target lambdas indicate the hazard of introducing a positive indel,
+        not a no-op indel.
+        """)
     parser.add_argument(
         '--trim-long-probs',
         type=float,

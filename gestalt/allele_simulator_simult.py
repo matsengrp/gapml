@@ -25,6 +25,14 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         boost_len: int = 1):
         """
         @param model
+        @param boost_probs: a 3-dim array that indicates the probability of a boost in length
+                        being applied to the insertion, left del, right del distributions.
+                        The boost will shift the insertion dist by `boost_len`.
+                        The boost will change the minimum left del len to `boost_len` (but doesn't
+                        shift the max length -- poisson distributions are properly normalized).
+                        Likewise for the right del dist.
+                        Note that boosts are not applied if the left or right deletions are long.
+        @param boost_len: the amount to boost up the length of the indel
         """
         self.bcode_meta = model.bcode_meta
         self.model = model
@@ -32,6 +40,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         self.insert_zero_prob = self.model.insert_zero_prob.eval()
         self.trim_zero_probs = self.model.trim_zero_probs.eval()
 
+        assert boost_len > 0
         self.boost_probs = boost_probs
         self.boost_len = boost_len
 
@@ -39,14 +48,12 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             min_vals = self.bcode_meta.left_long_trim_min,
             max_vals = self.bcode_meta.left_max_trim,
             poiss_short = self.model.trim_short_poissons[0].eval(),
-            poiss_long = self.model.trim_long_poissons[0].eval(),
-            boost_len = boost_len)
+            poiss_long = self.model.trim_long_poissons[0].eval())
         self.right_del_distributions = self._create_bounded_poissons(
             min_vals = self.bcode_meta.right_long_trim_min,
             max_vals = self.bcode_meta.right_max_trim,
             poiss_short = self.model.trim_short_poissons[1].eval(),
-            poiss_long = self.model.trim_long_poissons[1].eval(),
-            boost_len = boost_len)
+            poiss_long = self.model.trim_long_poissons[1].eval())
         self.insertion_distribution = poisson(mu=self.model.insert_poisson.eval())
 
     def get_root(self):
@@ -58,15 +65,14 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             min_vals: List[float],
             max_vals: List[float],
             poiss_short: float,
-            poiss_long: float,
-            boost_len: int = 1):
+            poiss_long: float):
         """
         @param min_vals: the min long trim length for this target (left or right)
         @param max_vals: the max trim length for this target (left or right)
         @param poisson_short: poisson parameter for short trims
         @param poisson_long: poisson parameter for long trims
 
-        @return bounded poisson distributions for each target, for long and short trims
+        @return bounded poisson distributions for each target, for long, short , boosted-short trims
                 List[Dict[bool, BoundedPoisson]]
         """
         dstns = []
@@ -77,7 +83,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
                     # Short trim
                     "short": ZeroInflatedBoundedPoisson(0, min_vals[i] - 1, poiss_short),
                     # Boosted short trim
-                    "boost_short": ZeroInflatedBoundedPoisson(boost_len, min_vals[i] - 1, poiss_short)}
+                    "boost_short": ZeroInflatedBoundedPoisson(self.boost_len, min_vals[i] - 1, poiss_short)}
             dstns.append(long_short_dstns)
         return dstns
 
@@ -145,8 +151,10 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         do_insertion = random() > self.insert_zero_prob
         if left_long or right_long:
             # No zero inflation if we decided to do a long left or right trim
+            # No boosts if long left or right del
             do_deletion = [True, True]
         else:
+            # Determine whether to boost insert vs left del vs right del
             len_incr_rv = np.random.multinomial(1, self.boost_probs)
             if len_incr_rv[0] == 1:
                 insert_boost = self.boost_len
