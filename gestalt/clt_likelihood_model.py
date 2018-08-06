@@ -550,12 +550,25 @@ class CLTLikelihoodModel:
         if not singletons:
             return []
         else:
-            log_insert_probs = self._create_log_insert_probs(singletons)
-            log_del_probs = self._create_log_del_probs(singletons)
-            log_indel_probs = log_del_probs + log_insert_probs
-            return log_indel_probs
+            log_insert_probs = self._create_log_insert_probs(singletons, insert_boost_len = 1)
+            log_left_del_probs = self._create_log_left_del_probs(singletons, left_boost_len = 0)
+            log_right_del_probs = self._create_log_right_del_probs(singletons, right_boost_len = 0)
+            indel_probs0 = np.exp(log_del_probs + log_insert_probs)
 
-    def _create_log_del_probs(self, singletons: List[Singleton]):
+            log_insert_probs = self._create_log_insert_probs(singletons, insert_boost_len = 0)
+            log_left_del_probs = self._create_log_left_del_probs(singletons, left_boost_len = 1)
+            log_right_del_probs = self._create_log_right_del_probs(singletons, right_boost_len = 0)
+            indel_probs1 = np.exp(log_del_probs + log_insert_probs)
+
+            log_insert_probs = self._create_log_insert_probs(singletons, insert_boost_len = 0)
+            log_left_del_probs = self._create_log_left_del_probs(singletons, left_boost_len = 0)
+            log_right_del_probs = self._create_log_right_del_probs(singletons, right_boost_len = 1)
+            indel_probs2 = np.exp(log_del_probs + log_insert_probs)
+
+            one_third = tf.constant(1/3., dtype=tf.float64)
+            return one_third * indel_probs0 + one_third * indel_probs1 + one_third * indel_probs2
+
+    def _create_log_left_del_probs(self, singletons: List[Singleton], left_boost_len: int):
         """
         Creates tensorflow nodes that calculate the log conditional probability of the deletions found in
         each of the singletons
@@ -563,38 +576,37 @@ class CLTLikelihoodModel:
         @return List[tensorflow nodes] for each singleton in `singletons`
         """
         min_targets = [sg.min_target for sg in singletons]
-        max_targets = [sg.max_target for sg in singletons]
         is_left_longs = tf.constant(
                 [sg.is_left_long for sg in singletons], dtype=tf.float64)
-        is_right_longs = tf.constant(
-                [sg.is_right_long for sg in singletons], dtype=tf.float64)
         start_posns = tf.constant(
                 [sg.start_pos for sg in singletons], dtype=tf.float64)
-        del_ends = tf.constant(
-                [sg.del_end for sg in singletons], dtype=tf.float64)
-        del_len = del_ends - start_posns
 
         # Compute conditional prob of deletion for a singleton
         min_target_sites = tf.constant([self.bcode_meta.abs_cut_sites[mt] for mt in min_targets], dtype=tf.float64)
-        max_target_sites = tf.constant([self.bcode_meta.abs_cut_sites[mt] for mt in max_targets], dtype=tf.float64)
         left_trim_len = min_target_sites - start_posns
-        right_trim_len = del_ends - max_target_sites
 
         left_trim_long_min = tf.constant([self.bcode_meta.left_long_trim_min[mt] for mt in min_targets], dtype=tf.float64)
-        right_trim_long_min = tf.constant([self.bcode_meta.right_long_trim_min[mt] for mt in max_targets], dtype=tf.float64)
         left_trim_long_max = tf.constant([self.bcode_meta.left_max_trim[mt] for mt in min_targets], dtype=tf.float64)
-        right_trim_long_max = tf.constant([self.bcode_meta.right_max_trim[mt] for mt in max_targets], dtype=tf.float64)
 
         min_left_trim = is_left_longs * left_trim_long_min
         max_left_trim = tf_common.ifelse(is_left_longs, left_trim_long_max, left_trim_long_min - 1)
-        min_right_trim = is_right_longs * right_trim_long_min
-        max_right_trim = tf_common.ifelse(is_right_longs, right_trim_long_max, right_trim_long_min - 1)
 
         check_left_max = tf.cast(tf.less_equal(left_trim_len, max_left_trim), tf.float64)
         check_left_min = tf.cast(tf.less_equal(min_left_trim, left_trim_len), tf.float64)
-        # The probability of a left trim for length zero in our truncated poisson is assigned to be (for a normal poisson) Pr(0) + Pr(X > max_trim)
-        # The other probabilities for the truncated poisson are therefore equal to the usual poisson distribution
-        short_left_prob = tf_common.ifelse(
+        if left_boost_len > 0:
+            short_left_prob = tf_common.ifelse(
+                tf_common.less_float(left_trim_len, left_boost_len),
+                tf.constant(0, dtype=tf.float64),
+                tf_common.ifelse(
+                    tf_common.equal_float(left_trim_len, left_boost_len),
+                    self.trim_zero_prob_left + (1 - self.trim_zero_prob_left) * (
+                        self.poiss_short[0].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_short[0].cdf(max_left_trim - left_boost_len)),
+                    (1 - self.trim_zero_prob_left) * self.poiss_short[0].prob(left_trim_len - left_boost_len))
+                )
+        else:
+            # The probability of a left trim for length zero in our truncated poisson is assigned to be (for a normal poisson) Pr(0) + Pr(X > max_trim)
+            # The other probabilities for the truncated poisson are therefore equal to the usual poisson distribution
+            short_left_prob = tf_common.ifelse(
                 tf_common.equal_float(left_trim_len, 0),
                 self.trim_zero_prob_left + (1 - self.trim_zero_prob_left) * (
                     self.poiss_short[0].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_short[0].cdf(max_left_trim)),
@@ -606,11 +618,48 @@ class CLTLikelihoodModel:
                 long_left_prob,
                 short_left_prob)
 
+        return tf.log(left_prob)
+
+    def _create_log_right_del_probs(self, singletons: List[Singleton], right_boost_len: int):
+        """
+        Creates tensorflow nodes that calculate the log conditional probability of the deletions found in
+        each of the singletons
+
+        @return List[tensorflow nodes] for each singleton in `singletons`
+        """
+        max_targets = [sg.max_target for sg in singletons]
+        is_right_longs = tf.constant(
+                [sg.is_right_long for sg in singletons], dtype=tf.float64)
+        del_ends = tf.constant(
+                [sg.del_end for sg in singletons], dtype=tf.float64)
+
+        # Compute conditional prob of deletion for a singleton
+        max_target_sites = tf.constant([self.bcode_meta.abs_cut_sites[mt] for mt in max_targets], dtype=tf.float64)
+        left_trim_len = min_target_sites - start_posns
+        right_trim_len = del_ends - max_target_sites
+
+        right_trim_long_min = tf.constant([self.bcode_meta.right_long_trim_min[mt] for mt in max_targets], dtype=tf.float64)
+        right_trim_long_max = tf.constant([self.bcode_meta.right_max_trim[mt] for mt in max_targets], dtype=tf.float64)
+
+        min_right_trim = is_right_longs * right_trim_long_min
+        max_right_trim = tf_common.ifelse(is_right_longs, right_trim_long_max, right_trim_long_min - 1)
+
         check_right_max = tf.cast(tf.less_equal(right_trim_len, max_right_trim), tf.float64)
         check_right_min = tf.cast(tf.less_equal(min_right_trim, right_trim_len), tf.float64)
-        # The probability of a right trim for length zero in our truncated poisson is assigned to be (for a normal poisson) Pr(0) + Pr(X > max_trim)
-        # The other probabilities for the truncated poisson are therefore equal to the usual poisson distribution
-        short_right_prob = tf_common.ifelse(
+        if right_boost_len > 0:
+            short_right_prob = tf_common.ifelse(
+                tf_common.less_float(right_trim_len, right_boost_len),
+                tf.constant(0, dtype=tf.float64),
+                tf_common.ifelse(
+                    tf_common.equal_float(right_trim_len, right_boost_len),
+                    self.trim_zero_prob_right + (1 - self.trim_zero_prob_right) * (
+                        self.poiss_short[0].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_short[0].cdf(max_right_trim - right_boost_len)),
+                    (1 - self.trim_zero_prob_right) * self.poiss_short[0].prob(right_trim_len - right_boost_len))
+                )
+        else:
+            # The probability of a right trim for length zero in our truncated poisson is assigned to be (for a normal poisson) Pr(0) + Pr(X > max_trim)
+            # The other probabilities for the truncated poisson are therefore equal to the usual poisson distribution
+            short_right_prob = tf_common.ifelse(
                 tf_common.equal_float(right_trim_len, 0),
                 self.trim_zero_prob_right + (1 - self.trim_zero_prob_right) * (
                     self.poiss_short[1].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_short[1].cdf(max_right_trim)),
@@ -622,9 +671,9 @@ class CLTLikelihoodModel:
                 long_right_prob,
                 short_right_prob)
 
-        return tf.log(left_prob) + tf.log(right_prob)
+        return tf.log(right_prob)
 
-    def _create_log_insert_probs(self, singletons: List[Singleton]):
+    def _create_log_insert_probs(self, singletons: List[Singleton], insert_boost_len: int):
         """
         Creates tensorflow nodes that calculate the log conditional probability of the insertions found in
         each of the singletons
@@ -633,12 +682,22 @@ class CLTLikelihoodModel:
         """
         insert_lens = tf.constant(
                 [sg.insert_len for sg in singletons], dtype=tf.float64)
-        insert_len_prob = self.poiss_insert.prob(insert_lens)
         # Equal prob of all same length sequences
         insert_seq_prob = 1.0/tf.pow(tf.constant(4.0, dtype=tf.float64), insert_lens)
-        is_insert_zero = tf.cast(tf.equal(insert_lens, 0), dtype=tf.float64)
-        insert_prob = tf_common.ifelse(
-                is_insert_zero,
+        if insert_boost_len > 0:
+            insert_boost_len_prob = self.poiss_insert.prob(insert_lens - insert_boost_len)
+            insert_prob = tf_common.ifelse(
+                tf_common.less_float(insert_lens, insert_boost_len),
+                tf.constant(0, dtype=tf.float64),
+                tf_common.ifelse(
+                    tf_common.equal_float(insert_lens, insert_boost_len),
+                    self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_boost_len_prob * insert_seq_prob,
+                    (1 - self.insert_zero_prob) * insert_boost_len_prob * insert_seq_prob)
+                )
+        else:
+            insert_len_prob = self.poiss_insert.prob(insert_lens)
+            insert_prob = tf_common.ifelse(
+                tf_common.equal_float(insert_lens, 0),
                 self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob,
                 (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob)
         return tf.log(insert_prob)

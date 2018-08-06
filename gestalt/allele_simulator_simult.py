@@ -50,7 +50,8 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             min_vals: List[float],
             max_vals: List[float],
             poiss_short: float,
-            poiss_long: float):
+            poiss_long: float,
+            boost_len: int = 1):
         """
         @param min_vals: the min long trim length for this target (left or right)
         @param max_vals: the max trim length for this target (left or right)
@@ -64,9 +65,11 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         for i in range(self.bcode_meta.n_targets):
             long_short_dstns = {
                     # Long trim
-                    True: PaddedBoundedPoisson(min_vals[i], max_vals[i], poiss_long),
+                    "long": PaddedBoundedPoisson(min_vals[i], max_vals[i], poiss_long),
                     # Short trim
-                    False: ZeroInflatedBoundedPoisson(0, min_vals[i] - 1, poiss_short)}
+                    "short": ZeroInflatedBoundedPoisson(0, min_vals[i] - 1, poiss_short),
+                    # Boosted short trim
+                    "boost_short": ZeroInflatedBoundedPoisson(boost_len, min_vals[i] - 1, poiss_short)}
             dstns.append(long_short_dstns)
         return dstns
 
@@ -125,19 +128,33 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         left_long = target_tract.is_left_long
         right_long = target_tract.is_right_long
 
+        insert_boost = 0
+        do_insertion = random() > self.insert_zero_prob
         if left_long or right_long:
             # No zero inflation if we decided to do a long left or right trim
-            do_insertion = True
             do_deletion = [True, True]
         else:
+            len_incr_rv = np.random.multinomial(1, [1/3.] * 3, size=1)
+            if len_incr_rv[0] == 1:
+                print("insert")
+                insert_boost = 1
+            elif len_incr_rv[1] == 1:
+                print("left")
+                left_distr_key = "boost_short"
+            else:
+                print("right")
+                right_distr_key = "boost_short"
+
             # Serves as zero-inflation for deletion/insertion process
             # Draw a separate RVs for each deletion/insertion process
-            do_insertion = random() > self.insert_zero_prob
             do_deletion  = random(2) > self.trim_zero_probs
 
-        insertion_length = self.insertion_distribution.rvs() if do_insertion else 0
-        left_del_len = self.left_del_distributions[target1][left_long].rvs() if do_deletion[0] else 0
-        right_del_len = self.right_del_distributions[target2][right_long].rvs() if do_deletion[1] else 0
+        if not do_insertion and not do_deletion[0] and not do_deletion[1]:
+            print("ajklajskldf")
+
+        insertion_length = insert_boost + (self.insertion_distribution.rvs() if do_insertion else 0)
+        left_del_len = self.left_del_distributions[target1][left_distr_key].rvs() if do_deletion[0] else 0
+        right_del_len = self.right_del_distributions[target2][right_distr_key].rvs() if do_deletion[1] else 0
 
         # TODO: make this more realistic. right now just random DNA inserted
         insertion = ''.join(choice(list('acgt'), insertion_length))
