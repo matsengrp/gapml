@@ -39,7 +39,7 @@ def get_target_lams(model_param_tuple):
 def get_double_cut_weight(model_param_tuple):
     return model_param_tuple[0]["double_cut_weight"]
 
-seeds = range(400,410)
+seeds = range(400,405)
 num_barcodes = [5, 10, 20, 40]
 
 get_param_func_dict = {
@@ -63,8 +63,7 @@ for key in get_param_func_dict.keys():
             true_model_val = get_param_func(true_model)
             try:
                 result = get_result(seed, lambda_type, n_bcode)
-            except Exception:
-                # file not there
+            except FileNotFoundError:
                 continue
             fitted_val = get_param_func(result)
             dist = np.linalg.norm(fitted_val - true_model_val)
@@ -77,8 +76,7 @@ for seed in seeds:
         print(true_mrca_meas.ref_tree_mrca_matrix.shape)
         try:
             result = get_result(seed, lambda_type, n_bcode)
-        except Exception:
-            # file not there
+        except FileNotFoundError:
             continue
         dist = true_mrca_meas.get_dist(result[1])
         n_bcode_results["mrca"][idx].append(dist)
