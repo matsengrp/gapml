@@ -4,21 +4,31 @@ import six
 import numpy as np
 from tree_distance import MRCADistanceMeasurer, RootRFDistanceMeasurer
 
-TEMPLATE = "simulation_topol_consist/_output/%d/%s/lam_scale0/double10/trim_zero_pr1_1/trim_poiss3_3/trim_long_pr0_0/insert_zero_pr0/insert_poiss1/num_barcodes%d/sum_states2000/tune_fitted.pkl"
-TRUE_TEMPLATE = "simulation_topol_consist/_output/%d/%s/lam_scale0/double10/trim_zero_pr1_1/trim_poiss3_3/trim_long_pr0_0/insert_zero_pr0/insert_poiss1/true_model.pkl"
-COLL_TREE_TEMPLATE = "simulation_topol_consist/_output/%d/%s/lam_scale0/double10/trim_zero_pr1_1/trim_poiss3_3/trim_long_pr0_0/insert_zero_pr0/insert_poiss1/num_barcodes%d/collapsed_tree.pkl"
+#lambda_type = "random"
+lambda_type = "sorted"
+lam_scale = 0
+double = 10
+trim_zero_pr = 1
+trim_poiss = 3
+trim_long_pr = 0
+insert_zero_pr = 0
+insert_poiss = 1
+
+TEMPLATE = "simulation_topol_consist/_output/%d/%s/lam_scale%d/double%d/trim_zero_pr%d_%d/trim_poiss%d_%d/trim_long_pr%d_%d/insert_zero_pr%d/insert_poiss%d/num_barcodes%d/sum_states2000/tune_fitted.pkl"
+TRUE_TEMPLATE = "simulation_topol_consist/_output/%d/%s/lam_scale%d/double%d/trim_zero_pr%d_%d/trim_poiss%d_%d/trim_long_pr%d_%d/insert_zero_pr%d/insert_poiss%d/true_model.pkl"
+COLL_TREE_TEMPLATE = "simulation_topol_consist/_output/%d/%s/lam_scale%d/double%d/trim_zero_pr%d_%d/trim_poiss%d_%d/trim_long_pr%d_%d/insert_zero_pr%d/insert_poiss%d/num_barcodes%d/collapsed_tree.pkl"
 
 def get_true_model(seed, lambda_type, n_bcodes):
-    file_name = TRUE_TEMPLATE % (seed, lambda_type)
+    file_name = TRUE_TEMPLATE % (seed, lambda_type, lam_scale, double, trim_zero_pr, trim_zero_pr, trim_poiss, trim_poiss, trim_long_pr, trim_long_pr, insert_zero_pr, insert_poiss)
     with open(file_name, "rb") as f:
         true_model = six.moves.cPickle.load(f)
-    tree_file_name = COLL_TREE_TEMPLATE % (seed, lambda_type, n_bcodes)
+    tree_file_name = COLL_TREE_TEMPLATE % (seed, lambda_type, lam_scale, double, trim_zero_pr, trim_zero_pr, trim_poiss, trim_poiss, trim_long_pr, trim_long_pr, insert_zero_pr, insert_poiss, n_bcodes)
     with open(tree_file_name, "rb") as f:
         true_coll_tree = six.moves.cPickle.load(f)
     return (true_model["true_model_params"], true_coll_tree)
 
 def get_result(seed, lambda_type, n_bcodes):
-    res_file = TEMPLATE % (seed, lambda_type, n_bcodes)
+    res_file = TEMPLATE % (seed, lambda_type, lam_scale, double, trim_zero_pr, trim_zero_pr, trim_poiss, trim_poiss, trim_long_pr, trim_long_pr, insert_zero_pr, insert_poiss, n_bcodes)
     with open(res_file, "rb") as f:
         result = six.moves.cPickle.load(f)
     return (result.model_params_dict, result.fitted_bifurc_tree)
@@ -31,8 +41,6 @@ def get_double_cut_weight(model_param_tuple):
 
 seeds = range(400,410)
 num_barcodes = [5, 10, 20, 40]
-#lambda_type = "random"
-lambda_type = "sorted"
 
 get_param_func_dict = {
         "mrca": None, # custom function
