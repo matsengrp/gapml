@@ -550,25 +550,25 @@ class CLTLikelihoodModel:
         if not singletons:
             return []
         else:
-            log_insert_probs = self._create_log_insert_probs(singletons, insert_boost_len = 1)
-            log_left_del_probs = self._create_log_left_del_probs(singletons, left_boost_len = 0)
-            log_right_del_probs = self._create_log_right_del_probs(singletons, right_boost_len = 0)
-            indel_probs0 = np.exp(log_del_probs + log_insert_probs)
+            insert_probs = self._create_insert_probs(singletons, insert_boost_len = 1)
+            left_del_probs = self._create_left_del_probs(singletons, left_boost_len = 0)
+            right_del_probs = self._create_right_del_probs(singletons, right_boost_len = 0)
+            indel_probs0 = left_del_probs * right_del_probs * insert_probs
 
-            log_insert_probs = self._create_log_insert_probs(singletons, insert_boost_len = 0)
-            log_left_del_probs = self._create_log_left_del_probs(singletons, left_boost_len = 1)
-            log_right_del_probs = self._create_log_right_del_probs(singletons, right_boost_len = 0)
-            indel_probs1 = np.exp(log_del_probs + log_insert_probs)
+            insert_probs = self._create_insert_probs(singletons, insert_boost_len = 0)
+            left_del_probs = self._create_left_del_probs(singletons, left_boost_len = 1)
+            right_del_probs = self._create_right_del_probs(singletons, right_boost_len = 0)
+            indel_probs1 = (left_del_probs * right_del_probs * insert_probs)
 
-            log_insert_probs = self._create_log_insert_probs(singletons, insert_boost_len = 0)
-            log_left_del_probs = self._create_log_left_del_probs(singletons, left_boost_len = 0)
-            log_right_del_probs = self._create_log_right_del_probs(singletons, right_boost_len = 1)
-            indel_probs2 = np.exp(log_del_probs + log_insert_probs)
+            insert_probs = self._create_insert_probs(singletons, insert_boost_len = 0)
+            left_del_probs = self._create_left_del_probs(singletons, left_boost_len = 0)
+            right_del_probs = self._create_right_del_probs(singletons, right_boost_len = 1)
+            indel_probs2 = (left_del_probs * right_del_probs * insert_probs)
 
             one_third = tf.constant(1/3., dtype=tf.float64)
-            return one_third * indel_probs0 + one_third * indel_probs1 + one_third * indel_probs2
+            return tf.log(one_third * (indel_probs0 + indel_probs1 + indel_probs2))
 
-    def _create_log_left_del_probs(self, singletons: List[Singleton], left_boost_len: int):
+    def _create_left_del_probs(self, singletons: List[Singleton], left_boost_len: int):
         """
         Creates tensorflow nodes that calculate the log conditional probability of the deletions found in
         each of the singletons
@@ -618,9 +618,9 @@ class CLTLikelihoodModel:
                 long_left_prob,
                 short_left_prob)
 
-        return tf.log(left_prob)
+        return left_prob
 
-    def _create_log_right_del_probs(self, singletons: List[Singleton], right_boost_len: int):
+    def _create_right_del_probs(self, singletons: List[Singleton], right_boost_len: int):
         """
         Creates tensorflow nodes that calculate the log conditional probability of the deletions found in
         each of the singletons
@@ -635,7 +635,6 @@ class CLTLikelihoodModel:
 
         # Compute conditional prob of deletion for a singleton
         max_target_sites = tf.constant([self.bcode_meta.abs_cut_sites[mt] for mt in max_targets], dtype=tf.float64)
-        left_trim_len = min_target_sites - start_posns
         right_trim_len = del_ends - max_target_sites
 
         right_trim_long_min = tf.constant([self.bcode_meta.right_long_trim_min[mt] for mt in max_targets], dtype=tf.float64)
@@ -671,9 +670,9 @@ class CLTLikelihoodModel:
                 long_right_prob,
                 short_right_prob)
 
-        return tf.log(right_prob)
+        return right_prob
 
-    def _create_log_insert_probs(self, singletons: List[Singleton], insert_boost_len: int):
+    def _create_insert_probs(self, singletons: List[Singleton], insert_boost_len: int):
         """
         Creates tensorflow nodes that calculate the log conditional probability of the insertions found in
         each of the singletons
@@ -691,16 +690,16 @@ class CLTLikelihoodModel:
                 tf.constant(0, dtype=tf.float64),
                 tf_common.ifelse(
                     tf_common.equal_float(insert_lens, insert_boost_len),
-                    self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_boost_len_prob * insert_seq_prob,
+                    (self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_boost_len_prob) * insert_seq_prob,
                     (1 - self.insert_zero_prob) * insert_boost_len_prob * insert_seq_prob)
                 )
         else:
             insert_len_prob = self.poiss_insert.prob(insert_lens)
             insert_prob = tf_common.ifelse(
                 tf_common.equal_float(insert_lens, 0),
-                self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob,
+                self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_len_prob,
                 (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob)
-        return tf.log(insert_prob)
+        return insert_prob
 
     """
     LOG LIKELIHOOD CALCULATION section
