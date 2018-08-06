@@ -100,8 +100,8 @@ class CLTPenalizedEstimator(CLTEstimator):
         for i in range(self.max_iters):
             var_dict = self.model.get_vars_as_dict()
             logging.info("target %s", var_dict["target_lams"])
-            boost_probs = tf.exp(var_dict["boost_softmax_weights"])/np.sum(
-                    tf.exp(var_dict["boost_softmax_weights"]))
+            boost_probs = np.exp(var_dict["boost_softmax_weights"])/np.sum(
+                    np.exp(var_dict["boost_softmax_weights"]))
             logging.info("boost softmax prob %s", boost_probs)
             logging.info("double cut %s", var_dict["double_cut_weight"])
             logging.info("trim long %s", var_dict["trim_long_probs"])

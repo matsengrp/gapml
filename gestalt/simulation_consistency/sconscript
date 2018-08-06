@@ -134,6 +134,7 @@ def generate(env, outdir, c):
         c['double_cut'],
         '--target-lambdas',
         targ_lambdas,
+        '--boost-probs 0.1 0.45 0.45',
         '--trim-zero-probs',
         ' '.join(map(str, c['trim_zero_probs'])),
         '--trim-poissons',
