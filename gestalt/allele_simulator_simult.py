@@ -1,6 +1,7 @@
 from numpy import ndarray
 from typing import List
 import numpy as np
+from numpy import ndarray
 from scipy.stats import expon
 from numpy.random import choice, random
 from scipy.stats import poisson
@@ -19,15 +20,29 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
     Allele cut/repair simulator where the cut/repair are simultaneous
     """
     def __init__(self,
-        model: CLTLikelihoodModel):
+        model: CLTLikelihoodModel,
+        boost_probs: ndarray,
+        boost_len: int = 1):
         """
         @param model
+        @param boost_probs: a 3-dim array that indicates the probability of a boost in length
+                        being applied to the insertion, left del, right del distributions.
+                        The boost will shift the insertion dist by `boost_len`.
+                        The boost will change the minimum left del len to `boost_len` (but doesn't
+                        shift the max length -- poisson distributions are properly normalized).
+                        Likewise for the right del dist.
+                        Note that boosts are not applied if the left or right deletions are long.
+        @param boost_len: the amount to boost up the length of the indel
         """
         self.bcode_meta = model.bcode_meta
         self.model = model
         self.all_target_tract_hazards = model.get_all_target_tract_hazards()
         self.insert_zero_prob = self.model.insert_zero_prob.eval()
         self.trim_zero_probs = self.model.trim_zero_probs.eval()
+
+        assert boost_len > 0
+        self.boost_probs = boost_probs
+        self.boost_len = boost_len
 
         self.left_del_distributions = self._create_bounded_poissons(
             min_vals = self.bcode_meta.left_long_trim_min,
@@ -57,16 +72,18 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         @param poisson_short: poisson parameter for short trims
         @param poisson_long: poisson parameter for long trims
 
-        @return bounded poisson distributions for each target, for long and short trims
+        @return bounded poisson distributions for each target, for long, short , boosted-short trims
                 List[Dict[bool, BoundedPoisson]]
         """
         dstns = []
         for i in range(self.bcode_meta.n_targets):
             long_short_dstns = {
                     # Long trim
-                    True: PaddedBoundedPoisson(min_vals[i], max_vals[i], poiss_long),
+                    "long": PaddedBoundedPoisson(min_vals[i], max_vals[i], poiss_long),
                     # Short trim
-                    False: ZeroInflatedBoundedPoisson(0, min_vals[i] - 1, poiss_short)}
+                    "short": ZeroInflatedBoundedPoisson(0, min_vals[i] - 1, poiss_short),
+                    # Boosted short trim
+                    "boost_short": ZeroInflatedBoundedPoisson(self.boost_len, min_vals[i] - 1, poiss_short)}
             dstns.append(long_short_dstns)
         return dstns
 
@@ -125,19 +142,36 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         left_long = target_tract.is_left_long
         right_long = target_tract.is_right_long
 
+        insert_boost = 0
+        left_short_boost = 0
+        right_short_boost = 0
+        left_distr_key = "long" if left_long else "short"
+        right_distr_key = "long" if right_long else "short"
+
+        do_insertion = random() > self.insert_zero_prob
         if left_long or right_long:
             # No zero inflation if we decided to do a long left or right trim
-            do_insertion = True
+            # No boosts if long left or right del
             do_deletion = [True, True]
         else:
+            # Determine whether to boost insert vs left del vs right del
+            len_incr_rv = np.random.multinomial(1, self.boost_probs)
+            if len_incr_rv[0] == 1:
+                insert_boost = self.boost_len
+            elif len_incr_rv[1] == 1:
+                left_distr_key = "boost_short"
+                left_short_boost = self.boost_len
+            else:
+                right_distr_key = "boost_short"
+                right_short_boost = self.boost_len
+
             # Serves as zero-inflation for deletion/insertion process
             # Draw a separate RVs for each deletion/insertion process
-            do_insertion = random() > self.insert_zero_prob
             do_deletion  = random(2) > self.trim_zero_probs
 
-        insertion_length = self.insertion_distribution.rvs() if do_insertion else 0
-        left_del_len = self.left_del_distributions[target1][left_long].rvs() if do_deletion[0] else 0
-        right_del_len = self.right_del_distributions[target2][right_long].rvs() if do_deletion[1] else 0
+        insertion_length = insert_boost + (self.insertion_distribution.rvs() if do_insertion else 0)
+        left_del_len = self.left_del_distributions[target1][left_distr_key].rvs() if do_deletion[0] else left_short_boost
+        right_del_len = self.right_del_distributions[target2][right_distr_key].rvs() if do_deletion[1] else right_short_boost
 
         # TODO: make this more realistic. right now just random DNA inserted
         insertion = ''.join(choice(list('acgt'), insertion_length))
