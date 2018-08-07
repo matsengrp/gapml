@@ -12,6 +12,7 @@ import logging
 from pathlib import Path
 import six
 from typing import List
+import glob
 
 from cell_lineage_tree import CellLineageTree
 from clt_observer import ObservedAlignedSeq
@@ -266,6 +267,11 @@ def main(args=sys.argv[1:]):
             distance_cls,
             args.scratch_dir)
     trees_to_output += random_trees_to_output
+
+    topology_files = glob.glob("%s/parsimony_tree*[0-9]*" % args.out_folder)
+    for t in topology_files:
+        print('remove %s' % t)
+        os.remove(t)
 
     # Save each tree as separate pickle file
     for i, tree_topology_dict in enumerate(trees_to_output):

@@ -219,7 +219,12 @@ def create_cell_lineage_tree(
                     clt,
                     seed=args.model_seed)
 
-            logging.info("time %f, num uniq alleles %d, num tot leaves %d", tot_time, len(obs_leaves), len(clt))
+            logging.info(
+                "time %f, num uniq alleles %d, num sampled leaves %d, num tot_leaves %d",
+                tot_time,
+                len(obs_leaves),
+                len(true_subtree),
+                len(clt))
             if len(obs_leaves) < args.min_uniq_alleles:
                 tot_time += time_incr
             elif len(obs_leaves) >= args.max_uniq_alleles:
@@ -303,6 +308,8 @@ def main(args=sys.argv[1:]):
     obs_leaves, true_subtree, obs_idx_to_leaves, tot_time = create_cell_lineage_tree(
             args,
             clt_model)
+    logging.info(true_subtree.get_ascii(attributes=["node_id"], show_internal=True))
+    logging.info(true_subtree.get_ascii(attributes=["allele_events_list_str"], show_internal=False))
 
     # Check that the the abundance of the leaves is not too high
     if args.max_abundance is not None:

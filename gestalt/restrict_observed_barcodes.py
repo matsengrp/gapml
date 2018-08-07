@@ -71,19 +71,29 @@ def collapse_obs_leaves_by_first_alleles(
     Collapse the observed data based on the first `num_barcodes` alleles
     @return List[ObservedAlignedSeq]
     """
-    obs_dict = {}
-    for obs in obs_leaves:
-        if obs.allele_list is not None:
-            obs.set_allele_list(obs.allele_list.create_truncated_version(num_barcodes))
-        else:
-            obs.allele_events_list = obs.allele_events_list[:num_barcodes]
+    min_barcode = 0
+    num_obs = 0
+    while num_obs < 2:
+        obs_dict = {}
+        for obs in obs_leaves:
+            if obs.allele_list is not None:
+                obs.set_allele_list(obs.allele_list.create_truncated_version(
+                    num_barcodes,
+                    min_barcode=min_barcode))
+            else:
+                obs.allele_events_list = obs.allele_events_list[min_barcode: min_barcode + num_barcodes]
 
-        # Make sure to keep unique observations and update abundance accordingly
-        obs_key = str(obs)
-        if obs_key in obs_dict:
-            obs_dict[obs_key].abundance += obs.abundance
-        else:
-            obs_dict[obs_key] = obs
+            # Make sure to keep unique observations and update abundance accordingly
+            obs_key = str(obs)
+            if obs_key in obs_dict:
+                obs_dict[obs_key].abundance += obs.abundance
+            else:
+                obs_dict[obs_key] = obs
+
+        # Check number of observations
+        num_obs = len(obs_dict.values())
+        logging.info("Min barcode idx %d results in %d observations", min_barcode, num_obs)
+        min_barcode += 1
 
     return list(obs_dict.values())
 
