@@ -2,12 +2,14 @@ import os
 import json
 import six
 import numpy as np
-from tree_distance import MRCADistanceMeasurer, RootRFDistanceMeasurer
+
+from tree_distance import MRCADistanceMeasurer, MRCASpearmanMeasurer, RootRFDistanceMeasurer
+from cell_lineage_tree import CellLineageTree
 
 #lambda_type = "random"
-lambda_type = "sorted"
+lambda_type = "random"
+double = 3
 lam_scale = 0
-double = 10
 trim_zero_pr = 1
 trim_poiss = 3
 trim_long_pr = 0
@@ -16,6 +18,7 @@ insert_poiss = 1
 
 TEMPLATE = "simulation_topol_consist/_output/%d/%s/lam_scale%d/double%d/trim_zero_pr%d_%d/trim_poiss%d_%d/trim_long_pr%d_%d/insert_zero_pr%d/insert_poiss%d/num_barcodes%d/sum_states2000/tune_fitted.pkl"
 TRUE_TEMPLATE = "simulation_topol_consist/_output/%d/%s/lam_scale%d/double%d/trim_zero_pr%d_%d/trim_poiss%d_%d/trim_long_pr%d_%d/insert_zero_pr%d/insert_poiss%d/true_model.pkl"
+OBS_TEMPLATE = "simulation_topol_consist/_output/%d/%s/lam_scale%d/double%d/trim_zero_pr%d_%d/trim_poiss%d_%d/trim_long_pr%d_%d/insert_zero_pr%d/insert_poiss%d/num_barcodes%d/obs_data.pkl"
 COLL_TREE_TEMPLATE = "simulation_topol_consist/_output/%d/%s/lam_scale%d/double%d/trim_zero_pr%d_%d/trim_poiss%d_%d/trim_long_pr%d_%d/insert_zero_pr%d/insert_poiss%d/num_barcodes%d/collapsed_tree.pkl"
 
 def get_true_model(seed, lambda_type, n_bcodes):
@@ -25,12 +28,45 @@ def get_true_model(seed, lambda_type, n_bcodes):
     tree_file_name = COLL_TREE_TEMPLATE % (seed, lambda_type, lam_scale, double, trim_zero_pr, trim_zero_pr, trim_poiss, trim_poiss, trim_long_pr, trim_long_pr, insert_zero_pr, insert_poiss, n_bcodes)
     with open(tree_file_name, "rb") as f:
         true_coll_tree = six.moves.cPickle.load(f)
+    obs_file_name = OBS_TEMPLATE % (seed, lambda_type, lam_scale, double, trim_zero_pr, trim_zero_pr, trim_poiss, trim_poiss, trim_long_pr, trim_long_pr, insert_zero_pr, insert_poiss, n_bcodes)
+    with open(obs_file_name, "rb") as f:
+        observations = six.moves.cPickle.load(f)["obs_leaves"]
+    obs_dict = {}
+    for obs in observations:
+         obs_id = CellLineageTree._allele_list_to_str(obs.allele_events_list)
+         obs_dict[obs_id] = obs
+    for node in true_coll_tree:
+        if obs_dict[node.allele_events_list_str] is None:
+            continue
+        abund = obs_dict[node.allele_events_list_str].abundance
+        if abund > 1:
+            for _ in range(abund):
+                new_child = CellLineageTree(
+                    node.allele_list,
+                    node.allele_events_list,
+                    node.cell_state,
+                    dist = 0,
+                    abundance = 1,
+                    resolved_multifurcation = True)
+                node.add_child(new_child)
+            obs_dict[node.allele_events_list_str] = None
     return (true_model["true_model_params"], true_coll_tree)
 
 def get_result(seed, lambda_type, n_bcodes):
     res_file = TEMPLATE % (seed, lambda_type, lam_scale, double, trim_zero_pr, trim_zero_pr, trim_poiss, trim_poiss, trim_long_pr, trim_long_pr, insert_zero_pr, insert_poiss, n_bcodes)
     with open(res_file, "rb") as f:
         result = six.moves.cPickle.load(f)
+    for node in result.fitted_bifurc_tree:
+        if node.abundance > 1:
+            for _ in range(node.abundance):
+                new_child = CellLineageTree(
+                    node.allele_list,
+                    node.allele_events_list,
+                    node.cell_state,
+                    dist = 0,
+                    abundance = 1,
+                    resolved_multifurcation = True)
+                node.add_child(new_child)
     return (result.model_params_dict, result.fitted_bifurc_tree)
 
 def get_target_lams(model_param_tuple):
@@ -59,7 +95,10 @@ for key in get_param_func_dict.keys():
 
     for seed in seeds:
         for idx, n_bcode in enumerate(num_barcodes):
-            true_model = get_true_model(seed, lambda_type, n_bcode)
+            try:
+                true_model = get_true_model(seed, lambda_type, n_bcode)
+            except FileNotFoundError:
+                continue
             true_model_val = get_param_func(true_model)
             try:
                 result = get_result(seed, lambda_type, n_bcode)
@@ -71,7 +110,10 @@ for key in get_param_func_dict.keys():
 
 for seed in seeds:
     for idx, n_bcode in enumerate(num_barcodes):
-        true_model = get_true_model(seed, lambda_type, n_bcode)
+        try:
+            true_model = get_true_model(seed, lambda_type, n_bcode)
+        except FileNotFoundError:
+            continue
         true_mrca_meas = MRCADistanceMeasurer(true_model[1])
         print(true_mrca_meas.ref_tree_mrca_matrix.shape)
         try:
@@ -81,8 +123,9 @@ for seed in seeds:
         dist = true_mrca_meas.get_dist(result[1])
         n_bcode_results["mrca"][idx].append(dist)
 
-        true_rf_meas = RootRFDistanceMeasurer(true_model[1], None)
+        true_rf_meas = MRCASpearmanMeasurer(true_model[1], None)
         dist = true_rf_meas.get_dist(result[1])
+        #print("RF", dist)
         n_bcode_results["rf"][idx].append(dist)
 
 for idx, n_bcode in enumerate(num_barcodes):

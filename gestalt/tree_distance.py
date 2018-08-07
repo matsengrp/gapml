@@ -138,6 +138,7 @@ class RootRFDistanceMeasurer(TreeDistanceMeasurer):
             return rf_res[0]
         except Exception as err:
             logging.info("cannot get root RF distance: %s", str(err))
+            print("cannot get root RF distance: %s", str(err))
             return np.NaN
 
 class SPRDistanceMeasurer(TreeDistanceMeasurer):
