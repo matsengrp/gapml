@@ -10,7 +10,7 @@ import plot_simulation_common
 double = 5
 seeds = range(0,5)
 n_bcode = 1
-lambda_magnitudes = [0.33, 1, 3]
+lambda_magnitudes = [3, 10, 30]
 
 TEMPLATE = "simulation_topology_magnitude/_output/model_seed800/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/sum_states2000/tune_fitted.pkl"
 TRUE_TEMPLATE = "simulation_topology_magnitude/_output/model_seed800/%d/lambda_magnitude%d/double_cut%d/true_model.pkl"
