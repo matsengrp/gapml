@@ -20,7 +20,7 @@ def get_true_model(file_name, tree_file_name, n_bcodes):
         if node.allele_events_list_str in existing_strs:
             count = existing_strs[node.allele_events_list_str]
             existing_strs[node.allele_events_list_str] += 1
-            node.allele_events_list_str = "%s::%d" % (
+            node.allele_events_list_str = "%s==%d" % (
                      node.allele_events_list_str,
                      count)
         else:
@@ -42,7 +42,7 @@ def get_result(res_file):
                     abundance = 1,
                     resolved_multifurcation = True)
                 if idx > 0:
-                    new_child.allele_events_list_str = "%s::%d" % (
+                    new_child.allele_events_list_str = "%s==%d" % (
                         new_child.allele_events_list_str,
                         idx)
                 node.add_child(new_child)

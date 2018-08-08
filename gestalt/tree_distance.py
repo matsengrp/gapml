@@ -1,3 +1,4 @@
+import os
 import subprocess
 import numpy as np
 import typing
@@ -8,7 +9,9 @@ import logging
 
 from scipy.stats import spearmanr, kendalltau
 from cell_lineage_tree import CellLineageTree
-from constants import RSPR_PATH
+from collapsed_tree import _remove_single_child_unobs_nodes
+from constants import RSPR_PATH, BHV_PATH
+from common import get_randint
 
 class TreeDistanceMeasurerAgg:
     """
@@ -141,6 +144,53 @@ class RootRFDistanceMeasurer(TreeDistanceMeasurer):
             print("cannot get root RF distance: %s", str(err))
             return np.NaN
 
+class BHVDistanceMeasurer(TreeDistanceMeasurer):
+    """
+    BHV distance
+    """
+    name = "bhv"
+    def get_dist(self, tree):
+        """
+        http://comet.lehman.cuny.edu/owen/code.html
+        """
+        if len(self.ref_tree.get_children()) == 1:
+            self.ref_tree.get_children()[0].delete(prevent_nondicotomic=True, preserve_branch_length=True)
+
+        for n in self.ref_tree:
+            n.name = n.allele_events_list_str
+
+        if len(tree.get_children()) == 1:
+            tree.get_children()[0].delete(prevent_nondicotomic=True, preserve_branch_length=True)
+        for n in tree:
+            n.name = n.allele_events_list_str
+
+        # Write tree out in newick format
+        suffix = "%d%d" % (int(time.time()), np.random.randint(1000000))
+        tree_in_file = "%s/tree_newick%s.txt" % (
+                self.scratch_dir, suffix)
+        with open(tree_in_file, "w") as f:
+            f.write(self.ref_tree.write(format=5))
+            f.write("\n")
+            f.write(tree.write(format=5))
+            f.write("\n")
+
+        # Run bhv
+        bhv_out_file = "%s/tree_bhv%s.txt" % (self.scratch_dir, suffix)
+        bhv_cmd = "java -jar %s -o %s %s" % (BHV_PATH, bhv_out_file, tree_in_file)
+        subprocess.check_output(
+                bhv_cmd,
+                shell=True)
+
+        # Read bhv output, distance is on the last line
+        with open(bhv_out_file, "r") as f:
+            lines = f.readlines()
+            bhv_dist = float(lines[0].split("\t")[-1])
+
+        os.remove(tree_in_file)
+        os.remove(bhv_out_file)
+
+        return bhv_dist
+
 class SPRDistanceMeasurer(TreeDistanceMeasurer):
     """
     SPR distance
@@ -155,14 +205,14 @@ class SPRDistanceMeasurer(TreeDistanceMeasurer):
         # Set node name to allele_events_list_str
         for n in self.ref_tree.traverse():
             n.name = n.allele_events_list_str
-            if not n.is_leaf() and len(n.get_children()) != 2:
+            if not n.is_leaf() and len(n.get_children()) > 2:
                 raise ValueError("Reference tree is not binary. SPR will not work")
 
         for n in tree.traverse():
             n.name = n.allele_events_list_str
 
         # Write tree out in newick format
-        suffix = "%d%d" % (int(time.time()),np.random.randint(1000000))
+        suffix = "%d%d" % (int(time.time()), np.random.randint(1000000))
         tree_in_file = "%s/tree_newick%s.txt" % (
                 self.scratch_dir, suffix)
         with open(tree_in_file, "w") as f:

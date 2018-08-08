@@ -3,7 +3,7 @@ import json
 import six
 import numpy as np
 
-from tree_distance import MRCADistanceMeasurer, MRCASpearmanMeasurer, RootRFDistanceMeasurer
+from tree_distance import *
 from cell_lineage_tree import CellLineageTree
 import plot_simulation_common
 
@@ -28,6 +28,8 @@ def get_result(seed, lambda_type, n_bcodes):
 get_param_func_dict = {
         "mrca": None, # custom function
         "rf": None, # custom function
+        "spr": None, # custom function
+        "bhv": None, # custom function
         "leaves": None, # custom function
         "targ": plot_simulation_common.get_target_lams,
         "double": plot_simulation_common.get_double_cut_weight}
@@ -73,13 +75,13 @@ for seed in seeds:
         dist = true_mrca_meas.get_dist(result[1])
         n_bcode_results["mrca"][idx].append(dist)
 
-        true_rf_meas = MRCASpearmanMeasurer(true_model[1], None)
-        dist = true_rf_meas.get_dist(result[1])
-        n_bcode_results["rf"][idx].append(dist)
+        true_bhv_meas = BHVDistanceMeasurer(true_model[1], "_output/scratch")
+        dist = true_bhv_meas.get_dist(result[1])
+        n_bcode_results["bhv"][idx].append(dist)
 
 for idx, lambda_type in enumerate(lambda_types):
     size = len(n_bcode_results["mrca"][idx])
-    print("%s & %d & %d & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f)" % (
+    print("%s & %d & %d & %.02f (%.02f) & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f)" % (
         lambda_type,
         n_bcode,
         size,
@@ -87,8 +89,8 @@ for idx, lambda_type in enumerate(lambda_types):
         np.sqrt(np.var(n_bcode_results["leaves"][idx])/size),
         np.mean(n_bcode_results["mrca"][idx]),
         np.sqrt(np.var(n_bcode_results["mrca"][idx])/size),
-        np.mean(n_bcode_results["rf"][idx]),
-        np.sqrt(np.var(n_bcode_results["rf"][idx])/size),
+        np.mean(n_bcode_results["bhv"][idx]),
+        np.sqrt(np.var(n_bcode_results["bhv"][idx])/size),
         np.mean(n_bcode_results["targ"][idx]),
         np.sqrt(np.var(n_bcode_results["targ"][idx])/size),
         np.mean(n_bcode_results["double"][idx]),
