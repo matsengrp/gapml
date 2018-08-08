@@ -6,7 +6,7 @@ import random
 import time
 import logging
 
-from scipy.stats import spearmanr
+from scipy.stats import spearmanr, kendalltau
 from cell_lineage_tree import CellLineageTree
 from constants import RSPR_PATH
 
@@ -248,5 +248,5 @@ class MRCASpearmanMeasurer(MRCADistanceMeasurer):
         tree_mrca_matrix = self._get_mrca_matrix(tree)
         tree_mrca_matrix_half = MRCASpearmanMeasurer.get_upper_half(tree_mrca_matrix)
         ref_mrca_matrix_half = MRCASpearmanMeasurer.get_upper_half(self.ref_tree_mrca_matrix)
-        spearman_corr, _ = spearmanr(tree_mrca_matrix_half, ref_mrca_matrix_half)
-        return spearman_corr
+        rank_corr, _ = kendalltau(tree_mrca_matrix_half, ref_mrca_matrix_half)
+        return rank_corr

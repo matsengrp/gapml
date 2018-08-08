@@ -20,8 +20,7 @@ from clt_observer import ObservedAlignedSeq
 from transition_wrapper_maker import TransitionWrapperMaker
 from parallel_worker import BatchSubmissionManager
 from plot_mrca_matrices import plot_mrca_matrix
-from common import save_data
-from common import create_directory
+from common import save_data, create_directory, get_randint
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Collapse data based on first n alleles')
@@ -203,13 +202,13 @@ def make_likelihood_scorer(tree: CellLineageTree, true_model_dict: Dict, name: s
     param_dict.pop('cell_type_lams', None)
 
     scorer = LikelihoodScorer(
-        0, # seed
+        get_randint(), # seed
         tree,
         true_model_dict["bcode_meta"],
         log_barr = 0, # no penalty
         target_lam_pen = 0, # no penalty
         max_iters = 0,
-        num_inits = 3,
+        num_inits = 1,
         transition_wrap_maker = TransitionWrapperMaker(tree, bcode_meta),
         tot_time = true_model_dict["time"],
         init_model_params = param_dict)
@@ -325,6 +324,8 @@ def main(args=sys.argv[1:]):
     if args.model_file is not None:
         with open(args.model_file, "rb") as f:
             true_model_dict = six.moves.cPickle.load(f)
+        # Update the bcode metadata to be the truncated version
+        true_model_dict["bcode_meta"] = bcode_meta
         collapsed_clt = collapse_tree_by_first_alleles(
                 true_model_dict,
                 args.num_barcodes)

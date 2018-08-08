@@ -95,22 +95,27 @@ def collapse_ultrametric(raw_tree: CellLineageTree):
             # If the child allele same as parent, attach the new collapsed child
             # to the latest node with that same allele
             parent_collapsed_node, parent_dist_to_root = latest_node_dict[child.earliest_ancestor_node_id]
+            abund = 1
             collapsed_child_dist = child.dist_to_root - parent_dist_to_root
+            if np.isclose(0, collapsed_child_dist):
+                abund = parent_collapsed_node.abundance + 1
             new_child_collapsed_node = CellLineageTree(
                 allele_list = child.allele_list,
                 allele_events_list = child.allele_events_list,
                 cell_state = child.cell_state,
-                dist = collapsed_child_dist)
+                dist = collapsed_child_dist,
+                abundance = abund)
         parent_collapsed_node.add_child(new_child_collapsed_node)
         node_to_collapsed_node_dict[child.node_id] = new_child_collapsed_node
         latest_node_dict[child.earliest_ancestor_node_id] = (new_child_collapsed_node, child.dist_to_root)
+
+    for leaf in collapsed_tree:
+        assert np.isclose(leaf.get_distance(collapsed_tree), max_dist)
 
     _remove_single_child_unobs_nodes(collapsed_tree)
 
     #print(collapsed_tree.get_ascii(attributes=["dist"], show_internal=True))
     #print(collapsed_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-    for leaf in tree:
-        assert np.isclose(leaf.get_distance(tree), max_dist)
 
     return collapsed_tree
 

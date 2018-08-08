@@ -62,6 +62,9 @@ for seed in seeds:
             true_model = get_true_model(seed, lambda_type, n_bcode)
         except FileNotFoundError:
             continue
+
+        n_bcode_results["leaves"][idx].append(len(true_model[2]))
+
         true_mrca_meas = MRCADistanceMeasurer(true_model[1])
         try:
             result = get_result(seed, lambda_type, n_bcode)
@@ -69,8 +72,6 @@ for seed in seeds:
             continue
         dist = true_mrca_meas.get_dist(result[1])
         n_bcode_results["mrca"][idx].append(dist)
-
-        n_bcode_results["leaves"][idx].append(len(true_model[2]))
 
         true_rf_meas = MRCASpearmanMeasurer(true_model[1], None)
         dist = true_rf_meas.get_dist(result[1])
