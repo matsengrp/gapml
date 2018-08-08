@@ -53,3 +53,24 @@ def get_target_lams(model_param_tuple):
 
 def get_double_cut_weight(model_param_tuple):
     return model_param_tuple[0]["double_cut_weight"]
+
+def print_results(settings, n_bcode_results, n_bcode):
+    settings = [str(s) for s in settings]
+    for idx, setting in enumerate(settings):
+        size = len(n_bcode_results["mrca"][idx])
+        print("%s & %d & %d & %.02f (%.02f) & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f)" % (
+            setting,
+            n_bcode,
+            size,
+            np.mean(n_bcode_results["leaves"][idx]),
+            np.sqrt(np.var(n_bcode_results["leaves"][idx])/size),
+            np.mean(n_bcode_results["mrca"][idx]),
+            np.sqrt(np.var(n_bcode_results["mrca"][idx])/size),
+            np.mean(n_bcode_results["bhv"][idx]),
+            np.sqrt(np.var(n_bcode_results["bhv"][idx])/size),
+            np.mean(n_bcode_results["targ"][idx]),
+            np.sqrt(np.var(n_bcode_results["targ"][idx])/size),
+            np.mean(n_bcode_results["double"][idx]),
+            np.sqrt(np.var(n_bcode_results["double"][idx])/size),
+        ))
+

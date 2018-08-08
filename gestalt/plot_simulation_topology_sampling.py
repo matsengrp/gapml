@@ -7,24 +7,23 @@ from tree_distance import *
 from cell_lineage_tree import CellLineageTree
 import plot_simulation_common
 
-double = 0
-seeds = range(100,110)
+double = 5
+seeds = range(0,6)
 n_bcode = 1
-lambda_types = ["same", "diff", "super_diff"]
+sampling_rates = [1, 2, 6]
 
-
-TEMPLATE = "simulation_topology_same_diff/_output/%d/%s/double_cut%d/num_barcodes%d/sum_states2000/tune_fitted.pkl"
-TRUE_TEMPLATE = "simulation_topology_same_diff/_output/%d/%s/double_cut%d/true_model.pkl"
-OBS_TEMPLATE = "simulation_topology_same_diff/_output/%d/%s/double_cut%d/num_barcodes%d/obs_data.pkl"
-COLL_TREE_TEMPLATE = "simulation_topology_same_diff/_output/%d/%s/double_cut%d/num_barcodes%d/collapsed_tree.pkl"
+TEMPLATE = "simulation_topology_sampling/_output/model_seed3/%d/sampling%d/num_barcodes%d/sum_states2000/tune_fitted.pkl"
+TRUE_TEMPLATE = "simulation_topology_sampling/_output/model_seed3/%d/sampling%d/true_model.pkl"
+OBS_TEMPLATE = "simulation_topology_sampling/_output/model_seed3/%d/sampling%d/num_barcodes%d/obs_data.pkl"
+COLL_TREE_TEMPLATE = "simulation_topology_sampling/_output/model_seed3/%d/sampling%d/num_barcodes%d/collapsed_tree.pkl"
 
 def get_true_model(seed, lambda_type, n_bcodes):
-    file_name = TRUE_TEMPLATE % (seed, lambda_type, double)
-    tree_file_name = COLL_TREE_TEMPLATE % (seed, lambda_type, double, n_bcodes)
+    file_name = TRUE_TEMPLATE % (seed, lambda_type)
+    tree_file_name = COLL_TREE_TEMPLATE % (seed, lambda_type, n_bcodes)
     return plot_simulation_common.get_true_model(file_name, tree_file_name, n_bcodes)
 
 def get_result(seed, lambda_type, n_bcodes):
-    res_file = TEMPLATE % (seed, lambda_type, double, n_bcodes)
+    res_file = TEMPLATE % (seed, lambda_type, n_bcodes)
     return plot_simulation_common.get_result(res_file)
 
 get_param_func_dict = {
@@ -35,7 +34,7 @@ get_param_func_dict = {
         "leaves": None}
 
 n_bcode_results = {
-        key: [[] for _ in lambda_types]
+        key: [[] for _ in sampling_rates]
         for key in get_param_func_dict.keys()}
 
 for key in get_param_func_dict.keys():
@@ -44,7 +43,7 @@ for key in get_param_func_dict.keys():
         continue
 
     for seed in seeds:
-        for idx, lambda_type in enumerate(lambda_types):
+        for idx, lambda_type in enumerate(sampling_rates):
             try:
                 true_model = get_true_model(seed, lambda_type, n_bcode)
             except FileNotFoundError:
@@ -59,23 +58,23 @@ for key in get_param_func_dict.keys():
             n_bcode_results[key][idx].append(dist)
 
 for seed in seeds:
-    for idx, lambda_type in enumerate(lambda_types):
+    for idx, lambda_type in enumerate(sampling_rates):
         try:
             true_model = get_true_model(seed, lambda_type, n_bcode)
         except FileNotFoundError:
             continue
         true_mrca_meas = MRCADistanceMeasurer(true_model[1])
         n_bcode_results["leaves"][idx].append(len(true_model[2]))
-        #print("true...", true_mrca_meas.ref_tree_mrca_matrix.shape)
         try:
             result = get_result(seed, lambda_type, n_bcode)
         except FileNotFoundError:
             continue
         dist = true_mrca_meas.get_dist(result[1])
         n_bcode_results["mrca"][idx].append(dist)
+        print(dist)
 
         true_bhv_meas = BHVDistanceMeasurer(true_model[1], "_output/scratch")
         dist = true_bhv_meas.get_dist(result[1])
         n_bcode_results["bhv"][idx].append(dist)
 
-plot_simulation_common.print_results(lambda_types, n_bcode_results, n_bcode)
+plot_simulation_common.print_results(sampling_rates, n_bcode_results, n_bcode)

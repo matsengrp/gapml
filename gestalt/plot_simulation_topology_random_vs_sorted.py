@@ -8,7 +8,7 @@ from cell_lineage_tree import CellLineageTree
 import plot_simulation_common
 
 seeds = range(100,110)
-n_bcode = 9
+n_bcode = 1
 lambda_types = ["random", "sorted"]
 
 TEMPLATE = "simulation_topology_random_vs_sorted/_output/%d/%s/num_barcodes%d/sum_states2000/tune_fitted.pkl"
@@ -27,8 +27,6 @@ def get_result(seed, lambda_type, n_bcodes):
 
 get_param_func_dict = {
         "mrca": None, # custom function
-        "rf": None, # custom function
-        "spr": None, # custom function
         "bhv": None, # custom function
         "leaves": None, # custom function
         "targ": plot_simulation_common.get_target_lams,
@@ -79,20 +77,4 @@ for seed in seeds:
         dist = true_bhv_meas.get_dist(result[1])
         n_bcode_results["bhv"][idx].append(dist)
 
-for idx, lambda_type in enumerate(lambda_types):
-    size = len(n_bcode_results["mrca"][idx])
-    print("%s & %d & %d & %.02f (%.02f) & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f)" % (
-        lambda_type,
-        n_bcode,
-        size,
-        np.mean(n_bcode_results["leaves"][idx]),
-        np.sqrt(np.var(n_bcode_results["leaves"][idx])/size),
-        np.mean(n_bcode_results["mrca"][idx]),
-        np.sqrt(np.var(n_bcode_results["mrca"][idx])/size),
-        np.mean(n_bcode_results["bhv"][idx]),
-        np.sqrt(np.var(n_bcode_results["bhv"][idx])/size),
-        np.mean(n_bcode_results["targ"][idx]),
-        np.sqrt(np.var(n_bcode_results["targ"][idx])/size),
-        np.mean(n_bcode_results["double"][idx]),
-        np.sqrt(np.var(n_bcode_results["double"][idx])/size),
-    ))
+plot_simulation_common.print_results(lambda_types, n_bcode_results, n_bcode)
