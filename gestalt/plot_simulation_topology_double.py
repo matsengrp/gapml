@@ -72,7 +72,7 @@ for seed in seeds:
         dist = true_mrca_meas.get_dist(result[1])
         n_bcode_results["mrca"][idx].append(dist)
 
-        true_bhv_meas = BHVDistanceMeasurer(true_model[1], None)
+        true_bhv_meas = BHVDistanceMeasurer(true_model[1], "_output/scratch")
         dist = true_bhv_meas.get_dist(result[1])
         #print("RF", dist)
         n_bcode_results["bhv"][idx].append(dist)
