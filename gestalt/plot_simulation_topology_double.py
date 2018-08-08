@@ -16,13 +16,13 @@ TRUE_TEMPLATE = "simulation_topology_double/_output/model_seed600/%d/double_cut%
 OBS_TEMPLATE = "simulation_topology_double/_output/model_seed600/%d/double_cut%d/num_barcodes%d/obs_data.pkl"
 COLL_TREE_TEMPLATE = "simulation_topology_double/_output/model_seed600/%d/double_cut%d/num_barcodes%d/collapsed_tree.pkl"
 
-def get_true_model(seed, lambda_type, n_bcodes):
-    file_name = TRUE_TEMPLATE % (seed, double)
-    tree_file_name = COLL_TREE_TEMPLATE % (seed, lambda_type, double, n_bcodes)
+def get_true_model(seed, double_cut, n_bcodes):
+    file_name = TRUE_TEMPLATE % (seed, double_cut)
+    tree_file_name = COLL_TREE_TEMPLATE % (seed, double_cut, n_bcodes)
     return plot_simulation_common.get_true_model(file_name, tree_file_name, n_bcodes)
 
-def get_result(seed, lambda_type, n_bcodes):
-    res_file = TEMPLATE % (seed, double, n_bcodes)
+def get_result(seed, double_cut, n_bcodes):
+    res_file = TEMPLATE % (seed, double_cut, n_bcodes)
     return plot_simulation_common.get_result(res_file)
 
 get_param_func_dict = {
@@ -42,14 +42,14 @@ for key in get_param_func_dict.keys():
         continue
 
     for seed in seeds:
-        for idx, lambda_type in enumerate(double_cuts):
+        for idx, double_cut in enumerate(double_cuts):
             try:
-                true_model = get_true_model(seed, lambda_type, n_bcode)
+                true_model = get_true_model(seed, double_cut, n_bcode)
             except FileNotFoundError:
                 continue
             true_model_val = get_param_func(true_model)
             try:
-                result = get_result(seed, lambda_type, n_bcode)
+                result = get_result(seed, double_cut, n_bcode)
             except FileNotFoundError:
                 continue
             fitted_val = get_param_func(result)
@@ -57,16 +57,16 @@ for key in get_param_func_dict.keys():
             n_bcode_results[key][idx].append(dist)
 
 for seed in seeds:
-    for idx, lambda_type in enumerate(double_cuts):
+    for idx, double_cut in enumerate(double_cuts):
         try:
-            true_model = get_true_model(seed, lambda_type, n_bcode)
+            true_model = get_true_model(seed, double_cut, n_bcode)
         except FileNotFoundError:
             continue
         true_mrca_meas = MRCADistanceMeasurer(true_model[1])
         n_bcode_results["leaves"][idx].append(len(true_model[2]))
         #print("true...", true_mrca_meas.ref_tree_mrca_matrix.shape)
         try:
-            result = get_result(seed, lambda_type, n_bcode)
+            result = get_result(seed, double_cut, n_bcode)
         except FileNotFoundError:
             continue
         dist = true_mrca_meas.get_dist(result[1])
