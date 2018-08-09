@@ -43,7 +43,8 @@ class LikelihoodScorer(ParallelWorker):
             dist_measurers: TreeDistanceMeasurerAgg = None,
             target_lams_known: bool = False,
             branch_lengths_known: bool = False,
-            max_try_per_init: int = 2):
+            max_try_per_init: int = 2,
+            abundance_weight: float = 0):
         """
         @param seed: required to set the seed of each parallel worker
         @param tree: the cell lineage tree topology to fit the likelihood for
@@ -71,6 +72,7 @@ class LikelihoodScorer(ParallelWorker):
         self.target_lams_known = target_lams_known
         self.branch_lengths_known = branch_lengths_known
         self.max_tries = max_try_per_init * num_inits
+        self.abundance_weight = abundance_weight
 
     def run_worker(self, shared_obj):
         """
@@ -133,9 +135,11 @@ class LikelihoodScorer(ParallelWorker):
             target_lams_known = self.target_lams_known,
             cell_type_tree = None,
             cell_lambdas_known = False,
-            double_cut_weight_known = False,
+            double_cut_weight = self.init_model_params["double_cut_weight"],
+            double_cut_weight_known = self.target_lams_known,
             branch_lens_known = self.branch_lengths_known,
-            tot_time = self.tot_time)
+            tot_time = self.tot_time,
+            abundance_weight = self.abundance_weight)
         estimator = CLTPenalizedEstimator(
                 res_model,
                 self.transition_wrap_maker,

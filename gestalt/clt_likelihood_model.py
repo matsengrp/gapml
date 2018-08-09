@@ -49,7 +49,8 @@ class CLTLikelihoodModel:
             cell_type_tree: CellTypeTree = None,
             cell_lambdas_known: bool = False,
             tot_time: float = 1,
-            boost_len: int = 1):
+            boost_len: int = 1,
+            abundance_weight: float = 1):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
         @param boost_softmax_weights: vals to plug into softmax to get the probability of boosting
@@ -72,6 +73,8 @@ class CLTLikelihoodModel:
 
         self.num_targets = bcode_meta.n_targets
         self.boost_len = boost_len
+        self.abundance_weight = abundance_weight
+        assert abundance_weight >= 0 #and abundance_weight <= 1
         assert boost_len == 1
 
         # Process cell type tree
@@ -111,7 +114,7 @@ class CLTLikelihoodModel:
         # Create all the variables
         self._create_parameters(
                 target_lams,
-                [double_cut_weight],
+                double_cut_weight,
                 boost_softmax_weights,
                 trim_long_probs,
                 trim_zero_probs,
@@ -137,7 +140,7 @@ class CLTLikelihoodModel:
 
     def _create_parameters(self,
             target_lams: ndarray,
-            double_cut_weight: List[float], # list of length one
+            double_cut_weight: ndarray,
             boost_softmax_weights: ndarray,
             trim_long_probs: ndarray,
             trim_zero_probs: ndarray,
@@ -151,7 +154,6 @@ class CLTLikelihoodModel:
         """
         Creates the tensorflow nodes for each of the model parameters
         """
-        assert len(double_cut_weight) == 1
         assert len(insert_zero_prob) == 1
         assert len(insert_poisson) == 1
         assert boost_softmax_weights.size == 3
@@ -575,14 +577,19 @@ class CLTLikelihoodModel:
             left_del_probs = self._create_left_del_probs(singletons, left_boost_len = 0)
             right_del_probs_boost = self._create_right_del_probs(singletons, right_boost_len = self.boost_len)
             right_del_probs = self._create_right_del_probs(singletons, right_boost_len = 0)
-            indel_probs0 = left_del_probs * right_del_probs * insert_probs
-            indel_probs1 = left_del_probs * right_del_probs * insert_probs
-            indel_probs2 = left_del_probs * right_del_probs * insert_probs
 
-            return tf.log(
-                    self.boost_probs[0] * left_del_probs * right_del_probs * insert_probs_boost
-                    + self.boost_probs[1] * left_del_probs_boost * right_del_probs * insert_probs
-                    + self.boost_probs[2] * left_del_probs * right_del_probs_boost * insert_probs)
+            insert_log_p = tf.log(self.boost_probs[0]) + tf.log(left_del_probs) + tf.log(right_del_probs) + tf.log(insert_probs_boost)
+            left_del_log_p = tf.log(self.boost_probs[1]) + tf.log(left_del_probs_boost) + tf.log(right_del_probs) + tf.log(insert_probs)
+            right_del_log_p = tf.log(self.boost_probs[2]) + tf.log(left_del_probs) + tf.log(right_del_probs_boost) + tf.log(insert_probs)
+
+            max_log_p = tf.maximum(tf.maximum(insert_log_p, left_del_log_p), right_del_log_p)
+
+            return max_log_p + tf.log(tf.exp(insert_log_p - max_log_p) + tf.exp(left_del_log_p - max_log_p) + tf.exp(right_del_log_p - max_log_p))
+
+            #return tf.log(
+            #        self.boost_probs[0] * left_del_probs * right_del_probs * insert_probs_boost
+            #        + self.boost_probs[1] * left_del_probs_boost * right_del_probs * insert_probs
+            #        + self.boost_probs[2] * left_del_probs * right_del_probs_boost * insert_probs)
 
     def _create_left_del_probs(self, singletons: List[Singleton], left_boost_len: int):
         """
@@ -620,7 +627,9 @@ class CLTLikelihoodModel:
             # zero-inflated distribution (also still must correct for boost)
             short_left_prob = tf_common.ifelse(
                 tf_common.less_float(left_trim_len, left_boost_len),
-                tf.constant(0, dtype=tf.float64),
+                # Make this nonzero since otherwise the tensorflow gradient calculation will break
+                # will be numerically unstable and it will break
+                tf.constant(PERTURB_ZERO, dtype=tf.float64),
                 tf_common.ifelse(
                     tf_common.equal_float(left_trim_len, left_boost_len),
                     self.trim_zero_prob_left + (1 - self.trim_zero_prob_left) * (
@@ -680,7 +689,9 @@ class CLTLikelihoodModel:
             # zero-inflated distribution (also still must correct for boost)
             short_right_prob = tf_common.ifelse(
                 tf_common.less_float(right_trim_len, right_boost_len),
-                tf.constant(0, dtype=tf.float64),
+                # Make this nonzero since otherwise the tensorflow gradient calculation will break
+                # will be numerically unstable and it will break
+                tf.constant(PERTURB_ZERO, dtype=tf.float64),
                 tf_common.ifelse(
                     tf_common.equal_float(right_trim_len, right_boost_len),
                     self.trim_zero_prob_right + (1 - self.trim_zero_prob_right) * (
@@ -725,7 +736,9 @@ class CLTLikelihoodModel:
             insert_boost_len_prob = self.poiss_insert.prob(insert_lens - insert_boost_len)
             insert_prob = tf_common.ifelse(
                 tf_common.less_float(insert_lens, insert_boost_len),
-                tf.constant(0, dtype=tf.float64),
+                # Make this nonzero since otherwise the tensorflow gradient calculation will break
+                # will be numerically unstable and it will break
+                tf.constant(PERTURB_ZERO, dtype=tf.float64),
                 tf_common.ifelse(
                     tf_common.equal_float(insert_lens, insert_boost_len),
                     (self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_boost_len_prob) * insert_seq_prob,
@@ -889,15 +902,13 @@ class CLTLikelihoodModel:
                     # Get the trim probabilities
                     with tf.name_scope("trim_matrix%d" % node.node_id):
                         trim_probs[child.node_id] = self._create_trim_prob_matrix(child_wrapper)
-                        #log_trim_probs = tf.verify_tensor_all_finite(
-                        #        tf.log(trim_probs[child.node_id], name="log_trim_probs"),
-                        #        "trim%d has problem" % child.node_id)
-                        #trim_probs[child.node_id] = tf.exp(log_trim_probs)
 
                     # Create the probability matrix exp(Qt)
                     with tf.name_scope("expm_ops%d" % node.node_id):
+                        tr_mat = tf.verify_tensor_all_finite(trans_mats[child.node_id], "transmat %d problem" % child.node_id)
                         pt_matrix[child.node_id], _, _, Ddiags[child.node_id] = tf_common.myexpm(
-                                trans_mats[child.node_id],
+                                # trans_mats[child.node_id],
+                                tr_mat,
                                 self.branch_lens[child.node_id])
 
                     # Get the probability for the data descended from the child node, assuming that the node
@@ -924,7 +935,13 @@ class CLTLikelihoodModel:
                             down_probs = ch_ordered_down_probs[ch_id]
 
                         down_probs_dict[child.node_id] = down_probs
-                        log_Lprob_node = log_Lprob_node + tf.log(down_probs)
+                        if child.is_leaf():
+                            leaf_abundance_weight = tf.constant(
+                                1 + (child.abundance - 1) * self.abundance_weight,
+                                dtype=tf.float64)
+                        else:
+                            leaf_abundance_weight = tf.constant(1, dtype=tf.float64)
+                        log_Lprob_node = log_Lprob_node + tf.log(down_probs) * leaf_abundance_weight
 
                 # Handle numerical underflow
                 log_scaling_term = tf.reduce_max(log_Lprob_node)
@@ -1233,7 +1250,7 @@ class CLTLikelihoodModel:
             return self.sess.run(self.log_lik, feed_dict = feed_dict), None
 
 
-    def check_grad(self, transition_matrices, epsilon=1e-10):
+    def check_grad(self, transition_matrices, epsilon=PERTURB_ZERO):
         """
         Function just for checking the gradient
         """

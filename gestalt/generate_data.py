@@ -225,9 +225,9 @@ def create_cell_lineage_tree(
                 len(obs_leaves),
                 len(true_subtree),
                 len(clt))
-            if len(obs_leaves) < args.min_uniq_alleles:
+            if len(true_subtree) < args.min_uniq_alleles:
                 tot_time += time_incr
-            elif len(obs_leaves) >= args.max_uniq_alleles:
+            elif len(true_subtree) >= args.max_uniq_alleles:
                 tot_time -= time_incr
             else:
                 # We got a good number of leaves! Stop trying
@@ -239,7 +239,7 @@ def create_cell_lineage_tree(
         #    logging.info("AssertionError warning ... %s", str(e))
         #    continue
 
-    if len(obs_leaves) < args.min_uniq_alleles:
+    if len(true_subtree) < args.min_uniq_alleles:
         raise Exception("Could not manage to get enough leaves")
 
     logging.info("True subtree for the observed nodes, time %f", tot_time)

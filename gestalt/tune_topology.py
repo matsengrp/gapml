@@ -87,6 +87,15 @@ def parse_args():
         '--submit-srun',
         action='store_true',
         help='is using slurm to submit jobs')
+    parser.add_argument(
+        '--lambda-known',
+        action='store_true',
+        help='are target rates known?')
+    parser.add_argument(
+        '--max-topologies',
+        type=int,
+        default=10,
+        help='max topologies to tune over')
 
     parser.set_defaults()
     args = parser.parse_args()
@@ -111,10 +120,11 @@ def main(args=sys.argv[1:]):
     topology_files = glob.glob(args.topology_file_template.replace("parsimony_tree0", "parsimony_tree*[0-9]"))
     logging.info("Processing the tree files: %s", topology_files)
     worker_list = []
-    for top_file in topology_files:
+    for file_idx, top_file in enumerate(topology_files[:args.max_topologies]):
         worker = RunEstimatorWorker(
             args.obs_file,
             top_file,
+            args.out_model_file.replace(".pkl", "tree%d.pkl" % file_idx),
             args.true_model_file,
             args.true_collapsed_tree_file,
             args.seed,
@@ -122,6 +132,7 @@ def main(args=sys.argv[1:]):
             args.target_lam_pens,
             args.max_iters,
             args.num_inits,
+            args.lambda_known,
             True, # do refitting
             args.max_sum_states,
             args.max_extra_steps,
