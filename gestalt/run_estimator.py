@@ -168,7 +168,7 @@ def tune_hyperparams(
     assert not args.lambda_known
     best_params = {
         "target_lams": get_init_target_lams(bcode_meta),
-        "double_cut_weight": 0.5}
+        "double_cut_weight": np.array([0.5])}
     if len(args.target_lam_pens) == 1:
         # Nothing to tune.
         best_targ_lam_pen = args.target_lam_pens[0]
@@ -399,6 +399,10 @@ def main(args=sys.argv[1:]):
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
 
+    if os.path.exists(args.pickle_out):
+        logging.info("model exists...")
+        return
+
     np.random.seed(seed=args.seed)
 
     # Read input files
@@ -416,7 +420,6 @@ def main(args=sys.argv[1:]):
         init_params ={
                 "target_lams": true_model_dict['true_model_params']['target_lams'],
                 "double_cut_weight": true_model_dict['true_model_params']['double_cut_weight']}
-        print(init_params)
         best_targ_lam_pen = 0
     else:
         # Tune penalty params for the target lambdas

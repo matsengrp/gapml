@@ -7,7 +7,7 @@ import random
 import time
 import logging
 
-from scipy.stats import spearmanr, kendalltau
+from scipy.stats import spearmanr, kendalltau, pearsonr
 from cell_lineage_tree import CellLineageTree
 from collapsed_tree import _remove_single_child_unobs_nodes
 from constants import RSPR_PATH, BHV_PATH
@@ -149,7 +149,7 @@ class BHVDistanceMeasurer(TreeDistanceMeasurer):
     BHV distance
     """
     name = "bhv"
-    def get_dist(self, tree):
+    def get_dist(self, tree, attr="allele_events_list_str"):
         """
         http://comet.lehman.cuny.edu/owen/code.html
         """
@@ -157,12 +157,12 @@ class BHVDistanceMeasurer(TreeDistanceMeasurer):
             self.ref_tree.get_children()[0].delete(prevent_nondicotomic=True, preserve_branch_length=True)
 
         for n in self.ref_tree:
-            n.name = n.allele_events_list_str
+            n.name = getattr(n, attr)
 
         if len(tree.get_children()) == 1:
             tree.get_children()[0].delete(prevent_nondicotomic=True, preserve_branch_length=True)
         for n in tree:
-            n.name = n.allele_events_list_str
+            n.name = getattr(n, attr)
 
         # Write tree out in newick format
         suffix = "%d%d" % (int(time.time()), np.random.randint(1000000))

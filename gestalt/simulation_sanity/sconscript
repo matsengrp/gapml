@@ -27,6 +27,8 @@ nest.add(
 def generate(env, outdir, c):
     cmd = [
         'python generate_data.py',
+        '--is-stupid-cherry',
+        '--sampling 1',
         '--model-seed',
         c['seed'],
         '--data-seed',
@@ -34,14 +36,15 @@ def generate(env, outdir, c):
         '--out-obs-file ${TARGETS[0]}',
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
-        '--time 1.8',
+        '--target-lambda 0.6,0.5,0.5',
+        '--time 1',
         '--num-barcodes',
-        2,
+        4,
         '--min-uniq-alleles',
-        5,
+        3,
         '--max-uniq-alleles',
-        12,
-        '--max-abundance 10'
+        5,
+        '--max-abundance 40'
     ]
     return env.Command(
         [
@@ -107,10 +110,12 @@ def run_MLE(env, outdir, c):
         '--seed',
 	c['seed'] + 100,
         '--log-barr 0.001',
-        '--target-lam-pens 10.0,1.0',
-        '--max-sum-states 50',
-        '--max-extra-steps 1',
-        '--max-iters 6',
+        '--target-lam-pens 0.4',
+        '--max-sum-states 2000',
+        '--max-extra-steps 2',
+        '--max-iters 601',
+        '--do-refit',
+        '--lambda-known',
     ]
     return env.Command(
         [

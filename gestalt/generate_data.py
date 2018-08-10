@@ -293,7 +293,7 @@ def main(args=sys.argv[1:]):
             bcode_meta,
             sess,
             target_lams = np.array(args.target_lambdas),
-            double_cut_weight = args.double_cut_weight,
+            double_cut_weight = [args.double_cut_weight],
             trim_long_probs = np.array(args.trim_long_probs),
             trim_zero_probs = np.array(args.trim_zero_probs),
             trim_short_poissons = np.array(args.trim_poissons),

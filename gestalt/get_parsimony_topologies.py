@@ -268,6 +268,7 @@ def main(args=sys.argv[1:]):
             args.scratch_dir)
     trees_to_output += random_trees_to_output
 
+    # Remove existing parsimony trees
     topology_files = glob.glob("%s/parsimony_tree*[0-9]*" % args.out_folder)
     for t in topology_files:
         print('remove %s' % t)

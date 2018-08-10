@@ -19,17 +19,17 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
-LAMBDA_SEQUENCE = np.ones(6) * 0.35
+LAMBDA_SEQUENCE = np.ones(6) * 1.25
 
 nest.add(
     'model_seed',
-    [800],
+    [9],
     label_func=lambda c: 'model_seed%d' % c,
 )
 
 nest.add(
     'seed',
-    range(0, 5),
+    range(15, 20),
 )
 
 nest.add(
@@ -39,7 +39,7 @@ nest.add(
 
 nest.add(
     'double_cut',
-    [0.5],
+    [0.05],
     label_func=lambda c: 'double_cut%d' % int(c * 10))
 
 @nest.add_target_with_env(localenv)
@@ -48,9 +48,9 @@ def generate(env, outdir, c):
     targ_lambdas = ",".join(map(str, lambda_seq))
 
     cmd = [
-        'python boto_run.py 2 2000 generate_data.py',
-	#'python generate_data.py',
-	'--sampling-rate 0.4',
+        #'python boto_run.py 2 2000 generate_data.py',
+	'python generate_data.py',
+	'--sampling-rate 0.3',
         '--model-seed',
         c['model_seed'],
         '--data-seed',
@@ -59,12 +59,12 @@ def generate(env, outdir, c):
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
         '--time 1',
-        '--birth-lambda 6',
+        '--birth-lambda 5.2',
         '--num-barcodes',
-        30,
-        '--min-uniq-alleles 50',
-        '--max-uniq-alleles 70',
-        '--max-abundance 10',
+        8,
+        '--min-uniq-alleles 40',
+        '--max-uniq-alleles 100',
+        '--max-abundance 20',
         '--double-cut-weight',
         c['double_cut'],
         '--target-lambdas',
@@ -76,7 +76,6 @@ def generate(env, outdir, c):
         '--insert-poisson 1',
         '--perturb-target-lambdas-variance 0',
     ]
-    cmd = []
     return env.Command(
         [
             join(outdir, 'obs_data.pkl'),
@@ -87,15 +86,15 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [1, 9],
+    [1],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
 @nest.add_target_with_env(localenv)
 def restrict_observed_alleles(env, outdir, c):
     cmd = [
-        'python boto_run.py 2 2000 restrict_observed_barcodes.py',
-        #'python restrict_observed_barcodes.py',
+        #'python boto_run.py 2 2000 restrict_observed_barcodes.py',
+        'python restrict_observed_barcodes.py',
         '--obs-file ${SOURCES[0]}',
         '--model-file ${SOURCES[1]}',
         '--num-barcodes',
@@ -104,7 +103,6 @@ def restrict_observed_alleles(env, outdir, c):
         '--out-collapsed-tree-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
     ]
-    cmd = []
     return env.Command(
         [
             join(outdir, 'obs_data.pkl'),
@@ -116,8 +114,8 @@ def restrict_observed_alleles(env, outdir, c):
 @nest.add_target_with_env(localenv)
 def run_topology(env, outdir, c):
     cmd = [
-        'python boto_run.py 2 6000 get_parsimony_topologies.py',
-        #'python get_parsimony_topologies.py',
+        #'python boto_run.py 2 6000 get_parsimony_topologies.py',
+        'python get_parsimony_topologies.py',
         '--obs-file ${SOURCES[0]}',
         '--out-template-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
@@ -127,7 +125,6 @@ def run_topology(env, outdir, c):
         4,
         '--num-jumbles 1'
     ]
-    cmd  = []
     return env.Command(
         [
             join(outdir, 'parsimony_tree0.pkl'),
@@ -137,20 +134,24 @@ def run_topology(env, outdir, c):
         ' '.join(map(str, cmd)))
 
 nest.add(
-    'sum_states',
-    [2000],
-    label_func=lambda c: "sum_states%d" % c,
-)
+    'lambda_known',
+    [True],
+    label_func=lambda c: 'lambda_known%d' % int(c))
+
+nest.add(
+    'abundance',
+    [0],
+    label_func=lambda c: 'abundance_weight%d' % c)
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
     #penalty_params = ",".join(map(str, np.power(10, np.arange(0.5, -3.0, step=-1)).tolist()))
     penalty_params = "0.01" if c['num_barcodes'] > 3 else "0.1"
     cmd = [
-        'python boto_run.py 18 25000 tune_topology.py',
+        #'python boto_run.py 18 25000 tune_topology.py',
         #'srun -p matsen_e,campus',
         #'--cpus-per-task 4' if c['num_barcodes'] < 3 else '--cpus-per-task 6',
-	#'python tune_topology.py',
+	'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
         '--topology-file ${SOURCES[1]}',
         '--true-model-file ${SOURCES[2]}',
@@ -162,13 +163,12 @@ def run_MLE(env, outdir, c):
         '--log-barr 0.0000001',
         '--target-lam-pens',
 	penalty_params,
-        '--max-sum-states',
-	c['sum_states'],
+        '--max-sum-states 2000',
         '--max-extra-steps 2',
         '--max-iters 10000',
-        '--train-split 0.75',
-        '--num-inits 3',
-        #'--submit-srun' if c['num_barcodes'] < 3 else ''
+        '--num-inits',
+        1 if c['lambda_known'] else 3,
+        '--lambda-known' if c['lambda_known'] else '',
     ]
     return env.Command(
         [

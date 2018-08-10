@@ -19,7 +19,7 @@ nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_enviro
 
 nest.add(
     'abundance_thres',
-    [50],
+    [5],
     label_func=lambda c: "min_abund_%d" % c,
 )
 
@@ -69,7 +69,7 @@ def run_parsimony(env, outdir, c):
         '--max-random',
         0,
         '--max-random-multifurc',
-        1,
+        10,
     ]
     return env.Command(
         [
@@ -86,9 +86,15 @@ nest.add(
 )
 
 nest.add(
+    'extra_steps',
+    [0],
+    label_func=lambda c: "extra_steps_%d" % c,
+)
+
+nest.add(
     'penalty_params',
     [
-	'50',
+	'200',
     	#",".join(map(str, np.power(10, np.arange(1.0, -2.0, step=-1)).tolist())),
     ],
     label_func=lambda c: "penalty_params_%s" % c,
@@ -108,10 +114,12 @@ def run_MLE(env, outdir, c):
         c['penalty_params'],
         '--max-sum-states',
         c['sum_states'],
-        '--max-extra-steps 1',
+        '--max-extra-steps',
+        c['extra_steps'],
         '--max-iters 10000',
         '--num-inits 1',
         '--train-split 0.75',
+        '--max-topologies 1',
     ]
     return env.Command(
         [
