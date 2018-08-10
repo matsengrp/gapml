@@ -7,7 +7,7 @@ import random
 import time
 import logging
 
-from scipy.stats import spearmanr, kendalltau
+from scipy.stats import spearmanr, kendalltau, pearsonr
 from cell_lineage_tree import CellLineageTree
 from collapsed_tree import _remove_single_child_unobs_nodes
 from constants import RSPR_PATH, BHV_PATH
@@ -149,7 +149,7 @@ class BHVDistanceMeasurer(TreeDistanceMeasurer):
     BHV distance
     """
     name = "bhv"
-    def get_dist(self, tree):
+    def get_dist(self, tree, attr="allele_events_list_str"):
         """
         http://comet.lehman.cuny.edu/owen/code.html
         """
@@ -157,12 +157,12 @@ class BHVDistanceMeasurer(TreeDistanceMeasurer):
             self.ref_tree.get_children()[0].delete(prevent_nondicotomic=True, preserve_branch_length=True)
 
         for n in self.ref_tree:
-            n.name = n.allele_events_list_str
+            n.name = getattr(n, attr)
 
         if len(tree.get_children()) == 1:
             tree.get_children()[0].delete(prevent_nondicotomic=True, preserve_branch_length=True)
         for n in tree:
-            n.name = n.allele_events_list_str
+            n.name = getattr(n, attr)
 
         # Write tree out in newick format
         suffix = "%d%d" % (int(time.time()), np.random.randint(1000000))
@@ -242,13 +242,18 @@ class MRCADistanceMeasurer(TreeDistanceMeasurer):
     Use mrca dist in "Mapping Phylogenetic Trees to Reveal Distinct Patterns of Evolution", Kendall and Colijn
     """
     name = "mrca"
-    def __init__(self, ref_tree: CellLineageTree, scratch_dir: str = None):
+    def __init__(
+            self,
+            ref_tree: CellLineageTree,
+            scratch_dir: str = None,
+            attr="allele_events_list_str"):
         self.ref_tree = ref_tree
         self.scratch_dir = scratch_dir
+        self.attr = attr
 
         # Number the leaves because we need to represent each tree by its pairwise
         # MRCA distance matrix
-        leaf_str_sorted = sorted([leaf.allele_events_list_str for leaf in ref_tree])
+        leaf_str_sorted = sorted([getattr(leaf, attr) for leaf in ref_tree])
         self.leaf_dict = {}
         for idx, leaf_str in enumerate(leaf_str_sorted):
             self.leaf_dict[leaf_str] = idx
@@ -261,10 +266,11 @@ class MRCADistanceMeasurer(TreeDistanceMeasurer):
         @return the pairwise MRCA distance matrix for that tree
         """
         mrca_matrix = np.zeros((self.num_leaves, self.num_leaves))
+        assert len(tree) == self.num_leaves
         for leaf1 in tree:
             for leaf2 in tree:
-                leaf1_idx = self.leaf_dict[leaf1.allele_events_list_str]
-                leaf2_idx = self.leaf_dict[leaf2.allele_events_list_str]
+                leaf1_idx = self.leaf_dict[getattr(leaf1, self.attr)]
+                leaf2_idx = self.leaf_dict[getattr(leaf2, self.attr)]
                 if leaf1_idx == leaf2_idx:
                     # Instead of distance to itself, set this to be pendant edge length
                     mrca_matrix[leaf1_idx, leaf2_idx] = leaf1.dist

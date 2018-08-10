@@ -7,23 +7,24 @@ from tree_distance import *
 from cell_lineage_tree import CellLineageTree
 import plot_simulation_common
 
-double = 5
-seeds = range(0,5)
+double = 0
+model_seed = 9
+seeds = range(10,20)
 n_bcode = 1
 lambda_magnitudes = [3, 10, 30]
 
-TEMPLATE = "simulation_topology_magnitude/_output/model_seed800/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/sum_states2000/tune_fitted.pkl"
-TRUE_TEMPLATE = "simulation_topology_magnitude/_output/model_seed800/%d/lambda_magnitude%d/double_cut%d/true_model.pkl"
-OBS_TEMPLATE = "simulation_topology_magnitude/_output/model_seed800/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/obs_data.pkl"
-COLL_TREE_TEMPLATE = "simulation_topology_magnitude/_output/model_seed800/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/collapsed_tree.pkl"
+TEMPLATE = "simulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/lambda_known1/abundance_weight0/tune_fitted.pkl"
+TRUE_TEMPLATE = "simulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/true_model.pkl"
+OBS_TEMPLATE = "simulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/obs_data.pkl"
+COLL_TREE_TEMPLATE = "simulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/collapsed_tree.pkl"
 
 def get_true_model(seed, lambda_type, n_bcodes):
-    file_name = TRUE_TEMPLATE % (seed, lambda_type, double)
-    tree_file_name = COLL_TREE_TEMPLATE % (seed, lambda_type, double, n_bcodes)
+    file_name = TRUE_TEMPLATE % (model_seed, seed, lambda_type, double)
+    tree_file_name = COLL_TREE_TEMPLATE % (model_seed, seed, lambda_type, double, n_bcodes)
     return plot_simulation_common.get_true_model(file_name, tree_file_name, n_bcodes)
 
 def get_result(seed, lambda_type, n_bcodes):
-    res_file = TEMPLATE % (seed, lambda_type, double, n_bcodes)
+    res_file = TEMPLATE % (model_seed, seed, lambda_type, double, n_bcodes)
     return plot_simulation_common.get_result(res_file)
 
 get_param_func_dict = {

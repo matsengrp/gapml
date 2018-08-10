@@ -99,7 +99,7 @@ class BirthDeathTreeSimulator:
         self._simulate_tree(tree, time)
         return tree
 
-    def _run_race(self):
+    def _run_race(self, birth_scale, death_scale):
         """
         Run the race to determine branch length and event at end of branch
         Does not take into account the maximum observation time!
@@ -107,8 +107,8 @@ class BirthDeathTreeSimulator:
                 branch_length: time til the next event
         """
         # Birth rate very high initially?
-        t_birth = expon.rvs(scale=self.birth_scale)
-        t_death = expon.rvs(scale=self.death_scale)
+        t_birth = expon.rvs(scale=birth_scale)
+        t_death = expon.rvs(scale=death_scale)
         division_happens = t_birth < t_death
         branch_length = np.min([t_birth, t_death])
         return division_happens, branch_length
@@ -130,7 +130,9 @@ class BirthDeathTreeSimulator:
             return
 
         # Determine branch length and event at end of branch
-        division_happens, branch_length = self._run_race()
+        division_happens, branch_length = self._run_race(
+                self.birth_scale/1.1 if remain_time < 0.025 else self.birth_scale,
+                self.death_scale * 2 if remain_time < 0.025 else self.death_scale)
         obs_branch_length = min(branch_length, remain_time)
         remain_time = remain_time - obs_branch_length
 

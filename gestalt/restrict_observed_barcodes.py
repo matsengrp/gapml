@@ -332,6 +332,9 @@ def main(args=sys.argv[1:]):
         logging.info(collapsed_clt.get_ascii(
             attributes=["allele_events_list_str"],
             show_internal=True))
+        logging.info(collapsed_clt.get_ascii(
+            attributes=["dist"],
+            show_internal=True))
 
         selected_collapsed_clt = get_highest_likelihood_single_appearance_tree(
             collapsed_clt,

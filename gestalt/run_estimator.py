@@ -63,6 +63,11 @@ def parse_args():
         type=int,
         default=40)
     parser.add_argument(
+        '--abundance-weight',
+        type=float,
+        default=0,
+        help="weight for abundance")
+    parser.add_argument(
         '--log-barr',
         type=float,
         default=0.001,
@@ -72,6 +77,10 @@ def parse_args():
         type=str,
         default="10.0",
         help="comma separated penalty parameters on the target lambdas")
+    parser.add_argument(
+        '--lambda-known',
+        action='store_true',
+        help='are target rates known?')
     parser.add_argument(
         '--train-split',
         type=float,
@@ -128,7 +137,6 @@ def fit_tree(
         target_lam: float,
         transition_wrap_maker: TransitionWrapperMaker,
         init_model_params: Dict,
-        target_lams_known: bool,
         oracle_dist_measurers = None):
     """
     Fits the model params for the given tree and a given penalty param
@@ -145,7 +153,8 @@ def fit_tree(
         tot_time = args.tot_time,
         init_model_params = init_model_params,
         dist_measurers = oracle_dist_measurers,
-        target_lams_known = target_lams_known)
+        target_lams_known = args.lambda_known,
+        abundance_weight = args.abundance_weight)
     res = worker.run_worker(None)
     return res
 
@@ -156,11 +165,14 @@ def tune_hyperparams(
     """
     Tunes the penalty param for the target lambda
     """
-    init_target_lams = get_init_target_lams(bcode_meta)
+    assert not args.lambda_known
+    best_params = {
+        "target_lams": get_init_target_lams(bcode_meta),
+        "double_cut_weight": np.array([0.5])}
     if len(args.target_lam_pens) == 1:
         # Nothing to tune.
         best_targ_lam_pen = args.target_lam_pens[0]
-        return best_targ_lam_pen, init_target_lams
+        return best_targ_lam_pen, best_params
 
     train_tree, val_tree, train_bcode_meta, val_bcode_meta = create_train_val_tree(
             tree,
@@ -179,7 +191,6 @@ def tune_hyperparams(
             args.max_sum_states)
 
     best_targ_lam_pen = args.target_lam_pens[0]
-    best_target_lams = init_target_lams
     best_val_log_lik = None
     for i, target_lam_pen in enumerate(args.target_lam_pens):
         logging.info("TUNING %f", target_lam_pen)
@@ -193,8 +204,7 @@ def tune_hyperparams(
             args,
             target_lam_pen,
             train_transition_wrap_maker,
-            init_model_params,
-            target_lams_known = False)
+            init_model_params)
         logging.info("Done training pen param %f", target_lam_pen)
 
         # Copy over the trained model params except for branch length things
@@ -212,8 +222,7 @@ def tune_hyperparams(
             args,
             0, # target pen lam = zero
             val_transition_wrap_maker,
-            init_model_params = fixed_params,
-            target_lams_known = True)
+            init_model_params = fixed_params)
         curr_val_log_lik = res_val.train_history[-1]["log_lik"]
         curr_val_pen_log_lik = res_val.train_history[-1]["pen_log_lik"]
         logging.info(
@@ -225,10 +234,10 @@ def tune_hyperparams(
         if not np.isnan(curr_val_pen_log_lik) and (best_val_log_lik is None or best_val_log_lik < curr_val_log_lik):
             best_val_log_lik = curr_val_log_lik
             best_targ_lam_pen = target_lam_pen
-            best_target_lams = fixed_params['target_lams']
+            best_params = fixed_params
 
     logging.info("Best penalty param %s", best_targ_lam_pen)
-    return best_targ_lam_pen, best_target_lams
+    return best_targ_lam_pen, best_params
 
 def get_init_target_lams(bcode_meta):
     return 0.2 * np.ones(bcode_meta.n_targets) + np.random.uniform(size=bcode_meta.n_targets) * 0.02
@@ -298,7 +307,7 @@ def fit_multifurc_tree(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
         args,
-        init_target_lams: ndarray,
+        init_params: Dict[str, ndarray],
         best_targ_lam_pen: float,
         oracle_dist_measurers: TreeDistanceMeasurerAgg = None):
     """
@@ -309,17 +318,14 @@ def fit_multifurc_tree(
             bcode_meta,
             args.max_extra_steps,
             args.max_sum_states)
-    init_model_params = {
-        "target_lams": init_target_lams,
-        "tot_time": args.tot_time}
+    init_params["tot_time"] = args.tot_time
     raw_res = fit_tree(
             tree,
             bcode_meta,
             args,
             best_targ_lam_pen,
             transition_wraps_multifurc,
-            init_model_params,
-            target_lams_known = False,
+            init_params,
             oracle_dist_measurers = oracle_dist_measurers)
     return raw_res
 
@@ -358,7 +364,6 @@ def refit_bifurc_tree(
             best_targ_lam_pen,
             refit_transition_wrap_maker,
             init_model_params = param_dict,
-            target_lams_known = False,
             oracle_dist_measurers = oracle_dist_measurers)
     return refit_res
 
@@ -391,9 +396,12 @@ def write_output_json_summary(
 
 def main(args=sys.argv[1:]):
     args = parse_args()
-    args.double_cut_weight_known = False
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
+
+    if os.path.exists(args.pickle_out):
+        logging.info("model exists...")
+        return
 
     np.random.seed(seed=args.seed)
 
@@ -403,17 +411,26 @@ def main(args=sys.argv[1:]):
 
     has_unresolved_multifurcs = check_has_unresolved_multifurcs(tree)
     logging.info("Tree has unresolved mulfirucs? %d", has_unresolved_multifurcs)
-
-    # Tune penalty params for the target lambdas
-    best_targ_lam_pen, init_target_lams = tune_hyperparams(tree, bcode_meta, args)
-
     logging.info(tree.get_ascii(attributes=["node_id"], show_internal=True))
+    logging.info("JSDFLJSLDFKSDF")
+    logging.info(tree.get_ascii(attributes=["abundance"], show_internal=True))
+    logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+
+    if args.lambda_known:
+        init_params ={
+                "target_lams": true_model_dict['true_model_params']['target_lams'],
+                "double_cut_weight": true_model_dict['true_model_params']['double_cut_weight']}
+        best_targ_lam_pen = 0
+    else:
+        # Tune penalty params for the target lambdas
+        best_targ_lam_pen, init_params = tune_hyperparams(tree, bcode_meta, args)
+
     # Now we can actually train the multifurc tree with the target lambda penalty param fixed
     raw_res = fit_multifurc_tree(
             tree,
             bcode_meta,
             args,
-            init_target_lams,
+            init_params,
             best_targ_lam_pen,
             oracle_dist_measurers)
 
