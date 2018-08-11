@@ -21,6 +21,7 @@ from transition_wrapper_maker import TransitionWrapperMaker
 from parallel_worker import BatchSubmissionManager
 from plot_mrca_matrices import plot_mrca_matrix
 from common import save_data, create_directory, get_randint
+from optim_settings import KnownModelParams
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Collapse data based on first n alleles')
@@ -216,8 +217,8 @@ def make_likelihood_scorer(tree: CellLineageTree, true_model_dict: Dict, name: s
         max_iters = 0,
         num_inits = 1,
         transition_wrap_maker = TransitionWrapperMaker(tree, bcode_meta),
-        tot_time = true_model_dict["time"],
-        init_model_params = param_dict)
+        init_model_params = param_dict,
+        known_params = KnownModelParams(target_lams=True, tot_time=True))
     return scorer
 
 def get_highest_likelihood_single_appearance_tree(

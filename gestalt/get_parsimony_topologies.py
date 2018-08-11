@@ -21,6 +21,7 @@ from tree_distance import TreeDistanceMeasurer, UnrootRFDistanceMeasurer
 from clt_estimator import CLTParsimonyEstimator
 from collapsed_tree import collapse_zero_lens
 from constants import *
+from constant_paths import *
 
 def parse_args():
     parser = argparse.ArgumentParser(description='generate possible tree topologies using MIX')
