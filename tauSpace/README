@@ -1,0 +1,10 @@
+Need to also download beast.jar from http://www.beast2.org/
+
+to compile this code:
+```
+jar cmvf META-INF/MANIFEST.MF  tauGeodesic.jar Main.class
+```
+to run this code:
+```
+java -jar  tauGeodesic.jar <newick tree file 1> <newick tree file 2>
+```

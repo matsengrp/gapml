@@ -9,8 +9,12 @@ from cell_lineage_tree import CellLineageTree
 def get_true_model(file_name, tree_file_name, n_bcodes):
     with open(file_name, "rb") as f:
         true_model = six.moves.cPickle.load(f)
-    with open(tree_file_name, "rb") as f:
-        true_coll_tree = six.moves.cPickle.load(f)
+    if tree_file_name is not None:
+        with open(tree_file_name, "rb") as f:
+            true_coll_tree = six.moves.cPickle.load(f)
+    else:
+        true_coll_tree = None
+
     true_tree = true_model["true_subtree"]
     existing_strs = {}
     for node in true_tree:
