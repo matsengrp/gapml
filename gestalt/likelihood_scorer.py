@@ -12,6 +12,7 @@ from transition_wrapper_maker import TransitionWrapperMaker
 from clt_likelihood_model import CLTLikelihoodModel
 from clt_likelihood_estimator import CLTPenalizedEstimator
 from tree_distance import TreeDistanceMeasurerAgg
+from optim_settings import KnownModelParams
 
 
 class LikelihoodScorerResult:
@@ -38,11 +39,9 @@ class LikelihoodScorer(ParallelWorker):
             max_iters: int,
             num_inits: int,
             transition_wrap_maker: TransitionWrapperMaker,
-            tot_time: float,
             init_model_params: Dict,
+            known_params: KnownModelParams,
             dist_measurers: TreeDistanceMeasurerAgg = None,
-            target_lams_known: bool = False,
-            branch_lengths_known: bool = False,
             max_try_per_init: int = 2,
             abundance_weight: float = 0):
         """
@@ -54,7 +53,6 @@ class LikelihoodScorer(ParallelWorker):
                                 (penalty tries to keep target lambdas the same)
         @param max_iters: maximum number of iterations for MLE
         @param transition_wrap_maker: TransitionWrapperMaker
-        @param tot_time: total height of the tree
         @param dist_measurers: if not None, TreeDistanceMeasurerAgg is used to measure the distance between the estimated
                                 tree and the oracle tree at each iteration
         """
@@ -66,11 +64,9 @@ class LikelihoodScorer(ParallelWorker):
         self.max_iters = max_iters
         self.num_inits = num_inits
         self.transition_wrap_maker = transition_wrap_maker
-        self.tot_time = tot_time
         self.init_model_params = init_model_params
+        self.known_params = known_params
         self.dist_measurers = dist_measurers
-        self.target_lams_known = target_lams_known
-        self.branch_lengths_known = branch_lengths_known
         self.max_tries = max_try_per_init * num_inits
         self.abundance_weight = abundance_weight
 
@@ -91,7 +87,7 @@ class LikelihoodScorer(ParallelWorker):
         # Fill in the dictionary for initializing model params
         full_init_model_params = res_model.get_vars_as_dict()
         for key, val in self.init_model_params.items():
-            if key != "tot_time" and val.shape != full_init_model_params[key].shape:
+            if key not in ["tot_time", "tot_time_extra"] and val.shape != full_init_model_params[key].shape:
                 raise ValueError(
                         "Something went wrong. not same shape for key %s (%s vs %s)" %
                         (key, val.shape, full_init_model_params[key].shape))
@@ -100,7 +96,7 @@ class LikelihoodScorer(ParallelWorker):
 
         # Just checking branch lengths positive
         br_lens = res_model.get_branch_lens()[1:]
-        if not np.all(br_lens > 0):
+        if not np.all(br_lens > -1e-10):
             raise ValueError("not all positive %s" % br_lens)
         assert res_model._are_all_branch_lens_positive()
 
@@ -132,13 +128,11 @@ class LikelihoodScorer(ParallelWorker):
             self.bcode_meta,
             sess,
             target_lams = self.init_model_params["target_lams"],
-            target_lams_known = self.target_lams_known,
+            known_params = self.known_params,
             cell_type_tree = None,
-            cell_lambdas_known = False,
             double_cut_weight = self.init_model_params["double_cut_weight"],
-            double_cut_weight_known = self.target_lams_known,
-            branch_lens_known = self.branch_lengths_known,
-            tot_time = self.tot_time,
+            tot_time = self.init_model_params["tot_time"],
+            tot_time_extra = self.init_model_params["tot_time_extra"],
             abundance_weight = self.abundance_weight)
         estimator = CLTPenalizedEstimator(
                 res_model,

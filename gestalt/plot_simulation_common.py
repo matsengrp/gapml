@@ -31,6 +31,7 @@ def get_true_model(file_name, tree_file_name, n_bcodes):
 def get_result(res_file):
     with open(res_file, "rb") as f:
         result = six.moves.cPickle.load(f)
+    raw_tree = result.fitted_bifurc_tree.copy()
     for node in result.fitted_bifurc_tree:
         if node.abundance > 1:
             for idx in range(node.abundance):
@@ -46,7 +47,7 @@ def get_result(res_file):
                         new_child.allele_events_list_str,
                         idx)
                 node.add_child(new_child)
-    return (result.model_params_dict, result.fitted_bifurc_tree)
+    return (result.model_params_dict, result.fitted_bifurc_tree, raw_tree)
 
 def get_target_lams(model_param_tuple):
     return model_param_tuple[0]["target_lams"]
@@ -64,6 +65,8 @@ def print_results(settings, n_bcode_results, n_bcode):
             size,
             np.mean(n_bcode_results["leaves"][idx]),
             np.sqrt(np.var(n_bcode_results["leaves"][idx])/size),
+            #np.mean(n_bcode_results["num_indels"][idx]),
+            #np.sqrt(np.var(n_bcode_results["num_indels"][idx])/size),
             np.mean(n_bcode_results["mrca"][idx]),
             np.sqrt(np.var(n_bcode_results["mrca"][idx])/size),
             np.mean(n_bcode_results["bhv"][idx]),

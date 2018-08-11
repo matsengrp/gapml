@@ -76,7 +76,6 @@ class CLTPenalizedEstimator(CLTEstimator):
         feed_dict = {
                     self.model.log_barr_ph: self.log_barr,
                     self.model.target_lam_pen_ph: self.target_lam_pen,
-                    self.model.tot_time_ph: self.model.tot_time
                 }
 
         pen_log_lik, log_lik, penalties = self.model.sess.run(
@@ -99,17 +98,13 @@ class CLTPenalizedEstimator(CLTEstimator):
 
         for i in range(self.max_iters):
             var_dict = self.model.get_vars_as_dict()
-            logging.info("target %s", var_dict["target_lams"])
             boost_probs = np.exp(var_dict["boost_softmax_weights"])/np.sum(
                     np.exp(var_dict["boost_softmax_weights"]))
             logging.info("boost softmax prob %s", boost_probs)
-            logging.info("double cut %s", var_dict["double_cut_weight"])
-            logging.info("trim long %s", var_dict["trim_long_probs"])
-            logging.info("trim zero %s", var_dict["trim_zero_probs"])
-            logging.info("trim short poiss %s", var_dict["trim_short_poissons"])
-            logging.info("trim long poiss %s", var_dict["trim_long_poissons"])
-            logging.info("insert zero %s", var_dict["insert_zero_prob"])
-            logging.info("insert poiss %s", var_dict["insert_poisson"])
+            for k, v in var_dict.items():
+                if k not in ["branch_len_offsets_proportion", "branch_len_inners", "boost_probs"]:
+                    logging.info("%s: %s", k, v)
+
             _, pen_log_lik, log_lik, targ_pen, log_barr, branch_lens = self.model.sess.run(
                     [
                         self.model.adam_train_op,
@@ -130,7 +125,6 @@ class CLTPenalizedEstimator(CLTEstimator):
                 logging.info(
                     "iter %d pen log lik %f log lik %f targ pen %f log barr %f min branch len %f",
                     i, pen_log_lik, log_lik, targ_pen, log_barr, np.min(branch_lens[1:]))
-                logging.info("tot time %f", self.model.tot_time)
 
             if np.isnan(pen_log_lik):
                 logging.info("ERROR: pen log like is nan. branch lengths are negative?")
