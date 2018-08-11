@@ -177,7 +177,7 @@ class BHVDistanceMeasurer(TreeDistanceMeasurer):
         if len(tree.get_children()) == 1:
             tree.get_children()[0].delete(prevent_nondicotomic=True, preserve_branch_length=True)
 
-        self._rename_nodes()
+        self._rename_nodes(tree)
 
         # Write tree out in newick format
         suffix = "%d%d" % (int(time.time()), np.random.randint(1000000))
@@ -221,7 +221,7 @@ class SPRDistanceMeasurer(TreeDistanceMeasurer):
             if not n.is_leaf() and len(n.get_children()) > 2:
                 raise ValueError("Reference tree is not binary. SPR will not work")
 
-        self._rename_nodes()
+        self._rename_nodes(tree)
 
         # Write tree out in newick format
         suffix = "%d%d" % (int(time.time()), np.random.randint(1000000))
@@ -261,7 +261,7 @@ class GavruskinDistanceMeasurer(TreeDistanceMeasurer):
         Uses a modification of the tauGeodesic code
         -- mostly modifies the code to deal with newick format instead
         """
-        self._rename_nodes()
+        self._rename_nodes(tree)
 
         # Write tree out in newick format
         suffix = "%d%d" % (int(time.time()), np.random.randint(1000000))

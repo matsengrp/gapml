@@ -9,7 +9,7 @@ import plot_simulation_common
 
 double = 0
 model_seed = 9
-seeds = range(10,20)
+seeds = range(150,155)
 n_bcode = 1
 lambda_magnitudes = [3, 10, 30]
 

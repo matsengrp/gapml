@@ -103,7 +103,6 @@ class CLTLikelihoodModel:
 
         if branch_len_inners.size == 0:
             branch_len_inners = np.random.rand(self.num_nodes) * 0.8
-            branch_len_inners = np.ones(self.num_nodes) * 0.5
         if branch_len_offsets_proportion.size == 0:
             branch_len_offsets_proportion = np.random.rand(self.num_nodes) * 0.5
 
