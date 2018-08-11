@@ -73,7 +73,7 @@ class CLTLikelihoodModel:
         self.num_targets = bcode_meta.n_targets
         self.boost_len = boost_len
         self.abundance_weight = abundance_weight
-        assert abundance_weight >= 0 #and abundance_weight <= 1
+        assert abundance_weight >= 0 and abundance_weight <= 1
         assert boost_len == 1
 
         # Process cell type tree
