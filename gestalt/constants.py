@@ -66,11 +66,6 @@ BARCODE_QUAKE = (
 COLORS = ["cyan", "green", "orange"]
 
 MIX_CFG_FILE = "mix.cfg"
-MIX_PATH = "~/phylip-3.697/exe/mix"
-
-BHV_PATH = "~/gtp_170317/gtp.jar"
-
-RSPR_PATH = "/home/jfeng2/rspr_1_3_0/rspr"
 
 UNLIKELY = "unlikely"
 PERTURB_ZERO = 1e-10

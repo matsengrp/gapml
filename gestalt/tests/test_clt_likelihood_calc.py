@@ -13,6 +13,7 @@ from barcode_metadata import BarcodeMetadata
 from collapsed_tree import collapse_zero_lens
 from transition_wrapper_maker import TransitionWrapperMaker
 from target_status import TargetStatus, TargetDeactTract
+from optim_settings import KnownModelParams
 
 class LikelihoodCalculationTestCase(unittest.TestCase):
     def setUp(self):
@@ -21,6 +22,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             cut_site = 3,
             crucial_pos_len = [3,3])
         self.num_targets = self.bcode_metadata.n_targets
+        self.known_params = KnownModelParams(tot_time=True)
 
     def _create_bifurc_model(
             self,
@@ -54,13 +56,14 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
                 branch_len_inners = np.array(branch_lens),
                 branch_len_offsets_proportion = 1e-20 * np.ones(num_nodes), # dummy!!!
                 target_lams = target_lams,
-                trim_long_probs = 0.1 * np.ones(2),
+                known_params = self.known_params,
+                trim_long_factor = 0.1 * np.ones(2),
                 trim_zero_probs = 0.5 * np.ones(2),
                 trim_short_poissons = np.ones(2),
                 trim_long_poissons = np.ones(2),
-                insert_zero_prob = 0.5,
-                insert_poisson = 2,
-                double_cut_weight = double_cut_weight,
+                insert_zero_prob = [0.5],
+                insert_poisson = [2],
+                double_cut_weight = [double_cut_weight],
                 tot_time = tot_time)
         tf.global_variables_initializer().run()
         return model
@@ -87,13 +90,14 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
                 branch_len_inners = br_len_inners,
                 branch_len_offsets_proportion = br_len_offsets/(br_len_inners + 1e-10),
                 target_lams = target_lams,
-                trim_long_probs = 0.1 * np.ones(2),
+                known_params = self.known_params,
+                trim_long_factor = 0.1 * np.ones(2),
                 trim_zero_probs = 0.5 * np.ones(2),
                 trim_short_poissons = np.ones(2),
                 trim_long_poissons = np.ones(2),
-                insert_zero_prob = 0.5,
-                insert_poisson = 2,
-                double_cut_weight = double_cut_weight,
+                insert_zero_prob = [0.5],
+                insert_poisson = [2],
+                double_cut_weight = [double_cut_weight],
                 tot_time = tot_time)
         tf.global_variables_initializer().run()
         return model, target_lams
@@ -138,7 +142,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
                 branch_len_inners,
                 branch_len_offsets,
                 tot_time = tot_time)
-        trim_long_probs = model.trim_long_probs.eval()
+        trim_long_factor = model.trim_long_factor.eval()
 
         transition_maker = TransitionWrapperMaker(topology, bcode_metadata=self.bcode_metadata)
         model.create_log_lik(transition_maker.create_transition_wrappers())
@@ -193,7 +197,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             hazard_away_dict[TargetStatus(TargetDeactTract(0,0))]])
         hazard_away = hazard_aways[0]
         hazard_away_from_event = hazard_aways[1]
-        hazard_to_event = target_lams[0] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
+        hazard_to_event = target_lams[0]
         q_mat = np.matrix([
             [-hazard_away, hazard_to_event, hazard_away - hazard_to_event],
             [0, -hazard_away_from_event, hazard_away_from_event],
@@ -401,7 +405,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         branch_len = 10
         model = self._create_bifurc_model(topology, self.bcode_metadata, branch_len)
         target_lams = model.target_lams.eval()
-        trim_long_probs = model.trim_long_probs.eval()
+        trim_long_factor = model.trim_long_factor.eval()
 
         transition_wrappers = TransitionWrapperMaker(topology, self.bcode_metadata).create_transition_wrappers()
         model.create_log_lik(transition_wrappers)
@@ -414,7 +418,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             hazard_away_dict[TargetStatus(TargetDeactTract(0,0))]])
         hazard_away = hazard_aways[0]
         hazard_away_from_event = hazard_aways[1]
-        hazard_to_event = target_lams[0] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
+        hazard_to_event = target_lams[0]
         q_mat = np.matrix([
             [-hazard_away, hazard_to_event, hazard_away - hazard_to_event],
             [0, -hazard_away_from_event, hazard_away_from_event],
@@ -458,7 +462,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
                 branch_len,
                 double_cut_weight = double_cut_weight)
         target_lams = model.target_lams.eval()
-        trim_long_probs = model.trim_long_probs.eval()
+        trim_long_factor = model.trim_long_factor.eval()
 
         transition_wrappers = TransitionWrapperMaker(topology, self.bcode_metadata).create_transition_wrappers()
         model.create_log_lik(transition_wrappers)
@@ -471,8 +475,10 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             hazard_away_dict[TargetStatus(TargetDeactTract(1,1))],
             hazard_away_dict[TargetStatus(TargetDeactTract(0,2))],
             ])
-        hazard_to_cut1 = target_lams[1] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
-        hazard_to_cut02 = double_cut_weight * target_lams[0] * target_lams[2] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
+        hazard_to_cut1 = target_lams[1]
+        # Note that the hazard to cut02 cannot include the hazard for cutting
+        # a long TT[0,1,1,2] because we are calculating the hazard to a singleton
+        hazard_to_cut02 = double_cut_weight * target_lams[0] * target_lams[2]
 
         q_mat = np.matrix([
             [-hazard_away, hazard_to_cut1, hazard_to_cut02, hazard_away - hazard_to_cut1 - hazard_to_cut02],
@@ -526,7 +532,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
                 branch_lens=[branch_len1, branch_len2],
                 double_cut_weight = double_cut_weight)
         target_lams = model.target_lams.eval()
-        trim_long_probs = model.trim_long_probs.eval()
+        trim_long_factor = model.trim_long_factor.eval()
 
         transition_wrappers = TransitionWrapperMaker(topology, self.bcode_metadata).create_transition_wrappers()
         model.create_log_lik(transition_wrappers)
@@ -538,8 +544,8 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         hazard_away, hazard_away_from_cut1 = model.sess.run([
             hazard_away_dict[TargetStatus()],
             hazard_away_dict[TargetStatus(TargetDeactTract(1,1))]])
-        hazard_to_cut1 = target_lams[1] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
-        hazard_to_cut02 = double_cut_weight * target_lams[0] * target_lams[2] * (1 - trim_long_probs[0]) * (1 - trim_long_probs[1])
+        hazard_to_cut1 = target_lams[1]
+        hazard_to_cut02 = double_cut_weight * target_lams[0] * target_lams[2]
 
         q_mat = np.matrix([
             [-hazard_away, hazard_to_cut1, hazard_to_cut02, hazard_away - hazard_to_cut1 - hazard_to_cut02],

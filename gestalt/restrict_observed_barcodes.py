@@ -21,6 +21,7 @@ from transition_wrapper_maker import TransitionWrapperMaker
 from parallel_worker import BatchSubmissionManager
 from plot_mrca_matrices import plot_mrca_matrix
 from common import save_data, create_directory, get_randint
+from optim_settings import KnownModelParams
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Collapse data based on first n alleles')
@@ -38,6 +39,11 @@ def parse_args():
         type=str,
         default="_output/restrict_log.txt",
         help='pkl file with true model')
+    parser.add_argument(
+        '--min-leaves',
+        type=int,
+        default=1,
+        help="Number of the barcodes we actually observe")
     parser.add_argument(
         '--num-barcodes',
         type=int,
@@ -65,14 +71,15 @@ def parse_args():
 
 def collapse_obs_leaves_by_first_alleles(
         obs_leaves: List[ObservedAlignedSeq],
-        num_barcodes: int):
+        num_barcodes: int,
+        min_leaves: int):
     """
     Collapse the observed data based on the first `num_barcodes` alleles
     @return List[ObservedAlignedSeq]
     """
     min_barcode = 0
     num_obs = 0
-    while num_obs < 2:
+    while num_obs < min_leaves:
         obs_dict = {}
         for obs in obs_leaves:
             if obs.allele_list is not None:
@@ -210,8 +217,8 @@ def make_likelihood_scorer(tree: CellLineageTree, true_model_dict: Dict, name: s
         max_iters = 0,
         num_inits = 1,
         transition_wrap_maker = TransitionWrapperMaker(tree, bcode_meta),
-        tot_time = true_model_dict["time"],
-        init_model_params = param_dict)
+        init_model_params = param_dict,
+        known_params = KnownModelParams(target_lams=True, tot_time=True))
     return scorer
 
 def get_highest_likelihood_single_appearance_tree(
@@ -313,7 +320,8 @@ def main(args=sys.argv[1:]):
     raw_obs_leaves = obs_data_dict["obs_leaves"]
     obs_data_dict["obs_leaves"] = collapse_obs_leaves_by_first_alleles(
             raw_obs_leaves,
-            args.num_barcodes)
+            args.num_barcodes,
+            args.min_leaves)
     logging.info(
         "Number of uniq obs after restricting to first %d alleles: %d",
         args.num_barcodes,

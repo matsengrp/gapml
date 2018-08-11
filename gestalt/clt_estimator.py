@@ -18,7 +18,8 @@ from barcode_metadata import BarcodeMetadata
 from tree_distance import UnrootRFDistanceMeasurer
 import data_binarizer
 
-from constants import MIX_CFG_FILE, MIX_PATH
+from constants import MIX_CFG_FILE
+from constant_paths import MIX_PATH
 
 
 class CLTEstimator:

@@ -71,7 +71,7 @@ def generate(env, outdir, c):
         targ_lambdas,
         '--trim-zero-probs 0.1 0.1',
         '--trim-poissons 4 4',
-        '--trim-long-probs 0.02 0.02',
+        '--trim-long-factor 0.02 0.02',
         '--insert-zero-prob 0.1',
         '--insert-poisson 1',
         '--perturb-target-lambdas-variance 0',

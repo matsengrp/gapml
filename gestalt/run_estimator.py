@@ -430,11 +430,18 @@ def main(args=sys.argv[1:]):
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
     args.init_params = {
-            "tot_time": 1,
-            "tot_time_extra": 0.3,
-            "target_lams_intercept": 0,
+            "target_lams_intercept": np.array([0]),
             "target_lams": get_init_target_lams(bcode_meta, 0),
-            "double_cut_weight": np.array([0.1])}
+            "boost_softmax_weights": np.ones(3),
+            "trim_long_factor": 0.05 * np.ones(2),
+            "trim_zero_probs": 0.5 * np.ones(2),
+            "trim_short_poissons": 2.5 * np.ones(2),
+            "trim_long_poissons": 2.5 * np.ones(2),
+            "insert_zero_prob": np.array([0.5]),
+            "insert_poisson": np.array([0.5]),
+            "double_cut_weight": np.array([0.1]),
+            "tot_time": 1,
+            "tot_time_extra": 0.5}
     if args.known_params.tot_time:
         args.init_params["tot_time"] = true_model_dict["true_model_params"]["tot_time"]
         args.init_params["tot_time_extra"] = true_model_dict["true_model_params"]["tot_time_extra"]
@@ -444,6 +451,8 @@ def main(args=sys.argv[1:]):
                 bcode_meta,
                 args.init_params["target_lams_intercept"])
         print(true_model_dict["true_model_params"])
+    if args.known_params.trim_long_factor:
+        args.init_params["trim_long_factor"] = true_model_dict['true_model_params']['trim_long_factor']
     if args.known_params.target_lams:
         args.init_params["target_lams"] = true_model_dict['true_model_params']['target_lams']
         args.init_params["double_cut_weight"] = true_model_dict['true_model_params']['double_cut_weight']

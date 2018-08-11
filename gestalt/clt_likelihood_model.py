@@ -33,16 +33,16 @@ class CLTLikelihoodModel:
             topology: CellLineageTree,
             bcode_meta: BarcodeMetadata,
             sess: Session,
-            target_lams: ndarray,
             known_params: KnownModelParams,
+            target_lams: ndarray,
             boost_softmax_weights: ndarray = np.ones(3),
-            trim_long_probs: ndarray = 0.05 * np.ones(2),
+            trim_long_factor: ndarray = 0.05 * np.ones(2),
             trim_zero_probs: ndarray = 0.5 * np.ones(2),
             trim_short_poissons: ndarray = 2.5 * np.ones(2),
             trim_long_poissons: ndarray = 2.5 * np.ones(2),
-            insert_zero_prob: float = 0.5,
-            insert_poisson: float = 0.2,
-            double_cut_weight: float = 1.0,
+            insert_zero_prob: ndarray = np.array([0.5]),
+            insert_poisson: ndarray = np.array([0.2]),
+            double_cut_weight: ndarray = np.array([1.0]),
             branch_len_inners: ndarray = np.array([]),
             branch_len_offsets_proportion: ndarray = np.array([]),
             cell_type_tree: CellTypeTree = None,
@@ -56,6 +56,7 @@ class CLTLikelihoodModel:
             insertion, left del, and right del
         @param double_cut_weight: a weight for inter-target indels
         @param target_lams: target lambda rates
+        @param trim_long_factor: the scaling factor for the trim long hazard rate. assumed to be less than 1
         @param cell_type_tree: CellTypeTree that specifies the cell type lambdas
         @param tot_time: total height of the tree
         """
@@ -105,17 +106,18 @@ class CLTLikelihoodModel:
         if branch_len_offsets_proportion.size == 0:
             branch_len_offsets_proportion = np.random.rand(self.num_nodes) * 0.5
 
+        assert np.all(trim_long_factor < 1)
         # Create all the variables
         self._create_parameters(
                 target_lams,
                 double_cut_weight,
                 boost_softmax_weights,
-                trim_long_probs,
+                trim_long_factor,
                 trim_zero_probs,
                 trim_short_poissons,
                 trim_long_poissons,
-                [insert_zero_prob],
-                [insert_poisson],
+                insert_zero_prob,
+                insert_poisson,
                 branch_len_inners,
                 branch_len_offsets_proportion,
                 cell_type_lams,
@@ -141,21 +143,19 @@ class CLTLikelihoodModel:
             target_lams: ndarray,
             double_cut_weight: ndarray,
             boost_softmax_weights: ndarray,
-            trim_long_probs: ndarray,
+            trim_long_factor: ndarray,
             trim_zero_probs: ndarray,
             trim_short_poissons: ndarray,
             trim_long_poissons: ndarray,
-            insert_zero_prob: List[float],
-            insert_poisson: List[float],
+            insert_zero_prob: ndarray,
+            insert_poisson: ndarray,
             branch_len_inners: ndarray,
             branch_len_offsets_proportion: ndarray,
             cell_type_lams: ndarray,
-            tot_time_extra: List[float]):
+            tot_time_extra: float):
         """
         Creates the tensorflow nodes for each of the model parameters
         """
-        assert len(insert_zero_prob) == 1
-        assert len(insert_poisson) == 1
         assert boost_softmax_weights.size == 3
 
         # Fix the first target value -- not for optimization
@@ -165,7 +165,7 @@ class CLTLikelihoodModel:
                     [] if self.known_params.target_lams else (np.log(target_lams[1:]) - np.log(target_lams[0])),
                     [] if self.known_params.double_cut_weight else np.log(double_cut_weight),
                     boost_softmax_weights,
-                    inv_sigmoid(trim_long_probs),
+                    [] if self.known_params.trim_long_factor else inv_sigmoid(trim_long_factor),
                     inv_sigmoid(trim_zero_probs),
                     np.log(trim_short_poissons),
                     np.log(trim_long_poissons),
@@ -187,10 +187,10 @@ class CLTLikelihoodModel:
             self.tot_time_extra = tf.exp(self.all_vars[0])
         prev_size = up_to_size
         if self.known_params.target_lams_intercept:
-            self.mean_log_target_lams = tf.constant([np.log(target_lams[0])], dtype=tf.float64)
+            self.log_target_lam_intercept = tf.constant([np.log(target_lams[0])], dtype=tf.float64)
         else:
             up_to_size += 1
-            self.mean_log_target_lams = self.all_vars[prev_size: up_to_size]
+            self.log_target_lam_intercept = self.all_vars[prev_size: up_to_size]
         prev_size = up_to_size
         if self.known_params.target_lams:
             self.target_lams = tf.constant(target_lams, dtype=tf.float64)
@@ -201,8 +201,8 @@ class CLTLikelihoodModel:
             up_to_size += target_lams.size - 1
             self.log_target_lam_diffs = self.all_vars[prev_size: up_to_size]
             self.target_lams = tf.exp(tf.concat([
-                self.mean_log_target_lams,
-                self.mean_log_target_lams + self.log_target_lam_diffs],
+                self.log_target_lam_intercept,
+                self.log_target_lam_intercept + self.log_target_lam_diffs],
                 axis=0))
         prev_size = up_to_size
         if self.known_params.double_cut_weight:
@@ -215,9 +215,11 @@ class CLTLikelihoodModel:
         self.boost_softmax_weights = self.all_vars[prev_size: up_to_size]
         self.boost_probs = tf.nn.softmax(self.boost_softmax_weights)
         prev_size = up_to_size
-        up_to_size += trim_long_probs.size
-        self.trim_long_probs = tf.sigmoid(self.all_vars[prev_size: up_to_size])
-        self.trim_short_probs = tf.ones(1, dtype=tf.float64) - self.trim_long_probs
+        if self.known_params.trim_long_factor:
+            self.trim_long_factor = tf.constant(trim_long_factor, dtype=tf.float64)
+        else:
+            up_to_size += trim_long_factor.size
+            self.trim_long_factor = tf.sigmoid(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
         up_to_size += trim_zero_probs.size
         self.trim_zero_probs = tf.sigmoid(self.all_vars[prev_size: up_to_size])
@@ -297,8 +299,12 @@ class CLTLikelihoodModel:
                     int_dist = self.dist_to_root[leaf.up.node_id]
                 internal_dist_to_roots.append(int_dist)
 
-            self.dist_to_root_tensor = tf.reduce_max(tf.stack(internal_dist_to_roots))
-            return self.tot_time_extra + self.dist_to_root_tensor
+            if len(internal_dist_to_roots) >= 2:
+                self.dist_to_root_tensor = tf.reduce_max(tf.stack(internal_dist_to_roots))
+                return self.tot_time_extra + self.dist_to_root_tensor
+            else:
+                self.dist_to_root_tensor = tf.constant(0, dtype=tf.float64)
+                return self.tot_time_extra
 
     def _create_branch_lens(self):
         """
@@ -338,7 +344,7 @@ class CLTLikelihoodModel:
                 param_dict["target_lams"],
                 param_dict["double_cut_weight"],
                 param_dict["boost_softmax_weights"],
-                param_dict["trim_long_probs"],
+                param_dict["trim_long_factor"],
                 param_dict["trim_zero_probs"],
                 param_dict["trim_short_poissons"],
                 param_dict["trim_long_poissons"],
@@ -353,7 +359,7 @@ class CLTLikelihoodModel:
             target_lams: ndarray,
             double_cut_weight: float,
             boost_softmax_weights: ndarray,
-            trim_long_probs: ndarray,
+            trim_long_factor: ndarray,
             trim_zero_probs: ndarray,
             trim_short_poissons: ndarray,
             trim_long_poissons: ndarray,
@@ -376,7 +382,7 @@ class CLTLikelihoodModel:
             [] if self.known_params.target_lams else np.log(target_lams[1:]) - np.log(target_lams[0]),
             [] if self.known_params.double_cut_weight else np.log(double_cut_weight),
             boost_softmax_weights,
-            inv_sigmoid(trim_long_probs),
+            [] if self.known_params.trim_long_factor else inv_sigmoid(trim_long_factor),
             inv_sigmoid(trim_zero_probs),
             np.log(trim_short_poissons),
             np.log(trim_long_poissons),
@@ -392,12 +398,12 @@ class CLTLikelihoodModel:
         @return the variable values -- companion for set_params (aka the ordering of the output matches set_params)
         """
         return self.sess.run([
-            self.mean_log_target_lams,
+            self.log_target_lam_intercept,
             self.log_target_lam_diffs,
             self.target_lams,
             self.double_cut_weight,
             self.boost_softmax_weights,
-            self.trim_long_probs,
+            self.trim_long_factor,
             self.trim_zero_probs,
             self.trim_short_poissons,
             self.trim_long_poissons,
@@ -420,7 +426,7 @@ class CLTLikelihoodModel:
             "target_lams",
             "double_cut_weight",
             "boost_softmax_weights",
-            "trim_long_probs",
+            "trim_long_factor",
             "trim_zero_probs",
             "trim_short_poissons",
             "trim_long_poissons",
@@ -518,8 +524,8 @@ class CLTLikelihoodModel:
         log_lambda_part = (
                 tf.log(tf.gather(self.target_lams, min_target))
                 + tf.log(tf.gather(self.target_lams, max_target) * self.double_cut_weight) * tf_common.not_equal_float(min_target, max_target))
-        left_trim_prob = tf_common.ifelse(long_left_statuses, self.trim_long_probs[0], 1 - self.trim_long_probs[0])
-        right_trim_prob = tf_common.ifelse(long_right_statuses, self.trim_long_probs[1], 1 - self.trim_long_probs[1])
+        left_trim_prob = tf_common.ifelse(long_left_statuses, self.trim_long_factor[0], 1)
+        right_trim_prob = tf_common.ifelse(long_right_statuses, self.trim_long_factor[1], 1)
         hazard = tf.exp(log_lambda_part + tf.log(left_trim_prob) + tf.log(right_trim_prob), name="hazard")
         return hazard
 
@@ -601,14 +607,17 @@ class CLTLikelihoodModel:
 
         @return tensorflow tensor with the hazard of a long and/or short trim to the left and/or right at each of the targets
         """
-        trim_short_left = 1 - self.trim_long_probs[0] if trim_left else 1
-        trim_short_right = 1 - self.trim_long_probs[1] if trim_right else 1
+        left_factor = tf_common.equal_float(left_trimmables, 1) + tf_common.equal_float(left_trimmables, 2) * (1 + self.trim_long_factor[0])
+        right_factor = tf_common.equal_float(right_trimmables, 1) + tf_common.equal_float(right_trimmables, 2) * (1 + self.trim_long_factor[1])
 
-        left_factor = tf_common.equal_float(left_trimmables, 1) * trim_short_left + tf_common.equal_float(left_trimmables, 2)
-        right_factor = tf_common.equal_float(right_trimmables, 1) * trim_short_right + tf_common.equal_float(right_trimmables, 2)
-
-        hazard_list = self.target_lams * left_factor * right_factor
-        return hazard_list
+        if trim_left and not trim_right:
+            return self.target_lams * left_factor
+        elif trim_right and not trim_left:
+            return self.target_lams * right_factor
+        elif trim_right and trim_left:
+            return self.target_lams * left_factor * right_factor
+        else:
+            raise ValueError("not allowed to not trim left and right")
 
     """
     SECTION: methods for helping to calculate Pr(indel | target target)
@@ -836,7 +845,7 @@ class CLTLikelihoodModel:
 
         self.target_lam_penalty = tf.constant(0, dtype=tf.float64)
         # Penalize target lambda differences -- try to keep lambdas close to each other
-        if not self.known_params.target_lams:
+        if not self.known_params.target_lams and self.bcode_meta.n_targets > 1:
             self.target_lam_penalty = tf.reduce_mean(tf.pow(self.log_target_lam_diffs, 2))
             self.penalties -= self.target_lam_pen_ph * self.target_lam_penalty
 
@@ -1257,7 +1266,7 @@ class CLTLikelihoodModel:
         @return the log likelihood and the gradient, if requested
         """
         if get_grad and not do_logging:
-            log_lik, grad = self.sess.run([self.log_lik, self.log_lik_grad], feed_dict=feed_dict)
+            log_lik, grad = self.sess.run([self.log_lik, self.log_lik_grad])
             return log_lik, grad[0][0]
         elif do_logging:
             # For tensorflow logging
@@ -1273,14 +1282,12 @@ class CLTLikelihoodModel:
             if get_grad:
                 log_lik, grad, Ds, q_mats, D_types = self.sess.run(
                         [self.log_lik, self.log_lik_grad, D_vals, trans_mats_vals, D_cell_type_vals],
-                        feed_dict = feed_dict,
                         options=run_options,
                         run_metadata=run_metadata)
                 grad = grad[0][0]
             else:
                 log_lik, Ds, q_mats, D_types = self.sess.run(
                         [self.log_lik, D_vals, trans_mats_vals, D_cell_type_vals],
-                        feed_dict = feed_dict,
                         options=run_options,
                         run_metadata=run_metadata)
                 grad = None
@@ -1299,7 +1306,7 @@ class CLTLikelihoodModel:
 
             return log_lik, grad
         else:
-            return self.sess.run(self.log_lik, feed_dict = feed_dict), None
+            return self.sess.run(self.log_lik), None
 
 
     def check_grad(self, transition_matrices, epsilon=PERTURB_ZERO):

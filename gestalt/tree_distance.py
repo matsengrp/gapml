@@ -10,7 +10,7 @@ import logging
 from scipy.stats import spearmanr, kendalltau, pearsonr
 from cell_lineage_tree import CellLineageTree
 from collapsed_tree import _remove_single_child_unobs_nodes
-from constants import RSPR_PATH, BHV_PATH
+from constant_paths import RSPR_PATH, BHV_PATH, TAU_GEO_JAR_PATH
 from common import get_randint
 
 class TreeDistanceMeasurerAgg:
@@ -47,7 +47,11 @@ class TreeDistanceMeasurer:
     """
     Class that measures distances btw trees -- subclass this!
     """
-    def __init__(self, ref_tree: CellLineageTree, scratch_dir: str):
+    def __init__(
+            self,
+            ref_tree: CellLineageTree,
+            scratch_dir: str,
+            attr: str = "allele_events_list_str"):
         """
         @param ref_tree: tree to measure dsitances from
         @param scratch_dir: a directory where files can be written to if needed
@@ -55,6 +59,20 @@ class TreeDistanceMeasurer:
         """
         self.ref_tree = ref_tree
         self.scratch_dir = scratch_dir
+        self.attr = attr
+
+    def _rename_nodes(self, tree):
+        """
+        Run rspr software from Chris Whidden
+        Chris's software requires that the first tree be bifurcating.
+        Second tree can be multifurcating.
+        """
+        # Set node name to the attribute
+        for n in self.ref_tree.traverse():
+            n.name = getattr(n, self.attr)
+
+        for n in tree.traverse():
+            n.name = getattr(n, self.attr)
 
     def get_dist(self, tree: CellLineageTree):
         """
@@ -119,8 +137,8 @@ class UnrootRFDistanceMeasurer(TreeDistanceMeasurer):
     def get_dist(self, tree):
         rf_res = self.ref_tree.robinson_foulds(
                 tree,
-                attr_t1="allele_events_list_str",
-                attr_t2="allele_events_list_str",
+                attr_t1=self.attr,
+                attr_t2=self.attr,
                 expand_polytomies=False,
                 unrooted_trees=True)
         return rf_res[0]
@@ -134,8 +152,8 @@ class RootRFDistanceMeasurer(TreeDistanceMeasurer):
         try:
             rf_res = self.ref_tree.robinson_foulds(
                     tree,
-                    attr_t1="allele_events_list_str",
-                    attr_t2="allele_events_list_str",
+                    attr_t1=self.attr,
+                    attr_t2=self.attr,
                     expand_polytomies=False,
                     unrooted_trees=False)
             return rf_res[0]
@@ -156,13 +174,10 @@ class BHVDistanceMeasurer(TreeDistanceMeasurer):
         if len(self.ref_tree.get_children()) == 1:
             self.ref_tree.get_children()[0].delete(prevent_nondicotomic=True, preserve_branch_length=True)
 
-        for n in self.ref_tree:
-            n.name = getattr(n, attr)
-
         if len(tree.get_children()) == 1:
             tree.get_children()[0].delete(prevent_nondicotomic=True, preserve_branch_length=True)
-        for n in tree:
-            n.name = getattr(n, attr)
+
+        self._rename_nodes(tree)
 
         # Write tree out in newick format
         suffix = "%d%d" % (int(time.time()), np.random.randint(1000000))
@@ -202,14 +217,11 @@ class SPRDistanceMeasurer(TreeDistanceMeasurer):
         Chris's software requires that the first tree be bifurcating.
         Second tree can be multifurcating.
         """
-        # Set node name to allele_events_list_str
         for n in self.ref_tree.traverse():
-            n.name = n.allele_events_list_str
             if not n.is_leaf() and len(n.get_children()) > 2:
                 raise ValueError("Reference tree is not binary. SPR will not work")
 
-        for n in tree.traverse():
-            n.name = n.allele_events_list_str
+        self._rename_nodes(tree)
 
         # Write tree out in newick format
         suffix = "%d%d" % (int(time.time()), np.random.randint(1000000))
@@ -236,6 +248,35 @@ class SPRDistanceMeasurer(TreeDistanceMeasurer):
         os.remove(rspr_out_file)
 
         return spr_dist
+
+class GavruskinDistanceMeasurer(TreeDistanceMeasurer):
+    """
+    "BHV" distance but for ultrametric trees
+    The tau-metric trees
+    https://github.com/gavruskin/tauGeodesic
+    """
+    name = "tau-bhv"
+    def get_dist(self, tree):
+        """
+        Uses a modification of the tauGeodesic code
+        -- mostly modifies the code to deal with newick format instead
+        """
+        self._rename_nodes(tree)
+
+        # Write tree out in newick format
+        suffix = "%d%d" % (int(time.time()), np.random.randint(1000000))
+        ref_tree_in_file = "%s/ref_tree_newick%s.txt" % (
+                self.scratch_dir, suffix)
+        with open(ref_tree_in_file, "w") as f:
+            f.write(self.ref_tree.write(format=9))
+
+        tree_in_file = "%s/tree_newick%s.txt" % (
+                self.scratch_dir, suffix)
+        with open(tree_in_file, "w") as f:
+            f.write(tree.write(format=9))
+
+        # Run geodesic distance code
+        raise NotImplementedError("not done with gavruskin")
 
 class MRCADistanceMeasurer(TreeDistanceMeasurer):
     """

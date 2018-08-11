@@ -7,19 +7,24 @@ from allele_simulator_simult import AlleleSimulatorSimultaneous
 from allele import Allele
 from barcode_metadata import BarcodeMetadata
 from clt_likelihood_model import CLTLikelihoodModel
+from optim_settings import KnownModelParams
 
 class AlleleSimulatorTestCase(unittest.TestCase):
     def setUp(self):
         bcode_meta = BarcodeMetadata()
         self.sess = tf.InteractiveSession()
+        self.known_params = KnownModelParams(tot_time=True)
         self.mdl = CLTLikelihoodModel(
                 None,
                 bcode_meta,
                 self.sess,
+                known_params = self.known_params,
                 target_lams = 1 + np.arange(bcode_meta.n_targets))
         tf.global_variables_initializer().run()
 
-        self.allele_sim = AlleleSimulatorSimultaneous(self.mdl)
+        self.allele_sim = AlleleSimulatorSimultaneous(
+                self.mdl,
+                boost_probs = .3 * np.ones(3))
         self.allele = self.allele_sim.get_root().alleles[0]
 
     def test_race_process_no_events(self):

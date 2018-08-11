@@ -11,6 +11,7 @@ from bounded_poisson import ZeroInflatedBoundedPoisson, PaddedBoundedPoisson
 from target_status import TargetStatus, TargetDeactTract
 from transition_wrapper_maker import TransitionWrapper
 from anc_state import AncState
+from optim_settings import KnownModelParams
 
 class CLTTrimProbTestCase(unittest.TestCase):
     # TODO: add more tests to trimming code!
@@ -18,11 +19,13 @@ class CLTTrimProbTestCase(unittest.TestCase):
     def setUp(self):
         self.num_targets = 10
         self.bcode_metadata = BarcodeMetadata()
+        self.known_params = KnownModelParams(tot_time=True)
         self.sess = tf.InteractiveSession()
         self.mdl = CLTLikelihoodModel(
                 None,
                 self.bcode_metadata,
                 self.sess,
+                known_params = self.known_params,
                 target_lams = 0.1 + np.arange(self.bcode_metadata.n_targets))
         tf.global_variables_initializer().run()
         self.trim_zero_probs = self.mdl.trim_zero_probs.eval()
