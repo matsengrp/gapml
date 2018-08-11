@@ -1,2 +1,2 @@
 Main-Class: Main
-Class-Path: . /Users/jeanfeng/Downloads/beast.jar
+Class-Path: . jars/beast.jar
