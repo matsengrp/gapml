@@ -19,6 +19,7 @@ from clt_simulator_simple import CLTSimulatorSimple, CLTSimulatorSimpler
 from clt_likelihood_model import CLTLikelihoodModel
 from allele_simulator_simult import AlleleSimulatorSimultaneous
 from clt_observer import CLTObserver
+from optim_settings import KnownModelParams
 from barcode_metadata import BarcodeMetadata
 
 from common import create_directory
@@ -288,11 +289,16 @@ def main(args=sys.argv[1:]):
 
     sess = tf.InteractiveSession()
     # Create model
+    known_params = KnownModelParams(
+            target_lams = True,
+            target_lams_intercept = True,
+            double_cut_weight = True)
     clt_model = CLTLikelihoodModel(
             None,
             bcode_meta,
             sess,
             target_lams = np.array(args.target_lambdas),
+            known_params = known_params,
             double_cut_weight = [args.double_cut_weight],
             trim_long_probs = np.array(args.trim_long_probs),
             trim_zero_probs = np.array(args.trim_zero_probs),
@@ -331,7 +337,6 @@ def main(args=sys.argv[1:]):
 
     # Save the true data
     with open(args.out_model_file, "wb") as f:
-        clt_model.tot_time = tot_time
         out_dict = {
             "true_model_params": clt_model.get_vars_as_dict(),
             "true_subtree": true_subtree,

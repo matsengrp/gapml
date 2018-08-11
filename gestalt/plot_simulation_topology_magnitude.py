@@ -70,13 +70,15 @@ for seed in seeds:
         try:
             result = get_result(seed, lambda_type, n_bcode)
         except FileNotFoundError:
+            print("asdfasdf")
             continue
         dist = true_mrca_meas.get_dist(result[1])
         n_bcode_results["mrca"][idx].append(dist)
 
         true_bhv_meas = BHVDistanceMeasurer(true_model[1], "_output/scratch")
+        #true_bhv_meas = SPRDistanceMeasurer(true_model[1], "_output/scratch")
+        #true_bhv_meas = MRCASpearmanMeasurer(true_model[1], "_output/scratch")
         dist = true_bhv_meas.get_dist(result[1])
-        #print("RF", dist)
         n_bcode_results["bhv"][idx].append(dist)
 
 plot_simulation_common.print_results(lambda_magnitudes, n_bcode_results, n_bcode)

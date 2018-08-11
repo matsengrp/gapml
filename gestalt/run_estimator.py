@@ -22,6 +22,7 @@ from scipy.stats import pearsonr
 import logging
 import six
 
+from optim_settings import KnownModelParams
 from transition_wrapper_maker import TransitionWrapperMaker
 from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from plot_mrca_matrices import plot_mrca_matrix
@@ -78,6 +79,14 @@ def parse_args():
         default="10.0",
         help="comma separated penalty parameters on the target lambdas")
     parser.add_argument(
+        '--intercept-lambda-known',
+        action='store_true',
+        help='are intercept target rates known?')
+    parser.add_argument(
+        '--tot-time-known',
+        action='store_true',
+        help='is tot time known?')
+    parser.add_argument(
         '--lambda-known',
         action='store_true',
         help='are target rates known?')
@@ -122,6 +131,12 @@ def parse_args():
     print("Log file", args.log_file)
     create_directory(args.pickle_out)
 
+    assert (args.intercept_lambda_known or args.lambda_known) or args.tot_time_known
+    args.known_params = KnownModelParams(
+         target_lams=args.lambda_known,
+         target_lams_intercept=args.intercept_lambda_known,
+         tot_time=args.tot_time_known)
+
     args.target_lam_pens = list(sorted(
         [float(lam) for lam in args.target_lam_pens.split(",")],
         reverse=True))
@@ -150,10 +165,9 @@ def fit_tree(
         args.max_iters,
         args.num_inits,
         transition_wrap_maker,
-        tot_time = args.tot_time,
         init_model_params = init_model_params,
+        known_params = args.known_params,
         dist_measurers = oracle_dist_measurers,
-        target_lams_known = args.lambda_known,
         abundance_weight = args.abundance_weight)
     res = worker.run_worker(None)
     return res
@@ -165,10 +179,8 @@ def tune_hyperparams(
     """
     Tunes the penalty param for the target lambda
     """
-    assert not args.lambda_known
-    best_params = {
-        "target_lams": get_init_target_lams(bcode_meta),
-        "double_cut_weight": np.array([0.5])}
+    assert not args.known_params.target_lams
+    best_params = args.init_params
     if len(args.target_lam_pens) == 1:
         # Nothing to tune.
         best_targ_lam_pen = args.target_lam_pens[0]
@@ -195,16 +207,13 @@ def tune_hyperparams(
     for i, target_lam_pen in enumerate(args.target_lam_pens):
         logging.info("TUNING %f", target_lam_pen)
         # Train the model using only the training data
-        init_model_params = {
-            "target_lams": get_init_target_lams(bcode_meta),
-            "tot_time": args.tot_time}
         res_train = fit_tree(
             train_tree,
             train_bcode_meta,
             args,
             target_lam_pen,
             train_transition_wrap_maker,
-            init_model_params)
+            args.init_model_params)
         logging.info("Done training pen param %f", target_lam_pen)
 
         # Copy over the trained model params except for branch length things
@@ -239,8 +248,11 @@ def tune_hyperparams(
     logging.info("Best penalty param %s", best_targ_lam_pen)
     return best_targ_lam_pen, best_params
 
-def get_init_target_lams(bcode_meta):
-    return 0.2 * np.ones(bcode_meta.n_targets) + np.random.uniform(size=bcode_meta.n_targets) * 0.02
+def get_init_target_lams(bcode_meta, mean_val):
+    random_perturb = np.random.uniform(size=bcode_meta.n_targets) * 0.001
+    random_perturb = random_perturb - np.mean(random_perturb)
+    random_perturb[0] = 0
+    return np.exp(mean_val * np.ones(bcode_meta.n_targets) + random_perturb)
 
 def check_has_unresolved_multifurcs(tree: CellLineageTree):
     """
@@ -281,7 +293,6 @@ def read_data(args):
         obs_data_dict = six.moves.cPickle.load(f)
         bcode_meta = obs_data_dict["bcode_meta"]
         obs_leaves = obs_data_dict["obs_leaves"]
-        args.tot_time = obs_data_dict["time"]
     logging.info("Number of uniq obs alleles %d", len(obs_leaves))
     logging.info("Barcode cut sites %s", str(bcode_meta.abs_cut_sites))
 
@@ -307,7 +318,6 @@ def fit_multifurc_tree(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
         args,
-        init_params: Dict[str, ndarray],
         best_targ_lam_pen: float,
         oracle_dist_measurers: TreeDistanceMeasurerAgg = None):
     """
@@ -318,18 +328,17 @@ def fit_multifurc_tree(
             bcode_meta,
             args.max_extra_steps,
             args.max_sum_states)
-    init_params["tot_time"] = args.tot_time
     raw_res = fit_tree(
             tree,
             bcode_meta,
             args,
             best_targ_lam_pen,
             transition_wraps_multifurc,
-            init_params,
+            args.init_params,
             oracle_dist_measurers = oracle_dist_measurers)
     return raw_res
 
-def refit_bifurc_tree(
+def do_refit_bifurc_tree(
         raw_res: LikelihoodScorerResult,
         bcode_meta: BarcodeMetadata,
         args,
@@ -339,9 +348,14 @@ def refit_bifurc_tree(
     we need to refit using the bifurcating tree
     """
     # Copy over the latest model parameters for warm start
+    print(raw_res.model_params_dict["target_lams"])
+    print(raw_res.model_params_dict["target_lams_intercept"])
     param_dict = {k: v for k,v in raw_res.model_params_dict.items()}
     refit_bifurc_tree = raw_res.fitted_bifurc_tree.copy()
     refit_bifurc_tree.label_node_ids()
+    print('bifurc')
+    print(refit_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
+    print(refit_bifurc_tree.get_ascii(attributes=["node_id"], show_internal=True))
     num_nodes = refit_bifurc_tree.get_num_nodes()
     # Copy over the branch lengths
     br_lens = np.zeros(num_nodes)
@@ -412,25 +426,38 @@ def main(args=sys.argv[1:]):
     has_unresolved_multifurcs = check_has_unresolved_multifurcs(tree)
     logging.info("Tree has unresolved mulfirucs? %d", has_unresolved_multifurcs)
     logging.info(tree.get_ascii(attributes=["node_id"], show_internal=True))
-    logging.info("JSDFLJSLDFKSDF")
     logging.info(tree.get_ascii(attributes=["abundance"], show_internal=True))
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
-    if args.lambda_known:
-        init_params ={
-                "target_lams": true_model_dict['true_model_params']['target_lams'],
-                "double_cut_weight": true_model_dict['true_model_params']['double_cut_weight']}
+    args.init_params = {
+            "tot_time": 1,
+            "tot_time_extra": 0.3,
+            "target_lams_intercept": 0,
+            "target_lams": get_init_target_lams(bcode_meta, 0),
+            "double_cut_weight": np.array([0.1])}
+    if args.known_params.tot_time:
+        args.init_params["tot_time"] = true_model_dict["true_model_params"]["tot_time"]
+        args.init_params["tot_time_extra"] = true_model_dict["true_model_params"]["tot_time_extra"]
+    if args.known_params.target_lams_intercept:
+        args.init_params["target_lams_intercept"] = true_model_dict["true_model_params"]["target_lams_intercept"]
+        args.init_params["target_lams"] = get_init_target_lams(
+                bcode_meta,
+                args.init_params["target_lams_intercept"])
+        print(true_model_dict["true_model_params"])
+    if args.known_params.target_lams:
+        args.init_params["target_lams"] = true_model_dict['true_model_params']['target_lams']
+        args.init_params["double_cut_weight"] = true_model_dict['true_model_params']['double_cut_weight']
         best_targ_lam_pen = 0
     else:
         # Tune penalty params for the target lambdas
-        best_targ_lam_pen, init_params = tune_hyperparams(tree, bcode_meta, args)
+        # Initialize with random values
+        best_targ_lam_pen, args.init_params = tune_hyperparams(tree, bcode_meta, args)
 
     # Now we can actually train the multifurc tree with the target lambda penalty param fixed
     raw_res = fit_multifurc_tree(
             tree,
             bcode_meta,
             args,
-            init_params,
             best_targ_lam_pen,
             oracle_dist_measurers)
 
@@ -441,7 +468,7 @@ def main(args=sys.argv[1:]):
         refit_res = raw_res
     elif has_unresolved_multifurcs and args.do_refit:
         logging.info("Doing refit")
-        refit_res = refit_bifurc_tree(
+        refit_res = do_refit_bifurc_tree(
                 raw_res,
                 bcode_meta,
                 args,
