@@ -1,4 +1,5 @@
 # Just an scons to run through the entire pipeline and check things work
+# Also very simple tests for consistency
 
 import os
 
@@ -19,15 +20,19 @@ nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_enviro
 
 nest.add(
     'seed',
-    range(1),
+    range(5,6),
     label_func=lambda c: "seed%d" % c,
 )
+
+nest.add(
+    'setting',
+    ['one_leaf', 'stupid_cherry'])
 
 @nest.add_target_with_env(localenv)
 def generate(env, outdir, c):
     cmd = [
         'python generate_data.py',
-        '--is-stupid-cherry',
+        "--is-%s" % c['setting'].replace("_", "-"),
         '--sampling 1',
         '--model-seed',
         c['seed'],
@@ -36,15 +41,17 @@ def generate(env, outdir, c):
         '--out-obs-file ${TARGETS[0]}',
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
-        '--target-lambda 0.6,0.5,0.5',
+        '--target-lambda 0.5,0.4',
+        '--double 0.000001',
         '--time 1',
         '--num-barcodes',
-        4,
+        400,
         '--min-uniq-alleles',
-        3,
+        0,
         '--max-uniq-alleles',
-        5,
-        '--max-abundance 40'
+        10,
+        '--max-abundance 40',
+        '--perturb-target 0'
     ]
     return env.Command(
         [
@@ -56,7 +63,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [2],
+    [100],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -83,20 +90,17 @@ def restrict_observed_alleles(env, outdir, c):
 @nest.add_target_with_env(localenv)
 def run_parsimony(env, outdir, c):
     cmd = [
-        'python get_parsimony_topologies.py',
-        '--obs-file ${SOURCES[0]}',
+        'python get_collapsed_oracle.py',
+        '--obs-data-pkl ${SOURCES[0]}',
         '--out-template-file ${TARGETS[0]}',
-        '--log-file ${TARGETS[1]}',
-        '--max-random',
-        0,
-        '--max-random-multifurc',
-        1,
+        '--true-model-pkl ${SOURCES[1]}',
     ]
     return env.Command(
         [
-            join(outdir, 'parsimony_tree0.pkl'),
-            join(outdir, 'log_parsimony.txt')],
-        c['restrict_observed_alleles'],
+            join(outdir, 'oracle_tree0.pkl')],
+        [
+            c['restrict_observed_alleles'][0],
+            c['restrict_observed_alleles'][1]],
         ' '.join(map(str, cmd)))
 
 @nest.add_target_with_env(localenv)
@@ -113,13 +117,14 @@ def run_MLE(env, outdir, c):
         '--target-lam-pens 0.4',
         '--max-sum-states 2000',
         '--max-extra-steps 2',
-        '--max-iters 601',
-        '--do-refit',
-        '--lambda-known',
+        '--max-iters 10000',
+        '--intercept-lambda-known',
+        #'--tot-time',
+        #'--lambda-known',
     ]
     return env.Command(
         [
-            join(outdir, 'parsimony_tree0_fitted.pkl')],
+            join(outdir, 'oracle_tree0_fitted.pkl')],
         [
             c['restrict_observed_alleles'][0],
             c['run_parsimony'][0],
