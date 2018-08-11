@@ -39,6 +39,11 @@ def parse_args():
         default="_output/restrict_log.txt",
         help='pkl file with true model')
     parser.add_argument(
+        '--min-leaves',
+        type=int,
+        default=1,
+        help="Number of the barcodes we actually observe")
+    parser.add_argument(
         '--num-barcodes',
         type=int,
         default=1,
@@ -65,14 +70,15 @@ def parse_args():
 
 def collapse_obs_leaves_by_first_alleles(
         obs_leaves: List[ObservedAlignedSeq],
-        num_barcodes: int):
+        num_barcodes: int,
+        min_leaves: int):
     """
     Collapse the observed data based on the first `num_barcodes` alleles
     @return List[ObservedAlignedSeq]
     """
     min_barcode = 0
     num_obs = 0
-    while num_obs < 2:
+    while num_obs < min_leaves:
         obs_dict = {}
         for obs in obs_leaves:
             if obs.allele_list is not None:
@@ -313,7 +319,8 @@ def main(args=sys.argv[1:]):
     raw_obs_leaves = obs_data_dict["obs_leaves"]
     obs_data_dict["obs_leaves"] = collapse_obs_leaves_by_first_alleles(
             raw_obs_leaves,
-            args.num_barcodes)
+            args.num_barcodes,
+            args.min_leaves)
     logging.info(
         "Number of uniq obs after restricting to first %d alleles: %d",
         args.num_barcodes,

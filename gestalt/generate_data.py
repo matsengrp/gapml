@@ -15,7 +15,7 @@ from cell_state import CellState, CellTypeTree
 from cell_lineage_tree import CellLineageTree
 from cell_state_simulator import CellTypeSimulator
 from clt_simulator import CLTSimulatorBifurcating
-from clt_simulator_simple import CLTSimulatorSimple, CLTSimulatorSimpler
+from clt_simulator_simple import CLTSimulatorSimple, CLTSimulatorSimpler, CLTSimulatorSimplest
 from clt_likelihood_model import CLTLikelihoodModel
 from allele_simulator_simult import AlleleSimulatorSimultaneous
 from clt_observer import CLTObserver
@@ -75,10 +75,10 @@ def parse_args():
         not a no-op indel.
         """)
     parser.add_argument(
-        '--trim-long-probs',
+        '--trim-long-factor',
         type=float,
         nargs=2,
-        default=[0.001] * 2,
+        default=[0.05] * 2,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
         '--trim-zero-probs',
@@ -135,7 +135,7 @@ def parse_args():
         default=None,
         help="Maximum abundance of the observed leaves")
     parser.add_argument(
-        '--is-cherry',
+        '--is-one-leaf',
         action='store_true',
         help="special tree structure for tests")
     parser.add_argument(
@@ -148,7 +148,7 @@ def parse_args():
 
     create_directory(args.out_obs_file)
 
-    if args.is_cherry or args.is_stupid_cherry:
+    if args.is_one_leaf or args.is_stupid_cherry:
         assert args.sampling_rate == 1
 
     args.target_lambdas = [float(x) for x in args.target_lambdas.split(",")]
@@ -174,8 +174,8 @@ def create_simulators(args, clt_model):
             clt_model,
             np.array(args.boost_probs))
     cell_type_simulator = CellTypeSimulator(clt_model.cell_type_tree)
-    if args.is_cherry:
-        clt_simulator = CLTSimulatorSimple(
+    if args.is_one_leaf:
+        clt_simulator = CLTSimulatorSimplest(
                 cell_type_simulator,
                 allele_simulator)
     elif args.is_stupid_cherry:
@@ -247,8 +247,8 @@ def create_cell_lineage_tree(
 
     true_subtree.label_tree_with_strs()
     logging.info(true_subtree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-    logging.info(true_subtree.get_ascii(attributes=["dist"], show_internal=True))
     logging.info(true_subtree.get_ascii(attributes=["node_id"], show_internal=True))
+    logging.info(true_subtree.get_ascii(attributes=["dist"], show_internal=True))
 
     return obs_leaves, true_subtree, obs_idx_to_leaves, tot_time
 
@@ -257,9 +257,12 @@ def initialize_lambda_rates(args, boost: float = 0.00001):
     death_lambda = args.death_lambda
 
     # initialize the target lambdas with some perturbation to ensure we don't have eigenvalues that are exactly equal
-    perturbations = np.random.uniform(size=args.num_targets) - 0.5
-    perturbations = perturbations / np.sqrt(np.var(perturbations)) * np.sqrt(args.perturb_target_lambdas_variance)
-    target_lambdas = np.array(args.target_lambdas) + perturbations
+    if args.perturb_target_lambdas_variance > 0:
+        perturbations = np.random.uniform(size=args.num_targets) - 0.5
+        perturbations = perturbations / np.sqrt(np.var(perturbations)) * np.sqrt(args.perturb_target_lambdas_variance)
+        target_lambdas = np.array(args.target_lambdas) + perturbations
+    else:
+        target_lambdas = np.array(args.target_lambdas)
     min_lambda = np.min(target_lambdas)
     if min_lambda < 0:
         # Make sure all target lambdas are positive
@@ -300,12 +303,12 @@ def main(args=sys.argv[1:]):
             target_lams = np.array(args.target_lambdas),
             known_params = known_params,
             double_cut_weight = [args.double_cut_weight],
-            trim_long_probs = np.array(args.trim_long_probs),
+            trim_long_factor = np.array(args.trim_long_factor),
             trim_zero_probs = np.array(args.trim_zero_probs),
             trim_short_poissons = np.array(args.trim_poissons),
             trim_long_poissons = np.array(args.trim_poissons),
-            insert_zero_prob = args.insert_zero_prob,
-            insert_poisson = args.insert_poisson,
+            insert_zero_prob = np.array([args.insert_zero_prob]),
+            insert_poisson = np.array([args.insert_poisson]),
             cell_type_tree = cell_type_tree)
     tf.global_variables_initializer().run()
     logging.info("Done creating model")
@@ -314,8 +317,6 @@ def main(args=sys.argv[1:]):
     obs_leaves, true_subtree, obs_idx_to_leaves, tot_time = create_cell_lineage_tree(
             args,
             clt_model)
-    logging.info(true_subtree.get_ascii(attributes=["node_id"], show_internal=True))
-    logging.info(true_subtree.get_ascii(attributes=["allele_events_list_str"], show_internal=False))
 
     # Check that the the abundance of the leaves is not too high
     if args.max_abundance is not None:

@@ -22,6 +22,7 @@ class BarcodeMetadata:
         # The original barcode
         self.unedited_barcode = unedited_barcode
         self.num_barcodes = num_barcodes
+        assert num_barcodes > 0
         self.orig_substr_lens = [len(s) for s in unedited_barcode]
         self.orig_length = sum(self.orig_substr_lens)
         self.n_targets = (len(self.unedited_barcode) - 1) // 2
