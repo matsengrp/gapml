@@ -68,9 +68,17 @@ class TreeDistanceMeasurer:
         Second tree can be multifurcating.
         """
         # Set node name to the attribute
+        _remove_single_child_unobs_nodes(self.ref_tree)
+        if len(self.ref_tree.get_children()) == 1:
+            child = self.ref_tree.get_children()[0]
+            child.delete(prevent_nondicotomic=True, preserve_branch_length=True)
         for n in self.ref_tree.traverse():
             n.name = getattr(n, self.attr)
 
+        _remove_single_child_unobs_nodes(tree)
+        if len(tree.get_children()) == 1:
+            child = tree.get_children()[0]
+            child.delete(prevent_nondicotomic=True, preserve_branch_length=True)
         for n in tree.traverse():
             n.name = getattr(n, self.attr)
 
@@ -196,7 +204,7 @@ class BHVDistanceMeasurer(TreeDistanceMeasurer):
                 bhv_cmd,
                 shell=True)
 
-        # Read bhv output, distance is on the last line
+        # read bhv output, distance is on the last line
         with open(bhv_out_file, "r") as f:
             lines = f.readlines()
             bhv_dist = float(lines[0].split("\t")[-1])
@@ -249,34 +257,64 @@ class SPRDistanceMeasurer(TreeDistanceMeasurer):
 
         return spr_dist
 
-class GavruskinDistanceMeasurer(TreeDistanceMeasurer):
+class GavruskinMeasurer(TreeDistanceMeasurer):
     """
     "BHV" distance but for ultrametric trees
     The tau-metric trees
     https://github.com/gavruskin/tauGeodesic
     """
     name = "tau-bhv"
+
+    def _perturb_distances(self, raw_tree, perturb_err = 0.5 * 1e-4):
+        tree = raw_tree.copy()
+        for node in tree.traverse():
+            node.dist += np.random.rand() * perturb_err
+        return tree
+
     def get_dist(self, tree):
         """
         Uses a modification of the tauGeodesic code
         -- mostly modifies the code to deal with newick format instead
         """
-        self._rename_nodes(tree)
+        try_vals = [0, 1e-10, 1e-8, 1e-4 * 0.5, 1e-3]
+        for perturb_err in try_vals:
+            try:
+                tree = self._perturb_distances(tree, perturb_err)
+                self._rename_nodes(tree)
 
-        # Write tree out in newick format
-        suffix = "%d%d" % (int(time.time()), np.random.randint(1000000))
-        ref_tree_in_file = "%s/ref_tree_newick%s.txt" % (
-                self.scratch_dir, suffix)
-        with open(ref_tree_in_file, "w") as f:
-            f.write(self.ref_tree.write(format=9))
+                # Write tree out in newick format
+                suffix = "%d%d" % (int(time.time()), np.random.randint(1000000))
 
-        tree_in_file = "%s/tree_newick%s.txt" % (
-                self.scratch_dir, suffix)
-        with open(tree_in_file, "w") as f:
-            f.write(tree.write(format=9))
+                ref_tree_in_file = "%s/ref_tree_newick%s.txt" % (
+                        self.scratch_dir, suffix)
+                with open(ref_tree_in_file, "w") as f:
+                    f.write(self.ref_tree.write(format=5))
 
-        # Run geodesic distance code
-        raise NotImplementedError("not done with gavruskin")
+                tree_in_file = "%s/tree_newick%s.txt" % (
+                        self.scratch_dir, suffix)
+                with open(tree_in_file, "w") as f:
+                    f.write(tree.write(format=5))
+
+                # Run geodesic distance code
+                out_file = "%s/tree_tau_ultra%s.txt" % (self.scratch_dir, suffix)
+                tau_cmd = "java -jar %s %s %s > %s 2>&1" % (TAU_GEO_JAR_PATH, ref_tree_in_file, tree_in_file, out_file)
+                subprocess.check_output(
+                        tau_cmd,
+                        shell=True)
+
+                # read tau-distance output, distance is on the last line
+                with open(out_file, "r") as f:
+                    lines = f.readlines()
+                    tau_dist = float(lines[-1])
+                print("good err", perturb_err)
+                return tau_dist
+            except subprocess.CalledProcessError as e:
+                print(e)
+            finally:
+                os.remove(ref_tree_in_file)
+                os.remove(tree_in_file)
+                os.remove(out_file)
+        raise ValueError("Failed to calculate tau dist")
 
 class MRCADistanceMeasurer(TreeDistanceMeasurer):
     """

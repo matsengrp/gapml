@@ -62,7 +62,8 @@ public class TauTree {
             Node node = nodes.get(i);
             if (!node.isRoot()) {
                 double tau = nodes.get(i + 1).getHeight() - node.getHeight();
-                tauPartitions.add(new TauPartition(node, tau, ancestors));
+                // tauPartitions.add(new TauPartition(node, tau, ancestors));
+                addPartition(new TauPartition(node, tau, ancestors));
             }
         }
         firstTau = nodes.get(0).getHeight();

@@ -37,20 +37,29 @@ def get_result(res_file):
         result = six.moves.cPickle.load(f)
     raw_tree = result.fitted_bifurc_tree.copy()
     for node in result.fitted_bifurc_tree:
-        if node.abundance > 1:
-            for idx in range(node.abundance):
-                new_child = CellLineageTree(
-                    node.allele_list,
-                    node.allele_events_list,
-                    node.cell_state,
-                    dist = 0,
-                    abundance = 1,
-                    resolved_multifurcation = True)
-                if idx > 0:
-                    new_child.allele_events_list_str = "%s==%d" % (
-                        new_child.allele_events_list_str,
-                        idx)
-                node.add_child(new_child)
+        curr_node = node
+        for idx in range(node.abundance - 1):
+            new_child = CellLineageTree(
+                curr_node.allele_list,
+                curr_node.allele_events_list,
+                curr_node.cell_state,
+                dist = 0,
+                abundance = 1,
+                resolved_multifurcation = True)
+            new_child.allele_events_list_str = "%s==%d" % (
+                new_child.allele_events_list_str,
+                idx + 1)
+            copy_leaf = CellLineageTree(
+                curr_node.allele_list,
+                curr_node.allele_events_list,
+                curr_node.cell_state,
+                dist = 0,
+                abundance = 1,
+                resolved_multifurcation = True)
+            copy_leaf.allele_events_list_str = curr_node.allele_events_list_str
+            curr_node.add_child(new_child)
+            curr_node.add_child(copy_leaf)
+            curr_node = new_child
     return (result.model_params_dict, result.fitted_bifurc_tree, raw_tree)
 
 def get_target_lams(model_param_tuple):
@@ -69,12 +78,10 @@ def print_results(settings, n_bcode_results, n_bcode):
             size,
             np.mean(n_bcode_results["leaves"][idx]),
             np.sqrt(np.var(n_bcode_results["leaves"][idx])/size),
-            #np.mean(n_bcode_results["num_indels"][idx]),
-            #np.sqrt(np.var(n_bcode_results["num_indels"][idx])/size),
             np.mean(n_bcode_results["mrca"][idx]),
             np.sqrt(np.var(n_bcode_results["mrca"][idx])/size),
-            np.mean(n_bcode_results["bhv"][idx]),
-            np.sqrt(np.var(n_bcode_results["bhv"][idx])/size),
+            np.mean(n_bcode_results["tau"][idx]),
+            np.sqrt(np.var(n_bcode_results["tau"][idx])/size),
             np.mean(n_bcode_results["targ"][idx]),
             np.sqrt(np.var(n_bcode_results["targ"][idx])/size),
             np.mean(n_bcode_results["double"][idx]),
