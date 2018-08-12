@@ -7,23 +7,24 @@ from tree_distance import *
 from cell_lineage_tree import CellLineageTree
 import plot_simulation_common
 
-seeds = range(200,210)
+seeds = range(200,205)
 n_bcode = 1
-sampling_rates = [1, 4, 9]
-model_seed = 5
+sampling_rates = [1, 3, 9]
+model_seed = 15
+lambda_known = 1
+prefix = "tmp_mount/"
 
-TEMPLATE = "simulation_topology_sampling/_output/model_seed%d/%d/sampling%d/num_barcodes%d/tune_fitted.pkl"
-TRUE_TEMPLATE = "simulation_topology_sampling/_output/model_seed%d/%d/sampling%d/true_model.pkl"
-OBS_TEMPLATE = "simulation_topology_sampling/_output/model_seed%d/%d/sampling%d/num_barcodes%d/obs_data.pkl"
-COLL_TREE_TEMPLATE = "simulation_topology_sampling/_output/model_seed%d/%d/sampling%d/num_barcodes%d/collapsed_tree.pkl"
+TEMPLATE = "%ssimulation_topology_sampling/_output/model_seed%d/%d/sampling%d/num_barcodes%d/lambda_known%d/tune_fitted.pkl"
+TRUE_TEMPLATE = "%ssimulation_topology_sampling/_output/model_seed%d/%d/sampling%d/true_model.pkl"
+COLL_TREE_TEMPLATE = "%ssimulation_topology_sampling/_output/model_seed%d/%d/sampling%d/num_barcodes%d/collapsed_tree.pkl"
 
 def get_true_model(seed, lambda_type, n_bcodes):
-    file_name = TRUE_TEMPLATE % (model_seed, seed, lambda_type)
-    tree_file_name = COLL_TREE_TEMPLATE % (model_seed, seed, lambda_type, n_bcodes)
+    file_name = TRUE_TEMPLATE % (prefix, model_seed, seed, lambda_type)
+    tree_file_name = COLL_TREE_TEMPLATE % (prefix, model_seed, seed, lambda_type, n_bcodes)
     return plot_simulation_common.get_true_model(file_name, tree_file_name, n_bcodes)
 
 def get_result(seed, lambda_type, n_bcodes):
-    res_file = TEMPLATE % (model_seed, seed, lambda_type, n_bcodes)
+    res_file = TEMPLATE % (prefix, model_seed, seed, lambda_type, n_bcodes, lambda_known)
     return plot_simulation_common.get_result(res_file)
 
 get_param_func_dict = {
@@ -31,7 +32,8 @@ get_param_func_dict = {
         "bhv": None, # custom function
         "targ": plot_simulation_common.get_target_lams,
         "double": plot_simulation_common.get_double_cut_weight,
-        "leaves": None}
+        "leaves": None,
+        "seed": None}
 
 n_bcode_results = {
         key: [[] for _ in sampling_rates]
@@ -91,22 +93,24 @@ for seed in seeds:
                         "sampled_node_id",
                         allele_to_node_id_dict[leaf.allele_events_list_str])
                     keep_leaves.append(leaf)
+            tot_dist = keep_leaves[0].get_distance(result[1])
             result[1].prune(keep_leaves)
             pruned_tree = result[1]
             # ETE pruning doesnt really work... need to fix distances it seems
             for leaf in pruned_tree:
                 if leaf.dist == 0:
-                    leaf.dist = 1 - leaf.get_distance(pruned_tree)
+                    leaf.dist = tot_dist - leaf.get_distance(pruned_tree)
         except FileNotFoundError:
             continue
+        n_bcode_results["seed"][idx].append(seed)
         #print(pruned_tree.get_ascii(attributes=["dist"], show_internal=True))
         dist = true_mrca_meas.get_dist(pruned_tree)
         n_bcode_results["mrca"][idx].append(dist)
 
-        true_bhv_meas = BHVDistanceMeasurer(true_subtree, "_output/scratch")
-        dist = true_bhv_meas.get_dist(pruned_tree, "sampled_node_id")
-        #true_bhv_meas = MRCASpearmanMeasurer(true_subtree, attr="sampled_node_id")
-        #dist = true_bhv_meas.get_dist(pruned_tree)
-        n_bcode_results["bhv"][idx].append(dist)
+        #true_bhv_meas = BHVDistanceMeasurer(true_subtree, "_output/scratch")
+        #dist = true_bhv_meas.get_dist(pruned_tree, "sampled_node_id")
+        ##true_bhv_meas = MRCASpearmanMeasurer(true_subtree, attr="sampled_node_id")
+        ##dist = true_bhv_meas.get_dist(pruned_tree)
+        #n_bcode_results["bhv"][idx].append(dist)
 
 plot_simulation_common.print_results(sampling_rates, n_bcode_results, n_bcode)
