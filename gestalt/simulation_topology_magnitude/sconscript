@@ -30,6 +30,7 @@ nest.add(
 nest.add(
     'seed',
     range(150, 155),
+    #range(155, 165),
 )
 
 nest.add(
@@ -135,7 +136,7 @@ def run_topology(env, outdir, c):
 
 nest.add(
     'lambda_known',
-    [True],
+    [False],
     label_func=lambda c: 'lambda_known%d' % int(c))
 
 nest.add(
@@ -168,7 +169,7 @@ def run_MLE(env, outdir, c):
         '--max-iters 10000',
         '--num-inits',
         1 if c['lambda_known'] else 3,
-        '--lambda-known' if c['lambda_known'] else '',
+        '--lambda-known' if c['lambda_known'] else '--intercept-lambda-known',
     ]
     return env.Command(
         [

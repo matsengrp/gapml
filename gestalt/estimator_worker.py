@@ -17,6 +17,7 @@ class RunEstimatorWorker(ParallelWorker):
             target_lam_pens: str,
             max_iters: int,
             num_inits: int,
+            intercept_lambda_known: bool,
             lambda_known: bool,
             do_refit: bool,
             max_sum_states: int,
@@ -34,6 +35,7 @@ class RunEstimatorWorker(ParallelWorker):
         self.target_lam_pens = target_lam_pens
         self.max_iters = max_iters
         self.num_inits = num_inits
+        self.intercept_lambda_known = intercept_lambda_known
         self.lambda_known = lambda_known
         self.do_refit = do_refit
         self.max_sum_states = max_sum_states
@@ -81,6 +83,8 @@ class RunEstimatorWorker(ParallelWorker):
         cmd = _add_more_args(
                 self.true_model_file,
                 '--true-model-file')
+        if self.intercept_lambda_known:
+            cmd = cmd + ['--intercept-lambda-known']
         if self.lambda_known:
             cmd = cmd + ['--lambda-known']
         cmd = _add_more_args(
