@@ -88,6 +88,10 @@ def parse_args():
         action='store_true',
         help='is using slurm to submit jobs')
     parser.add_argument(
+        '--intercept-lambda-known',
+        action='store_true',
+        help='are intercept target rates known?')
+    parser.add_argument(
         '--lambda-known',
         action='store_true',
         help='are target rates known?')
@@ -132,12 +136,13 @@ def main(args=sys.argv[1:]):
             args.target_lam_pens,
             args.max_iters,
             args.num_inits,
-            args.lambda_known,
-            True, # do refitting
-            args.max_sum_states,
-            args.max_extra_steps,
-            args.train_split,
-            args.scratch_dir)
+            intercept_lambda_known = args.intercept_lambda_known,
+            lambda_known = args.lambda_known,
+            do_refit = True, # do refitting
+            max_sum_states = args.max_sum_states,
+            max_extra_steps = args.max_extra_steps,
+            train_split = args.train_split,
+            scratch_dir = args.scratch_dir)
         worker_list.append(worker)
 
     if len(worker_list) > 1 and args.submit_srun:

@@ -58,7 +58,7 @@ def plot_tree(tree: CellLineageTree, file_name: str):
 #plot_tree(coll_tree, "/Users/jeanfeng/Desktop/simulation_coll_tree%d.png" % n_bcode)
 #plot_mrca_matrix(coll_tree, "/Users/jeanfeng/Desktop/simulation_coll_tree_mrca%d.png" % n_bcode)
 #
-with open("tmp_mount/analyze_gestalt/_output/min_abund_5/sum_states_10/extra_steps_0/penalty_params_200/tune_topology_fitted.pkl", "rb") as f:
-    res = six.moves.cPickle.load(f)
-plot_tree(res.fitted_bifurc_tree, "/Users/jeanfeng/Desktop/gestalt_fitted5.png")
-plot_mrca_matrix(res.fitted_bifurc_tree, None, "/Users/jeanfeng/Desktop/gestalt_fitted_mrca5.png")
+#with open("tmp_mount/analyze_gestalt/_output/min_abund_5/sum_states_10/extra_steps_0/penalty_params_200/tune_topology_fitted.pkl", "rb") as f:
+#    res = six.moves.cPickle.load(f)
+#plot_tree(res.fitted_bifurc_tree, "/Users/jeanfeng/Desktop/gestalt_fitted5.png")
+#plot_mrca_matrix(res.fitted_bifurc_tree, None, "/Users/jeanfeng/Desktop/gestalt_fitted_mrca5.png")

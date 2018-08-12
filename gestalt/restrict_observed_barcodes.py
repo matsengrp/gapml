@@ -19,7 +19,7 @@ from likelihood_scorer import LikelihoodScorer
 from clt_observer import ObservedAlignedSeq
 from transition_wrapper_maker import TransitionWrapperMaker
 from parallel_worker import BatchSubmissionManager
-from plot_mrca_matrices import plot_mrca_matrix
+# from plot_mrca_matrices import plot_mrca_matrix
 from common import save_data, create_directory, get_randint
 from optim_settings import KnownModelParams
 
@@ -357,9 +357,9 @@ def main(args=sys.argv[1:]):
 
         save_data(selected_collapsed_clt, args.out_collapsed_tree_file)
 
-        # Plot the MRCA matrix of the true collapsed tree for fun
-        out_png = args.out_collapsed_tree_file.replace(".pkl", "_mrca.png")
-        plot_mrca_matrix(selected_collapsed_clt, out_png)
+        ## Plot the MRCA matrix of the true collapsed tree for fun
+        #out_png = args.out_collapsed_tree_file.replace(".pkl", "_mrca.png")
+        #plot_mrca_matrix(selected_collapsed_clt, out_png)
 
 if __name__ == "__main__":
     main()
