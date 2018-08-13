@@ -157,7 +157,7 @@ def process_observed_seq_format7B(
     obs = ObservedAlignedSeq(
             None,
             [AlleleEvents(non_clashing_events)],
-            cell_state,
+            [cell_state],
             abundance=1)
     #obs.orig_seq = target_str_list
     return obs
@@ -204,7 +204,9 @@ def parse_reads_file_format7B(file_name,
                 if str(obs_aligned_seq) not in observed_alleles:
                     observed_alleles[str(obs_aligned_seq)] = obs_aligned_seq
                 else:
-                    observed_alleles[str(obs_aligned_seq)].abundance += 1
+                    observation = observed_alleles[str(obs_aligned_seq)]
+                    observation.abundance += 1
+                    observation.cell_state.append(cell_state)
                 if max_read is not None and len(all_alleles) == max_read:
                     break
 
