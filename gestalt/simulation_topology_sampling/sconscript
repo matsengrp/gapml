@@ -20,19 +20,19 @@ base = {'nreps': localenv['NREPS'],
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
 NUM_TARGS = 6
-LAM_MAG = 1.25
+LAM_MAG = 0.6
 LAMBDA_SEQUENCE = [LAM_MAG] * NUM_TARGS
-SAMPLING_RATE = [0.1, 0.3, 0.9]
+SAMPLING_RATE = [0.1, 0.25, 0.625]
 
 nest.add(
     'model_seed',
-    [15],
+    [153],
     label_func=lambda c: 'model_seed%d' % c,
 )
 
 nest.add(
     'seed',
-    range(200, 205),
+    range(211, 215),
 )
 nest.add(
     'sampling_rate',
@@ -56,21 +56,22 @@ def generate(env, outdir, c):
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
         '--time 1',
-        '--birth-lambda 5.5',
+        '--birth-lambda 5.7',
         '--num-barcodes',
         8,
-        '--min-uniq-alleles 2',
-        '--max-uniq-alleles 1000',
+        '--min-uniq-alleles 10',
+        '--max-uniq-alleles 140',
         '--max-abundance 100',
         '--double-cut-weight 0.05',
         '--target-lambdas',
         targ_lambdas,
         '--trim-zero-probs 0.1 0.1',
-        '--trim-poissons 4 4',
+        '--trim-poissons 5 5',
         '--trim-long-factor 0.02 0.02',
         '--insert-zero-prob 0.1',
         '--insert-poisson 1',
         '--perturb-target-lambdas-variance 0',
+        '--max-tries 1'
     ]
     return env.Command(
         [
@@ -134,6 +135,11 @@ nest.add(
     [True, False],
     label_func=lambda c: 'lambda_known%d' % int(c))
 
+nest.add(
+    'tot_time_known',
+    [True],
+    label_func=lambda c: 'tot_time_known%d' % int(c))
+
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
     penalty_params = "0.01" if c['num_barcodes'] > 3 else "0.1"
@@ -159,7 +165,8 @@ def run_MLE(env, outdir, c):
         '--train-split 0.75',
         '--num-inits',
         1 if c['lambda_known'] else 3,
-        '--lambda-known' if c['lambda_known'] else '--intercept-lambda-known',
+        '--lambda-known' if c['lambda_known'] else '',
+        '--tot-time-known',
     ]
     return env.Command(
         [

@@ -132,6 +132,8 @@ class CLTPenalizedEstimator(CLTEstimator):
 
             if i % save_iter == (save_iter - 1):
                 if dist_measurers is not None:
+                    #tt = (self.model.get_fitted_bifurcating_tree())
+                    #logging.info(tt.get_ascii(attributes=["dist"], show_internal=True))
                     tree_dist = dist_measurers.get_tree_dists([self.model.get_fitted_bifurcating_tree()])[0]
                     logging.info("iter %d tree dists: %s", i, tree_dist)
                     iter_info["tree_dists"] = tree_dist

@@ -135,6 +135,11 @@ def parse_args():
         default=None,
         help="Maximum abundance of the observed leaves")
     parser.add_argument(
+        '--max-tries',
+        type=int,
+        default=1,
+        help="Maximum tries to generate tree")
+    parser.add_argument(
         '--is-one-leaf',
         action='store_true',
         help="special tree structure for tests")
@@ -226,12 +231,14 @@ def create_cell_lineage_tree(
                 len(obs_leaves),
                 len(true_subtree),
                 len(clt))
+            print("le....", len(true_subtree))
             if len(true_subtree) < args.min_uniq_alleles:
                 tot_time += time_incr
             elif len(true_subtree) >= args.max_uniq_alleles:
                 tot_time -= time_incr
             else:
                 # We got a good number of leaves! Stop trying
+                print("done!")
                 break
         except ValueError as e:
             logging.info("ValueError warning.... %s", str(e))
@@ -316,7 +323,8 @@ def main(args=sys.argv[1:]):
     # Generate data!
     obs_leaves, true_subtree, obs_idx_to_leaves, tot_time = create_cell_lineage_tree(
             args,
-            clt_model)
+            clt_model,
+            args.max_tries)
 
     # Check that the the abundance of the leaves is not too high
     if args.max_abundance is not None:

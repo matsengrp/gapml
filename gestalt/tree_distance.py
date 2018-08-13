@@ -209,9 +209,9 @@ class BHVDistanceMeasurer(TreeDistanceMeasurer):
             lines = f.readlines()
             bhv_dist = float(lines[0].split("\t")[-1])
 
+        #print(tree_in_file)
         os.remove(tree_in_file)
         os.remove(bhv_out_file)
-
         return bhv_dist
 
 class SPRDistanceMeasurer(TreeDistanceMeasurer):

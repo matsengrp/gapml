@@ -441,7 +441,7 @@ def main(args=sys.argv[1:]):
             "insert_poisson": np.array([0.5]),
             "double_cut_weight": np.array([0.1]),
             "tot_time": 1,
-            "tot_time_extra": 0.5}
+            "tot_time_extra": 0.2}
     if args.known_params.tot_time:
         args.init_params["tot_time"] = true_model_dict["true_model_params"]["tot_time"]
         args.init_params["tot_time_extra"] = true_model_dict["true_model_params"]["tot_time_extra"]

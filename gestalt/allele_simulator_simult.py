@@ -37,6 +37,8 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         self.bcode_meta = model.bcode_meta
         self.model = model
         self.all_target_tract_hazards = model.get_all_target_tract_hazards()
+        print(self.all_target_tract_hazards)
+        print(model.target_tract_dict)
         self.insert_zero_prob = self.model.insert_zero_prob.eval()
         self.trim_zero_probs = self.model.trim_zero_probs.eval()
 

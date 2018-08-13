@@ -204,16 +204,18 @@ def parse_reads_file_format7B(file_name,
                 if str(obs_aligned_seq) not in observed_alleles:
                     observed_alleles[str(obs_aligned_seq)] = obs_aligned_seq
                 else:
-                    observation = observed_alleles[str(obs_aligned_seq)]
-                    observation.abundance += 1
-                    observation.cell_state.append(cell_state)
+                    obs = observed_alleles[str(obs_aligned_seq)]
+                    obs.abundance += 1
+                    obs.cell_state.append(cell_state)
                 if max_read is not None and len(all_alleles) == max_read:
                     break
+
+    obs_alleles_list = list(observed_alleles.values())
 
     organ_dict = {}
     for organ_str, cell_type in cell_states_dict.items():
         organ_dict[str(cell_type)] = organ_str
-    return list(observed_alleles.values()), organ_dict
+    return obs_alleles_list, organ_dict
 
 def main():
     args = parse_args()

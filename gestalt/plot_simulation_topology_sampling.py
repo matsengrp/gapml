@@ -7,14 +7,14 @@ from tree_distance import *
 from cell_lineage_tree import CellLineageTree
 import plot_simulation_common
 
-seeds = range(200,205)
+seeds = range(210,211)
 n_bcode = 1
-sampling_rates = [1, 3, 9]
-model_seed = 15
+sampling_rates = [1, 2, 6]
+model_seed = 153
 lambda_known = 1
-prefix = "tmp_mount/"
+prefix = ""
 
-TEMPLATE = "%ssimulation_topology_sampling/_output/model_seed%d/%d/sampling%d/num_barcodes%d/lambda_known%d/tune_fitted.pkl"
+TEMPLATE = "%ssimulation_topology_sampling/_output/model_seed%d/%d/sampling%d/num_barcodes%d/lambda_known%d/tot_time_known1/tune_fitted.pkl"
 TRUE_TEMPLATE = "%ssimulation_topology_sampling/_output/model_seed%d/%d/sampling%d/true_model.pkl"
 COLL_TREE_TEMPLATE = "%ssimulation_topology_sampling/_output/model_seed%d/%d/sampling%d/num_barcodes%d/collapsed_tree.pkl"
 
@@ -29,7 +29,7 @@ def get_result(seed, lambda_type, n_bcodes):
 
 get_param_func_dict = {
         "mrca": None, # custom function
-        "bhv": None, # custom function
+        "tau": None, # custom function
         "targ": plot_simulation_common.get_target_lams,
         "double": plot_simulation_common.get_double_cut_weight,
         "leaves": None,
@@ -62,7 +62,9 @@ for key in get_param_func_dict.keys():
 for seed in seeds:
     try:
         true_model = get_true_model(seed, sampling_rates[0], n_bcode)
+        print("123123123")
     except FileNotFoundError:
+        print("asdfasdf")
         continue
     true_subtree = true_model[1]
     sampled_node_ids = set()
@@ -80,6 +82,7 @@ for seed in seeds:
             for leaf in true_model[1]:
                 allele_to_node_id_dict[leaf.allele_events_list_str] = leaf.node_id
         except FileNotFoundError:
+            print("asdfasdf 2222")
             continue
         n_bcode_results["leaves"][idx].append(len(true_model[2]))
 
@@ -101,16 +104,17 @@ for seed in seeds:
                 if leaf.dist == 0:
                     leaf.dist = tot_dist - leaf.get_distance(pruned_tree)
         except FileNotFoundError:
+            print("asdfasdf11111")
             continue
         n_bcode_results["seed"][idx].append(seed)
         #print(pruned_tree.get_ascii(attributes=["dist"], show_internal=True))
         dist = true_mrca_meas.get_dist(pruned_tree)
         n_bcode_results["mrca"][idx].append(dist)
 
-        #true_bhv_meas = BHVDistanceMeasurer(true_subtree, "_output/scratch")
-        #dist = true_bhv_meas.get_dist(pruned_tree, "sampled_node_id")
-        ##true_bhv_meas = MRCASpearmanMeasurer(true_subtree, attr="sampled_node_id")
-        ##dist = true_bhv_meas.get_dist(pruned_tree)
-        #n_bcode_results["bhv"][idx].append(dist)
+        true_bhv_meas = MRCASpearmanMeasurer(true_subtree, "_output/scratch", attr="sampled_node_id")
+        dist = true_bhv_meas.get_dist(pruned_tree)
+        #true_bhv_meas = MRCASpearmanMeasurer(true_subtree, attr="sampled_node_id")
+        #dist = true_bhv_meas.get_dist(pruned_tree)
+        n_bcode_results["tau"][idx].append(dist)
 
 plot_simulation_common.print_results(sampling_rates, n_bcode_results, n_bcode)

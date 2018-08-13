@@ -19,18 +19,17 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
-LAMBDA_SEQUENCE = np.ones(6) * 1.25
+LAMBDA_SEQUENCE = np.ones(6) * 0.65
 
 nest.add(
     'model_seed',
-    [9],
+    [90],
     label_func=lambda c: 'model_seed%d' % c,
 )
 
 nest.add(
     'seed',
     range(150, 155),
-    #range(155, 165),
 )
 
 nest.add(
@@ -51,7 +50,7 @@ def generate(env, outdir, c):
     cmd = [
         #'python boto_run.py 2 2000 generate_data.py',
 	'python generate_data.py',
-	'--sampling-rate 0.3',
+	'--sampling-rate 0.2',
         '--model-seed',
         c['model_seed'],
         '--data-seed',
@@ -60,11 +59,11 @@ def generate(env, outdir, c):
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
         '--time 1',
-        '--birth-lambda 5.2',
+        '--birth-lambda 5.13',
         '--num-barcodes',
         8,
-        '--min-uniq-alleles 40',
-        '--max-uniq-alleles 100',
+        '--min-uniq-alleles 30',
+        '--max-uniq-alleles 50',
         '--max-abundance 20',
         '--double-cut-weight',
         c['double_cut'],
@@ -136,13 +135,13 @@ def run_topology(env, outdir, c):
 
 nest.add(
     'lambda_known',
-    [False],
+    [True, False],
     label_func=lambda c: 'lambda_known%d' % int(c))
 
 nest.add(
-    'abundance',
-    [0],
-    label_func=lambda c: 'abundance_weight%d' % c)
+    'tot_time_known',
+    [True],
+    label_func=lambda c: 'tot_time_known%d' % c)
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
@@ -169,7 +168,8 @@ def run_MLE(env, outdir, c):
         '--max-iters 10000',
         '--num-inits',
         1 if c['lambda_known'] else 3,
-        '--lambda-known' if c['lambda_known'] else '--intercept-lambda-known',
+        '--lambda-known' if c['lambda_known'] else '',
+        '--tot-time-known',
     ]
     return env.Command(
         [
@@ -181,4 +181,3 @@ def run_MLE(env, outdir, c):
             c['generate'][1],
             c['restrict_observed_alleles'][1]],
         ' '.join(map(str, cmd)))
-

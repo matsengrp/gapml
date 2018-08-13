@@ -96,6 +96,10 @@ def parse_args():
         action='store_true',
         help='are target rates known?')
     parser.add_argument(
+        '--tot-time-known',
+        action='store_true',
+        help='is total time known?')
+    parser.add_argument(
         '--max-topologies',
         type=int,
         default=10,
@@ -138,6 +142,7 @@ def main(args=sys.argv[1:]):
             args.num_inits,
             intercept_lambda_known = args.intercept_lambda_known,
             lambda_known = args.lambda_known,
+            tot_time_known = args.tot_time_known,
             do_refit = True, # do refitting
             max_sum_states = args.max_sum_states,
             max_extra_steps = args.max_extra_steps,
@@ -145,7 +150,7 @@ def main(args=sys.argv[1:]):
             scratch_dir = args.scratch_dir)
         worker_list.append(worker)
 
-    if len(worker_list) > 1 and args.submit_srun:
+    if args.submit_srun:
         logging.info("Submitting jobs")
         job_manager = BatchSubmissionManager(
                 worker_list,

@@ -19,6 +19,7 @@ class RunEstimatorWorker(ParallelWorker):
             num_inits: int,
             intercept_lambda_known: bool,
             lambda_known: bool,
+            tot_time_known: bool,
             do_refit: bool,
             max_sum_states: int,
             max_extra_steps: int,
@@ -37,6 +38,7 @@ class RunEstimatorWorker(ParallelWorker):
         self.num_inits = num_inits
         self.intercept_lambda_known = intercept_lambda_known
         self.lambda_known = lambda_known
+        self.tot_time_known = tot_time_known
         self.do_refit = do_refit
         self.max_sum_states = max_sum_states
         self.max_extra_steps = max_extra_steps
@@ -87,6 +89,8 @@ class RunEstimatorWorker(ParallelWorker):
             cmd = cmd + ['--intercept-lambda-known']
         if self.lambda_known:
             cmd = cmd + ['--lambda-known']
+        if self.tot_time_known:
+            cmd = cmd + ['--tot-time-known']
         cmd = _add_more_args(
                 self.true_collapsed_tree_file,
                 '--true-collapsed-tree-file')

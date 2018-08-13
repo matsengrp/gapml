@@ -10,13 +10,14 @@ import plot_simulation_common
 np.random.seed(0)
 
 double = 0
-model_seed = 9
-seeds = range(150,155)
+model_seed = 90
+seeds = range(150,151)
 n_bcode = 1
 lambda_magnitudes = [3, 10, 30]
-prefix = "tmp_mount/"
+prefix = ""
+lambda_known = 1
 
-TEMPLATE = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/lambda_known1/abundance_weight0/tune_fitted.pkl"
+TEMPLATE = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/lambda_known%d/tot_time_known1/tune_fitted.pkl"
 TRUE_TEMPLATE = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/true_model.pkl"
 COLL_TREE_TEMPLATE = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/collapsed_tree.pkl"
 
@@ -26,7 +27,7 @@ def get_true_model(seed, lambda_type, n_bcodes):
     return plot_simulation_common.get_true_model(file_name, tree_file_name, n_bcodes)
 
 def get_result(seed, lambda_type, n_bcodes):
-    res_file = TEMPLATE % (prefix, model_seed, seed, lambda_type, double, n_bcodes)
+    res_file = TEMPLATE % (prefix, model_seed, seed, lambda_type, double, n_bcodes, lambda_known)
     return plot_simulation_common.get_result(res_file)
 
 get_param_func_dict = {
@@ -75,7 +76,7 @@ for seed in seeds:
         dist = true_mrca_meas.get_dist(result[1])
         n_bcode_results["mrca"][idx].append(dist)
 
-        true_tau_meas = GavruskinMeasurer(true_model[1], "_output/scratch")
+        true_tau_meas = MRCASpearmanMeasurer(true_model[1], "_output/scratch")
         dist = true_tau_meas.get_dist(result[1])
         n_bcode_results["tau"][idx].append(dist)
 

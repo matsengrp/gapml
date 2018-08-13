@@ -102,7 +102,7 @@ class CLTLikelihoodModel:
         self.target_lam_pen_ph = tf.placeholder(tf.float64)
 
         if branch_len_inners.size == 0:
-            branch_len_inners = np.random.rand(self.num_nodes) * 0.8
+            branch_len_inners = np.random.rand(self.num_nodes) * 0.3
         if branch_len_offsets_proportion.size == 0:
             branch_len_offsets_proportion = np.random.rand(self.num_nodes) * 0.5
 
@@ -453,13 +453,14 @@ class CLTLikelihoodModel:
 
     def initialize_branch_lens(self,
             max_attempts: int=10,
-            br_len_scale: float=1.0,
+            br_len_scale: float=0.25,
             br_len_shrink: float=0.8):
         """
         Will randomly initialize branch lengths if they are not all positive already
         @param max_attempts: will try at most this many times to initialize branch lengths
         """
         for j in range(max_attempts):
+            print("tot time", self.sess.run(self.tot_time))
             # If all branch length positive, then we are good to go
             if self._are_all_branch_lens_positive():
                 break
