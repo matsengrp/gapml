@@ -8,33 +8,39 @@ from cell_lineage_tree import CellLineageTree
 import plot_simulation_common
 
 double = 0
+model_seed = 301
 seeds = range(0,5)
 n_bcode = 1
 lambda_types = ["same", "diff", "super_diff"]
+lambda_known = 1
 
-
-TEMPLATE = "simulation_topology_same_diff/_output/model_seed300/%d/%s/double_cut%d/num_barcodes%d/lambda_known1/abundance_weight0/tune_fittedtree0.pkl"
-TRUE_TEMPLATE = "simulation_topology_same_diff/_output/model_seed300/%d/%s/double_cut%d/true_model.pkl"
-OBS_TEMPLATE = "simulation_topology_same_diff/_output/model_seed300/%d/%s/double_cut%d/num_barcodes%d/obs_data.pkl"
-COLL_TREE_TEMPLATE = "simulation_topology_same_diff/_output/model_seed300/%d/%s/double_cut%d/num_barcodes%d/collapsed_tree.pkl"
+TEMPLATE = "simulation_topology_same_diff/_output/model_seed%d/%d/%s/double_cut%d/num_barcodes%d/lambda_known%d/tot_time_known1/tune_fitted.pkl"
+RAND_TEMPLATE = "simulation_topology_same_diff/_output/model_seed%d/%d/%s/double_cut%d/num_barcodes%d/parsimony_tree0.pkl"
+TRUE_TEMPLATE = "simulation_topology_same_diff/_output/model_seed%d/%d/%s/double_cut%d/true_model.pkl"
+COLL_TREE_TEMPLATE = "simulation_topology_same_diff/_output/model_seed%d/%d/%s/double_cut%d/num_barcodes%d/collapsed_tree.pkl"
 
 def get_true_model(seed, lambda_type, n_bcodes):
-    file_name = TRUE_TEMPLATE % (seed, lambda_type, double)
-    tree_file_name = COLL_TREE_TEMPLATE % (seed, lambda_type, double, n_bcodes)
-    print(file_name)
+    file_name = TRUE_TEMPLATE % (model_seed, seed, lambda_type, double)
+    tree_file_name = COLL_TREE_TEMPLATE % (model_seed, seed, lambda_type, double, n_bcodes)
     return plot_simulation_common.get_true_model(file_name, tree_file_name, n_bcodes)
 
 def get_result(seed, lambda_type, n_bcodes):
-    res_file = TEMPLATE % (seed, lambda_type, double, n_bcodes)
-    print(res_file)
+    res_file = TEMPLATE % (model_seed, seed, lambda_type, double, n_bcodes, lambda_known)
     return plot_simulation_common.get_result(res_file)
 
+def get_rand_tree(seed, lambda_type, n_bcodes):
+    res_file = RAND_TEMPLATE % (model_seed, seed, lambda_type, double, n_bcodes)
+    return plot_simulation_common.get_rand_tree(res_file)
+
 get_param_func_dict = {
+        "zero_mrca": None, # custom function
+        "random_mrca": None, # custom function
         "mrca": None, # custom function
-        "bhv": None, # custom function
+        "tau": None, # custom function
         "targ": plot_simulation_common.get_target_lams,
         "double": plot_simulation_common.get_double_cut_weight,
         "leaves": None,
+        "seeds": None,
         "num_indels": None}
 
 n_bcode_results = {
@@ -74,17 +80,46 @@ for seed in seeds:
         for leaf in true_model[2]:
             num_indels += len(leaf.allele_events_list[0].events)
         n_bcode_results["num_indels"][idx].append(num_indels)
-        #print("true...", true_mrca_meas.ref_tree_mrca_matrix.shape)
         try:
             result = get_result(seed, lambda_type, n_bcode)
         except FileNotFoundError:
             continue
+        n_bcode_results["seeds"][idx].append(seed)
+
         dist = true_mrca_meas.get_dist(result[1])
         n_bcode_results["mrca"][idx].append(dist)
 
         true_bhv_meas = MRCASpearmanMeasurer(true_model[1], "_output/scratch")
         dist = true_bhv_meas.get_dist(result[1])
-        n_bcode_results["bhv"][idx].append(dist)
+        n_bcode_results["tau"][idx].append(dist)
+
+        try:
+            _, rand_tree = get_rand_tree(seed, lambda_type, n_bcode)
+        except FileNotFoundError:
+            continue
+
+        for node in rand_tree.traverse():
+            if node.is_root():
+                continue
+            if node.is_leaf():
+                node.dist = 1 - node.up.get_distance(rand_tree)
+                assert node.dist > 0
+            else:
+                node.dist = 0.05
+        dist = true_mrca_meas.get_dist(rand_tree)
+        n_bcode_results["random_mrca"][idx].append(dist)
+
+        zero_tree = rand_tree.copy()
+        for node in zero_tree.traverse():
+            if node.is_root():
+                continue
+            if node.is_leaf():
+                node.dist = 1 - node.up.get_distance(zero_tree)
+                assert node.dist > 0
+            else:
+                node.dist = 1e-10
+        dist = true_mrca_meas.get_dist(zero_tree)
+        n_bcode_results["zero_mrca"][idx].append(dist)
 
         #true_bhv_meas = BHVDistanceMeasurer(true_model[1], "_output/scratch")
         #dist = true_bhv_meas.get_dist(result[1])

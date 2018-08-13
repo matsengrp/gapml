@@ -11,13 +11,14 @@ np.random.seed(0)
 
 double = 0
 model_seed = 90
-seeds = range(150,151)
+seeds = range(150,155)
 n_bcode = 1
 lambda_magnitudes = [3, 10, 30]
 prefix = ""
 lambda_known = 1
 
 TEMPLATE = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/lambda_known%d/tot_time_known1/tune_fitted.pkl"
+RAND_TEMPLATE = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/parsimony_tree0.pkl"
 TRUE_TEMPLATE = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/true_model.pkl"
 COLL_TREE_TEMPLATE = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/collapsed_tree.pkl"
 
@@ -30,11 +31,18 @@ def get_result(seed, lambda_type, n_bcodes):
     res_file = TEMPLATE % (prefix, model_seed, seed, lambda_type, double, n_bcodes, lambda_known)
     return plot_simulation_common.get_result(res_file)
 
+def get_rand_tree(seed, lambda_type, n_bcodes):
+    res_file = RAND_TEMPLATE % (prefix, model_seed, seed, lambda_type, double, n_bcodes)
+    return plot_simulation_common.get_rand_tree(res_file)
+
 get_param_func_dict = {
         "mrca": None, # custom function
+        "zero_mrca": None, # custom function
+        "random_mrca": None, # custom function
         "tau": None, # custom function
         "targ": plot_simulation_common.get_target_lams,
         "double": plot_simulation_common.get_double_cut_weight,
+        "seeds": None,
         "leaves": None}
 
 n_bcode_results = {
@@ -73,11 +81,41 @@ for seed in seeds:
             result = get_result(seed, lambda_type, n_bcode)
         except FileNotFoundError:
             continue
+        n_bcode_results["seeds"][idx].append(seed)
+
         dist = true_mrca_meas.get_dist(result[1])
         n_bcode_results["mrca"][idx].append(dist)
 
         true_tau_meas = MRCASpearmanMeasurer(true_model[1], "_output/scratch")
         dist = true_tau_meas.get_dist(result[1])
         n_bcode_results["tau"][idx].append(dist)
+
+        try:
+            _, rand_tree = get_rand_tree(seed, lambda_type, n_bcode)
+        except FileNotFoundError:
+            continue
+
+        for node in rand_tree.traverse():
+            if node.is_root():
+                continue
+            if node.is_leaf():
+                node.dist = 1 - node.up.get_distance(rand_tree)
+                assert node.dist > 0
+            else:
+                node.dist = 0.025
+        dist = true_mrca_meas.get_dist(rand_tree)
+        n_bcode_results["random_mrca"][idx].append(dist)
+
+        zero_tree = rand_tree.copy()
+        for node in zero_tree.traverse():
+            if node.is_root():
+                continue
+            if node.is_leaf():
+                node.dist = 1 - node.up.get_distance(zero_tree)
+                assert node.dist > 0
+            else:
+                node.dist = 1e-10
+        dist = true_mrca_meas.get_dist(zero_tree)
+        n_bcode_results["zero_mrca"][idx].append(dist)
 
 plot_simulation_common.print_results(lambda_magnitudes, n_bcode_results, n_bcode)
