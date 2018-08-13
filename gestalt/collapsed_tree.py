@@ -131,7 +131,4 @@ def collapse_zero_lens(raw_tree: TreeNode):
 
     _remove_single_child_unobs_nodes(tree)
 
-    for node in tree.traverse("preorder"):
-        node.add_feature("observed", node.is_leaf())
-
     return tree

@@ -14,7 +14,7 @@ class ObservedAlignedSeq:
     def __init__(self,
             allele_list: AlleleList,
             allele_events_list: List[AlleleEvents],
-            cell_state: CellState,
+            cell_state: List[CellState],
             abundance: float):
         """
         Stores alleles that are observed.
