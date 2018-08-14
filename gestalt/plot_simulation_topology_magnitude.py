@@ -21,6 +21,8 @@ TEMPLATE = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magni
 RAND_TEMPLATE = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/parsimony_tree0.pkl"
 TRUE_TEMPLATE = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/true_model.pkl"
 COLL_TREE_TEMPLATE = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/collapsed_tree.pkl"
+OUT_TRUE_MRCA_PLOT = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/true_mrca.png"
+OUT_FITTED_MRCA_PLOT = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/lambda_known%d/tot_time_known1/tune_fitted_mrca.png"
 
 def get_true_model(seed, lambda_type, n_bcodes):
     file_name = TRUE_TEMPLATE % (prefix, model_seed, seed, lambda_type, double)
@@ -41,7 +43,6 @@ get_param_func_dict = {
         "random_mrca": None, # custom function
         "tau": None, # custom function
         "targ": plot_simulation_common.get_target_lams,
-        "double": plot_simulation_common.get_double_cut_weight,
         "seeds": None,
         "leaves": None}
 
@@ -66,45 +67,66 @@ for key in get_param_func_dict.keys():
             except FileNotFoundError:
                 continue
             fitted_val = get_param_func(result)
-            dist = np.linalg.norm(fitted_val - true_model_val)
+            dist = np.linalg.norm(fitted_val - true_model_val)/np.linalg.norm(true_model_val)
             n_bcode_results[key][idx].append(dist)
 
-for seed in seeds:
+for seed_idx, seed in enumerate(seeds):
     for idx, lambda_type in enumerate(lambda_magnitudes):
         try:
             true_model = get_true_model(seed, lambda_type, n_bcode)
         except FileNotFoundError:
             continue
         true_mrca_meas = MRCADistanceMeasurer(true_model[1])
+        if seed_idx == 0:
+            plot_simulation_common.plot_mrca_matrix(
+                true_mrca_meas.ref_tree_mrca_matrix,
+                OUT_TRUE_MRCA_PLOT % (prefix, model_seed, seed, lambda_type, double))
+
         n_bcode_results["leaves"][idx].append(len(true_model[2]))
+
         try:
             result = get_result(seed, lambda_type, n_bcode)
         except FileNotFoundError:
+            print("not found", lambda_type)
             continue
+        if seed_idx == 0:
+            plot_simulation_common.plot_mrca_matrix(
+                true_mrca_meas._get_mrca_matrix(result[1]),
+                OUT_FITTED_MRCA_PLOT % (prefix, model_seed, seed, lambda_type, double, n_bcode, lambda_known))
         n_bcode_results["seeds"][idx].append(seed)
 
         dist = true_mrca_meas.get_dist(result[1])
         n_bcode_results["mrca"][idx].append(dist)
 
-        true_tau_meas = MRCASpearmanMeasurer(true_model[1], "_output/scratch")
-        dist = true_tau_meas.get_dist(result[1])
-        n_bcode_results["tau"][idx].append(dist)
+        #true_tau_meas = MRCASpearmanMeasurer(true_model[1], "_output/scratch")
+        #dist = true_tau_meas.get_dist(result[1])
+        #n_bcode_results["tau"][idx].append(dist)
 
         try:
             _, rand_tree = get_rand_tree(seed, lambda_type, n_bcode)
         except FileNotFoundError:
             continue
 
-        for node in rand_tree.traverse():
-            if node.is_root():
-                continue
-            if node.is_leaf():
-                node.dist = 1 - node.up.get_distance(rand_tree)
-                assert node.dist > 0
-            else:
-                node.dist = 0.025
-        dist = true_mrca_meas.get_dist(rand_tree)
-        n_bcode_results["random_mrca"][idx].append(dist)
+        rand_dists = []
+        for _ in range(1):
+            br_scale = 0.8
+            has_neg = True
+            while has_neg:
+                has_neg = False
+                for node in rand_tree.traverse():
+                    if node.is_root():
+                        continue
+                    if node.is_leaf():
+                        node.dist = 1 - node.up.get_distance(rand_tree)
+                        if node.dist < 0:
+                            has_neg = True
+                            break
+                    else:
+                        node.dist = np.random.rand() * br_scale
+                br_scale *= 0.5
+            dist = true_mrca_meas.get_dist(rand_tree)
+            rand_dists.append(dist)
+        n_bcode_results["random_mrca"][idx].append(np.mean(rand_dists))
 
         zero_tree = rand_tree.copy()
         for node in zero_tree.traverse():
@@ -118,4 +140,12 @@ for seed in seeds:
         dist = true_mrca_meas.get_dist(zero_tree)
         n_bcode_results["zero_mrca"][idx].append(dist)
 
-plot_simulation_common.print_results(lambda_magnitudes, n_bcode_results, n_bcode)
+plot_simulation_common.print_results(
+        lambda_magnitudes,
+        n_bcode_results,
+        n_bcode,
+        print_keys = [
+            "mrca",
+            "zero_mrca",
+            "random_mrca",
+            "targ"])

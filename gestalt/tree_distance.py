@@ -332,7 +332,7 @@ class MRCADistanceMeasurer(TreeDistanceMeasurer):
 
         # Number the leaves because we need to represent each tree by its pairwise
         # MRCA distance matrix
-        leaf_str_sorted = sorted([getattr(leaf, attr) for leaf in ref_tree])
+        leaf_str_sorted = [getattr(leaf, attr) for leaf in ref_tree]
         self.leaf_dict = {}
         for idx, leaf_str in enumerate(leaf_str_sorted):
             self.leaf_dict[leaf_str] = idx
@@ -340,7 +340,7 @@ class MRCADistanceMeasurer(TreeDistanceMeasurer):
 
         self.ref_tree_mrca_matrix = self._get_mrca_matrix(ref_tree)
 
-    def _get_mrca_matrix(self, tree):
+    def _get_mrca_matrix(self, tree, perturb=1e-2):
         """
         @return the pairwise MRCA distance matrix for that tree
         """
@@ -352,21 +352,28 @@ class MRCADistanceMeasurer(TreeDistanceMeasurer):
                 leaf2_idx = self.leaf_dict[getattr(leaf2, self.attr)]
                 if leaf1_idx == leaf2_idx:
                     # Instead of distance to itself, set this to be pendant edge length
-                    mrca_matrix[leaf1_idx, leaf2_idx] = leaf1.dist
+                    mrca_matrix[leaf1_idx, leaf2_idx] = leaf1.dist + perturb
                     continue
                 elif (mrca_matrix[leaf1_idx, leaf2_idx] + mrca_matrix[leaf2_idx, leaf1_idx]) > 0:
                     # We already filled this distance out
                     continue
                 mrca = leaf1.get_common_ancestor(leaf2)
                 mrca_dist = leaf1.get_distance(mrca)
-                mrca_matrix[min(leaf1_idx, leaf2_idx), max(leaf1_idx, leaf2_idx)] = mrca_dist
+                mrca_matrix[min(leaf1_idx, leaf2_idx), max(leaf1_idx, leaf2_idx)] = mrca_dist + perturb
+                #if mrca_dist == 0:
+                #    print("ajsdkflajsdklfjasd", leaf1_idx, leaf2_idx)
+                #    1/0
+                mrca_matrix[max(leaf1_idx, leaf2_idx), min(leaf1_idx, leaf2_idx)] = 1
         return mrca_matrix
 
-    def get_dist(self, tree):
+    def get_dist(self, tree, C=0.1):
         tree_mrca_matrix = self._get_mrca_matrix(tree)
-        norm_diff = np.linalg.norm(self.ref_tree_mrca_matrix - tree_mrca_matrix, ord="fro")
+        difference_matrix = np.abs((self.ref_tree_mrca_matrix) - (tree_mrca_matrix))
+        norm_diff = np.sum(difference_matrix)
+        #norm_diff = np.linalg.norm(difference_matrix, ord="fro")
         num_entries = (self.num_leaves - 1) * self.num_leaves / 2 + self.num_leaves
-        return norm_diff/np.sqrt(num_entries)
+        #return norm_diff/np.sqrt(num_entries)
+        return norm_diff/(num_entries)
 
 class MRCASpearmanMeasurer(MRCADistanceMeasurer):
     """

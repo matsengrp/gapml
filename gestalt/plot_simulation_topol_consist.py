@@ -3,86 +3,46 @@ import json
 import six
 import numpy as np
 
-from tree_distance import MRCADistanceMeasurer, MRCASpearmanMeasurer, RootRFDistanceMeasurer
+from tree_distance import *
 from cell_lineage_tree import CellLineageTree
+import plot_simulation_common
 
-#lambda_type = "random"
-lambda_type = "random"
-double = 3
-lam_scale = 0
-trim_zero_pr = 1
-trim_poiss = 3
-trim_long_pr = 0
-insert_zero_pr = 0
-insert_poiss = 1
+model_seed = 391
+seeds = range(500,501)
+num_barcodes = [1, 4, 16]
+prefix = ""
 
-TEMPLATE = "simulation_topol_consist/_output/%d/%s/lam_scale%d/double%d/trim_zero_pr%d_%d/trim_poiss%d_%d/trim_long_pr%d_%d/insert_zero_pr%d/insert_poiss%d/num_barcodes%d/sum_states2000/tune_fitted.pkl"
-TRUE_TEMPLATE = "simulation_topol_consist/_output/%d/%s/lam_scale%d/double%d/trim_zero_pr%d_%d/trim_poiss%d_%d/trim_long_pr%d_%d/insert_zero_pr%d/insert_poiss%d/true_model.pkl"
-OBS_TEMPLATE = "simulation_topol_consist/_output/%d/%s/lam_scale%d/double%d/trim_zero_pr%d_%d/trim_poiss%d_%d/trim_long_pr%d_%d/insert_zero_pr%d/insert_poiss%d/num_barcodes%d/obs_data.pkl"
-COLL_TREE_TEMPLATE = "simulation_topol_consist/_output/%d/%s/lam_scale%d/double%d/trim_zero_pr%d_%d/trim_poiss%d_%d/trim_long_pr%d_%d/insert_zero_pr%d/insert_poiss%d/num_barcodes%d/collapsed_tree.pkl"
+TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/num_barcodes%d/tune_fitted.pkl"
+RAND_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/num_barcodes%d/parsimony_tree0.pkl"
+TRUE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/true_model.pkl"
+COLL_TREE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/num_barcodes%d/collapsed_tree.pkl"
+OUT_TRUE_MRCA_PLOT = "%ssimulation_topol_consist/_output/model_seed%d/%d/true_mrca.png"
+OUT_FITTED_MRCA_PLOT = "%ssimulation_topol_consist/_output/model_seed%d/%d/num_barcodes%d/tune_fitted_mrca.png"
+OUT_RAND_MRCA_PLOT = "%ssimulation_topol_consist/_output/model_seed%d/%d/num_barcodes%d/tune_rand_mrca.png"
 
-def get_true_model(seed, lambda_type, n_bcodes):
-    file_name = TRUE_TEMPLATE % (seed, lambda_type, lam_scale, double, trim_zero_pr, trim_zero_pr, trim_poiss, trim_poiss, trim_long_pr, trim_long_pr, insert_zero_pr, insert_poiss)
-    with open(file_name, "rb") as f:
-        true_model = six.moves.cPickle.load(f)
-    tree_file_name = COLL_TREE_TEMPLATE % (seed, lambda_type, lam_scale, double, trim_zero_pr, trim_zero_pr, trim_poiss, trim_poiss, trim_long_pr, trim_long_pr, insert_zero_pr, insert_poiss, n_bcodes)
-    with open(tree_file_name, "rb") as f:
-        true_coll_tree = six.moves.cPickle.load(f)
-    obs_file_name = OBS_TEMPLATE % (seed, lambda_type, lam_scale, double, trim_zero_pr, trim_zero_pr, trim_poiss, trim_poiss, trim_long_pr, trim_long_pr, insert_zero_pr, insert_poiss, n_bcodes)
-    with open(obs_file_name, "rb") as f:
-        observations = six.moves.cPickle.load(f)["obs_leaves"]
-    obs_dict = {}
-    for obs in observations:
-         obs_id = CellLineageTree._allele_list_to_str(obs.allele_events_list)
-         obs_dict[obs_id] = obs
-    for node in true_coll_tree:
-        if obs_dict[node.allele_events_list_str] is None:
-            continue
-        abund = obs_dict[node.allele_events_list_str].abundance
-        if abund > 1:
-            for _ in range(abund):
-                new_child = CellLineageTree(
-                    node.allele_list,
-                    node.allele_events_list,
-                    node.cell_state,
-                    dist = 0,
-                    abundance = 1,
-                    resolved_multifurcation = True)
-                node.add_child(new_child)
-            obs_dict[node.allele_events_list_str] = None
-    return (true_model["true_model_params"], true_coll_tree)
+def get_true_model(seed, n_bcodes):
+    file_name = TRUE_TEMPLATE % (prefix, model_seed, seed)
+    tree_file_name = COLL_TREE_TEMPLATE % (prefix, model_seed, seed, n_bcodes)
+    return plot_simulation_common.get_true_model(file_name, tree_file_name, n_bcodes)
 
-def get_result(seed, lambda_type, n_bcodes):
-    res_file = TEMPLATE % (seed, lambda_type, lam_scale, double, trim_zero_pr, trim_zero_pr, trim_poiss, trim_poiss, trim_long_pr, trim_long_pr, insert_zero_pr, insert_poiss, n_bcodes)
-    with open(res_file, "rb") as f:
-        result = six.moves.cPickle.load(f)
-    for node in result.fitted_bifurc_tree:
-        if node.abundance > 1:
-            for _ in range(node.abundance):
-                new_child = CellLineageTree(
-                    node.allele_list,
-                    node.allele_events_list,
-                    node.cell_state,
-                    dist = 0,
-                    abundance = 1,
-                    resolved_multifurcation = True)
-                node.add_child(new_child)
-    return (result.model_params_dict, result.fitted_bifurc_tree)
+def get_result(seed, n_bcodes):
+    res_file = TEMPLATE % (prefix, model_seed, seed, n_bcodes)
+    print(res_file)
+    return plot_simulation_common.get_result(res_file)
 
-def get_target_lams(model_param_tuple):
-    return model_param_tuple[0]["target_lams"]
-
-def get_double_cut_weight(model_param_tuple):
-    return model_param_tuple[0]["double_cut_weight"]
-
-seeds = range(400,405)
-num_barcodes = [5, 10, 20, 40]
+def get_rand_tree(seed, n_bcodes):
+    res_file = RAND_TEMPLATE % (prefix, model_seed, seed, n_bcodes)
+    return plot_simulation_common.get_rand_tree(res_file)
 
 get_param_func_dict = {
         "mrca": None, # custom function
-        "rf": None, # custom function
-        "targ": get_target_lams,
-        "double": get_double_cut_weight}
+        "gav": None, # custom function
+        "zero_mrca": None, # custom function
+        "random_mrca": None, # custom function
+        "leaves": None, # custom function
+        "seeds": None, # custom function
+        "targ": plot_simulation_common.get_only_target_lams,
+        "double": plot_simulation_common.get_double_cut}
 
 n_bcode_results = {
         key: [[] for _ in num_barcodes]
@@ -96,12 +56,12 @@ for key in get_param_func_dict.keys():
     for seed in seeds:
         for idx, n_bcode in enumerate(num_barcodes):
             try:
-                true_model = get_true_model(seed, lambda_type, n_bcode)
+                true_model = get_true_model(seed, n_bcode)
             except FileNotFoundError:
                 continue
             true_model_val = get_param_func(true_model)
             try:
-                result = get_result(seed, lambda_type, n_bcode)
+                result = get_result(seed, n_bcode)
             except FileNotFoundError:
                 continue
             fitted_val = get_param_func(result)
@@ -111,35 +71,87 @@ for key in get_param_func_dict.keys():
 for seed in seeds:
     for idx, n_bcode in enumerate(num_barcodes):
         try:
-            true_model = get_true_model(seed, lambda_type, n_bcode)
+            true_model = get_true_model(seed, n_bcode)
         except FileNotFoundError:
             continue
         true_mrca_meas = MRCADistanceMeasurer(true_model[1])
-        print(true_mrca_meas.ref_tree_mrca_matrix.shape)
+
+        plot_simulation_common.plot_mrca_matrix(
+            true_mrca_meas.ref_tree_mrca_matrix,
+            OUT_TRUE_MRCA_PLOT % (prefix, model_seed, seed))
+
+        n_bcode_results["leaves"][idx].append(len(true_model[2]))
+
         try:
-            result = get_result(seed, lambda_type, n_bcode)
+            _, rand_tree = get_rand_tree(seed, n_bcode)
         except FileNotFoundError:
+            print("asdfasd")
             continue
+
+        rand_dists = []
+        for _ in range(1):
+            br_scale = 0.8
+            has_neg = True
+            while has_neg:
+                has_neg = False
+                for node in rand_tree.traverse():
+                    if node.is_root():
+                        continue
+                    if node.is_leaf():
+                        node.dist = 1 - node.up.get_distance(rand_tree)
+                        if node.dist < 0:
+                            has_neg = True
+                            break
+                    else:
+                        node.dist = np.random.rand() * br_scale
+                br_scale *= 0.8
+            dist = true_mrca_meas.get_dist(rand_tree)
+            rand_dists.append(dist)
+        n_bcode_results["random_mrca"][idx].append(np.mean(rand_dists))
+
+        plot_simulation_common.plot_mrca_matrix(
+            true_mrca_meas._get_mrca_matrix(rand_tree),
+            OUT_RAND_MRCA_PLOT % (prefix, model_seed, seed, n_bcode))
+
+        zero_tree = rand_tree.copy()
+        for node in zero_tree.traverse():
+            if node.is_root():
+                continue
+            if node.is_leaf():
+                node.dist = 1 - node.up.get_distance(zero_tree)
+                assert node.dist > 0
+            else:
+                node.dist = 1e-10
+        dist = true_mrca_meas.get_dist(zero_tree)
+        n_bcode_results["zero_mrca"][idx].append(dist)
+
+        try:
+            result = get_result(seed, n_bcode)
+        except FileNotFoundError:
+            print("asdfasd sdfsdfsdfsdf")
+            continue
+
+        plot_simulation_common.plot_mrca_matrix(
+            true_mrca_meas._get_mrca_matrix(result[1]),
+            OUT_FITTED_MRCA_PLOT % (prefix, model_seed, seed, n_bcode))
+
+        n_bcode_results["seeds"][idx].append(len(true_model[2]))
+
         dist = true_mrca_meas.get_dist(result[1])
         n_bcode_results["mrca"][idx].append(dist)
 
-        true_rf_meas = MRCASpearmanMeasurer(true_model[1], None)
-        dist = true_rf_meas.get_dist(result[1])
-        #print("RF", dist)
-        n_bcode_results["rf"][idx].append(dist)
+        true_mrca_meas = GavruskinMeasurer(true_model[1], "_output/scratch")
+        dist = true_mrca_meas.get_dist(result[1])
+        n_bcode_results["gav"][idx].append(dist)
 
-for idx, n_bcode in enumerate(num_barcodes):
-    size = len(n_bcode_results["mrca"][idx])
-    print("%s & %d & %d & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f)" % (
-        lambda_type,
+plot_simulation_common.print_results(
+        num_barcodes,
+        n_bcode_results,
         n_bcode,
-        size,
-        np.mean(n_bcode_results["mrca"][idx]),
-        np.sqrt(np.var(n_bcode_results["mrca"][idx])/size),
-        np.mean(n_bcode_results["rf"][idx]),
-        np.sqrt(np.var(n_bcode_results["rf"][idx])/size),
-        np.mean(n_bcode_results["targ"][idx]),
-        np.sqrt(np.var(n_bcode_results["targ"][idx])/size),
-        np.mean(n_bcode_results["double"][idx]),
-        np.sqrt(np.var(n_bcode_results["double"][idx])/size),
-    ))
+        print_keys = [
+            "mrca",
+            "gav",
+            "zero_mrca",
+            "random_mrca",
+            "targ",
+            "double"])

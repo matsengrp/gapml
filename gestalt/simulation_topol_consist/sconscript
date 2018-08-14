@@ -18,11 +18,12 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
-LAMBDA_SEQUENCE = np.ones(6) * 1
+LAMBDA_SEQUENCE = np.ones(6) * 0.65
+LAMBDA_SEQUENCE = [1, .9, .8, .7, .6, .5, .4]
 
 nest.add(
     'model_seed',
-    [390],
+    [391],
     label_func=lambda c: 'model_seed%d' % c,
 )
 
@@ -31,6 +32,12 @@ nest.add(
     range(500,501),
 )
 
+nest.add(
+    'lambda_type',
+    [
+       'lambda_diff'
+    ])
+
 @nest.add_target_with_env(localenv)
 def generate(env, outdir, c):
     targ_lambdas = ",".join(map(str, LAMBDA_SEQUENCE))
@@ -38,7 +45,7 @@ def generate(env, outdir, c):
     cmd = [
         #'python boto_run.py 2 2000 generate_data.py',
 	'python generate_data.py',
-	'--sampling-rate 0.3',
+	'--sampling-rate 0.4',
         '--model-seed',
         c['model_seed'],
         '--data-seed',
@@ -47,13 +54,13 @@ def generate(env, outdir, c):
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
         '--time 1',
-        '--birth-lambda 3.1',
+        '--birth-lambda 5.1',
         '--num-barcodes',
         40,
         '--min-uniq-alleles 10',
         '--max-uniq-alleles 25',
         '--max-abundance 20',
-        '--double-cut-weight 0.05',
+        '--double-cut-weight 0.2',
         '--target-lambdas',
         targ_lambdas,
         '--trim-zero-probs 0.1 0.1',
@@ -73,7 +80,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [10, 20, 40],
+    [4], # 1, 16
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -122,7 +129,7 @@ def run_topology(env, outdir, c):
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = "0.01" if c['num_barcodes'] > 3 else "0.1"
+    penalty_params = "0.1" if c['num_barcodes'] > 3 else "1"
     cmd = [
 	'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
@@ -140,9 +147,7 @@ def run_MLE(env, outdir, c):
         '--max-extra-steps 2',
         '--max-iters 10000',
         '--num-inits 3',
-        '--intercept-lambda-known',
-        '--submit-srun',
-        '--cpu 8'
+        '--tot-time-known',
     ]
     return env.Command(
         [

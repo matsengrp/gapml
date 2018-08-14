@@ -32,7 +32,7 @@ nest.add(
 
 nest.add(
     'seed',
-    range(0,5),
+    range(2,3),
 )
 
 nest.add(
@@ -92,7 +92,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [1],
+    [3],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -141,7 +141,7 @@ def run_topology(env, outdir, c):
 
 nest.add(
     'lambda_known',
-    [True],
+    [False],
     label_func=lambda c: 'lambda_known%d' % int(c))
 
 nest.add(
@@ -152,7 +152,7 @@ nest.add(
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
     #penalty_params = ",".join(map(str, np.power(10, np.arange(0.5, -3.0, step=-1)).tolist()))
-    penalty_params = "0.01"
+    penalty_params = "0.1" if c['num_barcodes'] > 3 else "1"
     cmd = [
         #'python boto_run.py 18 25000 tune_topology.py',
 	'python tune_topology.py',

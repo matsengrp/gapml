@@ -29,7 +29,7 @@ def plot_mrca_matrix(bifurc_tree: CellLineageTree, ref_tree: CellLineageTree, fi
     else:
         mrca_meas = MRCADistanceMeasurer(bifurc_tree)
         mrca_mat = mrca_meas.ref_tree_mrca_matrix
-    plt.imshow(mrca_mat, vmin=0, vmax=1)
+    plt.imshow(mrca_mat, vmin=0, vmax=tot_time)
     cax = plt.axes([0.85, 0.1, 0.075, 0.8])
     plt.colorbar(cax=cax)
     plt.tight_layout()

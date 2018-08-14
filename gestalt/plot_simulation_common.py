@@ -2,6 +2,9 @@ import os
 import json
 import six
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+from matplotlib import pyplot as plt
 
 from tree_distance import MRCADistanceMeasurer, MRCASpearmanMeasurer, RootRFDistanceMeasurer
 from cell_lineage_tree import CellLineageTree
@@ -106,34 +109,42 @@ def get_rand_tree(res_file):
     return (None, parsimony_tree)
 
 def get_target_lams(model_param_tuple):
+    target_lams = model_param_tuple[0]["target_lams"]
+    double_weight = model_param_tuple[0]["double_cut_weight"]
+    trim_long = model_param_tuple[0]["trim_long_factor"]
+    return np.concatenate([target_lams, double_weight, trim_long])
+
+def get_only_target_lams(model_param_tuple):
     return model_param_tuple[0]["target_lams"]
 
-def get_double_cut_weight(model_param_tuple):
+def get_double_cut(model_param_tuple):
     return model_param_tuple[0]["double_cut_weight"]
 
-def print_results(settings, n_bcode_results, n_bcode):
+def print_results(settings, n_bcode_results, n_bcode, print_keys):
     settings = [str(s) for s in settings]
     for idx, setting in enumerate(settings):
         #print(n_bcode_results["tau"][idx])
         #print(n_bcode_results["seeds"][idx])
         size = len(n_bcode_results["mrca"][idx])
-        print("%s & %d & %d & %.02f (%.02f) & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f) & %.04f (%.04f)" % (
-            setting,
-            n_bcode,
-            size,
-            np.mean(n_bcode_results["leaves"][idx]),
-            np.sqrt(np.var(n_bcode_results["leaves"][idx])/size),
-            np.mean(n_bcode_results["mrca"][idx]),
-            np.sqrt(np.var(n_bcode_results["mrca"][idx])/size),
-            np.mean(n_bcode_results["zero_mrca"][idx]),
-            np.sqrt(np.var(n_bcode_results["zero_mrca"][idx])/size),
-            np.mean(n_bcode_results["random_mrca"][idx]),
-            np.sqrt(np.var(n_bcode_results["random_mrca"][idx])/size),
-            #np.mean(n_bcode_results["tau"][idx]),
-            #np.sqrt(np.var(n_bcode_results["tau"][idx])/size),
-            np.mean(n_bcode_results["targ"][idx]),
-            np.sqrt(np.var(n_bcode_results["targ"][idx])/size),
-            np.mean(n_bcode_results["double"][idx]),
-            np.sqrt(np.var(n_bcode_results["double"][idx])/size),
-        ))
+        print_list = [
+                setting,
+                size,
+                np.mean(n_bcode_results["leaves"][idx]),
+                np.sqrt(np.var(n_bcode_results["leaves"][idx])/size)]
+        print_template = "%s & %d & %.01f (%.01f)"
+        for key in print_keys:
+            size = len(n_bcode_results[key][idx])
+            print_list.append(np.mean(n_bcode_results[key][idx]))
+            print_list.append(np.sqrt(np.var(n_bcode_results["mrca"][idx])/size))
+            print_template += "& %.03f (%.03f)"
+        print_template += "\\\\"
+        print(print_template % tuple(print_list))
+
+def plot_mrca_matrix(mrca_mat, file_name: str, tot_time: float = 1):
+    plt.clf()
+    plt.imshow(mrca_mat, vmin=0, vmax=tot_time)
+    cax = plt.axes([0.85, 0.1, 0.075, 0.8])
+    plt.colorbar(cax=cax)
+    plt.tight_layout()
+    plt.savefig(file_name)
 

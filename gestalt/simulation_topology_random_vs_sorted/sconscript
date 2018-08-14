@@ -19,17 +19,23 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
-LAMBDA_SEQUENCE = [0.6,0.5,0.4,0.3,0.2,0.1]
+LAMBDA_SEQUENCE = [1.2,1.0,0.8,0.6,0.4,0.2]
+
+nest.add(
+    'model_seed',
+    [903],
+    label_func=lambda c: 'model_seed%d' % c,
+)
 
 nest.add(
     'seed',
-    range(101,105),
+    range(702,705),
 )
 
 nest.add(
     'lambda_seq',
     [
-	#'sorted',
+	'sorted',
 	'random',
     ])
 
@@ -44,28 +50,29 @@ def generate(env, outdir, c):
 	'python generate_data.py',
 	'--sampling-rate 0.4',
         '--model-seed',
-        400,
+        c['model_seed'],
         '--data-seed',
         c['seed'],
         '--out-obs-file ${TARGETS[0]}',
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
         '--time 1',
-        '--birth-lambda 6',
+        '--birth-lambda 5.1',
         '--num-barcodes',
-        30,
-        '--min-uniq-alleles 50',
+        8,
+        '--min-uniq-alleles 15',
         '--max-uniq-alleles 70',
-        '--max-abundance 10',
-        '--double-cut-weight 0.8',
+        '--max-abundance 100',
+        '--double-cut-weight 0.4',
         '--target-lambdas',
         targ_lambdas,
         '--trim-zero-probs 0.1 0.1',
         '--trim-poissons 4 4',
-        '--trim-long-probs 0.02 0.02',
+        '--trim-long-factor 0.02 0.02',
         '--insert-zero-prob 0.1',
         '--insert-poisson 1',
         '--perturb-target-lambdas-variance 0',
+        '--max-tries 1'
     ]
     return env.Command(
         [
@@ -77,7 +84,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [1, 9],
+    [1],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -125,15 +132,19 @@ def run_topology(env, outdir, c):
         ' '.join(map(str, cmd)))
 
 nest.add(
-    'sum_states',
-    [2000],
-    label_func=lambda c: "sum_states%d" % c,
-)
+    'lambda_known',
+    [False],
+    label_func=lambda c: 'lambda_known%d' % int(c))
+
+nest.add(
+    'tot_time_known',
+    [True],
+    label_func=lambda c: 'tot_time_known%d' % int(c))
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
     #penalty_params = ",".join(map(str, np.power(10, np.arange(0.5, -3.0, step=-1)).tolist()))
-    penalty_params = "0.01"
+    penalty_params = "0.1" if c['num_barcodes'] > 3 else "1"
     cmd = [
         #'python boto_run.py 18 25000 tune_topology.py',
 	'python tune_topology.py',
@@ -148,12 +159,14 @@ def run_MLE(env, outdir, c):
         '--log-barr 0.0000001',
         '--target-lam-pens',
 	penalty_params,
-        '--max-sum-states',
-	c['sum_states'],
+        '--max-sum-states 2000',
         '--max-extra-steps 2',
         '--max-iters 10000',
         '--train-split 0.75',
-        '--num-inits 3'
+        '--num-inits',
+        1 if c['lambda_known'] else 3,
+        '--lambda-known' if c['lambda_known'] else '',
+        '--tot-time-known',
     ]
     return env.Command(
         [

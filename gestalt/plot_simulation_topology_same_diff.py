@@ -7,12 +7,15 @@ from tree_distance import *
 from cell_lineage_tree import CellLineageTree
 import plot_simulation_common
 
+np.random.seed(0)
+
 double = 0
 model_seed = 301
 seeds = range(0,5)
 n_bcode = 1
 lambda_types = ["same", "diff", "super_diff"]
 lambda_known = 1
+mrcaC = 0.1
 
 TEMPLATE = "simulation_topology_same_diff/_output/model_seed%d/%d/%s/double_cut%d/num_barcodes%d/lambda_known%d/tot_time_known1/tune_fitted.pkl"
 RAND_TEMPLATE = "simulation_topology_same_diff/_output/model_seed%d/%d/%s/double_cut%d/num_barcodes%d/parsimony_tree0.pkl"
@@ -38,7 +41,6 @@ get_param_func_dict = {
         "mrca": None, # custom function
         "tau": None, # custom function
         "targ": plot_simulation_common.get_target_lams,
-        "double": plot_simulation_common.get_double_cut_weight,
         "leaves": None,
         "seeds": None,
         "num_indels": None}
@@ -83,31 +85,38 @@ for seed in seeds:
         try:
             result = get_result(seed, lambda_type, n_bcode)
         except FileNotFoundError:
+            print("not found")
             continue
         n_bcode_results["seeds"][idx].append(seed)
 
-        dist = true_mrca_meas.get_dist(result[1])
+        dist = true_mrca_meas.get_dist(result[1], C=mrcaC)
         n_bcode_results["mrca"][idx].append(dist)
-
-        true_bhv_meas = MRCASpearmanMeasurer(true_model[1], "_output/scratch")
-        dist = true_bhv_meas.get_dist(result[1])
-        n_bcode_results["tau"][idx].append(dist)
 
         try:
             _, rand_tree = get_rand_tree(seed, lambda_type, n_bcode)
         except FileNotFoundError:
             continue
 
-        for node in rand_tree.traverse():
-            if node.is_root():
-                continue
-            if node.is_leaf():
-                node.dist = 1 - node.up.get_distance(rand_tree)
-                assert node.dist > 0
-            else:
-                node.dist = 0.05
-        dist = true_mrca_meas.get_dist(rand_tree)
-        n_bcode_results["random_mrca"][idx].append(dist)
+        rand_dists = []
+        for _ in range(10):
+            br_scale = 0.8
+            has_neg = True
+            while has_neg:
+                has_neg = False
+                for node in rand_tree.traverse():
+                    if node.is_root():
+                        continue
+                    if node.is_leaf():
+                        node.dist = 1 - node.up.get_distance(rand_tree)
+                        if node.dist < 0:
+                            has_neg = True
+                            break
+                    else:
+                        node.dist = np.random.rand() * br_scale
+                br_scale *= 0.8
+            dist = true_mrca_meas.get_dist(rand_tree, C=mrcaC)
+            rand_dists.append(dist)
+        n_bcode_results["random_mrca"][idx].append(np.mean(rand_dists))
 
         zero_tree = rand_tree.copy()
         for node in zero_tree.traverse():
@@ -118,11 +127,19 @@ for seed in seeds:
                 assert node.dist > 0
             else:
                 node.dist = 1e-10
-        dist = true_mrca_meas.get_dist(zero_tree)
+        dist = true_mrca_meas.get_dist(zero_tree, C=mrcaC)
         n_bcode_results["zero_mrca"][idx].append(dist)
 
         #true_bhv_meas = BHVDistanceMeasurer(true_model[1], "_output/scratch")
         #dist = true_bhv_meas.get_dist(result[1])
         #n_bcode_results["bhv"][idx].append(dist)
 
-plot_simulation_common.print_results(lambda_types, n_bcode_results, n_bcode)
+plot_simulation_common.print_results(
+        lambda_types,
+        n_bcode_results,
+        n_bcode,
+        print_keys = [
+            "mrca",
+            "zero_mrca",
+            "random_mrca",
+            "targ"])
