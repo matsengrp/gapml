@@ -126,7 +126,6 @@ def run_MLE(env, outdir, c):
         '--max-sum-states 2000',
         '--max-extra-steps 2',
         '--max-iters 10000',
-        '--tot-time-known',
         '--lambda-known',
     ]
     return env.Command(
