@@ -214,7 +214,7 @@ def tune_hyperparams(
         # Copy over the trained model params except for branch length things
         fixed_params = {}
         for k, v in res_train.model_params_dict.items():
-            if k not in ['branch_len_inners', 'branch_len_offsets_proportion']:
+            if bcode_meta.num_barcodes > 1 or (k not in ['branch_len_inners', 'branch_len_offsets_proportion']):
                 fixed_params[k] = v
 
         # Now fit the validation tree with model params fixed
@@ -222,11 +222,12 @@ def tune_hyperparams(
             val_tree,
             val_bcode_meta,
             args,
-            dist_to_half_pen * (1 - args.train_split),
+            0, #dist_to_half_pen * (1 - args.train_split),
             val_transition_wrap_maker,
             init_model_params = fixed_params,
             known_params = KnownModelParams(
                 target_lams = True,
+                branch_lens = bcode_meta.num_barcodes > 1,
                 tot_time = True))
         curr_val_log_lik = res_val.train_history[-1]["log_lik"]
         curr_val_pen_log_lik = res_val.train_history[-1]["pen_log_lik"]
