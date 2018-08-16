@@ -304,7 +304,6 @@ def main(args=sys.argv[1:]):
     # Create model
     known_params = KnownModelParams(
             target_lams = True,
-            target_lams_intercept = True,
             double_cut_weight = True)
     clt_model = CLTLikelihoodModel(
             None,

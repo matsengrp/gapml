@@ -122,7 +122,7 @@ def run_MLE(env, outdir, c):
         '--seed',
 	c['seed'] + 100,
         '--log-barr 0.001',
-        '--target-lam-pens 1e-20',
+        '--dist-to-half-pens 1e-20',
         '--max-sum-states 2000',
         '--max-extra-steps 2',
         '--max-iters 10000',

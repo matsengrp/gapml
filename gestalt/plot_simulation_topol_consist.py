@@ -107,7 +107,8 @@ for seed in seeds:
                 for node in rand_tree.traverse():
                     if node.is_root():
                         continue
-                    if (len(node.get_children()) > 0 and all([c.is_leaf() for c in node.get_children()]) and node.abundance > ) or node.is_leaf():
+                    all_same_leaves = len(node.get_children()) > 0 and all([c.is_leaf() for c in node.get_children()]) and node.abundance > 1
+                    if all_same_leaves or node.is_leaf():
                         node.dist = 1 - node.up.get_distance(rand_tree)
                         if node.dist < 0:
                             has_neg = True

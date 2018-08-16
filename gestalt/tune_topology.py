@@ -57,9 +57,9 @@ def parse_args():
         default=0.001,
         help="log barrier parameter on the branch lengths")
     parser.add_argument(
-        '--target-lam-pens',
+        '--dist-to-half-pens',
         type=str,
-        default='10',
+        default='1',
         help="comma-separated string with penalty parameters on the target lambdas")
     parser.add_argument(
         '--train-split',
@@ -87,10 +87,6 @@ def parse_args():
         '--submit-srun',
         action='store_true',
         help='is using slurm to submit jobs')
-    parser.add_argument(
-        '--intercept-lambda-known',
-        action='store_true',
-        help='are intercept target rates known?')
     parser.add_argument(
         '--lambda-known',
         action='store_true',
@@ -137,10 +133,9 @@ def main(args=sys.argv[1:]):
             args.true_collapsed_tree_file,
             args.seed,
             args.log_barr,
-            args.target_lam_pens,
+            args.dist_to_half_pens,
             args.max_iters,
             args.num_inits,
-            intercept_lambda_known = args.intercept_lambda_known,
             lambda_known = args.lambda_known,
             tot_time_known = args.tot_time_known,
             do_refit = True, # do refitting

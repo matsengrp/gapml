@@ -82,7 +82,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [40],
+    [4],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -131,7 +131,7 @@ def run_topology(env, outdir, c):
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = "0.25"
+    penalty_params = "1"
     cmd = [
 	'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
@@ -143,7 +143,7 @@ def run_MLE(env, outdir, c):
         '--seed',
 	c['seed'] + 100,
         '--log-barr 0.0000001',
-        '--target-lam-pens',
+        '--dist-to-half-pens',
 	penalty_params,
         '--max-sum-states 2000',
         '--max-extra-steps 2',
