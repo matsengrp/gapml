@@ -18,12 +18,12 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
-LAMBDA_SEQUENCE = np.ones(6) * 0.65
-LAMBDA_SEQUENCE = [1, .9, .8, .7, .6, .5, .4]
+#LAMBDA_SEQUENCE = np.ones(6) * 0.65
+LAMBDA_SEQUENCE = [.9, .85, .8, .75, .7]
 
 nest.add(
     'model_seed',
-    [391],
+    [394],
     label_func=lambda c: 'model_seed%d' % c,
 )
 
@@ -45,7 +45,7 @@ def generate(env, outdir, c):
     cmd = [
         #'python boto_run.py 2 2000 generate_data.py',
 	'python generate_data.py',
-	'--sampling-rate 0.4',
+	'--sampling-rate 0.7',
         '--model-seed',
         c['model_seed'],
         '--data-seed',
@@ -54,12 +54,14 @@ def generate(env, outdir, c):
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
         '--time 1',
-        '--birth-lambda 5.1',
+        '--start-birth-lambda 50',
+        '--birth-lambda 1',
+        '--death-lambda 0.2',
         '--num-barcodes',
         40,
         '--min-uniq-alleles 10',
         '--max-uniq-alleles 25',
-        '--max-abundance 20',
+        '--max-abundance 200',
         '--double-cut-weight 0.2',
         '--target-lambdas',
         targ_lambdas,
@@ -80,7 +82,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [4], # 1, 16
+    [40],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -116,7 +118,7 @@ def run_topology(env, outdir, c):
         '--max-random',
         0,
         '--max-random-multifurc',
-        4,
+        1,
         '--num-jumbles 1'
     ]
     return env.Command(
@@ -129,7 +131,7 @@ def run_topology(env, outdir, c):
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = "0.1" if c['num_barcodes'] > 3 else "1"
+    penalty_params = "0.25"
     cmd = [
 	'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
@@ -146,7 +148,7 @@ def run_MLE(env, outdir, c):
         '--max-sum-states 2000',
         '--max-extra-steps 2',
         '--max-iters 10000',
-        '--num-inits 3',
+        '--num-inits 1',
         '--tot-time-known',
     ]
     return env.Command(

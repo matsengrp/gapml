@@ -7,18 +7,21 @@ from tree_distance import *
 from cell_lineage_tree import CellLineageTree
 import plot_simulation_common
 
-model_seed = 391
-seeds = range(500,501)
-num_barcodes = [1, 4, 16]
-prefix = ""
+np.random.seed(0)
 
-TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/num_barcodes%d/tune_fitted.pkl"
-RAND_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/num_barcodes%d/parsimony_tree0.pkl"
-TRUE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/true_model.pkl"
-COLL_TREE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/num_barcodes%d/collapsed_tree.pkl"
-OUT_TRUE_MRCA_PLOT = "%ssimulation_topol_consist/_output/model_seed%d/%d/true_mrca.png"
-OUT_FITTED_MRCA_PLOT = "%ssimulation_topol_consist/_output/model_seed%d/%d/num_barcodes%d/tune_fitted_mrca.png"
-OUT_RAND_MRCA_PLOT = "%ssimulation_topol_consist/_output/model_seed%d/%d/num_barcodes%d/tune_rand_mrca.png"
+model_seed = 394
+seeds = range(500,501)
+num_barcodes = [1, 4, 8, 40]
+prefix = ""
+tree_idx = 1
+
+TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/tune_fitted.pkl"
+RAND_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/parsimony_tree0.pkl"
+TRUE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/true_model.pkl"
+COLL_TREE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/collapsed_tree.pkl"
+OUT_TRUE_MRCA_PLOT = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/true_mrca.png"
+OUT_FITTED_MRCA_PLOT = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/tune_fitted_mrca.png"
+OUT_RAND_MRCA_PLOT = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/tune_rand_mrca.png"
 
 def get_true_model(seed, n_bcodes):
     file_name = TRUE_TEMPLATE % (prefix, model_seed, seed)
@@ -32,11 +35,15 @@ def get_result(seed, n_bcodes):
 
 def get_rand_tree(seed, n_bcodes):
     res_file = RAND_TEMPLATE % (prefix, model_seed, seed, n_bcodes)
+    print(res_file)
     return plot_simulation_common.get_rand_tree(res_file)
 
 get_param_func_dict = {
         "mrca": None, # custom function
-        "gav": None, # custom function
+        "bhv": None, # custom function
+        "random_bhv": None, # custom function
+        "zero_bhv": None, # custom function
+        "super_zero_bhv": None, # custom function
         "zero_mrca": None, # custom function
         "random_mrca": None, # custom function
         "leaves": None, # custom function
@@ -74,22 +81,25 @@ for seed in seeds:
             true_model = get_true_model(seed, n_bcode)
         except FileNotFoundError:
             continue
-        true_mrca_meas = MRCADistanceMeasurer(true_model[1])
+        true_mrca_meas = MRCADistanceMeasurer(true_model[tree_idx])
+        true_bhv_meas = BHVDistanceMeasurer(true_model[tree_idx], "_output/scratch")
 
         plot_simulation_common.plot_mrca_matrix(
             true_mrca_meas.ref_tree_mrca_matrix,
             OUT_TRUE_MRCA_PLOT % (prefix, model_seed, seed))
 
-        n_bcode_results["leaves"][idx].append(len(true_model[2]))
+        n_bcode_results["leaves"][idx].append(len(true_model[tree_idx]))
 
         try:
-            _, rand_tree = get_rand_tree(seed, n_bcode)
+            rand_res = get_rand_tree(seed, n_bcode)
+            rand_tree = rand_res[tree_idx]
         except FileNotFoundError:
             print("asdfasd")
             continue
 
         rand_dists = []
-        for _ in range(1):
+        rand_bhv_dists = []
+        for _ in range(30):
             br_scale = 0.8
             has_neg = True
             while has_neg:
@@ -97,7 +107,7 @@ for seed in seeds:
                 for node in rand_tree.traverse():
                     if node.is_root():
                         continue
-                    if node.is_leaf():
+                    if (len(node.get_children()) > 0 and all([c.is_leaf() for c in node.get_children()]) and node.abundance > ) or node.is_leaf():
                         node.dist = 1 - node.up.get_distance(rand_tree)
                         if node.dist < 0:
                             has_neg = True
@@ -107,6 +117,9 @@ for seed in seeds:
                 br_scale *= 0.8
             dist = true_mrca_meas.get_dist(rand_tree)
             rand_dists.append(dist)
+            dist = true_bhv_meas.get_dist(rand_tree)
+            rand_bhv_dists.append(dist)
+        n_bcode_results["random_bhv"][idx].append(np.mean(rand_bhv_dists))
         n_bcode_results["random_mrca"][idx].append(np.mean(rand_dists))
 
         plot_simulation_common.plot_mrca_matrix(
@@ -124,33 +137,41 @@ for seed in seeds:
                 node.dist = 1e-10
         dist = true_mrca_meas.get_dist(zero_tree)
         n_bcode_results["zero_mrca"][idx].append(dist)
+        dist = true_bhv_meas.get_dist(zero_tree)
+        n_bcode_results["zero_bhv"][idx].append(dist)
+
+        for node in zero_tree:
+            node.dist = 0
+        dist = true_bhv_meas.get_dist(zero_tree)
+        n_bcode_results["super_zero_bhv"][idx].append(dist)
 
         try:
             result = get_result(seed, n_bcode)
         except FileNotFoundError:
-            print("asdfasd sdfsdfsdfsdf")
             continue
 
         plot_simulation_common.plot_mrca_matrix(
-            true_mrca_meas._get_mrca_matrix(result[1]),
+            true_mrca_meas._get_mrca_matrix(result[tree_idx]),
             OUT_FITTED_MRCA_PLOT % (prefix, model_seed, seed, n_bcode))
 
-        n_bcode_results["seeds"][idx].append(len(true_model[2]))
+        n_bcode_results["seeds"][idx].append(len(true_model[tree_idx]))
 
-        dist = true_mrca_meas.get_dist(result[1])
+        dist = true_mrca_meas.get_dist(result[tree_idx])
         n_bcode_results["mrca"][idx].append(dist)
 
-        true_mrca_meas = GavruskinMeasurer(true_model[1], "_output/scratch")
-        dist = true_mrca_meas.get_dist(result[1])
-        n_bcode_results["gav"][idx].append(dist)
+        dist = true_bhv_meas.get_dist(result[tree_idx])
+        n_bcode_results["bhv"][idx].append(dist)
 
 plot_simulation_common.print_results(
         num_barcodes,
         n_bcode_results,
         n_bcode,
         print_keys = [
+            "bhv",
+            "random_bhv",
+            "zero_bhv",
+            "super_zero_bhv",
             "mrca",
-            "gav",
             "zero_mrca",
             "random_mrca",
             "targ",

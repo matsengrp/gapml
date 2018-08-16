@@ -293,6 +293,22 @@ def read_data(args):
         obs_data_dict = six.moves.cPickle.load(f)
         bcode_meta = obs_data_dict["bcode_meta"]
         obs_leaves = obs_data_dict["obs_leaves"]
+
+    obs_leaf = obs_data_dict["obs_leaves"][0]
+    no_evts_prop = np.mean([len(evts.events) == 0 for evts in obs_leaf.allele_events_list])
+    print("proportion of no events", no_evts_prop)
+    #true_haz = 0.85
+    #print("what i should be estimating totla time to be", np.log(no_evts_prop)/-true_haz)
+
+    evt_set = set()
+    for obs in obs_data_dict["obs_leaves"]:
+        for evts_list in obs.allele_events_list:
+            for evt in evts_list.events:
+                evt_set.add(evt)
+    logging.info("uniq events %s", evt_set)
+    logging.info("num uniq events %d", len(evt_set))
+    logging.info("propoertion of double cuts %f", np.mean([e.min_target != e.max_target for e in evt_set]))
+
     logging.info("Number of uniq obs alleles %d", len(obs_leaves))
     logging.info("Barcode cut sites %s", str(bcode_meta.abs_cut_sites))
 
@@ -413,15 +429,15 @@ def main(args=sys.argv[1:]):
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
 
-    if os.path.exists(args.pickle_out):
-        logging.info("model exists...")
-        return
-
     np.random.seed(seed=args.seed)
 
     # Read input files
     bcode_meta, tree = read_data(args)
     true_model_dict, oracle_dist_measurers = read_true_model_files(args)
+
+    if os.path.exists(args.pickle_out):
+        logging.info("model exists...")
+        return
 
     has_unresolved_multifurcs = check_has_unresolved_multifurcs(tree)
     logging.info("Tree has unresolved mulfirucs? %d", has_unresolved_multifurcs)
@@ -431,7 +447,7 @@ def main(args=sys.argv[1:]):
 
     args.init_params = {
             "target_lams_intercept": np.array([0]),
-            "target_lams": get_init_target_lams(bcode_meta, 0),
+            "target_lams": get_init_target_lams(bcode_meta, -0.1),
             "boost_softmax_weights": np.ones(3),
             "trim_long_factor": 0.05 * np.ones(2),
             "trim_zero_probs": 0.5 * np.ones(2),
@@ -441,7 +457,7 @@ def main(args=sys.argv[1:]):
             "insert_poisson": np.array([0.5]),
             "double_cut_weight": np.array([0.1]),
             "tot_time": 1,
-            "tot_time_extra": 0.2}
+            "tot_time_extra": 1.3}
     if args.known_params.tot_time:
         args.init_params["tot_time"] = true_model_dict["true_model_params"]["tot_time"]
         args.init_params["tot_time_extra"] = true_model_dict["true_model_params"]["tot_time_extra"]

@@ -98,6 +98,7 @@ class RunEstimatorWorker(ParallelWorker):
                 self.max_sum_states,
                 '--max-sum-states')
 
+        print(" ".join(map(str, cmd)))
         subprocess.check_call(list(map(lambda x: str(x), cmd)))
 
         assert os.path.exists(self.out_json_file)

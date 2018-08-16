@@ -106,6 +106,8 @@ def parse_args():
     parser.add_argument(
         '--birth-lambda', type=float, default=1.8, help='birth rate')
     parser.add_argument(
+        '--start-birth-lambda', type=float, default=1.8, help='birth rate')
+    parser.add_argument(
         '--death-lambda', type=float, default=0.001, help='death rate')
     parser.add_argument(
         '--time', type=float, default=1, help='how much time to simulate')
@@ -190,6 +192,7 @@ def create_simulators(args, clt_model):
     else:
         clt_simulator = CLTSimulatorBifurcating(
             args.birth_lambda,
+            args.start_birth_lambda,
             args.death_lambda,
             cell_type_simulator,
             allele_simulator)

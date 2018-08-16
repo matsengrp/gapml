@@ -162,7 +162,8 @@ class CLTLikelihoodModel:
         model_params = np.concatenate([
                     [] if self.known_params.tot_time else np.log([tot_time_extra]),
                     [] if self.known_params.target_lams_intercept else [np.log(target_lams[0])],
-                    [] if self.known_params.target_lams else (np.log(target_lams[1:]) - np.log(target_lams[0])),
+                    #[] if self.known_params.target_lams else (np.log(target_lams[1:]) - np.log(target_lams[0])),
+                    [] if self.known_params.target_lams else (np.log(target_lams) - np.log(target_lams[0])),
                     [] if self.known_params.double_cut_weight else np.log(double_cut_weight),
                     boost_softmax_weights,
                     [] if self.known_params.trim_long_factor else inv_sigmoid(trim_long_factor),
@@ -195,15 +196,17 @@ class CLTLikelihoodModel:
         if self.known_params.target_lams:
             self.target_lams = tf.constant(target_lams, dtype=tf.float64)
             self.log_target_lam_diffs = tf.constant(
-                    np.log(target_lams[1:]) - np.log(target_lams[0]),
+                    #np.log(target_lams[1:]) - np.log(target_lams[0]),
+                    np.log(target_lams) - np.log(target_lams[0]),
                     dtype=tf.float64)
         else:
-            up_to_size += target_lams.size - 1
+            up_to_size += target_lams.size# - 1
             self.log_target_lam_diffs = self.all_vars[prev_size: up_to_size]
-            self.target_lams = tf.exp(tf.concat([
-                self.log_target_lam_intercept,
-                self.log_target_lam_intercept + self.log_target_lam_diffs],
-                axis=0))
+            self.target_lams = tf.exp(self.log_target_lam_intercept + self.log_target_lam_diffs)
+            #self.target_lams = tf.exp(tf.concat([
+            #    self.log_target_lam_intercept,
+            #    self.log_target_lam_intercept + self.log_target_lam_diffs],
+            #    axis=0))
         prev_size = up_to_size
         if self.known_params.double_cut_weight:
             self.double_cut_weight = tf.constant(double_cut_weight, dtype=tf.float64)
@@ -379,7 +382,8 @@ class CLTLikelihoodModel:
         init_val = np.concatenate([
             [] if self.known_params.tot_time else np.log([tot_time_extra]),
             [] if (self.known_params.target_lams_intercept or self.known_params.target_lams) else [np.log(target_lams[0])],
-            [] if self.known_params.target_lams else np.log(target_lams[1:]) - np.log(target_lams[0]),
+            #[] if self.known_params.target_lams else np.log(target_lams[1:]) - np.log(target_lams[0]),
+            [] if self.known_params.target_lams else np.log(target_lams) - np.log(target_lams[0]),
             [] if self.known_params.double_cut_weight else np.log(double_cut_weight),
             boost_softmax_weights,
             [] if self.known_params.trim_long_factor else inv_sigmoid(trim_long_factor),
@@ -847,12 +851,18 @@ class CLTLikelihoodModel:
         self.target_lam_penalty = tf.constant(0, dtype=tf.float64)
         # Penalize target lambda differences -- try to keep lambdas close to each other
         if not self.known_params.target_lams and self.bcode_meta.n_targets > 1:
-            self.target_lam_penalty = tf.reduce_mean(tf.pow(self.log_target_lam_diffs, 2))
+            self.target_lam_penalty = (
+                    0.1 * tf.reduce_sum(tf.pow(self.log_target_lam_diffs, 2))
+                    + tf.reduce_sum(self.double_cut_weight))
             self.penalties -= self.target_lam_pen_ph * self.target_lam_penalty
 
-        self.smooth_log_lik = tf.add(
-                self.log_lik,
-                self.penalties / self.bcode_meta.num_barcodes)
+        #self.hessian = tf.hessians(self.log_lik, self.all_vars)[0]
+        #self.firth_pen = 0.5 * tf.log(tf.matrix_determinant(self.hessian))
+
+        self.smooth_log_lik = (
+                self.log_lik
+                + self.penalties / self.bcode_meta.num_barcodes
+                - self.min_pt_prob)  #+ self.firth_pen
 
         if create_gradient:
             logging.info("Computing gradients....")
@@ -944,6 +954,7 @@ class CLTLikelihoodModel:
         down_probs_dict = dict()
         # Store all the scaling terms addressing numerical underflow
         log_scaling_terms = dict()
+        self.min_pt_prob = tf.constant(0, dtype=tf.float64)
         # Tree traversal order should be postorder
         for node in self.topology.traverse("postorder"):
             if node.is_leaf():
@@ -975,6 +986,10 @@ class CLTLikelihoodModel:
                                 # trans_mats[child.node_id],
                                 tr_mat,
                                 self.branch_lens[child.node_id])
+
+                        self.min_pt_prob += tf.reduce_mean(tf.abs(
+                                tf.diag_part(pt_matrix[child.node_id])
+                                - tf.constant(0.5, tf.float64)))
 
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.
@@ -1025,6 +1040,7 @@ class CLTLikelihoodModel:
 
         self.Lprob = Lprob
         self.down_probs_dict = down_probs_dict
+        self.pt_matrix = pt_matrix
         return log_lik_alleles, Ddiags
 
     @profile
