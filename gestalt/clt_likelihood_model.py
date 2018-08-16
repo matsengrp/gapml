@@ -813,7 +813,6 @@ class CLTLikelihoodModel:
         logging.info("Done creating topology log likelihood, time: %d", time.time() - st_time)
         self.log_lik = self.log_lik_alleles
 
-        self.penalties = self.dist_to_half_pen * self.dist_to_half_pen_ph
         # Penalize branch lengths if they get too close to zero using the log barrier function
         # Only penalizing leaves because that is the only thing that can possibly be nonpositive
         # in this parameterization
@@ -822,11 +821,13 @@ class CLTLikelihoodModel:
                 self.branch_lens,
                 indices = [node.node_id for node in self.topology])
             self.branch_log_barr = tf.reduce_mean(tf.log(branch_lens_to_penalize))
-            self.penalties += self.log_barr_ph * self.branch_log_barr
         else:
             self.branch_log_barr = tf.constant(0, dtype=tf.float64)
 
-        self.smooth_log_lik = (self.log_lik + self.penalties) / self.bcode_meta.num_barcodes
+        self.smooth_log_lik = (
+                self.log_lik/self.bcode_meta.num_barcodes
+                + self.log_barr_ph * self.branch_log_barr
+                - self.dist_to_half_pen * self.dist_to_half_pen_ph)
 
         if create_gradient:
             logging.info("Computing gradients....")

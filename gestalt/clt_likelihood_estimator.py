@@ -78,14 +78,13 @@ class CLTPenalizedEstimator(CLTEstimator):
                     self.model.dist_to_half_pen_ph: self.dist_to_half_pen,
                 }
 
-        pen_log_lik, log_lik, penalties = self.model.sess.run(
-            [self.model.smooth_log_lik, self.model.log_lik, self.model.penalties],
+        pen_log_lik, log_lik = self.model.sess.run(
+            [self.model.smooth_log_lik, self.model.log_lik],
             feed_dict=feed_dict)
 
         prev_pen_log_lik = pen_log_lik[0]
         logging.info("initial penalized log lik %f, unpen log lik %f", pen_log_lik, log_lik)
         print("initial penalized log lik obtained %f" % pen_log_lik)
-        logging.info("penalties %f" % penalties)
         assert not np.isnan(pen_log_lik)
         train_history = [{
                     "iter": -1,
@@ -105,13 +104,12 @@ class CLTPenalizedEstimator(CLTEstimator):
                 if k not in ["branch_len_offsets_proportion", "branch_len_inners", "boost_probs"]:
                     logging.info("%s: %s", k, v)
 
-            _, pen_log_lik, log_lik, dist_to_half_pen, pt_matrices, log_barr, branch_lens = self.model.sess.run(
+            _, pen_log_lik, log_lik, dist_to_half_pen, log_barr, branch_lens = self.model.sess.run(
                     [
                         self.model.adam_train_op,
                         self.model.smooth_log_lik,
                         self.model.log_lik,
                         self.model.dist_to_half_pen,
-                        self.model.pt_matrix,
                         self.model.branch_log_barr,
                         self.model.branch_lens],
                     feed_dict=feed_dict)

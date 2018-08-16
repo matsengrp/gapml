@@ -147,7 +147,8 @@ def fit_tree(
         dist_to_half_pen: float,
         transition_wrap_maker: TransitionWrapperMaker,
         init_model_params: Dict,
-        oracle_dist_measurers = None):
+        oracle_dist_measurers = None,
+        known_params = None):
     """
     Fits the model params for the given tree and a given penalty param
     """
@@ -161,7 +162,7 @@ def fit_tree(
         args.num_inits,
         transition_wrap_maker,
         init_model_params = init_model_params,
-        known_params = args.known_params,
+        known_params = args.known_params if known_params is None else known_params,
         dist_measurers = oracle_dist_measurers,
         abundance_weight = args.abundance_weight)
     res = worker.run_worker(None)
@@ -205,9 +206,9 @@ def tune_hyperparams(
             train_tree,
             train_bcode_meta,
             args,
-            dist_to_half_pen,
+            dist_to_half_pen * args.train_split,
             train_transition_wrap_maker,
-            args.init_model_params)
+            args.init_params)
         logging.info("Done training pen param %f", dist_to_half_pen)
 
         # Copy over the trained model params except for branch length things
@@ -217,15 +218,16 @@ def tune_hyperparams(
                 fixed_params[k] = v
 
         # Now fit the validation tree with model params fixed
-        # TODO: this only keeps the target lambda values fixed and nothing else
-        #       We should probably keep more things fixed.
         res_val = fit_tree(
             val_tree,
             val_bcode_meta,
             args,
-            0, # target pen lam = zero
+            dist_to_half_pen * (1 - args.train_split),
             val_transition_wrap_maker,
-            init_model_params = fixed_params)
+            init_model_params = fixed_params,
+            known_params = KnownModelParams(
+                target_lams = True,
+                tot_time = True))
         curr_val_log_lik = res_val.train_history[-1]["log_lik"]
         curr_val_pen_log_lik = res_val.train_history[-1]["pen_log_lik"]
         logging.info(
@@ -457,10 +459,10 @@ def main(args=sys.argv[1:]):
         args.init_params["target_lams"] = true_model_dict['true_model_params']['target_lams']
         args.init_params["double_cut_weight"] = true_model_dict['true_model_params']['double_cut_weight']
         best_dist_to_half_pen = 0
-    else:
-        # Tune penalty params for the target lambdas
-        # Initialize with random values
-        best_dist_to_half_pen, args.init_params = tune_hyperparams(tree, bcode_meta, args)
+
+    # Tune penalty params
+    # Initialize with random values
+    best_dist_to_half_pen, args.init_params = tune_hyperparams(tree, bcode_meta, args)
 
     # Now we can actually train the multifurc tree with the target lambda penalty param fixed
     raw_res = fit_multifurc_tree(
