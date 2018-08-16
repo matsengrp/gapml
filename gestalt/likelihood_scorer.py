@@ -35,7 +35,7 @@ class LikelihoodScorer(ParallelWorker):
             tree: CellLineageTree,
             bcode_meta: BarcodeMetadata,
             log_barr: float,
-            target_lam_pen: float,
+            dist_to_half_pen: float,
             max_iters: int,
             num_inits: int,
             transition_wrap_maker: TransitionWrapperMaker,
@@ -49,8 +49,8 @@ class LikelihoodScorer(ParallelWorker):
         @param tree: the cell lineage tree topology to fit the likelihood for
         @param bcode_meta: BarcodeMetadata
         @param log_barr: log barrier penalty parameter, i.e. how much to scale the penalty
-        @param target_lam_pen: penalty parameter for log target lambda difference, i.e. how much to scale the penalty
-                                (penalty tries to keep target lambdas the same)
+        @param dist_to_half_pen: penalty parameter for penalizing how far the prob transition matrices
+                                are from having 1/2 on the diagonal
         @param max_iters: maximum number of iterations for MLE
         @param transition_wrap_maker: TransitionWrapperMaker
         @param dist_measurers: if not None, TreeDistanceMeasurerAgg is used to measure the distance between the estimated
@@ -60,7 +60,7 @@ class LikelihoodScorer(ParallelWorker):
         self.tree = tree
         self.bcode_meta = bcode_meta
         self.log_barr = log_barr
-        self.target_lam_pen = target_lam_pen
+        self.dist_to_half_pen = dist_to_half_pen
         self.max_iters = max_iters
         self.num_inits = num_inits
         self.transition_wrap_maker = transition_wrap_maker
@@ -146,7 +146,7 @@ class LikelihoodScorer(ParallelWorker):
                 self.transition_wrap_maker,
                 self.max_iters,
                 self.log_barr,
-                self.target_lam_pen)
+                self.dist_to_half_pen)
 
         # Fit multiple initializations
         results = []

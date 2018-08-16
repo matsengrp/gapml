@@ -326,6 +326,10 @@ def main(args=sys.argv[1:]):
         "Number of uniq obs after restricting to first %d alleles: %d",
         args.num_barcodes,
         len(obs_data_dict["obs_leaves"]))
+    print(
+        "Number of uniq obs after restricting to first %d alleles: %d" % (
+        args.num_barcodes,
+        len(obs_data_dict["obs_leaves"])))
     save_data(obs_data_dict, args.out_obs_file)
 
     # Generate the true collapsed tree

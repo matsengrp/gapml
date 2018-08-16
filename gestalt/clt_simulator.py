@@ -70,12 +70,14 @@ class BirthDeathTreeSimulator:
     Class for creating cell lineage trees without allele or cell types
     """
     def __init__(self,
+        start_birth_rate: float,
         birth_rate: float,
         death_rate: float):
         """
         @param birth_rate: the CTMC rate param for cell division
         @param death_rate: the CTMC rate param for cell death
         """
+        self.start_birth_scale = 1.0 / start_birth_rate
         self.birth_scale = 1.0 / birth_rate
         self.death_scale = 1.0 / death_rate
 
@@ -90,6 +92,7 @@ class BirthDeathTreeSimulator:
 
         @return CellLineageTree from the birth death tree simulator -- provides a topology only
         """
+        self.tot_time = time
         tree = CellLineageTree(
             allele_list=root_allele_list,
             dist=0)
@@ -131,8 +134,8 @@ class BirthDeathTreeSimulator:
 
         # Determine branch length and event at end of branch
         division_happens, branch_length = self._run_race(
-                self.birth_scale/1.1 if remain_time < 0.025 else self.birth_scale,
-                self.death_scale * 2 if remain_time < 0.025 else self.death_scale)
+            self.start_birth_scale if remain_time > self.tot_time - 0.02 else self.birth_scale,
+            self.death_scale)
         obs_branch_length = min(branch_length, remain_time)
         remain_time = remain_time - obs_branch_length
 
@@ -223,6 +226,7 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
 
     def __init__(self,
         birth_rate: float,
+        start_birth_rate: float,
         death_rate: float,
         cell_state_simulator: CellStateSimulator,
         allele_simulator: AlleleSimulator):
@@ -232,7 +236,10 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
         @param cell_type_tree: the tree that specifies how cells differentiate
         @param allele_simulator: a simulator for how alleles get modified
         """
-        self.bd_tree_simulator = BirthDeathTreeSimulator(birth_rate, death_rate)
+        self.bd_tree_simulator = BirthDeathTreeSimulator(
+                start_birth_rate,
+                birth_rate,
+                death_rate)
         self.cell_state_simulator = cell_state_simulator
         self.allele_simulator = allele_simulator
 

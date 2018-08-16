@@ -175,15 +175,23 @@ class BHVDistanceMeasurer(TreeDistanceMeasurer):
     BHV distance
     """
     name = "bhv"
-    def get_dist(self, tree, attr="allele_events_list_str"):
+    def get_dist(self, raw_tree, attr="allele_events_list_str"):
         """
         http://comet.lehman.cuny.edu/owen/code.html
         """
-        if len(self.ref_tree.get_children()) == 1:
-            self.ref_tree.get_children()[0].delete(prevent_nondicotomic=True, preserve_branch_length=True)
+        ref_tree = self.ref_tree.copy()
+        if len(ref_tree.get_children()) == 1:
+            ref_tree.get_children()[0].delete(prevent_nondicotomic=True, preserve_branch_length=True)
+        for leaf in ref_tree:
+            #leaf.dist = 0
+            leaf.name = getattr(leaf, attr)
 
+        tree = raw_tree.copy()
         if len(tree.get_children()) == 1:
             tree.get_children()[0].delete(prevent_nondicotomic=True, preserve_branch_length=True)
+        for leaf in tree:
+            #leaf.dist = 0
+            leaf.name = getattr(leaf, attr)
 
         self._rename_nodes(tree)
 
@@ -192,7 +200,7 @@ class BHVDistanceMeasurer(TreeDistanceMeasurer):
         tree_in_file = "%s/tree_newick%s.txt" % (
                 self.scratch_dir, suffix)
         with open(tree_in_file, "w") as f:
-            f.write(self.ref_tree.write(format=5))
+            f.write(ref_tree.write(format=5))
             f.write("\n")
             f.write(tree.write(format=5))
             f.write("\n")
@@ -340,7 +348,7 @@ class MRCADistanceMeasurer(TreeDistanceMeasurer):
 
         self.ref_tree_mrca_matrix = self._get_mrca_matrix(ref_tree)
 
-    def _get_mrca_matrix(self, tree, perturb=1e-2):
+    def _get_mrca_matrix(self, tree, perturb=0):
         """
         @return the pairwise MRCA distance matrix for that tree
         """
@@ -360,19 +368,14 @@ class MRCADistanceMeasurer(TreeDistanceMeasurer):
                 mrca = leaf1.get_common_ancestor(leaf2)
                 mrca_dist = leaf1.get_distance(mrca)
                 mrca_matrix[min(leaf1_idx, leaf2_idx), max(leaf1_idx, leaf2_idx)] = mrca_dist + perturb
-                #if mrca_dist == 0:
-                #    print("ajsdkflajsdklfjasd", leaf1_idx, leaf2_idx)
-                #    1/0
-                mrca_matrix[max(leaf1_idx, leaf2_idx), min(leaf1_idx, leaf2_idx)] = 1
+                mrca_matrix[max(leaf1_idx, leaf2_idx), min(leaf1_idx, leaf2_idx)] = 0
         return mrca_matrix
 
     def get_dist(self, tree, C=0.1):
         tree_mrca_matrix = self._get_mrca_matrix(tree)
         difference_matrix = np.abs((self.ref_tree_mrca_matrix) - (tree_mrca_matrix))
         norm_diff = np.sum(difference_matrix)
-        #norm_diff = np.linalg.norm(difference_matrix, ord="fro")
         num_entries = (self.num_leaves - 1) * self.num_leaves / 2 + self.num_leaves
-        #return norm_diff/np.sqrt(num_entries)
         return norm_diff/(num_entries)
 
 class MRCASpearmanMeasurer(MRCADistanceMeasurer):

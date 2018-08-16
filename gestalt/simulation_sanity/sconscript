@@ -1,5 +1,10 @@
 # Just an scons to run through the entire pipeline and check things work
 # Also very simple tests for consistency
+# To test code works:
+# (1) use a single target
+# (2) use two targets but a super low target rate and super high double weight
+# Test with lambda known and check the total time estimate
+# (Can also test with unknown lambda and known total time)
 
 import os
 
@@ -20,13 +25,15 @@ nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_enviro
 
 nest.add(
     'seed',
-    range(5,6),
+    #range(5,6),
+    [0],
     label_func=lambda c: "seed%d" % c,
 )
 
 nest.add(
     'setting',
-    ['one_leaf', 'stupid_cherry'])
+    #['one_leaf', 'stupid_cherry'])
+    ['one_leaf'])
 
 @nest.add_target_with_env(localenv)
 def generate(env, outdir, c):
@@ -41,11 +48,12 @@ def generate(env, outdir, c):
         '--out-obs-file ${TARGETS[0]}',
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
-        '--target-lambda 0.5,0.4',
-        '--double 0.000001',
+        '--target-lambda 0.001,0.001',
+        '--double 850000',
+        '--trim-long-factor 0.001 0.001',
         '--time 1',
         '--num-barcodes',
-        400,
+        1000,
         '--min-uniq-alleles',
         0,
         '--max-uniq-alleles',
@@ -114,17 +122,17 @@ def run_MLE(env, outdir, c):
         '--seed',
 	c['seed'] + 100,
         '--log-barr 0.001',
-        '--target-lam-pens 0.4',
+        '--dist-to-half-pens 1e-20',
         '--max-sum-states 2000',
         '--max-extra-steps 2',
         '--max-iters 10000',
-        '--intercept-lambda-known',
-        #'--tot-time',
-        #'--lambda-known',
+        '--lambda-known',
     ]
     return env.Command(
         [
-            join(outdir, 'oracle_tree0_fitted.pkl')],
+            join(outdir, 'oracle_tree0_fitted.pkl'),
+            join(outdir, 'oracle_tree0_fit_log.pkl'),
+        ],
         [
             c['restrict_observed_alleles'][0],
             c['run_parsimony'][0],

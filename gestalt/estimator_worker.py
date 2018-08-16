@@ -14,10 +14,9 @@ class RunEstimatorWorker(ParallelWorker):
             true_collapsed_tree_file: str,
             seed: int,
             log_barr: float,
-            target_lam_pens: str,
+            dist_to_half_pens: str,
             max_iters: int,
             num_inits: int,
-            intercept_lambda_known: bool,
             lambda_known: bool,
             tot_time_known: bool,
             do_refit: bool,
@@ -33,10 +32,9 @@ class RunEstimatorWorker(ParallelWorker):
         self.true_collapsed_tree_file = true_collapsed_tree_file
         self.seed = seed
         self.log_barr = log_barr
-        self.target_lam_pens = target_lam_pens
+        self.dist_to_half_pens = dist_to_half_pens
         self.max_iters = max_iters
         self.num_inits = num_inits
-        self.intercept_lambda_known = intercept_lambda_known
         self.lambda_known = lambda_known
         self.tot_time_known = tot_time_known
         self.do_refit = do_refit
@@ -62,8 +60,8 @@ class RunEstimatorWorker(ParallelWorker):
             self.seed,
             '--log-barr',
             self.log_barr,
-            '--target-lam-pens',
-            self.target_lam_pens,
+            '--dist-to-half-pens',
+            self.dist_to_half_pens,
             '--max-iters',
             self.max_iters,
             '--num-inits',
@@ -85,8 +83,6 @@ class RunEstimatorWorker(ParallelWorker):
         cmd = _add_more_args(
                 self.true_model_file,
                 '--true-model-file')
-        if self.intercept_lambda_known:
-            cmd = cmd + ['--intercept-lambda-known']
         if self.lambda_known:
             cmd = cmd + ['--lambda-known']
         if self.tot_time_known:
@@ -98,6 +94,7 @@ class RunEstimatorWorker(ParallelWorker):
                 self.max_sum_states,
                 '--max-sum-states')
 
+        print(" ".join(map(str, cmd)))
         subprocess.check_call(list(map(lambda x: str(x), cmd)))
 
         assert os.path.exists(self.out_json_file)

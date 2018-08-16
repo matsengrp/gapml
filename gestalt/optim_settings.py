@@ -4,14 +4,12 @@ class KnownModelParams:
     """
     def __init__(self,
             target_lams: bool = False,
-            target_lams_intercept: bool = False,
             double_cut_weight: bool = False,
             trim_long_factor: bool = False,
             branch_lens: bool = False,
             cell_lambdas: bool = False,
             tot_time: bool = False):
         self.target_lams = target_lams
-        self.target_lams_intercept = target_lams_intercept or target_lams
         self.double_cut_weight = double_cut_weight or target_lams
         self.trim_long_factor = trim_long_factor or target_lams
         self.branch_lens = branch_lens
