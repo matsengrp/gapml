@@ -206,7 +206,7 @@ def tune_hyperparams(
             train_tree,
             train_bcode_meta,
             args,
-            dist_to_half_pen * args.train_split,
+            dist_to_half_pen,
             train_transition_wrap_maker,
             args.init_params)
         logging.info("Done training pen param %f", dist_to_half_pen)
