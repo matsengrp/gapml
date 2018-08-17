@@ -203,7 +203,7 @@ def create_cell_lineage_tree(
         args,
         clt_model: CLTLikelihoodModel,
         max_tries: int = 20,
-        time_incr: float = 0.05,
+        incr: float = 0.02,
         time_min: float = 1e-3):
     """
     @return original clt, the set of observed leaves, and the true topology for the observed leaves
@@ -212,9 +212,10 @@ def create_cell_lineage_tree(
 
     # Keep trying to make CLT until enough leaves in observed tree by modifying the max time of the tree
     tot_time = args.time
+    birth_lambda = args.birth_lambda
     for i in range(max_tries):
-        args.model_seed += 1
         try:
+            clt_simulator.birth_rate = birth_lambda
             clt = clt_simulator.simulate(
                 tree_seed = args.model_seed,
                 data_seed = args.data_seed,
@@ -229,16 +230,16 @@ def create_cell_lineage_tree(
                     seed=args.model_seed)
 
             logging.info(
-                "time %f, num uniq alleles %d, num sampled leaves %d, num tot_leaves %d",
-                tot_time,
+                "birth lambda %f, num uniq alleles %d, num sampled leaves %d, num tot_leaves %d",
+                birth_lambda,
                 len(obs_leaves),
                 len(true_subtree),
                 len(clt))
             print("le....", len(true_subtree))
             if len(true_subtree) < args.min_uniq_alleles:
-                tot_time += time_incr
+                birth_lambda += incr
             elif len(true_subtree) >= args.max_uniq_alleles:
-                tot_time -= time_incr
+                birth_lambda -= incr
             else:
                 # We got a good number of leaves! Stop trying
                 print("done!")

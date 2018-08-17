@@ -110,7 +110,7 @@ def run_MLE(env, outdir, c):
         '--log-file ${TARGETS[1]}',
         '--seed 100',
         '--log-barr 0.0001',
-        '--target-lam-pens',
+        '--dist-to-half-pens',
         c['penalty_params'],
         '--max-sum-states',
         c['sum_states'],
@@ -120,6 +120,7 @@ def run_MLE(env, outdir, c):
         '--num-inits 1',
         '--train-split 0.75',
         '--max-topologies 1',
+        '--tot-time-known',
     ]
     return env.Command(
         [

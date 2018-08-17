@@ -23,7 +23,7 @@ LAMBDA_SEQUENCE = [.9, .85, .8, .75, .7]
 
 nest.add(
     'model_seed',
-    [394],
+    [396],
     label_func=lambda c: 'model_seed%d' % c,
 )
 
@@ -54,13 +54,13 @@ def generate(env, outdir, c):
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
         '--time 1',
-        '--start-birth-lambda 50',
-        '--birth-lambda 1',
+        '--start-birth-lambda 105',
+        '--birth-lambda 1.24',
         '--death-lambda 0.2',
         '--num-barcodes',
         40,
-        '--min-uniq-alleles 10',
-        '--max-uniq-alleles 25',
+        '--min-uniq-alleles 30',
+        '--max-uniq-alleles 50',
         '--max-abundance 200',
         '--double-cut-weight 0.2',
         '--target-lambdas',
@@ -71,6 +71,7 @@ def generate(env, outdir, c):
         '--insert-zero-prob 0.1',
         '--insert-poisson 1',
         '--perturb-target-lambdas-variance 0',
+        '--max-tries 20',
     ]
     return env.Command(
         [
@@ -118,7 +119,7 @@ def run_topology(env, outdir, c):
         '--max-random',
         0,
         '--max-random-multifurc',
-        1,
+        4,
         '--num-jumbles 1'
     ]
     return env.Command(
@@ -131,7 +132,7 @@ def run_topology(env, outdir, c):
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = "1"
+    penalty_params = "8,6,4,2"
     cmd = [
 	'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
@@ -142,19 +143,21 @@ def run_MLE(env, outdir, c):
         '--log-file ${TARGETS[1]}',
         '--seed',
 	c['seed'] + 100,
-        '--log-barr 0.0000001',
+        '--log-barr 1e-6',
         '--dist-to-half-pens',
 	penalty_params,
         '--max-sum-states 2000',
         '--max-extra-steps 2',
         '--max-iters 10000',
+        '--train-split 0.5',
         '--num-inits 1',
         '--tot-time-known',
+        '--max-topologies 4',
     ]
     return env.Command(
         [
             join(outdir, 'tune_fitted.pkl'),
-            join(outdir, 'tune_fitted_log.txt')],
+            join(outdir, 'tune_fitted.txt')],
         [
             c['restrict_observed_alleles'][0],
             c['run_topology'][0],

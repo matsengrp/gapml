@@ -137,7 +137,7 @@ def parse_args():
         reverse=True))
 
     assert args.log_barr >= 0
-    assert all(lam > 0 for lam in args.dist_to_half_pens)
+    assert all(lam >= 0 for lam in args.dist_to_half_pens)
     return args
 
 def fit_tree(
@@ -148,7 +148,8 @@ def fit_tree(
         transition_wrap_maker: TransitionWrapperMaker,
         init_model_params: Dict,
         oracle_dist_measurers = None,
-        known_params = None):
+        num_inits: int = None,
+        max_iters: int = None):
     """
     Fits the model params for the given tree and a given penalty param
     """
@@ -158,11 +159,11 @@ def fit_tree(
         bcode_meta,
         args.log_barr,
         dist_to_half_pen,
-        args.max_iters,
-        args.num_inits,
+        args.max_iters if max_iters is None else max_iters,
+        args.num_inits if num_inits is None else num_inits,
         transition_wrap_maker,
         init_model_params = init_model_params,
-        known_params = args.known_params if known_params is None else known_params,
+        known_params = args.known_params,
         dist_measurers = oracle_dist_measurers,
         abundance_weight = args.abundance_weight)
     res = worker.run_worker(None)
@@ -181,19 +182,19 @@ def tune_hyperparams(
         best_dist_to_half_pen = args.dist_to_half_pens[0]
         return best_dist_to_half_pen, best_params
 
-    train_tree, val_tree, train_bcode_meta, val_bcode_meta = create_train_val_tree(
+    train_tree_split, val_tree_split = create_train_val_tree(
             tree,
             bcode_meta,
             args.train_split)
 
     train_transition_wrap_maker = TransitionWrapperMaker(
-            train_tree,
-            train_bcode_meta,
+            train_tree_split.tree,
+            train_tree_split.bcode_meta,
             args.max_extra_steps,
             args.max_sum_states)
     val_transition_wrap_maker = TransitionWrapperMaker(
-            val_tree,
-            val_bcode_meta,
+            val_tree_split.tree,
+            val_tree_split.bcode_meta,
             args.max_extra_steps,
             args.max_sum_states)
 
@@ -203,8 +204,8 @@ def tune_hyperparams(
         logging.info("TUNING %f", dist_to_half_pen)
         # Train the model using only the training data
         res_train = fit_tree(
-            train_tree,
-            train_bcode_meta,
+            train_tree_split.tree,
+            train_tree_split.bcode_meta,
             args,
             dist_to_half_pen,
             train_transition_wrap_maker,
@@ -217,18 +218,27 @@ def tune_hyperparams(
             if bcode_meta.num_barcodes > 1 or (k not in ['branch_len_inners', 'branch_len_offsets_proportion']):
                 fixed_params[k] = v
 
+        if bcode_meta.num_barcodes == 1:
+            num_nodes = max([n.node_id for n in val_tree_split.tree]) + 1
+            br_len_inners = np.zeros(num_nodes)
+            br_len_offsets_proportion = np.zeros(num_nodes)
+            for val_node_id, orig_node_id in val_tree_split.to_orig_node_dict.items():
+                matching_train_id = train_tree_split.from_orig_node_dict[orig_node_id]
+                br_len_inners[val_node_id] = res_train.model_params_dict['branch_len_inners'][matching_train_id]
+                br_len_offsets_proportion[val_node_id] = res_train.model_params_dict['branch_len_offsets_proportion'][matching_train_id]
+            fixed_params['branch_len_inners'] = br_len_inners
+            fixed_params['branch_len_offsets_proportion'] = br_len_offsets_proportion
+
         # Now fit the validation tree with model params fixed
         res_val = fit_tree(
-            val_tree,
-            val_bcode_meta,
+            val_tree_split.tree,
+            val_tree_split.bcode_meta,
             args,
-            0, #dist_to_half_pen * (1 - args.train_split),
-            val_transition_wrap_maker,
+            dist_to_half_pen = 0,
+            transition_wrap_maker = val_transition_wrap_maker,
             init_model_params = fixed_params,
-            known_params = KnownModelParams(
-                target_lams = True,
-                branch_lens = bcode_meta.num_barcodes > 1,
-                tot_time = True))
+            num_inits = 1,
+            max_iters = 0)
         curr_val_log_lik = res_val.train_history[-1]["log_lik"]
         curr_val_pen_log_lik = res_val.train_history[-1]["pen_log_lik"]
         logging.info(
@@ -240,8 +250,13 @@ def tune_hyperparams(
             best_val_log_lik = curr_val_log_lik
             best_dist_to_half_pen = dist_to_half_pen
             best_params = fixed_params
+        else:
+            break
 
     logging.info("Best penalty param %s", best_dist_to_half_pen)
+    if bcode_meta.num_barcodes == 1:
+        best_params.pop('branch_len_inners', None)
+        best_params.pop('branch_len_offsets_proportion', None)
     return best_dist_to_half_pen, best_params
 
 def get_init_target_lams(bcode_meta, mean_val):
