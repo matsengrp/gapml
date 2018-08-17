@@ -45,7 +45,7 @@ def generate(env, outdir, c):
     cmd = [
         #'python boto_run.py 2 2000 generate_data.py',
 	'python generate_data.py',
-	'--sampling-rate 0.7',
+	'--sampling-rate 0.65',
         '--model-seed',
         c['model_seed'],
         '--data-seed',
@@ -54,8 +54,8 @@ def generate(env, outdir, c):
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
         '--time 1',
-        '--start-birth-lambda 105',
-        '--birth-lambda 1.24',
+        '--start-birth-lambda 100',
+        '--birth-lambda 2.8',
         '--death-lambda 0.2',
         '--num-barcodes',
         40,
@@ -83,7 +83,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [4],
+    [1, 4, 16],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -132,7 +132,7 @@ def run_topology(env, outdir, c):
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = "8,6,4,2"
+    penalty_params = "2,1,0.5,0.25"
     cmd = [
 	'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',

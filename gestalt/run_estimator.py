@@ -166,6 +166,7 @@ def fit_tree(
         known_params = args.known_params,
         dist_measurers = oracle_dist_measurers,
         abundance_weight = args.abundance_weight)
+    # TODO: this wastes a lot of time since much of the time is spent here!
     res = worker.run_worker(None)
     return res
 

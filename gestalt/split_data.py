@@ -128,7 +128,6 @@ def _prune_tree(clt: CellLineageTree, keep_leaf_ids: Set[int]):
     for node in clt.iter_descendants():
         if sum((node2.node_id in keep_leaf_ids) for node2 in node.traverse()) == 0:
             node.detach()
-    collapsed_tree._remove_single_child_unobs_nodes(clt)
     return clt
 
 def _create_train_val_tree_by_subsampling(clt: CellLineageTree, bcode_meta: BarcodeMetadata, train_split_rate: float):
@@ -145,28 +144,38 @@ def _create_train_val_tree_by_subsampling(clt: CellLineageTree, bcode_meta: Barc
         if leaf.node_id in train_leaf_ids or leaf.node_id in val_leaf_ids:
             continue
         parent = leaf.up
-        children = parent.get_children()
-        all_leaves = all([c.is_leaf() for c in children])
-        if all_leaves:
-            num_children = len(children)
-            assert num_children >= 2
-            num_train = int(np.ceil(train_split_rate * num_children))
+        leaf_children = [c for c in parent.get_children() if c.is_leaf()]
+        num_leaf_children = len(leaf_children)
+        if num_leaf_children > 1:
+            num_train = int(np.ceil(train_split_rate * num_leaf_children))
             assert num_train >= 1
-            shuffle_idxs = np.random.choice(num_children, size=num_children, replace=False)
+            shuffle_idxs = np.random.choice(num_leaf_children, size=num_leaf_children, replace=False)
             train_leaf_ids.update(
-                    [children[idx].node_id for idx in shuffle_idxs[:num_train]])
+                    [leaf_children[idx].node_id for idx in shuffle_idxs[:num_train]])
             val_leaf_ids.update(
-                    [children[idx].node_id for idx in shuffle_idxs[num_train:]])
+                    [leaf_children[idx].node_id for idx in shuffle_idxs[num_train:]])
         else:
             train_leaf_ids.add(leaf.node_id)
 
     train_clt = _prune_tree(clt.copy(), train_leaf_ids)
+    collapsed_tree._remove_single_child_unobs_nodes(train_clt)
+    train_node_ids = set([n.node_id for n in train_clt.traverse()])
+
     val_clt = _prune_tree(clt.copy(), val_leaf_ids)
+    # Only keep internal nodes that are also in the training tree
+    for c in val_clt.traverse():
+        if not c.is_leaf() and c.node_id not in train_node_ids:
+            c.delete(prevent_nondicotomic=True, preserve_branch_length=True)
+    children_nodes = val_clt.get_children()
+    # Also remove any children of the root node that are leaves
+    for c in children_nodes:
+        if c.is_leaf():
+            c.detach()
 
     logging.info("ORIG TREE")
     logging.info(clt.get_ascii(attributes=["node_id"], show_internal=True))
-    logging.info("TRAIN TREE")
+    logging.info("train tree")
     logging.info(train_clt.get_ascii(attributes=["node_id"], show_internal=True))
-    logging.info("VAL TREE")
+    logging.info("val tree")
     logging.info(val_clt.get_ascii(attributes=["node_id"], show_internal=True))
     return train_clt, val_clt, bcode_meta, bcode_meta
