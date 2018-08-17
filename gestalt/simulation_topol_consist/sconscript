@@ -23,7 +23,7 @@ LAMBDA_SEQUENCE = [.9, .85, .8, .75, .7]
 
 nest.add(
     'model_seed',
-    [396],
+    [400],
     label_func=lambda c: 'model_seed%d' % c,
 )
 
@@ -45,7 +45,7 @@ def generate(env, outdir, c):
     cmd = [
         #'python boto_run.py 2 2000 generate_data.py',
 	'python generate_data.py',
-	'--sampling-rate 0.65',
+	'--sampling-rate 0.3',
         '--model-seed',
         c['model_seed'],
         '--data-seed',
@@ -54,11 +54,13 @@ def generate(env, outdir, c):
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
         '--time 1',
+        #'--start-birth-lambda 150',
+        #'--birth-lambda 4',
         '--start-birth-lambda 100',
-        '--birth-lambda 2.8',
+        '--birth-lambda 3',
         '--death-lambda 0.2',
         '--num-barcodes',
-        40,
+        4,
         '--min-uniq-alleles 30',
         '--max-uniq-alleles 50',
         '--max-abundance 200',
@@ -83,7 +85,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [1, 4, 16],
+    [1],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -132,7 +134,7 @@ def run_topology(env, outdir, c):
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = "2,1,0.5,0.25"
+    penalty_params = "8" #,4,2"
     cmd = [
 	'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
@@ -143,16 +145,16 @@ def run_MLE(env, outdir, c):
         '--log-file ${TARGETS[1]}',
         '--seed',
 	c['seed'] + 100,
-        '--log-barr 1e-6',
+        '--log-barr 0.0001',
         '--dist-to-half-pens',
 	penalty_params,
         '--max-sum-states 2000',
         '--max-extra-steps 2',
         '--max-iters 10000',
-        '--train-split 0.5',
+        '--train-split 0.6',
         '--num-inits 1',
         '--tot-time-known',
-        '--max-topologies 4',
+        '--max-topologies 1',
     ]
     return env.Command(
         [

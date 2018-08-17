@@ -148,6 +148,7 @@ def fit_tree(
         transition_wrap_maker: TransitionWrapperMaker,
         init_model_params: Dict,
         oracle_dist_measurers = None,
+        known_model_params: KnownModelParams = None,
         num_inits: int = None,
         max_iters: int = None):
     """
@@ -163,7 +164,7 @@ def fit_tree(
         args.num_inits if num_inits is None else num_inits,
         transition_wrap_maker,
         init_model_params = init_model_params,
-        known_params = args.known_params,
+        known_params = args.known_params if known_model_params is None else known_model_params,
         dist_measurers = oracle_dist_measurers,
         abundance_weight = args.abundance_weight)
     # TODO: this wastes a lot of time since much of the time is spent here!
@@ -219,17 +220,6 @@ def tune_hyperparams(
             if bcode_meta.num_barcodes > 1 or (k not in ['branch_len_inners', 'branch_len_offsets_proportion']):
                 fixed_params[k] = v
 
-        if bcode_meta.num_barcodes == 1:
-            num_nodes = max([n.node_id for n in val_tree_split.tree]) + 1
-            br_len_inners = np.zeros(num_nodes)
-            br_len_offsets_proportion = np.zeros(num_nodes)
-            for val_node_id, orig_node_id in val_tree_split.to_orig_node_dict.items():
-                matching_train_id = train_tree_split.from_orig_node_dict[orig_node_id]
-                br_len_inners[val_node_id] = res_train.model_params_dict['branch_len_inners'][matching_train_id]
-                br_len_offsets_proportion[val_node_id] = res_train.model_params_dict['branch_len_offsets_proportion'][matching_train_id]
-            fixed_params['branch_len_inners'] = br_len_inners
-            fixed_params['branch_len_offsets_proportion'] = br_len_offsets_proportion
-
         # Now fit the validation tree with model params fixed
         res_val = fit_tree(
             val_tree_split.tree,
@@ -238,8 +228,13 @@ def tune_hyperparams(
             dist_to_half_pen = 0,
             transition_wrap_maker = val_transition_wrap_maker,
             init_model_params = fixed_params,
+            known_model_params = KnownModelParams(
+                target_lams = True,
+                branch_lens = bcode_meta.num_barcodes > 1,
+                tot_time = True),
+            # it's a validation tree -- no need to do multiple initializations. we already fixed the target lambdas
             num_inits = 1,
-            max_iters = 0)
+            max_iters = args.max_iters if bcode_meta.num_barcodes == 1 else 0)
         curr_val_log_lik = res_val.train_history[-1]["log_lik"]
         curr_val_pen_log_lik = res_val.train_history[-1]["pen_log_lik"]
         logging.info(
@@ -279,6 +274,7 @@ def read_true_model_files(args):
     """
     If true model files available, read them
     """
+    assert (args.true_model_file is None and args.true_collapsed_tree_file is None) or (args.true_model_file is not None and args.true_collapsed_tree_file is not None)
     if args.true_model_file is None or args.true_collapsed_tree_file is None:
         return None, None
 
@@ -456,7 +452,7 @@ def main(args=sys.argv[1:]):
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
     args.init_params = {
-            "target_lams": get_init_target_lams(bcode_meta, -0.1),
+            "target_lams": get_init_target_lams(bcode_meta, 0),
             "boost_softmax_weights": np.ones(3),
             "trim_long_factor": 0.05 * np.ones(2),
             "trim_zero_probs": 0.5 * np.ones(2),
@@ -464,7 +460,7 @@ def main(args=sys.argv[1:]):
             "trim_long_poissons": 2.5 * np.ones(2),
             "insert_zero_prob": np.array([0.5]),
             "insert_poisson": np.array([0.5]),
-            "double_cut_weight": np.array([0.1]),
+            "double_cut_weight": np.array([0.5]),
             "tot_time": 1,
             "tot_time_extra": 1.3}
     if args.known_params.tot_time:
