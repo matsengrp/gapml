@@ -43,8 +43,6 @@ def create_train_val_tree(tree: CellLineageTree, bcode_meta: BarcodeMetadata, tr
 
     train_node_dict, from_orig_train_node_dict = _relabel_node_ids(train_tree)
     val_node_dict, from_orig_val_node_dict = _relabel_node_ids(val_tree)
-    logging.info("train node dict", train_node_dict)
-    logging.info("val node dict", val_node_dict)
     train_tree.label_node_ids()
     val_tree.label_node_ids()
     train_split = TreeDataSplit(train_tree, train_bcode, train_node_dict, from_orig_train_node_dict)
