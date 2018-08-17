@@ -137,7 +137,7 @@ def parse_args():
         reverse=True))
 
     assert args.log_barr >= 0
-    assert all(lam > 0 for lam in args.dist_to_half_pens)
+    assert all(lam >= 0 for lam in args.dist_to_half_pens)
     return args
 
 def fit_tree(
@@ -148,7 +148,9 @@ def fit_tree(
         transition_wrap_maker: TransitionWrapperMaker,
         init_model_params: Dict,
         oracle_dist_measurers = None,
-        known_params = None):
+        known_model_params: KnownModelParams = None,
+        num_inits: int = None,
+        max_iters: int = None):
     """
     Fits the model params for the given tree and a given penalty param
     """
@@ -158,13 +160,14 @@ def fit_tree(
         bcode_meta,
         args.log_barr,
         dist_to_half_pen,
-        args.max_iters,
-        args.num_inits,
+        args.max_iters if max_iters is None else max_iters,
+        args.num_inits if num_inits is None else num_inits,
         transition_wrap_maker,
         init_model_params = init_model_params,
-        known_params = args.known_params if known_params is None else known_params,
+        known_params = args.known_params if known_model_params is None else known_model_params,
         dist_measurers = oracle_dist_measurers,
         abundance_weight = args.abundance_weight)
+    # TODO: this wastes a lot of time since much of the time is spent here!
     res = worker.run_worker(None)
     return res
 
@@ -181,19 +184,19 @@ def tune_hyperparams(
         best_dist_to_half_pen = args.dist_to_half_pens[0]
         return best_dist_to_half_pen, best_params
 
-    train_tree, val_tree, train_bcode_meta, val_bcode_meta = create_train_val_tree(
+    train_tree_split, val_tree_split = create_train_val_tree(
             tree,
             bcode_meta,
             args.train_split)
 
     train_transition_wrap_maker = TransitionWrapperMaker(
-            train_tree,
-            train_bcode_meta,
+            train_tree_split.tree,
+            train_tree_split.bcode_meta,
             args.max_extra_steps,
             args.max_sum_states)
     val_transition_wrap_maker = TransitionWrapperMaker(
-            val_tree,
-            val_bcode_meta,
+            val_tree_split.tree,
+            val_tree_split.bcode_meta,
             args.max_extra_steps,
             args.max_sum_states)
 
@@ -203,8 +206,8 @@ def tune_hyperparams(
         logging.info("TUNING %f", dist_to_half_pen)
         # Train the model using only the training data
         res_train = fit_tree(
-            train_tree,
-            train_bcode_meta,
+            train_tree_split.tree,
+            train_tree_split.bcode_meta,
             args,
             dist_to_half_pen,
             train_transition_wrap_maker,
@@ -219,16 +222,19 @@ def tune_hyperparams(
 
         # Now fit the validation tree with model params fixed
         res_val = fit_tree(
-            val_tree,
-            val_bcode_meta,
+            val_tree_split.tree,
+            val_tree_split.bcode_meta,
             args,
-            0, #dist_to_half_pen * (1 - args.train_split),
-            val_transition_wrap_maker,
+            dist_to_half_pen = 0,
+            transition_wrap_maker = val_transition_wrap_maker,
             init_model_params = fixed_params,
-            known_params = KnownModelParams(
+            known_model_params = KnownModelParams(
                 target_lams = True,
                 branch_lens = bcode_meta.num_barcodes > 1,
-                tot_time = True))
+                tot_time = True),
+            # it's a validation tree -- no need to do multiple initializations. we already fixed the target lambdas
+            num_inits = 1,
+            max_iters = args.max_iters if bcode_meta.num_barcodes == 1 else 0)
         curr_val_log_lik = res_val.train_history[-1]["log_lik"]
         curr_val_pen_log_lik = res_val.train_history[-1]["pen_log_lik"]
         logging.info(
@@ -240,8 +246,13 @@ def tune_hyperparams(
             best_val_log_lik = curr_val_log_lik
             best_dist_to_half_pen = dist_to_half_pen
             best_params = fixed_params
+        else:
+            break
 
     logging.info("Best penalty param %s", best_dist_to_half_pen)
+    if bcode_meta.num_barcodes == 1:
+        best_params.pop('branch_len_inners', None)
+        best_params.pop('branch_len_offsets_proportion', None)
     return best_dist_to_half_pen, best_params
 
 def get_init_target_lams(bcode_meta, mean_val):
@@ -263,6 +274,7 @@ def read_true_model_files(args):
     """
     If true model files available, read them
     """
+    assert (args.true_model_file is None and args.true_collapsed_tree_file is None) or (args.true_model_file is not None and args.true_collapsed_tree_file is not None)
     if args.true_model_file is None or args.true_collapsed_tree_file is None:
         return None, None
 
@@ -440,7 +452,7 @@ def main(args=sys.argv[1:]):
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
     args.init_params = {
-            "target_lams": get_init_target_lams(bcode_meta, -0.1),
+            "target_lams": get_init_target_lams(bcode_meta, 0),
             "boost_softmax_weights": np.ones(3),
             "trim_long_factor": 0.05 * np.ones(2),
             "trim_zero_probs": 0.5 * np.ones(2),
@@ -448,7 +460,7 @@ def main(args=sys.argv[1:]):
             "trim_long_poissons": 2.5 * np.ones(2),
             "insert_zero_prob": np.array([0.5]),
             "insert_poisson": np.array([0.5]),
-            "double_cut_weight": np.array([0.1]),
+            "double_cut_weight": np.array([0.5]),
             "tot_time": 1,
             "tot_time_extra": 1.3}
     if args.known_params.tot_time:

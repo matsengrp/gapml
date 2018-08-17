@@ -94,11 +94,14 @@ class LikelihoodScorer(ParallelWorker):
             full_init_model_params[key] = val
         res_model.set_params_from_dict(full_init_model_params)
 
-        # Just checking branch lengths positive
+        # Just checking branch lengths positive and that tree is ultrametric
         br_lens = res_model.get_branch_lens()[1:]
-        if not np.all(br_lens > -1e-10):
+        if not np.all(br_lens > 0):
             raise ValueError("not all positive %s" % br_lens)
         assert res_model._are_all_branch_lens_positive()
+        bifurc_tree = res_model.get_fitted_bifurcating_tree()
+        logging.info("init DISTANCE")
+        logging.info(bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
 
         # Actually fit the model
         train_history = estimator.fit(dist_measurers = self.dist_measurers)

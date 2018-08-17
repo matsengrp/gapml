@@ -4,12 +4,24 @@ This is our version of training validation split.
 It's the usual method if we have more than one barcode.
 Otherwise we subsample the tree.
 """
-from typing import Set
+from typing import Set, Dict
 import numpy as np
+import logging
 
 from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
 import collapsed_tree
+
+class TreeDataSplit:
+    def __init__(self,
+            tree: CellLineageTree,
+            bcode_meta: BarcodeMetadata,
+            to_orig_node_dict: Dict[int, int],
+            from_orig_node_dict: Dict[int, int]):
+        self.tree = tree
+        self.bcode_meta = bcode_meta
+        self.from_orig_node_dict = from_orig_node_dict
+        self.to_orig_node_dict = to_orig_node_dict
 
 def create_train_val_tree(tree: CellLineageTree, bcode_meta: BarcodeMetadata, train_split: float):
     """
@@ -22,12 +34,42 @@ def create_train_val_tree(tree: CellLineageTree, bcode_meta: BarcodeMetadata, tr
                 tree,
                 bcode_meta,
                 train_split)
+        is_all_leaves = all([c.is_leaf() for c in val_tree.children])
+        if is_all_leaves:
+            raise ValueError("Not possible to tune hyperparam since validation tree is all leaves")
     else:
         train_tree, val_tree, train_bcode, val_bcode = _create_train_val_tree_by_barcode(
                 tree, bcode_meta, train_split)
+
+    train_node_dict, from_orig_train_node_dict = _relabel_node_ids(train_tree)
+    val_node_dict, from_orig_val_node_dict = _relabel_node_ids(val_tree)
     train_tree.label_node_ids()
     val_tree.label_node_ids()
-    return train_tree, val_tree, train_bcode, val_bcode
+    train_split = TreeDataSplit(train_tree, train_bcode, train_node_dict, from_orig_train_node_dict)
+    val_split = TreeDataSplit(val_tree, val_bcode, val_node_dict, from_orig_val_node_dict)
+    return train_split, val_split
+
+def _relabel_node_ids(tree: CellLineageTree, order: str = "preorder"):
+    """
+    Label the node ids but also keep track of old node ids
+    """
+    to_orig_node_dict = {}
+    from_orig_node_dict = {}
+    node_id = 0
+    for node in tree.traverse(order):
+        orig_node_id = node.node_id
+        node.add_feature("node_id", node_id)
+        if node.is_root():
+            root_node_id = node_id
+        node_id += 1
+
+        if node.is_leaf():
+            continue
+
+        to_orig_node_dict[node.node_id] = orig_node_id
+        from_orig_node_dict[orig_node_id] = node.node_id
+    assert root_node_id == 0
+    return to_orig_node_dict, from_orig_node_dict
 
 """
 Code for train/val split for >1 barcode
@@ -98,12 +140,18 @@ def _create_train_val_tree_by_subsampling(clt: CellLineageTree, bcode_meta: Barc
     train_leaf_ids = set()
     val_leaf_ids = set()
     for leaf in clt:
-        is_train = np.random.binomial(1, train_split_rate)
-        if is_train:
+        if np.random.binomial(1, train_split_rate) == 1:
             train_leaf_ids.add(leaf.node_id)
         else:
             val_leaf_ids.add(leaf.node_id)
 
     train_clt = _prune_tree(clt.copy(), train_leaf_ids)
     val_clt = _prune_tree(clt.copy(), val_leaf_ids)
+
+    logging.info("ORIG TREE")
+    logging.info(clt.get_ascii(attributes=["node_id"], show_internal=True))
+    logging.info("TRAIN TREE")
+    logging.info(train_clt.get_ascii(attributes=["node_id"], show_internal=True))
+    logging.info("VAL TREE")
+    logging.info(val_clt.get_ascii(attributes=["node_id"], show_internal=True))
     return train_clt, val_clt, bcode_meta, bcode_meta

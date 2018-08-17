@@ -297,8 +297,6 @@ class CLTLikelihoodModel:
         """
         Create the branch length variable
         """
-        print(self.topology.get_ascii(attributes=["node_id"], show_internal=True))
-
         branch_lens_dict = []
         for node in self.topology.traverse("preorder"):
             if node.is_root():
@@ -819,7 +817,7 @@ class CLTLikelihoodModel:
         if self.known_params.tot_time:
             branch_lens_to_penalize = tf.gather(
                 self.branch_lens,
-                indices = [node.node_id for node in self.topology])
+                indices = [node.node_id for node in self.topology.traverse() if not node.is_root()])
             self.branch_log_barr = tf.reduce_mean(tf.log(branch_lens_to_penalize))
         else:
             self.branch_log_barr = tf.constant(0, dtype=tf.float64)
@@ -1158,7 +1156,10 @@ class CLTLikelihoodModel:
         @return CellLineageTree
         """
         # Get the current model parameters
-        br_lens, br_len_offsets, tot_time = self.sess.run([self.branch_lens, self.branch_len_offsets, self.tot_time])
+        br_lens, br_len_offsets, tot_time = self.sess.run([
+            self.branch_lens,
+            self.branch_len_offsets,
+            self.tot_time])
 
         scratch_tree = self.topology.copy("deepcopy")
         for node in scratch_tree.traverse("preorder"):

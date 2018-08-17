@@ -84,8 +84,10 @@ def get_rand_tree(res_file):
 
     # Create appropriate number of leaves to match abundance
     for node in parsimony_tree:
-        curr_node = node.up
-        for idx in range(node.abundance - 1):
+        curr_node = node
+        if node.abundance <= 1:
+            continue
+        for idx in range(node.abundance):
             new_child = CellLineageTree(
                 node.allele_list,
                 node.allele_events_list,
@@ -93,22 +95,12 @@ def get_rand_tree(res_file):
                 dist = 0,
                 abundance = 1,
                 resolved_multifurcation = True)
-            new_child.allele_events_list_str = "%s==%d" % (
-                new_child.allele_events_list_str,
-                idx + 1)
-            #copy_leaf = CellLineageTree(
-            #    curr_node.allele_list,
-            #    curr_node.allele_events_list,
-            #    curr_node.cell_state,
-            #    dist = 0,
-            #    abundance = 1,
-            #    resolved_multifurcation = True)
-            #copy_leaf.allele_events_list_str = curr_node.allele_events_list_str
+            if idx > 0:
+                new_child.allele_events_list_str = "%s==%d" % (
+                    new_child.allele_events_list_str,
+                    idx)
             curr_node.add_child(new_child)
-            #curr_node.add_child(copy_leaf)
-            #curr_node = new_child
         curr_node.abundance = node.abundance
-        node.abundance = 1
     return (None, parsimony_tree, raw_pars_tree)
 
 def get_target_lams(model_param_tuple):

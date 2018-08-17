@@ -236,10 +236,9 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
         @param cell_type_tree: the tree that specifies how cells differentiate
         @param allele_simulator: a simulator for how alleles get modified
         """
-        self.bd_tree_simulator = BirthDeathTreeSimulator(
-                start_birth_rate,
-                birth_rate,
-                death_rate)
+        self.start_birth_rate = start_birth_rate
+        self.birth_rate = birth_rate
+        self.death_rate = death_rate
         self.cell_state_simulator = cell_state_simulator
         self.allele_simulator = allele_simulator
 
@@ -257,7 +256,11 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
         root_allele = self.allele_simulator.get_root()
         root_cell_state = self.cell_state_simulator.get_root()
         # Run the simulation to just create the tree topology
-        tree = self.bd_tree_simulator.simulate(
+        bd_tree_simulator = BirthDeathTreeSimulator(
+                self.start_birth_rate,
+                self.birth_rate,
+                self.death_rate)
+        tree = bd_tree_simulator.simulate(
                 root_allele,
                 tot_time,
                 max_nodes)
