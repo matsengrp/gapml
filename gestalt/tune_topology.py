@@ -170,7 +170,10 @@ def main(args=sys.argv[1:]):
     with open(best_worker.out_model_file, "rb") as f:
         results = six.moves.cPickle.load(f)
     with open(args.out_model_file, "wb") as f:
-        six.moves.cPickle.dump(results["refit"], f, protocol = 2)
+        if results["refit"] is not None:
+            six.moves.cPickle.dump(results["refit"], f, protocol = 2)
+        else:
+            six.moves.cPickle.dump(results["raw"], f, protocol = 2)
     logging.info("Complete!!!")
 
 if __name__ == "__main__":

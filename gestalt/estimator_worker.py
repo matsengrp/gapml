@@ -66,7 +66,6 @@ class RunEstimatorWorker(ParallelWorker):
             self.max_iters,
             '--num-inits',
             self.num_inits,
-            '--do-refit' if self.do_refit else '',
             '--max-extra-steps',
             self.max_extra_steps,
             '--scratch-dir',
@@ -87,6 +86,9 @@ class RunEstimatorWorker(ParallelWorker):
             cmd = cmd + ['--lambda-known']
         if self.tot_time_known:
             cmd = cmd + ['--tot-time-known']
+        if self.do_refit:
+            cmd = cmd + ['--do-refit']
+
         cmd = _add_more_args(
                 self.true_collapsed_tree_file,
                 '--true-collapsed-tree-file')
