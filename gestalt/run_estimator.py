@@ -447,7 +447,7 @@ def main(args=sys.argv[1:]):
     np.random.seed(seed=args.seed)
 
     # Read input files
-    bcode_meta, tree = read_data(args)
+    bcode_meta, tree, obs_data_dict = read_data(args)
     true_model_dict, oracle_dist_measurers = read_true_model_files(args)
 
     if os.path.exists(args.pickle_out):
