@@ -91,7 +91,7 @@ def parse_args():
         type=float,
         default=0.5,
         help="fraction of data for training data. for tuning penalty param")
-    parser.add_argument('--max-iters', type=int, default=20)
+    parser.add_argument('--max-iters', type=int, default=2)
     parser.add_argument('--num-inits', type=int, default=1)
     parser.add_argument(
         '--do-refit',
@@ -144,9 +144,8 @@ def fit_tree(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
         args,
-        dist_to_half_pen: float,
         transition_wrap_maker: TransitionWrapperMaker,
-        init_model_params: Dict,
+        init_model_param_list: List[Dict],
         oracle_dist_measurers = None,
         known_model_params: KnownModelParams = None,
         num_inits: int = None,
@@ -158,12 +157,10 @@ def fit_tree(
         get_randint(),
         tree,
         bcode_meta,
-        args.log_barr,
-        dist_to_half_pen,
         args.max_iters if max_iters is None else max_iters,
         args.num_inits if num_inits is None else num_inits,
         transition_wrap_maker,
-        init_model_params = init_model_params,
+        init_model_param_list = init_model_param_list,
         known_params = args.known_params if known_model_params is None else known_model_params,
         dist_measurers = oracle_dist_measurers,
         abundance_weight = args.abundance_weight)
@@ -179,11 +176,13 @@ def tune_hyperparams(
     Tunes the penalty param for the target lambda
     """
     best_params = args.init_params
+    best_params["log_barr_pen"] = args.log_barr
+    best_params["dist_to_half_pen"] = args.dist_to_half_pens[0]
     if len(args.dist_to_half_pens) == 1:
         # Nothing to tune.
-        best_dist_to_half_pen = args.dist_to_half_pens[0]
-        return best_dist_to_half_pen, best_params
+        return best_params
 
+    # First split the data into training vs validation
     train_tree_split, val_tree_split = create_train_val_tree(
             tree,
             bcode_meta,
@@ -200,60 +199,77 @@ def tune_hyperparams(
             args.max_extra_steps,
             args.max_sum_states)
 
-    best_dist_to_half_pen = args.dist_to_half_pens[0]
-    best_val_log_lik = None
-    for i, dist_to_half_pen in enumerate(args.dist_to_half_pens):
-        logging.info("TUNING %f", dist_to_half_pen)
-        # Train the model using only the training data
-        res_train = fit_tree(
-            train_tree_split.tree,
-            train_tree_split.bcode_meta,
-            args,
-            dist_to_half_pen,
-            train_transition_wrap_maker,
-            args.init_params)
-        logging.info("Done training pen param %f", dist_to_half_pen)
+    # Train the model using only the training data
+    # First create all the different initialization/optimization settings
+    # These will all be fit on the trainin tree
+    init_model_param_list = []
+    for idx, dist_to_half_pen in enumerate(args.dist_to_half_pens):
+        if idx == 0:
+            new_init_model_params = args.init_params.copy()
+        else:
+            new_init_model_params = {}
+        new_init_model_params["log_barr_pen"] = args.log_barr
+        new_init_model_params["dist_to_half_pen"] = dist_to_half_pen
+        init_model_param_list.append(new_init_model_params)
+    # Actually fit the training tree
+    train_results = fit_tree(
+        train_tree_split.tree,
+        train_tree_split.bcode_meta,
+        args,
+        train_transition_wrap_maker,
+        init_model_param_list)
+    logging.info("Finished training all penalty params. Start validation round")
 
+    # Now copy these results over so we can use these fitted values in the validation tree
+    init_val_model_param_list = []
+    for res_train in train_results:
         # Copy over the trained model params except for branch length things
         fixed_params = {}
         for k, v in res_train.model_params_dict.items():
             if bcode_meta.num_barcodes > 1 or (k not in ['branch_len_inners', 'branch_len_offsets_proportion']):
                 fixed_params[k] = v
+        # on the validation set, the penalty parameters are all (near) zero
+        fixed_params["log_barr_pen"] = 1e-10
+        fixed_params["dist_to_half_pen"] = 0
+        init_val_model_param_list.append(fixed_params)
+    # Now evaluate all these settings on the validation tree
+    validation_results = fit_tree(
+        val_tree_split.tree,
+        val_tree_split.bcode_meta,
+        args,
+        transition_wrap_maker = val_transition_wrap_maker,
+        init_model_param_list = init_val_model_param_list,
+        known_model_params = KnownModelParams(
+            target_lams = True,
+            branch_lens = bcode_meta.num_barcodes > 1,
+            tot_time = True),
+        # it's a validation tree -- only a single initialization is probably fine
+        num_inits = 1,
+        max_iters = args.max_iters if bcode_meta.num_barcodes == 1 else 0)
 
-        # Now fit the validation tree with model params fixed
-        res_val = fit_tree(
-            val_tree_split.tree,
-            val_tree_split.bcode_meta,
-            args,
-            dist_to_half_pen = 0,
-            transition_wrap_maker = val_transition_wrap_maker,
-            init_model_params = fixed_params,
-            known_model_params = KnownModelParams(
-                target_lams = True,
-                branch_lens = bcode_meta.num_barcodes > 1,
-                tot_time = True),
-            # it's a validation tree -- no need to do multiple initializations. we already fixed the target lambdas
-            num_inits = 1,
-            max_iters = args.max_iters if bcode_meta.num_barcodes == 1 else 0)
-        curr_val_log_lik = res_val.train_history[-1]["log_lik"]
-        curr_val_pen_log_lik = res_val.train_history[-1]["pen_log_lik"]
+    # Now find the best penalty param by finding the one with the highest log likelihood
+    val_log_liks = []
+    for res_val, dist_to_half_pen in zip(validation_results, args.dist_to_half_pens):
+        # Print results
+        val_log_lik = res_val.train_history[-1]["log_lik"]
         logging.info(
                 "Pen param %f val log lik %f",
                 dist_to_half_pen,
-                curr_val_log_lik)
+                val_log_lik)
+        val_log_liks.append(val_log_lik)
 
-        if not np.isnan(curr_val_pen_log_lik) and (best_val_log_lik is None or best_val_log_lik < curr_val_log_lik):
-            best_val_log_lik = curr_val_log_lik
-            best_dist_to_half_pen = dist_to_half_pen
-            best_params = fixed_params
-        else:
-            break
-
-    logging.info("Best penalty param %s", best_dist_to_half_pen)
+    best_idx = np.argmax(val_log_liks)
+    best_dist_to_half_pen = args.dist_to_half_pens[best_idx]
+    # Create the initialization model params for warm starting
+    best_params = validation_results[best_idx].model_params_dict
     if bcode_meta.num_barcodes == 1:
         best_params.pop('branch_len_inners', None)
         best_params.pop('branch_len_offsets_proportion', None)
-    return best_dist_to_half_pen, best_params
+    best_params["dist_to_half_pen"] = best_dist_to_half_pen
+    best_params["log_barr_pen"] = args.log_barr
+
+    logging.info("Best penalty param %s", best_dist_to_half_pen)
+    return best_params
 
 def get_init_target_lams(bcode_meta, mean_val):
     random_perturb = np.random.uniform(size=bcode_meta.n_targets) * 0.001
@@ -305,8 +321,6 @@ def read_data(args):
     obs_leaf = obs_data_dict["obs_leaves"][0]
     no_evts_prop = np.mean([len(evts.events) == 0 for evts in obs_leaf.allele_events_list])
     print("proportion of no events", no_evts_prop)
-    #true_haz = 0.85
-    #print("what i should be estimating totla time to be", np.log(no_evts_prop)/-true_haz)
 
     evt_set = set()
     for obs in obs_data_dict["obs_leaves"]:
@@ -336,13 +350,12 @@ def read_data(args):
     logging.info("Tree topology info: %s", tree_topology_info)
     logging.info("Tree topology num leaves: %d", len(tree))
 
-    return bcode_meta, tree
+    return bcode_meta, tree, obs_data_dict
 
 def fit_multifurc_tree(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
         args,
-        best_dist_to_half_pen: float,
         oracle_dist_measurers: TreeDistanceMeasurerAgg = None):
     """
     @return LikelihoodScorerResult from fitting model on multifurcating tree
@@ -356,28 +369,25 @@ def fit_multifurc_tree(
             tree,
             bcode_meta,
             args,
-            best_dist_to_half_pen,
             transition_wraps_multifurc,
-            args.init_params,
+            [args.init_params],
             oracle_dist_measurers = oracle_dist_measurers)
-    return raw_res
+    return raw_res[0]
 
 def do_refit_bifurc_tree(
         raw_res: LikelihoodScorerResult,
         bcode_meta: BarcodeMetadata,
         args,
-        best_dist_to_half_pen: float,
         oracle_dist_measurers: TreeDistanceMeasurerAgg = None):
     """
     we need to refit using the bifurcating tree
     """
     # Copy over the latest model parameters for warm start
     param_dict = {k: v for k,v in raw_res.model_params_dict.items()}
+    param_dict["log_barr_pen"] = raw_res.log_barr_pen
+    param_dict["dist_to_half_pen"] = raw_res.dist_to_half_pen
     refit_bifurc_tree = raw_res.fitted_bifurc_tree.copy()
     refit_bifurc_tree.label_node_ids()
-    print('bifurc')
-    print(refit_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
-    print(refit_bifurc_tree.get_ascii(attributes=["node_id"], show_internal=True))
     num_nodes = refit_bifurc_tree.get_num_nodes()
     # Copy over the branch lengths
     br_lens = np.zeros(num_nodes)
@@ -397,11 +407,10 @@ def do_refit_bifurc_tree(
             refit_bifurc_tree,
             bcode_meta,
             args,
-            best_dist_to_half_pen,
             refit_transition_wrap_maker,
-            init_model_params = param_dict,
+            [param_dict],
             oracle_dist_measurers = oracle_dist_measurers)
-    return refit_res
+    return refit_res[0]
 
 def write_output_json_summary(
         res: LikelihoodScorerResult,
@@ -464,8 +473,12 @@ def main(args=sys.argv[1:]):
             "tot_time": 1,
             "tot_time_extra": 1.3}
     if args.known_params.tot_time:
-        args.init_params["tot_time"] = true_model_dict["true_model_params"]["tot_time"]
-        args.init_params["tot_time_extra"] = true_model_dict["true_model_params"]["tot_time_extra"]
+        if true_model_dict is not None:
+            args.init_params["tot_time"] = true_model_dict["true_model_params"]["tot_time"]
+            args.init_params["tot_time_extra"] = true_model_dict["true_model_params"]["tot_time_extra"]
+        else:
+            args.init_params["tot_time"] = obs_data_dict["time"]
+            args.init_params["tot_time_extra"] = 1e-10
     if args.known_params.trim_long_factor:
         args.init_params["trim_long_factor"] = true_model_dict['true_model_params']['trim_long_factor']
     if args.known_params.target_lams:
@@ -475,14 +488,13 @@ def main(args=sys.argv[1:]):
 
     # Tune penalty params
     # Initialize with random values
-    best_dist_to_half_pen, args.init_params = tune_hyperparams(tree, bcode_meta, args)
+    args.init_params = tune_hyperparams(tree, bcode_meta, args)
 
     # Now we can actually train the multifurc tree with the target lambda penalty param fixed
     raw_res = fit_multifurc_tree(
             tree,
             bcode_meta,
             args,
-            best_dist_to_half_pen,
             oracle_dist_measurers)
 
     # Refit the bifurcating tree if needed
@@ -496,7 +508,6 @@ def main(args=sys.argv[1:]):
                 raw_res,
                 bcode_meta,
                 args,
-                best_dist_to_half_pen,
                 oracle_dist_measurers)
 
     #### Mostly a section for printing
