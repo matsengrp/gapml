@@ -242,6 +242,7 @@ def tune_hyperparams(
         known_model_params = KnownModelParams(
             target_lams = True,
             branch_lens = bcode_meta.num_barcodes > 1,
+            indel_params = True,
             tot_time = True),
         # it's a validation tree -- only a single initialization is probably fine
         num_inits = 1,

@@ -1242,8 +1242,6 @@ class CLTLikelihoodModel:
             self.branch_lens,
             self.branch_len_offsets,
             self.tot_time])
-        print(br_lens)
-        assert all([b > 0 for b in br_lens[1:]])
 
         scratch_tree = self.topology.copy("deepcopy")
         for node in scratch_tree.traverse("preorder"):
