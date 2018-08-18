@@ -866,7 +866,7 @@ class CLTLikelihoodModel:
             self.Ddiags_list.append(Ddiags)
         self.log_lik_alleles = tf.add_n(self.log_lik_alleles_list)
 
-    def _initialize_lower_prob(self,
+    def _initialize_lower_log_prob(self,
             transition_wrappers: Dict[int, List[TransitionWrapper]],
             node: CellLineageTree,
             bcode_idx: int):
@@ -893,12 +893,12 @@ class CLTLikelihoodModel:
                         index_vals,
                         output_shape=[transition_wrapper.num_possible_states + 1, 1],
                         name="haz_away.multifurc")
-                return tf.exp(-haz_aways * time_stays_constant)
+                return -haz_aways * time_stays_constant
             else:
                 root_haz_away = self.hazard_away_dict[TargetStatus()]
-                return tf.exp(-root_haz_away * time_stays_constant)
+                return -root_haz_away * time_stays_constant
         else:
-            return tf.constant(1.0, dtype=tf.float64)
+            return tf.constant(0, dtype=tf.float64)
 
     @profile
     def _create_topology_log_lik_barcode(
@@ -931,10 +931,12 @@ class CLTLikelihoodModel:
                 prob_array[observed_key] = 1
                 Lprob[node.node_id] = tf.constant(prob_array, dtype=tf.float64)
             else:
-                log_Lprob_node = tf.log(self._initialize_lower_prob(
+                log_Lprob_node = self._initialize_lower_log_prob(
                         transition_wrappers,
                         node,
-                        bcode_idx))
+                        bcode_idx)
+                self.dist_to_half_pen += tf.reduce_mean(
+                        tf.abs(tf.exp(log_Lprob_node) - tf.constant(0.5, tf.float64)))
 
                 for child in node.children:
                     child_wrapper = transition_wrappers[child.node_id][bcode_idx]
@@ -954,9 +956,18 @@ class CLTLikelihoodModel:
                                 tr_mat,
                                 self.branch_lens[child.node_id])
 
-                        self.dist_to_half_pen += tf.reduce_mean(tf.abs(
-                                tf.diag_part(pt_matrix[child.node_id])
-                                - tf.constant(0.5, tf.float64)))
+                        dist_to_half_pen_br = tf.reduce_mean(tf.abs(
+                                tf.diag_part(pt_matrix[child.node_id]) - tf.constant(0.5, tf.float64)
+                                ))
+                        if hasattr(child, "spine_len"):
+                            if child.spine_len:
+                                # weight the penalty inverse to the number of spine nodes
+                                self.dist_to_half_pen += tf.constant(
+                                    2.0/child.spine_len, dtype=tf.float64) * dist_to_half_pen_br
+                            else:
+                                self.dist_to_half_pen += dist_to_half_pen_br
+                        else:
+                            self.dist_to_half_pen += dist_to_half_pen_br
 
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.
@@ -1167,6 +1178,9 @@ class CLTLikelihoodModel:
 
         scratch_tree = self.topology.copy("deepcopy")
         for node in scratch_tree.traverse("preorder"):
+            node.add_feature("spine_len", 0)
+
+        for node in scratch_tree.traverse("preorder"):
             if not node.is_resolved_multifurcation():
                 # Resolve the multifurcation by creating the spine of "identical" nodes
                 children = node.get_children()
@@ -1182,6 +1196,7 @@ class CLTLikelihoodModel:
                             cell_state = node.cell_state,
                             dist = children_offsets[idx] - curr_offset)
                     new_spine_node.node_id = None
+                    new_spine_node.add_feature("spine_len", len(children))
                     curr_spine_node.add_child(new_spine_node)
 
                     child = children[idx]
