@@ -24,19 +24,13 @@ class CLTPenalizedEstimator(CLTEstimator):
         self,
         model: CLTLikelihoodModel,
         transition_wrapper_maker: TransitionWrapperMaker,
-        max_iters: int,
-        log_barr: float,
-        dist_to_half_pen: float = 0):
+        max_iters: int):
         """
         @param model: initial CLT model params
         @param transition_wrapper_maker: TransitionWrapperMaker
         @param max_iters: maximum number of training iterations
-        @param log_barr: penalty parameter for the log barrier function
-        @param dist_to_half_pen: penalty parameter for the log target lambda difference from the mean
         """
         self.model = model
-        self.log_barr = log_barr
-        self.dist_to_half_pen = dist_to_half_pen
         self.max_iters = max_iters
 
         # Create the skeletons for the transition matrices -- via state sum approximation
@@ -59,23 +53,24 @@ class CLTPenalizedEstimator(CLTEstimator):
         #self.model.check_grad(transition_wrappers)
 
     def fit(self,
+            log_barr_pen: float,
+            dist_to_half_pen: float = 0,
             print_iter: int = 1,
             save_iter: int = 20,
-            step_size: float = 0.01,
             dist_measurers: TreeDistanceMeasurerAgg = None,
             conv_thres: float = 1e-5,
             min_iters: int = 10):
         """
         Finds the best model parameters
-        @param max_iters: number of iterations of gradient descent
+        @param log_barr: penalty parameter for the log barrier function
+        @param dist_to_half_pen: penalty parameter for the log target lambda difference from the mean
         @param print_iter: number of iters to wait to print iterim results
-        @param step_size: step size for gradient descent
         @param dist_measurer: if available, this is use to measure how close current tree is to the true tree
                             useful to see how progress is being made
         """
         feed_dict = {
-                    self.model.log_barr_ph: self.log_barr,
-                    self.model.dist_to_half_pen_ph: self.dist_to_half_pen,
+                    self.model.log_barr_ph: log_barr_pen,
+                    self.model.dist_to_half_pen_ph: dist_to_half_pen,
                 }
 
         pen_log_lik, log_lik = self.model.sess.run(
@@ -104,7 +99,7 @@ class CLTPenalizedEstimator(CLTEstimator):
                 if k not in ["branch_len_offsets_proportion", "branch_len_inners", "boost_probs"]:
                     logging.info("%s: %s", k, v)
 
-            _, pen_log_lik, log_lik, dist_to_half_pen, log_barr, branch_lens = self.model.sess.run(
+            _, pen_log_lik, log_lik, ridge_pen, log_barr, branch_lens = self.model.sess.run(
                     [
                         self.model.adam_train_op,
                         self.model.smooth_log_lik,
@@ -126,7 +121,7 @@ class CLTPenalizedEstimator(CLTEstimator):
             if i % print_iter == (print_iter - 1):
                 logging.info(
                     "iter %d pen log lik %f log lik %f dist-to-half pen %f log barr %f min branch len %f",
-                    i, pen_log_lik, log_lik, dist_to_half_pen, log_barr, np.min(branch_lens[1:]))
+                    i, pen_log_lik, log_lik, ridge_pen, log_barr, np.min(branch_lens[1:]))
 
             if np.isnan(pen_log_lik):
                 logging.info("ERROR: pen log like is nan. branch lengths are negative?")

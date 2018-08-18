@@ -49,7 +49,8 @@ class CLTLikelihoodModel:
             tot_time: float = 1,
             tot_time_extra: float = 0.1,
             boost_len: int = 1,
-            abundance_weight: float = 0):
+            abundance_weight: float = 0,
+            step_size: float = 0.01):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
         @param boost_softmax_weights: vals to plug into softmax to get the probability of boosting
@@ -59,6 +60,7 @@ class CLTLikelihoodModel:
         @param trim_long_factor: the scaling factor for the trim long hazard rate. assumed to be less than 1
         @param cell_type_tree: CellTypeTree that specifies the cell type lambdas
         @param tot_time: total height of the tree
+        @param step_size: the step size to initialize for the adam optimizer
         """
         assert known_params.target_lams or known_params.tot_time
 
@@ -123,6 +125,7 @@ class CLTLikelihoodModel:
                 cell_type_lams,
                 tot_time_extra)
         if self.topology:
+            assert not self.topology.is_leaf()
             self.dist_to_root = self._create_distance_to_root_dict()
             self.tot_time = self._create_total_time(tot_time)
             self.branch_lens = self._create_branch_lens()
@@ -137,7 +140,8 @@ class CLTLikelihoodModel:
         # Calculate hazard for transitioning away from all target statuses beforehand. Speeds up future computation.
         self.hazard_away_dict = self._create_hazard_away_dict()
 
-        self.adam_opt = tf.train.AdamOptimizer(learning_rate=0.01)
+        self.step_size = step_size
+        self.adam_opt = tf.train.AdamOptimizer(learning_rate=self.step_size)
 
     def _create_parameters(self,
             target_lams: ndarray,

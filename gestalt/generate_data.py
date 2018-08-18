@@ -50,7 +50,7 @@ def parse_args():
     parser.add_argument(
         '--target-lambdas',
         type=str,
-        default=",".join(["0.05", "0.04", "0.01"]),
+        default=",".join(["1.99", "2.1", "1.9"]),
         help='target cut rates -- will get slightly perturbed for the true value')
     parser.add_argument(
         '--perturb-target-lambdas-variance',
@@ -84,7 +84,7 @@ def parse_args():
         '--trim-zero-probs',
         type=float,
         nargs=2,
-        default=[0.4] * 2,
+        default=[0.01] * 2,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
         '--trim-poissons',
@@ -96,17 +96,17 @@ def parse_args():
     parser.add_argument(
         '--insert-zero-prob',
         type=float,
-        default=0.4,
+        default=0.01,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
         '--insert-poisson',
         type=float,
-        default=0.3,
+        default=1,
         help='poisson parameter for distribution of insertion in cut site(s)')
     parser.add_argument(
-        '--birth-lambda', type=float, default=1.8, help='birth rate')
+        '--birth-lambda', type=float, default=2, help='birth rate')
     parser.add_argument(
-        '--start-birth-lambda', type=float, default=1.8, help='birth rate')
+        '--start-birth-lambda', type=float, default=20, help='birth rate')
     parser.add_argument(
         '--death-lambda', type=float, default=0.001, help='death rate')
     parser.add_argument(
