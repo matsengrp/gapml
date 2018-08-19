@@ -9,6 +9,7 @@ from numpy import ndarray
 from tensorflow import Session
 
 import collapsed_tree
+from cell_state import CellTypeTree
 from cell_lineage_tree import CellLineageTree
 from cell_state import CellTypeTree
 from barcode_metadata import BarcodeMetadata
@@ -45,6 +46,7 @@ class CLTLikelihoodModel:
             double_cut_weight: ndarray = np.array([1.0]),
             branch_len_inners: ndarray = np.array([]),
             branch_len_offsets_proportion: ndarray = np.array([]),
+            cell_type_tree: CellTypeTree = None,
             tot_time: float = 1,
             tot_time_extra: float = 0.1,
             boost_len: int = 1,
@@ -69,6 +71,7 @@ class CLTLikelihoodModel:
             assert self.root_node_id == 0
             self.num_nodes = self.topology.get_num_nodes()
         self.bcode_meta = bcode_meta
+        self.cell_type_tree = cell_type_tree
         self.targ_stat_transitions_dict, _ = TargetStatus.get_all_transitions(self.bcode_meta)
 
         self.num_targets = bcode_meta.n_targets
