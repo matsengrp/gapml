@@ -42,10 +42,6 @@ def create_train_val_tree(tree: CellLineageTree, bcode_meta: BarcodeMetadata, tr
     else:
         train_tree, val_tree, train_bcode, val_bcode = _create_train_val_tree_by_barcode(
                 tree, bcode_meta, train_split)
-        print("ttttt")
-        print(train_tree.get_ascii(attributes=["node_id"], show_internal=True))
-        print("vvvvv")
-        print(val_tree.get_ascii(attributes=["node_id"], show_internal=True))
 
     train_split = TreeDataSplit(train_tree, train_bcode)
     val_split = TreeDataSplit(val_tree, val_bcode)
@@ -116,14 +112,17 @@ def _create_train_val_tree_by_subsampling(clt: CellLineageTree, bcode_meta: Barc
 
     @return CLT for training data, CLT for validation data
     """
-    # Assign leaf ids to train vs validation
+    # Assign by splitting on children of root node
+    # This decreases the correlation between observations
     train_leaf_ids = set()
     val_leaf_ids = set()
-    for leaf in clt:
+    for child in clt.children:
         if np.random.binomial(1, train_split_rate) == 1:
-            train_leaf_ids.add(leaf.node_id)
+            train_leaf_ids.update(
+                [l.node_id for l in child])
         else:
-            val_leaf_ids.add(leaf.node_id)
+            val_leaf_ids.update(
+                [l.node_id for l in child])
 
     train_clt = _prune_tree(clt.copy(), train_leaf_ids)
     val_clt = _prune_tree(clt.copy(), val_leaf_ids)
