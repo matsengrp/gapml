@@ -16,8 +16,8 @@ class TreeDataSplit:
     def __init__(self,
             tree: CellLineageTree,
             bcode_meta: BarcodeMetadata,
-            to_orig_node_dict: Dict[int, int],
-            from_orig_node_dict: Dict[int, int]):
+            to_orig_node_dict: Dict[int, int] = None,
+            from_orig_node_dict: Dict[int, int] = None):
         self.tree = tree
         self.bcode_meta = bcode_meta
         self.from_orig_node_dict = from_orig_node_dict
@@ -37,39 +37,19 @@ def create_train_val_tree(tree: CellLineageTree, bcode_meta: BarcodeMetadata, tr
         is_all_leaves = all([c.is_leaf() for c in val_tree.children])
         if is_all_leaves:
             raise ValueError("Not possible to tune hyperparam since validation tree is all leaves")
+        train_tree.label_node_ids()
+        val_tree.label_node_ids()
     else:
         train_tree, val_tree, train_bcode, val_bcode = _create_train_val_tree_by_barcode(
                 tree, bcode_meta, train_split)
+        print("ttttt")
+        print(train_tree.get_ascii(attributes=["node_id"], show_internal=True))
+        print("vvvvv")
+        print(val_tree.get_ascii(attributes=["node_id"], show_internal=True))
 
-    train_node_dict, from_orig_train_node_dict = _relabel_node_ids(train_tree)
-    val_node_dict, from_orig_val_node_dict = _relabel_node_ids(val_tree)
-    train_tree.label_node_ids()
-    val_tree.label_node_ids()
-    train_split = TreeDataSplit(train_tree, train_bcode, train_node_dict, from_orig_train_node_dict)
-    val_split = TreeDataSplit(val_tree, val_bcode, val_node_dict, from_orig_val_node_dict)
+    train_split = TreeDataSplit(train_tree, train_bcode)
+    val_split = TreeDataSplit(val_tree, val_bcode)
     return train_split, val_split
-
-def _relabel_node_ids(tree: CellLineageTree, order: str = "preorder"):
-    """
-    Label the node ids but also keep track of old node ids
-    """
-    to_orig_node_dict = {}
-    from_orig_node_dict = {}
-    node_id = 0
-    for node in tree.traverse(order):
-        orig_node_id = node.node_id
-        node.add_feature("node_id", node_id)
-        if node.is_root():
-            root_node_id = node_id
-        node_id += 1
-
-        if node.is_leaf():
-            continue
-
-        to_orig_node_dict[node.node_id] = orig_node_id
-        from_orig_node_dict[orig_node_id] = node.node_id
-    assert root_node_id == 0
-    return to_orig_node_dict, from_orig_node_dict
 
 """
 Code for train/val split for >1 barcode
@@ -82,10 +62,10 @@ def _restrict_barcodes(clt: CellLineageTree, min_bcode_idx: int, bcode_meta: Bar
     Update the alleles for each node in the tree to correspond to only the barcodes indicated
     """
     for node in clt.traverse():
-        if node.allele_list is not None:
-            node.set_allele_list(node.allele_list[min_bcode_idx: min_bcode_idx + bcode_meta.num_barcodes])
-        else:
-            node.allele_events_list = node.allele_events_list[min_bcode_idx: min_bcode_idx + bcode_meta.num_barcodes]
+        #if node.allele_list is not None:
+        #    node.set_allele_list(node.allele_list.alleles[min_bcode_idx: min_bcode_idx + bcode_meta.num_barcodes])
+        #else:
+        node.allele_events_list = node.allele_events_list[min_bcode_idx: min_bcode_idx + bcode_meta.num_barcodes]
     clt.label_tree_with_strs()
     return clt
 

@@ -9,6 +9,7 @@ from numpy import ndarray
 from tensorflow import Session
 
 import collapsed_tree
+from cell_state import CellTypeTree
 from cell_lineage_tree import CellLineageTree
 from cell_state import CellTypeTree
 from barcode_metadata import BarcodeMetadata
@@ -58,7 +59,6 @@ class CLTLikelihoodModel:
         @param double_cut_weight: a weight for inter-target indels
         @param target_lams: target lambda rates
         @param trim_long_factor: the scaling factor for the trim long hazard rate. assumed to be less than 1
-        @param cell_type_tree: CellTypeTree that specifies the cell type lambdas
         @param tot_time: total height of the tree
         @param step_size: the step size to initialize for the adam optimizer
         """
@@ -71,6 +71,7 @@ class CLTLikelihoodModel:
             assert self.root_node_id == 0
             self.num_nodes = self.topology.get_num_nodes()
         self.bcode_meta = bcode_meta
+        self.cell_type_tree = cell_type_tree
         self.targ_stat_transitions_dict, _ = TargetStatus.get_all_transitions(self.bcode_meta)
 
         self.num_targets = bcode_meta.n_targets
@@ -78,21 +79,6 @@ class CLTLikelihoodModel:
         self.abundance_weight = abundance_weight
         assert abundance_weight >= 0 and abundance_weight <= 1
         assert boost_len == 1
-
-        # Process cell type tree
-        self.cell_type_tree = cell_type_tree
-        cell_type_lams = []
-        if cell_type_tree:
-            max_cell_type = 0
-            cell_type_dict = {}
-            for node in cell_type_tree.traverse(self.NODE_ORDER):
-                if node.is_root():
-                    self.cell_type_root = node.cell_type
-                cell_type_dict[node.cell_type] = node.rate
-                max_cell_type = max(max_cell_type, node.cell_type)
-            for i in range(max_cell_type + 1):
-                cell_type_lams.append(cell_type_dict[i])
-        cell_type_lams = np.array(cell_type_lams)
 
         # Save tensorflow session
         self.sess = sess
@@ -110,6 +96,19 @@ class CLTLikelihoodModel:
 
         assert np.all(trim_long_factor < 1)
         # Create all the variables
+        self._create_known_parameters(
+                target_lams,
+                double_cut_weight,
+                boost_softmax_weights,
+                trim_long_factor,
+                trim_zero_probs,
+                trim_short_poissons,
+                trim_long_poissons,
+                insert_zero_prob,
+                insert_poisson,
+                branch_len_inners,
+                branch_len_offsets_proportion,
+                tot_time_extra)
         self._create_parameters(
                 target_lams,
                 double_cut_weight,
@@ -122,8 +121,8 @@ class CLTLikelihoodModel:
                 insert_poisson,
                 branch_len_inners,
                 branch_len_offsets_proportion,
-                cell_type_lams,
                 tot_time_extra)
+        self._create_poisson_distributions()
         if self.topology:
             assert not self.topology.is_leaf()
             self.dist_to_root = self._create_distance_to_root_dict()
@@ -143,6 +142,99 @@ class CLTLikelihoodModel:
         self.step_size = step_size
         self.adam_opt = tf.train.AdamOptimizer(learning_rate=self.step_size)
 
+    def _create_known_parameters(self,
+            target_lams: ndarray,
+            double_cut_weight: ndarray,
+            boost_softmax_weights: ndarray,
+            trim_long_factor: ndarray,
+            trim_zero_probs: ndarray,
+            trim_short_poissons: ndarray,
+            trim_long_poissons: ndarray,
+            insert_zero_prob: ndarray,
+            insert_poisson: ndarray,
+            branch_len_inners: ndarray,
+            branch_len_offsets_proportion: ndarray,
+            tot_time_extra: float):
+        """
+        Creates the tensorflow nodes for each of the model parameters
+        """
+        known_model_params = np.concatenate([
+                    [0] if self.known_params.tot_time else [],
+                    target_lams if self.known_params.target_lams else [],
+                    double_cut_weight if self.known_params.double_cut_weight else [],
+                    trim_long_factor if self.known_params.trim_long_factor else [],
+                    boost_softmax_weights if self.known_params.indel_params else [],
+                    trim_zero_probs if self.known_params.indel_params else [],
+                    trim_short_poissons if self.known_params.indel_params else [],
+                    trim_long_poissons if self.known_params.indel_params else [],
+                    insert_zero_prob if self.known_params.indel_params else [],
+                    insert_poisson if self.known_params.indel_params else [],
+                    branch_len_inners if self.known_params.branch_lens else [],
+                    branch_len_offsets_proportion if self.known_params.branch_lens else []])
+        self.known_vars = tf.Variable(known_model_params, dtype=tf.float64)
+        self.known_vars_ph = tf.placeholder(tf.float64, shape=self.known_vars.shape)
+        self.assign_known_op = self.known_vars.assign(self.known_vars_ph)
+
+        # For easy access to these model parameters
+        up_to_size = 0
+        if self.known_params.tot_time:
+            up_to_size = 1
+            self.tot_time_extra = self.known_vars[0]
+        prev_size = up_to_size
+        if self.known_params.target_lams:
+            up_to_size += target_lams.size
+            self.target_lams = self.known_vars[prev_size: up_to_size]
+        prev_size = up_to_size
+        if self.known_params.double_cut_weight:
+            up_to_size += 1
+            self.double_cut_weight = self.known_vars[prev_size: up_to_size]
+        prev_size = up_to_size
+        if self.known_params.trim_long_factor:
+            up_to_size += trim_long_factor.size
+            self.trim_long_factor = self.known_vars[prev_size: up_to_size]
+        prev_size = up_to_size
+        if self.known_params.indel_params:
+            up_to_size += boost_softmax_weights.size
+            self.boost_softmax_weights = self.known_vars[prev_size: up_to_size]
+            self.boost_probs = tf.nn.softmax(self.boost_softmax_weights)
+            prev_size = up_to_size
+            up_to_size += trim_zero_probs.size
+            self.trim_zero_probs = self.known_vars[prev_size: up_to_size]
+            self.trim_zero_prob_left = self.trim_zero_probs[0]
+            self.trim_zero_prob_right = self.trim_zero_probs[1]
+            prev_size = up_to_size
+            up_to_size += trim_short_poissons.size
+            self.trim_short_poissons = self.known_vars[prev_size: up_to_size]
+            prev_size = up_to_size
+            up_to_size += trim_long_poissons.size
+            self.trim_long_poissons = self.known_vars[prev_size: up_to_size]
+            prev_size = up_to_size
+            up_to_size += 1
+            self.insert_zero_prob = self.known_vars[prev_size: up_to_size]
+            prev_size = up_to_size
+            up_to_size += 1
+            self.insert_poisson = self.known_vars[prev_size: up_to_size]
+        prev_size = up_to_size
+        if self.known_params.branch_lens:
+            up_to_size += branch_len_inners.size
+            self.branch_len_inners = self.known_vars[prev_size: up_to_size]
+            prev_size = up_to_size
+            up_to_size += branch_len_offsets_proportion.size
+            self.branch_len_offsets_proportion = self.known_vars[prev_size: up_to_size]
+            self.branch_len_offsets = tf.multiply(
+                    self.branch_len_inners,
+                    self.branch_len_offsets_proportion)
+
+    def _create_poisson_distributions(self):
+        # Create my poisson distributions
+        self.poiss_short = [
+                tf.contrib.distributions.Poisson(self.trim_short_poissons[0]),
+                tf.contrib.distributions.Poisson(self.trim_short_poissons[1])]
+        self.poiss_long = [
+                tf.contrib.distributions.Poisson(self.trim_long_poissons[0]),
+                tf.contrib.distributions.Poisson(self.trim_long_poissons[1])]
+        self.poiss_insert = tf.contrib.distributions.Poisson(self.insert_poisson)
+
     def _create_parameters(self,
             target_lams: ndarray,
             double_cut_weight: ndarray,
@@ -155,7 +247,6 @@ class CLTLikelihoodModel:
             insert_poisson: ndarray,
             branch_len_inners: ndarray,
             branch_len_offsets_proportion: ndarray,
-            cell_type_lams: ndarray,
             tot_time_extra: float):
         """
         Creates the tensorflow nodes for each of the model parameters
@@ -167,75 +258,60 @@ class CLTLikelihoodModel:
                     [] if self.known_params.tot_time else np.log([tot_time_extra]),
                     [] if self.known_params.target_lams else np.log(target_lams),
                     [] if self.known_params.double_cut_weight else np.log(double_cut_weight),
-                    boost_softmax_weights,
                     [] if self.known_params.trim_long_factor else inv_sigmoid(trim_long_factor),
-                    inv_sigmoid(trim_zero_probs),
-                    np.log(trim_short_poissons),
-                    np.log(trim_long_poissons),
-                    inv_sigmoid(insert_zero_prob),
-                    np.log(insert_poisson),
+                    [] if self.known_params.indel_params else boost_softmax_weights,
+                    [] if self.known_params.indel_params else inv_sigmoid(trim_zero_probs),
+                    [] if self.known_params.indel_params else np.log(trim_short_poissons),
+                    [] if self.known_params.indel_params else np.log(trim_long_poissons),
+                    [] if self.known_params.indel_params else inv_sigmoid(insert_zero_prob),
+                    [] if self.known_params.indel_params else np.log(insert_poisson),
                     [] if self.known_params.branch_lens else np.log(branch_len_inners),
-                    [] if self.known_params.branch_lens else inv_sigmoid(branch_len_offsets_proportion),
-                    [] if self.known_params.cell_lambdas else np.log(cell_type_lams)])
+                    [] if self.known_params.branch_lens else inv_sigmoid(branch_len_offsets_proportion)])
         self.all_vars = tf.Variable(model_params, dtype=tf.float64)
         self.all_vars_ph = tf.placeholder(tf.float64, shape=self.all_vars.shape)
         self.assign_op = self.all_vars.assign(self.all_vars_ph)
 
         # For easy access to these model parameters
         up_to_size = 0
-        if self.known_params.tot_time:
-            self.tot_time_extra = tf.constant(0, dtype=tf.float64)
-        else:
+        if not self.known_params.tot_time:
             up_to_size = 1
             self.tot_time_extra = tf.exp(self.all_vars[0])
         prev_size = up_to_size
-        prev_size = up_to_size
-        if self.known_params.target_lams:
-            self.target_lams = tf.constant(target_lams, dtype=tf.float64)
-        else:
+        if not self.known_params.target_lams:
             up_to_size += target_lams.size
             self.target_lams = tf.exp(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
-        if self.known_params.double_cut_weight:
-            self.double_cut_weight = tf.constant(double_cut_weight, dtype=tf.float64)
-        else:
+        if not self.known_params.double_cut_weight:
             up_to_size += 1
             self.double_cut_weight = tf.exp(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
-        up_to_size += boost_softmax_weights.size
-        self.boost_softmax_weights = self.all_vars[prev_size: up_to_size]
-        self.boost_probs = tf.nn.softmax(self.boost_softmax_weights)
-        prev_size = up_to_size
-        if self.known_params.trim_long_factor:
-            self.trim_long_factor = tf.constant(trim_long_factor, dtype=tf.float64)
-        else:
+        if not self.known_params.trim_long_factor:
             up_to_size += trim_long_factor.size
             self.trim_long_factor = tf.sigmoid(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
-        up_to_size += trim_zero_probs.size
-        self.trim_zero_probs = tf.sigmoid(self.all_vars[prev_size: up_to_size])
-        self.trim_zero_prob_left = self.trim_zero_probs[0]
-        self.trim_zero_prob_right = self.trim_zero_probs[1]
+        if not self.known_params.indel_params:
+            up_to_size += boost_softmax_weights.size
+            self.boost_softmax_weights = self.all_vars[prev_size: up_to_size]
+            self.boost_probs = tf.nn.softmax(self.boost_softmax_weights)
+            prev_size = up_to_size
+            up_to_size += trim_zero_probs.size
+            self.trim_zero_probs = tf.sigmoid(self.all_vars[prev_size: up_to_size])
+            self.trim_zero_prob_left = self.trim_zero_probs[0]
+            self.trim_zero_prob_right = self.trim_zero_probs[1]
+            prev_size = up_to_size
+            up_to_size += trim_short_poissons.size
+            self.trim_short_poissons = tf.exp(self.all_vars[prev_size: up_to_size])
+            prev_size = up_to_size
+            up_to_size += trim_long_poissons.size
+            self.trim_long_poissons = tf.exp(self.all_vars[prev_size: up_to_size])
+            prev_size = up_to_size
+            up_to_size += 1
+            self.insert_zero_prob = tf.sigmoid(self.all_vars[prev_size: up_to_size])
+            prev_size = up_to_size
+            up_to_size += 1
+            self.insert_poisson = tf.exp(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
-        up_to_size += trim_short_poissons.size
-        self.trim_short_poissons = tf.exp(self.all_vars[prev_size: up_to_size])
-        prev_size = up_to_size
-        up_to_size += trim_long_poissons.size
-        self.trim_long_poissons = tf.exp(self.all_vars[prev_size: up_to_size])
-        prev_size = up_to_size
-        up_to_size += 1
-        self.insert_zero_prob = tf.sigmoid(self.all_vars[prev_size: up_to_size])
-        prev_size = up_to_size
-        up_to_size += 1
-        self.insert_poisson = tf.exp(self.all_vars[prev_size: up_to_size])
-        prev_size = up_to_size
-        if self.known_params.branch_lens:
-            self.branch_len_inners = tf.constant(branch_len_inners)
-            self.branch_len_offsets_proportion = tf.constant(branch_len_offsets_proportion)
-            self.branch_len_offsets = tf.multiply(
-                    self.branch_len_inners,
-                    self.branch_len_offsets_proportion)
-        else:
+        if not self.known_params.branch_lens:
             up_to_size += branch_len_inners.size
             self.branch_len_inners = tf.exp(self.all_vars[prev_size: up_to_size])
             prev_size = up_to_size
@@ -244,22 +320,6 @@ class CLTLikelihoodModel:
             self.branch_len_offsets = tf.multiply(
                     self.branch_len_inners,
                     self.branch_len_offsets_proportion)
-        if self.cell_type_tree:
-            if self.known_params.cell_lambdas:
-                self.cell_type_lams = tf.constant(cell_type_lams, dtype=tf.float64)
-            else:
-                self.cell_type_lams = tf.exp(self.all_vars[-cell_type_lams.size:])
-        else:
-            self.cell_type_lams = tf.zeros([])
-
-        # Create my poisson distributions
-        self.poiss_short = [
-                tf.contrib.distributions.Poisson(self.trim_short_poissons[0]),
-                tf.contrib.distributions.Poisson(self.trim_short_poissons[1])]
-        self.poiss_long = [
-                tf.contrib.distributions.Poisson(self.trim_long_poissons[0]),
-                tf.contrib.distributions.Poisson(self.trim_long_poissons[1])]
-        self.poiss_insert = tf.contrib.distributions.Poisson(self.insert_poisson)
 
     def _create_distance_to_root_dict(self):
         # Create distance to root tensors for all internal nodes
@@ -341,7 +401,6 @@ class CLTLikelihoodModel:
                 param_dict["insert_poisson"],
                 param_dict["branch_len_inners"],
                 param_dict["branch_len_offsets_proportion"],
-                param_dict["cell_type_lams"],
                 param_dict["tot_time_extra"])
 
     def set_params(self,
@@ -356,30 +415,44 @@ class CLTLikelihoodModel:
             insert_poisson: float,
             branch_len_inners: ndarray,
             branch_len_offsets_proportion: ndarray,
-            cell_type_lams: ndarray,
             tot_time_extra: float):
         """
         Set model params
         Should be very similar code to _create_parameters
         """
-        if self.cell_type_tree is None:
-            cell_type_lams = np.array([])
-
+        known_vals = np.concatenate([
+            [] if not self.known_params.tot_time else [tot_time_extra],
+            [] if not self.known_params.target_lams else target_lams,
+            [] if not self.known_params.double_cut_weight else double_cut_weight,
+            [] if not self.known_params.trim_long_factor else trim_long_factor,
+            [] if not self.known_params.indel_params else boost_softmax_weights,
+            [] if not self.known_params.indel_params else trim_zero_probs,
+            [] if not self.known_params.indel_params else trim_short_poissons,
+            [] if not self.known_params.indel_params else trim_long_poissons,
+            [] if not self.known_params.indel_params else insert_zero_prob,
+            [] if not self.known_params.indel_params else insert_poisson,
+            [] if not self.known_params.branch_lens else branch_len_inners,
+            [] if not self.known_params.branch_lens else branch_len_offsets_proportion])
         init_val = np.concatenate([
             [] if self.known_params.tot_time else np.log([tot_time_extra]),
             [] if self.known_params.target_lams else np.log(target_lams),
             [] if self.known_params.double_cut_weight else np.log(double_cut_weight),
-            boost_softmax_weights,
             [] if self.known_params.trim_long_factor else inv_sigmoid(trim_long_factor),
-            inv_sigmoid(trim_zero_probs),
-            np.log(trim_short_poissons),
-            np.log(trim_long_poissons),
-            inv_sigmoid(insert_zero_prob),
-            np.log(insert_poisson),
+            [] if self.known_params.indel_params else boost_softmax_weights,
+            [] if self.known_params.indel_params else inv_sigmoid(trim_zero_probs),
+            [] if self.known_params.indel_params else np.log(trim_short_poissons),
+            [] if self.known_params.indel_params else np.log(trim_long_poissons),
+            [] if self.known_params.indel_params else inv_sigmoid(insert_zero_prob),
+            [] if self.known_params.indel_params else np.log(insert_poisson),
             [] if self.known_params.branch_lens else np.log(branch_len_inners),
-            [] if self.known_params.branch_lens else inv_sigmoid(branch_len_offsets_proportion),
-            [] if self.known_params.cell_lambdas else np.log(cell_type_lams)])
-        self.sess.run(self.assign_op, feed_dict={self.all_vars_ph: init_val})
+            [] if self.known_params.branch_lens else inv_sigmoid(branch_len_offsets_proportion)])
+
+        self.sess.run(
+            [self.assign_known_op, self.assign_op],
+            feed_dict={
+                self.known_vars_ph: known_vals,
+                self.all_vars_ph: init_val
+            })
 
     def get_vars(self):
         """
@@ -397,7 +470,6 @@ class CLTLikelihoodModel:
             self.insert_poisson,
             self.branch_len_inners,
             self.branch_len_offsets_proportion,
-            self.cell_type_lams,
             self.tot_time,
             self.tot_time_extra])
 
@@ -418,7 +490,6 @@ class CLTLikelihoodModel:
             "insert_poisson",
             "branch_len_inners",
             "branch_len_offsets_proportion",
-            "cell_type_lams",
             "tot_time",
             "tot_time_extra"]
         var_dict = {lab: val for lab, val in zip(var_labels, var_vals)}
@@ -810,7 +881,6 @@ class CLTLikelihoodModel:
         Creates tensorflow nodes that calculate the log likelihood of the observed data
         """
         st_time = time.time()
-        self.log_lik_cell_type = tf.zeros([])
         self.create_topology_log_lik(transition_wrappers)
         logging.info("Done creating topology log likelihood, time: %d", time.time() - st_time)
         self.log_lik = self.log_lik_alleles

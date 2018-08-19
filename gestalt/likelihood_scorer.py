@@ -5,7 +5,6 @@ import tensorflow as tf
 import logging
 
 from cell_lineage_tree import CellLineageTree
-from cell_state import CellTypeTree
 from barcode_metadata import BarcodeMetadata
 from parallel_worker import ParallelWorker
 from transition_wrapper_maker import TransitionWrapperMaker
@@ -184,24 +183,14 @@ class LikelihoodScorer(ParallelWorker):
         @return LikelihoodScorerResult
         """
         np.random.seed(self.seed)
-        init_model_params = self.init_model_param_list[0]
         res_model = CLTLikelihoodModel(
             self.tree,
             self.bcode_meta,
             sess,
-            known_params = self.known_params,
-            target_lams = init_model_params["target_lams"],
-            boost_softmax_weights = init_model_params["boost_softmax_weights"],
-            trim_long_factor = init_model_params["trim_long_factor"],
-            trim_zero_probs = init_model_params["trim_zero_probs"],
-            trim_short_poissons = init_model_params["trim_short_poissons"],
-            trim_long_poissons = init_model_params["trim_long_poissons"],
-            insert_zero_prob= init_model_params["insert_zero_prob"],
-            insert_poisson= init_model_params["insert_poisson"],
-            double_cut_weight = init_model_params["double_cut_weight"],
-            tot_time = init_model_params["tot_time"],
-            tot_time_extra = init_model_params["tot_time_extra"],
-            cell_type_tree = None,
+            self.known_params,
+            # doesnt matter what value is set here for now. will be overridden
+            # TODO: remove this line/argument...
+            target_lams = self.init_model_param_list[0]['target_lams'],
             abundance_weight = self.abundance_weight)
         estimator = CLTPenalizedEstimator(
                 res_model,
