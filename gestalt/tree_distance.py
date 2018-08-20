@@ -207,7 +207,12 @@ class BHVDistanceMeasurer(TreeDistanceMeasurer):
 
         # Run bhv
         bhv_out_file = "%s/tree_bhv%s.txt" % (self.scratch_dir, suffix)
-        bhv_cmd = "java -jar %s -o %s %s" % (BHV_PATH, bhv_out_file, tree_in_file)
+        verbose_out_file = "%s/tree_bhv%s_verbose.txt" % (self.scratch_dir, suffix)
+        bhv_cmd = "java -jar %s -d -v -o %s %s > %s" % (
+                BHV_PATH,
+                bhv_out_file,
+                tree_in_file,
+                verbose_out_file)
         subprocess.check_output(
                 bhv_cmd,
                 shell=True)
@@ -220,6 +225,7 @@ class BHVDistanceMeasurer(TreeDistanceMeasurer):
         #print(tree_in_file)
         os.remove(tree_in_file)
         os.remove(bhv_out_file)
+        os.remove(verbose_out_file)
         return bhv_dist
 
 class SPRDistanceMeasurer(TreeDistanceMeasurer):

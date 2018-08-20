@@ -34,9 +34,6 @@ def create_train_val_tree(tree: CellLineageTree, bcode_meta: BarcodeMetadata, tr
                 tree,
                 bcode_meta,
                 train_split)
-        is_all_leaves = all([c.is_leaf() for c in val_tree.children])
-        if is_all_leaves:
-            raise ValueError("Not possible to tune hyperparam since validation tree is all leaves")
         train_tree.label_node_ids()
         val_tree.label_node_ids()
     else:
@@ -114,23 +111,29 @@ def _create_train_val_tree_by_subsampling(clt: CellLineageTree, bcode_meta: Barc
     """
     # Assign by splitting on children of root node
     # This decreases the correlation between observations
+    # This train/validation split is only useful if the root node has at least two or more children.
+    assert len(clt.get_children()) > 1
+
     # Shuffle children and assign children according to the desired
     # split ratio.
-    num_children = len(clt.get_children())
+    children = clt.get_children()
+    num_children = len(children)
     child_assignments = np.random.choice(num_children, num_children, replace=False)
     n_child_train = int(np.ceil(train_split_rate * num_children))
     train_childs = child_assignments[:n_child_train]
+    assert len(train_childs) < num_children
 
     # Now actually assign the leaf nodes appropriately
     train_leaf_ids = set()
     val_leaf_ids = set()
-    for child_idx, child in enumerate(clt.children):
+    for child_idx, child in enumerate(children):
         if child_idx in train_childs:
             train_leaf_ids.update(
                 [l.node_id for l in child])
         else:
             val_leaf_ids.update(
                 [l.node_id for l in child])
+    assert len(val_leaf_ids) + len(train_leaf_ids) == len(clt)
 
     train_clt = _prune_tree(clt.copy(), train_leaf_ids)
     val_clt = _prune_tree(clt.copy(), val_leaf_ids)

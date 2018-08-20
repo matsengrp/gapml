@@ -129,8 +129,9 @@ def print_results(settings, n_bcode_results, n_bcode, print_keys):
         print_template = "%s & %d & %.01f (%.01f)"
         for key in print_keys:
             size = len(n_bcode_results[key][idx])
+            print(key, idx, n_bcode_results[key][idx])
             print_list.append(np.mean(n_bcode_results[key][idx]))
-            print_list.append(np.sqrt(np.var(n_bcode_results["mrca"][idx])/size))
+            print_list.append(np.sqrt(np.var(n_bcode_results[key][idx])/size))
             print_template += "& %.03f (%.03f)"
         print_template += "\\\\"
         print(print_template % tuple(print_list))

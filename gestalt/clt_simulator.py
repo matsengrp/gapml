@@ -246,11 +246,18 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
             tree_seed: int,
             data_seed: int,
             tot_time: float,
-            max_nodes: int = 10):
+            max_nodes: int = 10,
+            max_tries: int = 3,
+            dominating_percent: float = 0.8):
         """
         Generates a CLT based on the model
 
         @param time: amount of time to simulate the CLT
+        @param max_nodes: maximum number of CLT nodes to simulate
+        @param max_tries: number of times we try to resimulate the alleles to satisfy
+                        our allele event "diversity" requirement
+        @param dominating_percent: if an event appears in at least this percentage of the observed leaves,
+                                then we are going to resimulate the alleles along the tree.
         """
         np.random.seed(tree_seed)
         root_allele = self.allele_simulator.get_root()
@@ -265,10 +272,30 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
                 tot_time,
                 max_nodes)
         tree.cell_state = root_cell_state
+        num_leaves = len(tree)
         print("TOTAL tree leaves", len(tree))
 
         np.random.seed(data_seed)
-        # Run the simulation to create the alleles along the tree topology
-        self._simulate_alleles(tree)
-        self._simulate_cell_states(tree)
+        for _ in range(max_tries):
+            # Run the simulation to create the alleles along the tree topology
+            self._simulate_alleles(tree)
+            # Check there is no event super early on that everyone shares this same evt
+            # Otherwise learning will be really hard. This simulated tree
+            # also won't look anything like real data.
+            intersection_evt_count = {}
+            for leaf in tree:
+                for evt in leaf.allele_events_list[0].events:
+                    if evt in intersection_evt_count:
+                        intersection_evt_count[evt] += 1
+                    else:
+                        intersection_evt_count[evt] = 1
+            no_dominating_evt = True
+            for evt, val in intersection_evt_count.items():
+                if val > num_leaves * dominating_percent:
+                    no_dominating_evt = False
+                    break
+
+            if no_dominating_evt:
+                self._simulate_cell_states(tree)
+                break
         return tree
