@@ -249,11 +249,13 @@ def _tune_hyperparams_one_split(
 
     # Now find the best penalty param by finding the one with the highest log likelihood
     val_log_liks = np.zeros(len(args.dist_to_half_pens))
+    final_validation_results = []
     for idx, dist_to_half_pen in enumerate(args.dist_to_half_pens):
         if good_idxs[idx]:
             # Print results
             res_val = validation_results[int(np.sum(good_idxs[:idx+1])) - 1]
             if res_val is not None:
+                final_validation_results.append(res_val)
                 val_log_lik = res_val.train_history[-1]["log_lik"]
                 logging.info(
                         "Pen param %f val log lik %f",
@@ -261,8 +263,9 @@ def _tune_hyperparams_one_split(
                         val_log_lik)
                 val_log_liks[idx] = val_log_lik
                 continue
+        final_validation_results.append(None)
         val_log_liks[idx] = -np.inf
-    return val_log_liks, validation_results
+    return val_log_liks, final_validation_results
 
 def tune_hyperparams(
         tree: CellLineageTree,
