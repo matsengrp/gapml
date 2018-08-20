@@ -30,6 +30,7 @@ class LikelihoodScorerResult:
         self.fitted_bifurc_tree = fitted_bifurc_tree
         self.train_history = train_history
         self.pen_log_lik = train_history[-1]["pen_log_lik"]
+        self.log_lik = train_history[-1]["log_lik"]
 
 class LikelihoodScorer(ParallelWorker):
     """

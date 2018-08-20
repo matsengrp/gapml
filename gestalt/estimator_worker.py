@@ -1,4 +1,5 @@
 import subprocess
+import six
 import os
 import json
 from typing import List
@@ -10,6 +11,7 @@ class RunEstimatorWorker(ParallelWorker):
             obs_file: str,
             topology_file: str,
             out_model_file: str,
+            warm_start_file: str,
             true_model_file: str,
             true_collapsed_tree_file: str,
             seed: int,
@@ -20,6 +22,7 @@ class RunEstimatorWorker(ParallelWorker):
             lambda_known: bool,
             tot_time_known: bool,
             do_refit: bool,
+            tune_only: bool,
             max_sum_states: int,
             max_extra_steps: int,
             train_split: float,
@@ -28,6 +31,7 @@ class RunEstimatorWorker(ParallelWorker):
         self.obs_file = obs_file
         self.topology_file = topology_file
         self.out_model_file = out_model_file
+        self.warm_start_file = warm_start_file
         self.true_model_file = true_model_file
         self.out_json_file = out_model_file.replace(".pkl", ".json")
         self.true_collapsed_tree_file = true_collapsed_tree_file
@@ -39,6 +43,7 @@ class RunEstimatorWorker(ParallelWorker):
         self.lambda_known = lambda_known
         self.tot_time_known = tot_time_known
         self.do_refit = do_refit
+        self.tune_only = tune_only
         self.max_sum_states = max_sum_states
         self.max_extra_steps = max_extra_steps
         self.scratch_dir = scratch_dir
@@ -86,12 +91,18 @@ class RunEstimatorWorker(ParallelWorker):
         cmd = _add_more_args(
                 self.true_model_file,
                 '--true-model-file')
+        if self.warm_start_file is not None:
+            cmd = cmd + [
+                '--init-model-params-file',
+                self.warm_start_file]
         if self.lambda_known:
             cmd = cmd + ['--lambda-known']
         if self.tot_time_known:
             cmd = cmd + ['--tot-time-known']
         if self.do_refit:
             cmd = cmd + ['--do-refit']
+        if self.tune_only:
+            cmd = cmd + ['--tune-only']
 
         cmd = _add_more_args(
                 self.true_collapsed_tree_file,
@@ -103,7 +114,7 @@ class RunEstimatorWorker(ParallelWorker):
         print(" ".join(map(str, cmd)))
         subprocess.check_call(list(map(lambda x: str(x), cmd)))
 
-        assert os.path.exists(self.out_json_file)
-        with open(self.out_json_file, "r") as f:
-            out_dict = json.load(f)
-        return out_dict
+        assert os.path.exists(self.out_model_file)
+        with open(self.out_model_file, "rb") as f:
+            res = six.moves.cPickle.load(f)
+        return res
