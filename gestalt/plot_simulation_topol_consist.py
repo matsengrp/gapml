@@ -94,7 +94,11 @@ for seed in seeds:
             rand_res = get_rand_tree(seed, n_bcode)
             rand_tree = rand_res[tree_idx]
         except FileNotFoundError:
-            print("asdfasd")
+            continue
+
+        try:
+            result = get_result(seed, n_bcode)
+        except FileNotFoundError:
             continue
 
         rand_dists = []
@@ -145,11 +149,6 @@ for seed in seeds:
             node.dist = 0
         dist = true_bhv_meas.get_dist(zero_tree)
         n_bcode_results["super_zero_bhv"][idx].append(dist)
-
-        try:
-            result = get_result(seed, n_bcode)
-        except FileNotFoundError:
-            continue
 
         plot_simulation_common.plot_mrca_matrix(
             true_mrca_meas._get_mrca_matrix(result[tree_idx]),

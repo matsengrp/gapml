@@ -18,18 +18,17 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
-#LAMBDA_SEQUENCE = np.ones(6) * 0.65
-LAMBDA_SEQUENCE = [.9, .85, .8, .75, .7]
+LAMBDA_SEQUENCE = [1. , 0.9, 0.8, 0.7, 0.6, 0.5]
 
 nest.add(
     'model_seed',
-    [400],
+    [506],
     label_func=lambda c: 'model_seed%d' % c,
 )
 
 nest.add(
     'seed',
-    range(500,501),
+    range(508,509),
 )
 
 nest.add(
@@ -45,7 +44,7 @@ def generate(env, outdir, c):
     cmd = [
         #'python boto_run.py 2 2000 generate_data.py',
 	'python generate_data.py',
-	'--sampling-rate 0.3',
+	'--sampling-rate 0.45',
         '--model-seed',
         c['model_seed'],
         '--data-seed',
@@ -54,13 +53,11 @@ def generate(env, outdir, c):
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
         '--time 1',
-        #'--start-birth-lambda 150',
-        #'--birth-lambda 4',
-        '--start-birth-lambda 100',
-        '--birth-lambda 3',
+        '--start-birth-lambda 145',
+        '--birth-lambda 3.8',
         '--death-lambda 0.2',
         '--num-barcodes',
-        4,
+        16,
         '--min-uniq-alleles 30',
         '--max-uniq-alleles 50',
         '--max-abundance 200',
@@ -134,7 +131,7 @@ def run_topology(env, outdir, c):
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = "8" #,4,2"
+    penalty_params = "12,6,3"
     cmd = [
 	'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
@@ -153,12 +150,13 @@ def run_MLE(env, outdir, c):
         '--max-iters 10000',
         '--train-split 0.6',
         '--num-inits 1',
+        '--num-tune-splits 3',
         '--tot-time-known',
-        '--max-topologies 1',
+        '--max-topologies 4',
     ]
     return env.Command(
         [
-            join(outdir, 'tune_fitted.pkl'),
+            join(outdir, 'tune_fitted_again.pkl'),
             join(outdir, 'tune_fitted.txt')],
         [
             c['restrict_observed_alleles'][0],
