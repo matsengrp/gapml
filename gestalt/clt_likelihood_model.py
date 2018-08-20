@@ -1005,6 +1005,7 @@ class CLTLikelihoodModel:
                         transition_wrappers,
                         node,
                         bcode_idx)
+                # Penalize spine length (constant penalty if no spine)
                 self.dist_to_half_pen += tf.reduce_mean(
                         tf.abs(tf.exp(log_Lprob_node) - tf.constant(0.5, tf.float64)))
 
@@ -1026,6 +1027,7 @@ class CLTLikelihoodModel:
                                 tr_mat,
                                 self.branch_lens[child.node_id])
 
+                        # Penalize branch length
                         dist_to_half_pen_br = tf.reduce_mean(tf.abs(
                                 tf.diag_part(pt_matrix[child.node_id]) - tf.constant(0.5, tf.float64)
                                 ))

@@ -66,6 +66,11 @@ def parse_args():
         type=float,
         default=0.75,
         help="fraction of data for training data. for tuning penalty param")
+    parser.add_argument(
+        '--num-tune-splits',
+        type=int,
+        default=1,
+        help="number of random splits of the data for tuning penalty params")
     parser.add_argument('--max-iters', type=int, default=20)
     parser.add_argument('--num-inits', type=int, default=1)
     parser.add_argument(
@@ -142,6 +147,7 @@ def main(args=sys.argv[1:]):
             max_sum_states = args.max_sum_states,
             max_extra_steps = args.max_extra_steps,
             train_split = args.train_split,
+            num_tune_splits = args.num_tune_splits,
             scratch_dir = args.scratch_dir)
         worker_list.append(worker)
 

@@ -163,14 +163,16 @@ class LikelihoodScorer(ParallelWorker):
             if len(results) >= self.num_inits:
                 break
 
-        assert len(results) > 0
-
         # Pick out the best result
-        best_res = results[0]
-        for res in results:
-            if res.pen_log_lik > best_res.pen_log_lik:
-                best_res = res
-        return best_res
+        if len(results):
+            best_res = results[0]
+            for res in results:
+                if res.pen_log_lik > best_res.pen_log_lik:
+                    best_res = res
+            return best_res
+        else:
+            logging.info("No training attempt worked")
+            return None
 
     def do_work_directly(self, sess):
         """

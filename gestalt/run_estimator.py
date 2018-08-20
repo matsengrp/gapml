@@ -87,6 +87,11 @@ def parse_args():
         action='store_true',
         help='are target rates known?')
     parser.add_argument(
+        '--num-tune-splits',
+        type=int,
+        default=3,
+        help="number of random splits of the data for tuning penalty params")
+    parser.add_argument(
         '--train-split',
         type=float,
         default=0.5,
@@ -168,20 +173,10 @@ def fit_tree(
     res = worker.run_worker(None)
     return res
 
-def tune_hyperparams(
+def _tune_hyperparams_one_split(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
         args):
-    """
-    Tunes the penalty param for the target lambda
-    """
-    best_params = args.init_params
-    best_params["log_barr_pen"] = args.log_barr
-    best_params["dist_to_half_pen"] = args.dist_to_half_pens[0]
-    if len(args.dist_to_half_pens) == 1:
-        # Nothing to tune.
-        return best_params
-
     # First split the data into training vs validation
     train_tree_split, val_tree_split = create_train_val_tree(
             tree,
@@ -212,6 +207,7 @@ def tune_hyperparams(
         new_init_model_params["dist_to_half_pen"] = dist_to_half_pen
         init_model_param_list.append(new_init_model_params)
     # Actually fit the training tree
+    print("fitting train stuff")
     train_results = fit_tree(
         train_tree_split.tree,
         train_tree_split.bcode_meta,
@@ -222,16 +218,19 @@ def tune_hyperparams(
 
     # Now copy these results over so we can use these fitted values in the validation tree
     init_val_model_param_list = []
-    for res_train in train_results:
-        # Copy over the trained model params except for branch length things
-        fixed_params = {}
-        for k, v in res_train.model_params_dict.items():
-            if bcode_meta.num_barcodes > 1 or (k not in ['branch_len_inners', 'branch_len_offsets_proportion']):
-                fixed_params[k] = v
-        # on the validation set, the penalty parameters are all (near) zero
-        fixed_params["log_barr_pen"] = 1e-10
-        fixed_params["dist_to_half_pen"] = 0
-        init_val_model_param_list.append(fixed_params)
+    good_idxs = [res is not None for res in train_results]
+    for idx, res_train in enumerate(train_results):
+        if res_train is not None:
+            # Copy over the trained model params except for branch length things
+            fixed_params = {}
+            for k, v in res_train.model_params_dict.items():
+                if bcode_meta.num_barcodes > 1 or (k not in ['branch_len_inners', 'branch_len_offsets_proportion']):
+                    fixed_params[k] = v
+            # on the validation set, the penalty parameters are all (near) zero
+            fixed_params["log_barr_pen"] = 1e-10
+            fixed_params["dist_to_half_pen"] = 0
+            init_val_model_param_list.append(fixed_params)
+
     # Now evaluate all these settings on the validation tree
     validation_results = fit_tree(
         val_tree_split.tree,
@@ -249,17 +248,46 @@ def tune_hyperparams(
         max_iters = args.max_iters if bcode_meta.num_barcodes == 1 else 0)
 
     # Now find the best penalty param by finding the one with the highest log likelihood
-    val_log_liks = []
-    for res_val, dist_to_half_pen in zip(validation_results, args.dist_to_half_pens):
-        # Print results
-        val_log_lik = res_val.train_history[-1]["log_lik"]
-        logging.info(
-                "Pen param %f val log lik %f",
-                dist_to_half_pen,
-                val_log_lik)
-        val_log_liks.append(val_log_lik)
+    val_log_liks = np.zeros(len(args.dist_to_half_pens))
+    for idx, dist_to_half_pen in enumerate(args.dist_to_half_pens):
+        if good_idxs[idx]:
+            # Print results
+            res_val = validation_results[int(np.sum(good_idxs[:idx+1])) - 1]
+            if res_val is not None:
+                val_log_lik = res_val.train_history[-1]["log_lik"]
+                logging.info(
+                        "Pen param %f val log lik %f",
+                        dist_to_half_pen,
+                        val_log_lik)
+                val_log_liks[idx] = val_log_lik
+                continue
+        val_log_liks[idx] = -np.inf
+    return val_log_liks, validation_results
 
-    best_idx = np.argmax(val_log_liks)
+def tune_hyperparams(
+        tree: CellLineageTree,
+        bcode_meta: BarcodeMetadata,
+        args):
+    """
+    Tunes the penalty param for the target lambda
+    """
+    best_params = args.init_params
+    best_params["log_barr_pen"] = args.log_barr
+    best_params["dist_to_half_pen"] = args.dist_to_half_pens[0]
+    if len(args.dist_to_half_pens) == 1:
+        # Nothing to tune.
+        return best_params
+
+    total_val_log_liks = np.zeros(len(args.dist_to_half_pens))
+    for i in range(args.num_tune_splits):
+        val_log_liks, validation_results = _tune_hyperparams_one_split(
+                tree,
+                bcode_meta,
+                args)
+        total_val_log_liks += val_log_liks
+    logging.info("TOTAL val log liks %s", total_val_log_liks)
+
+    best_idx = np.argmax(total_val_log_liks)
     best_dist_to_half_pen = args.dist_to_half_pens[best_idx]
     # Create the initialization model params for warm starting
     best_params = validation_results[best_idx].model_params_dict
@@ -303,7 +331,7 @@ def read_true_model_files(args):
     oracle_dist_measurers = TreeDistanceMeasurerAgg([
         UnrootRFDistanceMeasurer,
         RootRFDistanceMeasurer,
-        #SPRDistanceMeasurer,
+        BHVDistanceMeasurer,
         MRCADistanceMeasurer,
         MRCASpearmanMeasurer],
         collapsed_true_subtree,
@@ -517,7 +545,6 @@ def main(args=sys.argv[1:]):
     logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["node_id"], show_internal=True))
     logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
     logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
-    logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["cell_state"]))
 
     write_output_json_summary(res, args, oracle_dist_measurers, true_model_dict)
 
@@ -529,9 +556,6 @@ def main(args=sys.argv[1:]):
         six.moves.cPickle.dump(save_dict, f, protocol = 2)
 
     logging.info("Complete!")
-    #plot_mrca_matrix(
-    #    res.fitted_bifurc_tree,
-    #    args.pickle_out.replace(".pkl", "_mrca.png"))
 
 if __name__ == "__main__":
     main()
