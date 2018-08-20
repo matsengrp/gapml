@@ -114,10 +114,18 @@ def _create_train_val_tree_by_subsampling(clt: CellLineageTree, bcode_meta: Barc
     """
     # Assign by splitting on children of root node
     # This decreases the correlation between observations
+    # Shuffle children and assign children according to the desired
+    # split ratio.
+    num_children = len(clt.get_children())
+    child_assignments = np.random.choice(num_children, num_children, replace=False)
+    n_child_train = int(np.ceil(train_split_rate * num_children))
+    train_childs = child_assignments[:n_child_train]
+
+    # Now actually assign the leaf nodes appropriately
     train_leaf_ids = set()
     val_leaf_ids = set()
-    for child in clt.children:
-        if np.random.binomial(1, train_split_rate) == 1:
+    for child_idx, child in enumerate(clt.children):
+        if child_idx in train_childs:
             train_leaf_ids.update(
                 [l.node_id for l in child])
         else:
