@@ -6,6 +6,7 @@ Otherwise we subsample the tree.
 """
 from typing import Set, Dict
 import numpy as np
+from numpy import ndarray
 import logging
 
 from sklearn.model_selection import KFold
@@ -83,7 +84,7 @@ def create_train_val_tree(tree: CellLineageTree, bcode_meta: BarcodeMetadata, tr
 """
 Code for train/val split for >1 barcode
 """
-def _restrict_barcodes(clt: CellLineageTree, min_bcode_idx: int, bcode_meta: BarcodeMetadata):
+def _restrict_barcodes(clt: CellLineageTree, bcode_idxs: ndarray, bcode_meta: BarcodeMetadata):
     """
     @param min_bcode_idx: the start index of the barcode we observe
     @param bcode_meta: barcode metadata, indicates how many barcodes we should restrict it to
@@ -91,10 +92,7 @@ def _restrict_barcodes(clt: CellLineageTree, min_bcode_idx: int, bcode_meta: Bar
     Update the alleles for each node in the tree to correspond to only the barcodes indicated
     """
     for node in clt.traverse():
-        #if node.allele_list is not None:
-        #    node.set_allele_list(node.allele_list.alleles[min_bcode_idx: min_bcode_idx + bcode_meta.num_barcodes])
-        #else:
-        node.allele_events_list = node.allele_events_list[min_bcode_idx: min_bcode_idx + bcode_meta.num_barcodes]
+        node.allele_events_list = [node.allele_events_list[i] for i in bcode_idxs]
     clt.label_tree_with_strs()
     return clt
 
@@ -108,18 +106,22 @@ def _create_train_val_tree_by_barcode(clt: CellLineageTree, bcode_meta: BarcodeM
     num_val_bcodes = bcode_meta.num_barcodes - num_train_bcodes
     assert num_train_bcodes > 0 and num_val_bcodes > 0
 
+    shuffled_bcode_idxs = np.random.choice(bcode_meta.num_barcodes, bcode_meta.num_barcodes, replace=False)
+    train_bcode_idxs = shuffled_bcode_idxs[:num_train_bcodes]
+    print("trainnnn", train_bcode_idxs)
+    val_bcode_idxs = shuffled_bcode_idxs[num_train_bcodes:]
     train_bcode_meta = BarcodeMetadata(
             bcode_meta.unedited_barcode,
             num_train_bcodes,
             bcode_meta.cut_site,
             bcode_meta.crucial_pos_len)
-    train_clt = _restrict_barcodes(clt.copy(), 0, train_bcode_meta)
+    train_clt = _restrict_barcodes(clt.copy(), train_bcode_idxs, train_bcode_meta)
     val_bcode_meta = BarcodeMetadata(
             bcode_meta.unedited_barcode,
             num_val_bcodes,
             bcode_meta.cut_site,
             bcode_meta.crucial_pos_len)
-    val_clt = _restrict_barcodes(clt.copy(), num_train_bcodes, val_bcode_meta)
+    val_clt = _restrict_barcodes(clt.copy(), val_bcode_idxs, val_bcode_meta)
     return train_clt, val_clt, train_bcode_meta, val_bcode_meta
 
 

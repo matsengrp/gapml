@@ -36,7 +36,11 @@ def tune(
     best_params["log_barr_pen"] = args.log_barr
     best_params["dist_to_half_pen"] = args.dist_to_half_pens[0]
     if len(args.dist_to_half_pens) == 1:
-        return []
+        return [[TuneScorerResult(
+            args.log_barr,
+            args.dist_to_half_pens,
+            best_params,
+            score = 0)]]
 
     if bcode_meta.num_barcodes > 1:
         validation_res = _tune_hyperparams_one_split_many_bcodes(
