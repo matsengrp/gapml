@@ -156,6 +156,8 @@ def tune_hyperparams(
         topology_files,
         args):
     worker_list = []
+    # TODO: right now we only ever do one split for training validation
+    # ... mostly cause we're too lazy to implement something else
     num_tune_splits = 1 if args.num_barcodes > 1 else args.total_tune_splits
 
     for file_idx, top_file in enumerate(topology_files):

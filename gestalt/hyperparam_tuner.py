@@ -92,8 +92,8 @@ def _tune_hyperparams_one_split_many_bcodes(
         new_init_model_params["log_barr_pen"] = args.log_barr
         new_init_model_params["dist_to_half_pen"] = dist_to_half_pen
         init_model_param_list.append(new_init_model_params)
+
     # Actually fit the training tree
-    print("fitting train stuff")
     train_results = LikelihoodScorer(
         get_randint(),
         train_tree_split.tree,
@@ -122,21 +122,20 @@ def _tune_hyperparams_one_split_many_bcodes(
 
     # Now evaluate all these settings on the validation tree
     # This doesn't train the tree at all
-    val_worker = LikelihoodScorer(
+    validation_results = LikelihoodScorer(
         get_randint(),
         val_tree_split.tree,
         val_tree_split.bcode_meta,
         max_iters = 0,
         num_inits = 1,
         transition_wrap_maker = val_transition_wrap_maker,
-        init_model_param_list = init_model_param_list,
-        known_model_params = KnownModelParams(
+        init_model_param_list = init_val_model_param_list,
+        known_params = KnownModelParams(
             target_lams = True,
             branch_lens = True,
             indel_params = True,
             tot_time = True),
-        abundance_weight = args.abundance_weight)
-    validation_results = val_worker.run_worker(None)
+        abundance_weight = args.abundance_weight).run_worker(None)
 
     # Now find the best penalty param by finding the one with the highest log likelihood
     final_validation_results = []
@@ -152,10 +151,7 @@ def _tune_hyperparams_one_split_many_bcodes(
                     res_val.model_params_dict,
                     res_val.log_lik)
                 final_validation_results.append(tune_result)
-                logging.info(
-                        "Pen param %f log lik %f",
-                        dist_to_half_pen,
-                        tune_result.score)
+                logging.info("Pen param %f log lik %f", dist_to_half_pen, tune_result.score)
             else:
                 # Create our summary of tuning -- not stable
                 tune_result = TuneScorerResult(
