@@ -43,7 +43,7 @@ def get_result(res_file):
     Read fitted model
     """
     with open(res_file, "rb") as f:
-        result = six.moves.cPickle.load(f)
+        result = six.moves.cPickle.load(f)["refit"]
     raw_tree = result.fitted_bifurc_tree.copy()
 
     # Create appropriate number of leaves to match abundance

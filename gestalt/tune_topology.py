@@ -135,14 +135,14 @@ def get_best_hyperparam(
         args,
         tune_results: List[Tuple[Dict, RunEstimatorWorker]]):
 
-    total_val_log_liks = np.zeros(len(args.dist_to_half_pen_list))
+    total_pen_param_score = np.zeros(len(args.dist_to_half_pen_list))
     for (topology_res, _) in tune_results:
         for topology_rep_res in topology_res["tune_results"]:
             for i, res in enumerate(topology_rep_res):
-                total_val_log_liks[i] += res.score
+                total_pen_param_score[i] += res.score
 
-    logging.info("Total tuning scores %s", total_val_log_liks)
-    best_idx = np.argmax(total_val_log_liks)
+    logging.info("Total tuning scores %s", total_pen_param_score)
+    best_idx = np.argmax(total_pen_param_score)
     best_dist_to_half_pen = args.dist_to_half_pen_list[best_idx]
     logging.info("Best penalty param %s", best_dist_to_half_pen)
     # Create the initialization model params for warm starting

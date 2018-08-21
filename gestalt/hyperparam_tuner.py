@@ -24,6 +24,36 @@ class TuneScorerResult:
         self.model_params_dict = model_params_dict
         self.score = score
 
+def tune(
+        tree: CellLineageTree,
+        bcode_meta: BarcodeMetadata,
+        args):
+    """
+    Tunes the `dist_to_half_pen` penalty parameter
+    @return List[List[TuneScorerResult]]
+    """
+    best_params = args.init_params
+    best_params["log_barr_pen"] = args.log_barr
+    best_params["dist_to_half_pen"] = args.dist_to_half_pens[0]
+    if len(args.dist_to_half_pens) == 1:
+        return []
+
+    if bcode_meta.num_barcodes > 1:
+        validation_results = []
+        for i in range(args.num_tune_splits):
+            validation_res = _tune_hyperparams_one_split_many_bcodes(
+                tree,
+                bcode_meta,
+                args)
+            validation_results.append(validation_res)
+    else:
+        validation_res = _tune_hyperparams_single_bcode(
+            tree,
+            bcode_meta,
+            args)
+        validation_results = [validation_res]
+    return validation_results
+
 def _tune_hyperparams_one_split_many_bcodes(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
@@ -240,33 +270,3 @@ def _tune_hyperparams_single_bcode(
             logging.info("Pen param %f NOT STABLE", dist_to_half_pen)
 
     return final_validation_results
-
-def tune(
-        tree: CellLineageTree,
-        bcode_meta: BarcodeMetadata,
-        args):
-    """
-    Tunes the penalty param for the target lambda
-    @return List[List[TuneScorerResult]]
-    """
-    best_params = args.init_params
-    best_params["log_barr_pen"] = args.log_barr
-    best_params["dist_to_half_pen"] = args.dist_to_half_pens[0]
-    if len(args.dist_to_half_pens) == 1:
-        return []
-
-    if bcode_meta.num_barcodes > 1:
-        validation_results = []
-        for i in range(args.num_tune_splits):
-            validation_res = _tune_hyperparams_one_split_many_bcodes(
-                tree,
-                bcode_meta,
-                args)
-            validation_results.append(validation_res)
-    else:
-        validation_res = _tune_hyperparams_single_bcode(
-            tree,
-            bcode_meta,
-            args)
-        validation_results = [validation_res]
-    return validation_results
