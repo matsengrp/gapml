@@ -45,6 +45,11 @@ def parse_args():
         default="_output/parsimony_tree0.pkl",
         help='pkl file with tree topology')
     parser.add_argument(
+        '--init-model-params-file',
+        type=str,
+        default=None,
+        help='pkl file with initializations')
+    parser.add_argument(
         '--pickle-out',
         type=str,
         default=None,
@@ -99,6 +104,10 @@ def parse_args():
     parser.add_argument('--max-iters', type=int, default=2)
     parser.add_argument('--num-inits', type=int, default=1)
     parser.add_argument(
+        '--tune-only',
+        action='store_true',
+        help='only tune penalty params')
+    parser.add_argument(
         '--do-refit',
         action='store_true',
         help='refit after tuning over the compatible bifurcating trees')
@@ -118,7 +127,6 @@ def parse_args():
         default='_output/scratch',
         help='not used at the moment... eventually used by SPR')
 
-    parser.set_defaults(is_refit=False)
     args = parser.parse_args()
     if args.pickle_out is None:
         args.pickle_out = args.topology_file.replace(".pkl", "_fitted.pkl")
@@ -248,24 +256,25 @@ def _tune_hyperparams_one_split(
         max_iters = args.max_iters if bcode_meta.num_barcodes == 1 else 0)
 
     # Now find the best penalty param by finding the one with the highest log likelihood
-    val_log_liks = np.zeros(len(args.dist_to_half_pens))
     final_validation_results = []
     for idx, dist_to_half_pen in enumerate(args.dist_to_half_pens):
         if good_idxs[idx]:
             # Print results
             res_val = validation_results[int(np.sum(good_idxs[:idx+1])) - 1]
+            res_val.dist_to_half_pen = dist_to_half_pen
+            # Do not use this as warmstarting values ever.
+            if bcode_meta.num_barcodes == 1:
+                res_val.model_params_dict.pop('branch_len_inners', None)
+                res_val.model_params_dict.pop('branch_len_offsets_proportion', None)
             if res_val is not None:
                 final_validation_results.append(res_val)
-                val_log_lik = res_val.train_history[-1]["log_lik"]
                 logging.info(
                         "Pen param %f val log lik %f",
                         dist_to_half_pen,
-                        val_log_lik)
-                val_log_liks[idx] = val_log_lik
+                        res_val.log_lik)
                 continue
         final_validation_results.append(None)
-        val_log_liks[idx] = -np.inf
-    return val_log_liks, final_validation_results
+    return final_validation_results
 
 def tune_hyperparams(
         tree: CellLineageTree,
@@ -278,30 +287,16 @@ def tune_hyperparams(
     best_params["log_barr_pen"] = args.log_barr
     best_params["dist_to_half_pen"] = args.dist_to_half_pens[0]
     if len(args.dist_to_half_pens) == 1:
-        # Nothing to tune.
-        return best_params
+        return []
 
-    total_val_log_liks = np.zeros(len(args.dist_to_half_pens))
+    validation_results = []
     for i in range(args.num_tune_splits):
-        val_log_liks, validation_results = _tune_hyperparams_one_split(
+        validation_res = _tune_hyperparams_one_split(
                 tree,
                 bcode_meta,
                 args)
-        total_val_log_liks += val_log_liks
-    logging.info("TOTAL val log liks %s", total_val_log_liks)
-
-    best_idx = np.argmax(total_val_log_liks)
-    best_dist_to_half_pen = args.dist_to_half_pens[best_idx]
-    # Create the initialization model params for warm starting
-    best_params = validation_results[best_idx].model_params_dict
-    if bcode_meta.num_barcodes == 1:
-        best_params.pop('branch_len_inners', None)
-        best_params.pop('branch_len_offsets_proportion', None)
-    best_params["dist_to_half_pen"] = best_dist_to_half_pen
-    best_params["log_barr_pen"] = args.log_barr
-
-    logging.info("Best penalty param %s", best_dist_to_half_pen)
-    return best_params
+        validation_results.append(validation_res)
+    return validation_results
 
 def get_init_target_lams(bcode_meta, mean_val):
     random_perturb = np.random.uniform(size=bcode_meta.n_targets) * 0.001
@@ -341,6 +336,38 @@ def read_true_model_files(args):
         args.scratch_dir)
     return true_model_dict, oracle_dist_measurers
 
+def read_init_model_params_file(args, bcode_meta, true_model_dict):
+    args.init_params = {
+            "target_lams": get_init_target_lams(bcode_meta, 0),
+            "boost_softmax_weights": np.ones(3),
+            "trim_long_factor": 0.05 * np.ones(2),
+            "trim_zero_probs": 0.5 * np.ones(2),
+            "trim_short_poissons": 2.5 * np.ones(2),
+            "trim_long_poissons": 2.5 * np.ones(2),
+            "insert_zero_prob": np.array([0.5]),
+            "insert_poisson": np.array([0.5]),
+            "double_cut_weight": np.array([0.5]),
+            "tot_time": 1,
+            "tot_time_extra": 1.3}
+    # Use warm-start info if available
+    if args.init_model_params_file is not None:
+        with open(args.init_model_params_file, "rb") as f:
+            args.init_params = six.moves.cPickle.load(f)
+
+    # Copy over true known params if specified
+    if args.known_params.tot_time:
+        if true_model_dict is not None:
+            args.init_params["tot_time"] = true_model_dict["true_model_params"]["tot_time"]
+            args.init_params["tot_time_extra"] = true_model_dict["true_model_params"]["tot_time_extra"]
+        else:
+            args.init_params["tot_time"] = obs_data_dict["time"]
+            args.init_params["tot_time_extra"] = 1e-10
+    if args.known_params.trim_long_factor:
+        args.init_params["trim_long_factor"] = true_model_dict['true_model_params']['trim_long_factor']
+    if args.known_params.target_lams:
+        args.init_params["target_lams"] = true_model_dict['true_model_params']['target_lams']
+        args.init_params["double_cut_weight"] = true_model_dict['true_model_params']['double_cut_weight']
+
 def read_data(args):
     """
     Read the data files...
@@ -368,11 +395,8 @@ def read_data(args):
 
     with open(args.topology_file, "rb") as f:
         tree_topology_info = six.moves.cPickle.load(f)
-        if args.is_refit:
-            tree = tree_topology_info.fitted_bifurc_tree
-        else:
-            tree = tree_topology_info["tree"]
-    tree.label_node_ids()
+        tree = tree_topology_info["tree"]
+        tree.label_node_ids()
 
     # If this tree is not unresolved, then mark all the multifurcations as resolved
     if not tree_topology_info["multifurc"]:
@@ -419,7 +443,6 @@ def do_refit_bifurc_tree(
     param_dict["log_barr_pen"] = raw_res.log_barr_pen
     param_dict["dist_to_half_pen"] = raw_res.dist_to_half_pen
     refit_bifurc_tree = raw_res.fitted_bifurc_tree.copy()
-    refit_bifurc_tree.label_node_ids()
     num_nodes = refit_bifurc_tree.get_num_nodes()
     # Copy over the branch lengths
     br_lens = np.zeros(num_nodes)
@@ -478,82 +501,60 @@ def main(args=sys.argv[1:]):
 
     np.random.seed(seed=args.seed)
 
-    # Read input files
-    bcode_meta, tree, obs_data_dict = read_data(args)
-    true_model_dict, oracle_dist_measurers = read_true_model_files(args)
-
     if os.path.exists(args.pickle_out):
         logging.info("model exists...")
         return
 
-    has_unresolved_multifurcs = check_has_unresolved_multifurcs(tree)
-    logging.info("Tree has unresolved mulfirucs? %d", has_unresolved_multifurcs)
+    # Read input files
+    bcode_meta, tree, obs_data_dict = read_data(args)
+    true_model_dict, oracle_dist_measurers = read_true_model_files(args)
+    read_init_model_params_file(args, bcode_meta, true_model_dict)
+
     logging.info(tree.get_ascii(attributes=["node_id"], show_internal=True))
     logging.info(tree.get_ascii(attributes=["abundance"], show_internal=True))
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
 
-    args.init_params = {
-            "target_lams": get_init_target_lams(bcode_meta, 0),
-            "boost_softmax_weights": np.ones(3),
-            "trim_long_factor": 0.05 * np.ones(2),
-            "trim_zero_probs": 0.5 * np.ones(2),
-            "trim_short_poissons": 2.5 * np.ones(2),
-            "trim_long_poissons": 2.5 * np.ones(2),
-            "insert_zero_prob": np.array([0.5]),
-            "insert_poisson": np.array([0.5]),
-            "double_cut_weight": np.array([0.5]),
-            "tot_time": 1,
-            "tot_time_extra": 1.3}
-    if args.known_params.tot_time:
-        if true_model_dict is not None:
-            args.init_params["tot_time"] = true_model_dict["true_model_params"]["tot_time"]
-            args.init_params["tot_time_extra"] = true_model_dict["true_model_params"]["tot_time_extra"]
-        else:
-            args.init_params["tot_time"] = obs_data_dict["time"]
-            args.init_params["tot_time_extra"] = 1e-10
-    if args.known_params.trim_long_factor:
-        args.init_params["trim_long_factor"] = true_model_dict['true_model_params']['trim_long_factor']
-    if args.known_params.target_lams:
-        args.init_params["target_lams"] = true_model_dict['true_model_params']['target_lams']
-        args.init_params["double_cut_weight"] = true_model_dict['true_model_params']['double_cut_weight']
-        best_dist_to_half_pen = 0
+    has_unresolved_multifurcs = check_has_unresolved_multifurcs(tree)
+    logging.info("Tree has unresolved mulfirucs? %d", has_unresolved_multifurcs)
 
-    # Tune penalty params
-    # Initialize with random values
-    args.init_params = tune_hyperparams(tree, bcode_meta, args)
-
-    # Now we can actually train the multifurc tree with the target lambda penalty param fixed
-    raw_res = fit_multifurc_tree(
-            tree,
-            bcode_meta,
-            args,
-            oracle_dist_measurers)
-
-    # Refit the bifurcating tree if needed
+    raw_res = None
     refit_res = None
-    if not has_unresolved_multifurcs:
-        # The tree is already fully resolved. No refitting to do
-        refit_res = raw_res
-    elif has_unresolved_multifurcs and args.do_refit:
-        logging.info("Doing refit")
-        refit_res = do_refit_bifurc_tree(
-                raw_res,
+
+    tune_results = tune_hyperparams(tree, bcode_meta, args)
+
+    if not args.tune_only:
+        # Now we can actually train the multifurc tree with the target lambda penalty param fixed
+        raw_res = fit_multifurc_tree(
+                tree,
                 bcode_meta,
                 args,
                 oracle_dist_measurers)
 
-    #### Mostly a section for printing
-    res = refit_res if refit_res is not None else raw_res
-    print(res.model_params_dict)
-    logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["node_id"], show_internal=True))
-    logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
-    logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+        # Refit the bifurcating tree if needed
+        if not has_unresolved_multifurcs:
+            # The tree is already fully resolved. No refitting to do
+            refit_res = raw_res
+        elif has_unresolved_multifurcs and args.do_refit:
+            logging.info("Doing refit")
+            refit_res = do_refit_bifurc_tree(
+                    raw_res,
+                    bcode_meta,
+                    args,
+                    oracle_dist_measurers)
 
-    write_output_json_summary(res, args, oracle_dist_measurers, true_model_dict)
+        #### Mostly a section for printing
+        res = refit_res if refit_res is not None else raw_res
+        print(res.model_params_dict)
+        logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["node_id"], show_internal=True))
+        logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
+        logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+
+        write_output_json_summary(res, args, oracle_dist_measurers, true_model_dict)
 
     # Save the data
     with open(args.pickle_out, "wb") as f:
         save_dict = {
+                "tune_results": tune_results,
                 "raw": raw_res,
                 "refit": refit_res}
         six.moves.cPickle.dump(save_dict, f, protocol = 2)

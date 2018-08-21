@@ -1005,7 +1005,8 @@ class CLTLikelihoodModel:
                         transition_wrappers,
                         node,
                         bcode_idx)
-                # Penalize spine length (constant penalty if no spine)
+                # For a multifurcating tree, this is where we penalize spine length
+                # (constant penalty if no spine)
                 self.dist_to_half_pen += tf.reduce_mean(
                         tf.abs(tf.exp(log_Lprob_node) - tf.constant(0.5, tf.float64)))
 
@@ -1028,18 +1029,21 @@ class CLTLikelihoodModel:
                                 self.branch_lens[child.node_id])
 
                         # Penalize branch length
-                        dist_to_half_pen_br = tf.reduce_mean(tf.abs(
-                                tf.diag_part(pt_matrix[child.node_id]) - tf.constant(0.5, tf.float64)
-                                ))
-                        if hasattr(child, "spine_len"):
-                            if child.spine_len:
-                                # weight the penalty inverse to the number of spine nodes
-                                self.dist_to_half_pen += tf.constant(
-                                    2.0/child.spine_len, dtype=tf.float64) * dist_to_half_pen_br
-                            else:
-                                self.dist_to_half_pen += dist_to_half_pen_br
+                        if hasattr(child, "spine_children"):
+                            # For a bifurcating tree, this is where we penalize branches and also groups of branches that were originally
+                            # a single spine -- we use the instantaneous transition matrix from the top node and multiply by the entire
+                            # spine length
+                            if len(child.spine_children):
+                                haz_away = tf.exp(tf.diag_part(tr_mat) * tf.reduce_sum(
+                                        tf.gather(
+                                            params = self.branch_lens,
+                                            indices = child.spine_children)))
+                                self.dist_to_half_pen += tf.reduce_mean(tf.abs(
+                                    haz_away - tf.constant(0.5, dtype=tf.float64)))
                         else:
-                            self.dist_to_half_pen += dist_to_half_pen_br
+                            haz_away = tf.diag_part(pt_matrix[child.node_id])
+                            self.dist_to_half_pen += tf.reduce_mean(tf.abs(
+                                    haz_away - tf.constant(0.5, tf.float64)))
 
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.
@@ -1250,7 +1254,7 @@ class CLTLikelihoodModel:
 
         scratch_tree = self.topology.copy("deepcopy")
         for node in scratch_tree.traverse("preorder"):
-            node.add_feature("spine_len", 0)
+            node.add_feature("spine_children", [node])
 
         for node in scratch_tree.traverse("preorder"):
             if not node.is_resolved_multifurcation():
@@ -1261,15 +1265,16 @@ class CLTLikelihoodModel:
 
                 curr_offset = 0
                 curr_spine_node = node
+                spine_nodes = []
                 for idx in sort_indexes:
                     new_spine_node = CellLineageTree(
                             allele_list = node.allele_list,
                             allele_events_list = node.allele_events_list,
                             cell_state = node.cell_state,
                             dist = children_offsets[idx] - curr_offset)
-                    new_spine_node.node_id = None
-                    new_spine_node.add_feature("spine_len", len(children))
                     curr_spine_node.add_child(new_spine_node)
+                    new_spine_node.add_feature("spine_children", [])
+                    spine_nodes.append(new_spine_node)
 
                     child = children[idx]
                     node.remove_child(child)
@@ -1278,12 +1283,21 @@ class CLTLikelihoodModel:
                     curr_spine_node = new_spine_node
                     curr_offset = children_offsets[idx]
 
+                node.add_feature("spine_children", [node] + spine_nodes)
+
             if node.is_root():
                 node.dist = 0
-            elif node.node_id is not None:
+            elif len(node.spine_children):
                 node.dist = br_lens[node.node_id]
 
+        # Collapse tree but preserve node id ordering
         collapsed_tree._remove_single_child_unobs_nodes(scratch_tree)
+
+        scratch_tree.label_node_ids()
+        remaining_nodes = set([node for node in scratch_tree.traverse()])
+        for node in scratch_tree.traverse():
+            node.spine_children = [c.node_id for c in node.spine_children if c in remaining_nodes]
+
         # Just checking that the tree is ultrametric
         for leaf in scratch_tree:
             assert np.isclose(tot_time, leaf.get_distance(scratch_tree))
