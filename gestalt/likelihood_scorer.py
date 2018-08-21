@@ -202,16 +202,19 @@ class LikelihoodScorer(ParallelWorker):
 
         # Fit each initialzation/optimization setting
         result_list = []
-        for init_model_params in self.init_model_param_list:
+        for raw_init_model_params in self.init_model_param_list:
             if len(result_list):
                 # Do warm start from previous results if there are model parameters
                 # that the init dictionary does not have
                 prev_res = result_list[-1]
-                other_keys = set(list(prev_res.model_params_dict.keys())) - set(list(init_model_params.keys()))
+                other_keys = set(list(prev_res.model_params_dict.keys())) - set(list(raw_init_model_params.keys()))
                 if len(other_keys):
+                    init_model_params = raw_init_model_params.copy()
                     for k, v in prev_res.model_params_dict.items():
-                        if k not in init_model_params:
+                        if k not in raw_init_model_params:
                             init_model_params[k] = v
+            else:
+                init_model_params = raw_init_model_params
             res = self._get_best_result(
                     estimator,
                     res_model,

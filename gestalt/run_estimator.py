@@ -26,8 +26,8 @@ from optim_settings import KnownModelParams
 from transition_wrapper_maker import TransitionWrapperMaker
 from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from plot_mrca_matrices import plot_mrca_matrix
-from split_data import create_train_val_tree
 from barcode_metadata import BarcodeMetadata
+import hyperparam_tuner
 from tree_distance import *
 from constants import *
 from common import *
@@ -177,126 +177,8 @@ def fit_tree(
         known_params = args.known_params if known_model_params is None else known_model_params,
         dist_measurers = oracle_dist_measurers,
         abundance_weight = args.abundance_weight)
-    # TODO: this wastes a lot of time since much of the time is spent here!
     res = worker.run_worker(None)
     return res
-
-def _tune_hyperparams_one_split(
-        tree: CellLineageTree,
-        bcode_meta: BarcodeMetadata,
-        args):
-    # First split the data into training vs validation
-    train_tree_split, val_tree_split = create_train_val_tree(
-            tree,
-            bcode_meta,
-            args.train_split)
-
-    train_transition_wrap_maker = TransitionWrapperMaker(
-            train_tree_split.tree,
-            train_tree_split.bcode_meta,
-            args.max_extra_steps,
-            args.max_sum_states)
-    val_transition_wrap_maker = TransitionWrapperMaker(
-            val_tree_split.tree,
-            val_tree_split.bcode_meta,
-            args.max_extra_steps,
-            args.max_sum_states)
-
-    # Train the model using only the training data
-    # First create all the different initialization/optimization settings
-    # These will all be fit on the trainin tree
-    init_model_param_list = []
-    for idx, dist_to_half_pen in enumerate(args.dist_to_half_pens):
-        if idx == 0:
-            new_init_model_params = args.init_params.copy()
-        else:
-            new_init_model_params = {}
-        new_init_model_params["log_barr_pen"] = args.log_barr
-        new_init_model_params["dist_to_half_pen"] = dist_to_half_pen
-        init_model_param_list.append(new_init_model_params)
-    # Actually fit the training tree
-    print("fitting train stuff")
-    train_results = fit_tree(
-        train_tree_split.tree,
-        train_tree_split.bcode_meta,
-        args,
-        train_transition_wrap_maker,
-        init_model_param_list)
-    logging.info("Finished training all penalty params. Start validation round")
-
-    # Now copy these results over so we can use these fitted values in the validation tree
-    init_val_model_param_list = []
-    good_idxs = [res is not None for res in train_results]
-    for idx, res_train in enumerate(train_results):
-        if res_train is not None:
-            # Copy over the trained model params except for branch length things
-            fixed_params = {}
-            for k, v in res_train.model_params_dict.items():
-                if bcode_meta.num_barcodes > 1 or (k not in ['branch_len_inners', 'branch_len_offsets_proportion']):
-                    fixed_params[k] = v
-            # on the validation set, the penalty parameters are all (near) zero
-            fixed_params["log_barr_pen"] = 1e-10
-            fixed_params["dist_to_half_pen"] = 0
-            init_val_model_param_list.append(fixed_params)
-
-    # Now evaluate all these settings on the validation tree
-    validation_results = fit_tree(
-        val_tree_split.tree,
-        val_tree_split.bcode_meta,
-        args,
-        transition_wrap_maker = val_transition_wrap_maker,
-        init_model_param_list = init_val_model_param_list,
-        known_model_params = KnownModelParams(
-            target_lams = True,
-            branch_lens = bcode_meta.num_barcodes > 1,
-            indel_params = False, #True,
-            tot_time = True),
-        # it's a validation tree -- only a single initialization is probably fine
-        num_inits = 1,
-        max_iters = args.max_iters if bcode_meta.num_barcodes == 1 else 0)
-
-    # Now find the best penalty param by finding the one with the highest log likelihood
-    final_validation_results = []
-    for idx, dist_to_half_pen in enumerate(args.dist_to_half_pens):
-        if good_idxs[idx]:
-            # Print results
-            res_val = validation_results[int(np.sum(good_idxs[:idx+1])) - 1]
-            res_val.dist_to_half_pen = dist_to_half_pen
-            # Do not use this as warmstarting values ever.
-            if bcode_meta.num_barcodes == 1:
-                res_val.model_params_dict.pop('branch_len_inners', None)
-                res_val.model_params_dict.pop('branch_len_offsets_proportion', None)
-            if res_val is not None:
-                final_validation_results.append(res_val)
-                logging.info(
-                        "Pen param %f val log lik %f",
-                        dist_to_half_pen,
-                        res_val.log_lik)
-                continue
-        final_validation_results.append(None)
-    return final_validation_results
-
-def tune_hyperparams(
-        tree: CellLineageTree,
-        bcode_meta: BarcodeMetadata,
-        args):
-    """
-    Tunes the penalty param for the target lambda
-    """
-    best_params = args.init_params
-    best_params["log_barr_pen"] = args.log_barr
-    best_params["dist_to_half_pen"] = args.dist_to_half_pens[0]
-    if len(args.dist_to_half_pens) == 1:
-        return []
-
-    validation_results = []
-    for i in range(args.num_tune_splits):
-        validation_res = _tune_hyperparams_one_split(
-                tree,
-                bcode_meta,
-                args)
-        validation_results.append(validation_res)
-    return validation_results
 
 def get_init_target_lams(bcode_meta, mean_val):
     random_perturb = np.random.uniform(size=bcode_meta.n_targets) * 0.001
@@ -520,7 +402,7 @@ def main(args=sys.argv[1:]):
     raw_res = None
     refit_res = None
 
-    tune_results = tune_hyperparams(tree, bcode_meta, args)
+    tune_results = hyperparam_tuner.tune(tree, bcode_meta, args)
 
     if not args.tune_only:
         # Now we can actually train the multifurc tree with the target lambda penalty param fixed

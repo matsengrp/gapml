@@ -139,12 +139,9 @@ def get_best_hyperparam(
     for (topology_res, _) in tune_results:
         for topology_rep_res in topology_res["tune_results"]:
             for i, res in enumerate(topology_rep_res):
-                if res is not None:
-                    total_val_log_liks[i] += res.log_lik
-                else:
-                    total_val_log_liks[i] = -np.inf
+                total_val_log_liks[i] += res.score
 
-    logging.info("total val log liks %s", total_val_log_liks)
+    logging.info("Total tuning scores %s", total_val_log_liks)
     best_idx = np.argmax(total_val_log_liks)
     best_dist_to_half_pen = args.dist_to_half_pen_list[best_idx]
     logging.info("Best penalty param %s", best_dist_to_half_pen)
