@@ -8,6 +8,8 @@ from typing import Set, Dict
 import numpy as np
 import logging
 
+from sklearn.model_selection import KFold
+
 from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
 import collapsed_tree
@@ -22,6 +24,40 @@ class TreeDataSplit:
         self.bcode_meta = bcode_meta
         self.from_orig_node_dict = from_orig_node_dict
         self.to_orig_node_dict = to_orig_node_dict
+
+def create_kfold_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadata, n_splits: int):
+    """
+    Take a tree and create k-fold datasets based on children of the root node
+    @return List[TreeDataSplit]
+    """
+    assert len(tree.get_children()) > 1 and n_splits >= 2
+
+    # Assign by splitting on children of root node -- perform k-fold cv
+    # This decreases the correlation between training sets
+    children = tree.get_children()
+    children_indices = [c.node_id for c in children]
+    n_splits = min(int(len(children_indices)/2), n_splits)
+    logging.info("Splitting tree into %d, total %d children", n_splits, len(children))
+    assert n_splits > 1
+
+    kf = KFold(n_splits=n_splits, shuffle=True)
+    all_train_trees = []
+    for fold_indices, _ in kf.split(children_indices):
+        # Now actually assign the leaf nodes appropriately
+        train_leaf_ids = set()
+        for child_idx in fold_indices:
+            train_leaf_ids.update([l.node_id for l in children[child_idx]])
+
+        train_tree = _prune_tree(tree.copy(), train_leaf_ids)
+        logging.info("SAMPLED TREE")
+        logging.info(train_tree.get_ascii(attributes=["node_id"], show_internal=True))
+
+        train_tree.label_node_ids()
+        all_train_trees.append(TreeDataSplit(
+            train_tree,
+            bcode_meta))
+
+    return all_train_trees
 
 def create_train_val_tree(tree: CellLineageTree, bcode_meta: BarcodeMetadata, train_split: float):
     """
