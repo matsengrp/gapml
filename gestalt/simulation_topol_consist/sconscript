@@ -18,7 +18,7 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
-LAMBDA_SEQUENCE = [1. , 0.9, 0.8, 0.7, 0.6, 0.5]
+LAMBDA_SEQUENCE = [1., 0.9, 0.8, 0.7, 0.6, 0.5, .4]
 
 nest.add(
     'model_seed',
@@ -28,7 +28,7 @@ nest.add(
 
 nest.add(
     'seed',
-    range(508,509),
+    range(512, 513),
 )
 
 nest.add(

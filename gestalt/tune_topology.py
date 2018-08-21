@@ -156,6 +156,8 @@ def tune_hyperparams(
         topology_files,
         args):
     worker_list = []
+    num_tune_splits = 1 if args.num_barcodes > 1 else args.total_tune_splits
+
     for file_idx, top_file in enumerate(topology_files):
         worker = RunEstimatorWorker(
             args.obs_file,
@@ -177,7 +179,7 @@ def tune_hyperparams(
             max_sum_states = args.max_sum_states,
             max_extra_steps = args.max_extra_steps,
             train_split = args.train_split,
-            num_tune_splits = "%d" % max(int(args.total_tune_splits)/len(topology_files), 1),
+            num_tune_splits = num_tune_splits,
             scratch_dir = args.scratch_dir)
         worker_list.append(worker)
 
@@ -267,6 +269,11 @@ def main(args=sys.argv[1:]):
     args = parse_args()
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
+
+    with open(args.obs_file, "rb") as f:
+        obs_data_dict = six.moves.cPickle.load(f)
+        bcode_meta = obs_data_dict["bcode_meta"]
+        args.num_barcodes = bcode_meta.num_barcodes
 
     all_topology_files = glob.glob(args.topology_file_template.replace("parsimony_tree0", "parsimony_tree*[0-9]"))
     topology_files = all_topology_files[:args.max_topologies]

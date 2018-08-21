@@ -39,13 +39,11 @@ def tune(
         return []
 
     if bcode_meta.num_barcodes > 1:
-        validation_results = []
-        for i in range(args.num_tune_splits):
-            validation_res = _tune_hyperparams_one_split_many_bcodes(
-                tree,
-                bcode_meta,
-                args)
-            validation_results.append(validation_res)
+        validation_res = _tune_hyperparams_one_split_many_bcodes(
+            tree,
+            bcode_meta,
+            args)
+        validation_results = [validation_res]
     else:
         validation_res = _tune_hyperparams_single_bcode(
             tree,
@@ -98,8 +96,8 @@ def _tune_hyperparams_one_split_many_bcodes(
     print("fitting train stuff")
     train_results = LikelihoodScorer(
         get_randint(),
-        train_tree.tree,
-        train_tree.bcode_meta,
+        train_tree_split.tree,
+        train_tree_split.bcode_meta,
         args.max_iters,
         args.num_inits,
         train_transition_wrap_maker,
@@ -155,7 +153,7 @@ def _tune_hyperparams_one_split_many_bcodes(
                     res_val.log_lik)
                 final_validation_results.append(tune_result)
                 logging.info(
-                        "Pen param %f stability score %f",
+                        "Pen param %f log lik %f",
                         dist_to_half_pen,
                         tune_result.score)
             else:
@@ -166,7 +164,7 @@ def _tune_hyperparams_one_split_many_bcodes(
                     None,
                     -np.inf)
                 final_validation_results.append(tune_result)
-                logging.info("Pen param %f NOT STABLE", dist_to_half_pen)
+                logging.info("Pen param %f failed training", dist_to_half_pen)
 
     return final_validation_results
 
