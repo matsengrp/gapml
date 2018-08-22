@@ -28,7 +28,7 @@ nest.add(
 
 nest.add(
     'seed',
-    range(512, 513),
+    range(513, 514),
 )
 
 nest.add(
@@ -82,7 +82,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [1],
+    [4,16],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -131,7 +131,14 @@ def run_topology(env, outdir, c):
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = "12,6,3"
+    if c['num_barcodes'] == 1:
+        penalty_params = "96,48,24,12"
+    elif c['num_barcodes'] == 2:
+        penalty_params = "12,6,3,1.5"
+    elif c['num_barcodes'] == 4:
+        penalty_params = "6,3,1.5"
+    elif c['num_barcodes'] == 16:
+        penalty_params = "3,1.5,.75"
     cmd = [
 	'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
@@ -148,15 +155,16 @@ def run_MLE(env, outdir, c):
         '--max-sum-states 2000',
         '--max-extra-steps 2',
         '--max-iters 10000',
-        '--train-split 0.6',
+        '--train-split 0.6667',
         '--num-inits 1',
-        '--num-tune-splits 3',
         '--tot-time-known',
+        '--total-tune-splits',
+        3 if c['num_barcodes'] == 1 else 1,
         '--max-topologies 4',
     ]
     return env.Command(
         [
-            join(outdir, 'tune_fitted_again.pkl'),
+            join(outdir, 'tune_fitted_score.pkl'),
             join(outdir, 'tune_fitted.txt')],
         [
             c['restrict_observed_alleles'][0],

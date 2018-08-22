@@ -108,7 +108,7 @@ def _create_train_val_tree_by_barcode(clt: CellLineageTree, bcode_meta: BarcodeM
 
     shuffled_bcode_idxs = np.random.choice(bcode_meta.num_barcodes, bcode_meta.num_barcodes, replace=False)
     train_bcode_idxs = shuffled_bcode_idxs[:num_train_bcodes]
-    print("trainnnn", train_bcode_idxs)
+    logging.info("train barcode idxs %s", train_bcode_idxs)
     val_bcode_idxs = shuffled_bcode_idxs[num_train_bcodes:]
     train_bcode_meta = BarcodeMetadata(
             bcode_meta.unedited_barcode,

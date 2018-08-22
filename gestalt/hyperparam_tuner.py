@@ -8,6 +8,7 @@ from barcode_metadata import BarcodeMetadata
 from transition_wrapper_maker import TransitionWrapperMaker
 from split_data import create_kfold_trees
 from split_data import create_train_val_tree
+from tree_distance import TreeDistanceMeasurerAgg
 from common import *
 
 class TuneScorerResult:
@@ -27,7 +28,8 @@ class TuneScorerResult:
 def tune(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
-        args):
+        args,
+        oracle_dist_measurers: TreeDistanceMeasurerAgg = None):
     """
     Tunes the `dist_to_half_pen` penalty parameter
     @return List[List[TuneScorerResult]]
@@ -36,6 +38,8 @@ def tune(
     best_params["log_barr_pen"] = args.log_barr
     best_params["dist_to_half_pen"] = args.dist_to_half_pens[0]
     if len(args.dist_to_half_pens) == 1:
+        # There is nothing to tune -- no fitting to do.
+        # Sends back the same initialization params.
         return [[TuneScorerResult(
             args.log_barr,
             args.dist_to_half_pens,
@@ -46,7 +50,8 @@ def tune(
         validation_res = _tune_hyperparams_one_split_many_bcodes(
             tree,
             bcode_meta,
-            args)
+            args,
+            oracle_dist_measurers)
         validation_results = [validation_res]
     else:
         validation_res = _tune_hyperparams_single_bcode(
@@ -59,7 +64,8 @@ def tune(
 def _tune_hyperparams_one_split_many_bcodes(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
-        args):
+        args,
+        oracle_dist_measurers: TreeDistanceMeasurerAgg = None):
     """
     Hyperparams are tuned by splitting independent barcodes.
     The score is the log likelihood of the validation barcodes.
@@ -107,6 +113,7 @@ def _tune_hyperparams_one_split_many_bcodes(
         train_transition_wrap_maker,
         init_model_param_list = init_model_param_list,
         known_params = args.known_params,
+        dist_measurers = oracle_dist_measurers,
         abundance_weight = args.abundance_weight).run_worker(None)
     logging.info("Finished training all penalty params. Start validation round")
 
@@ -164,7 +171,16 @@ def _tune_hyperparams_one_split_many_bcodes(
                     None,
                     -np.inf)
                 final_validation_results.append(tune_result)
-                logging.info("Pen param %f failed training", dist_to_half_pen)
+                logging.info("Pen param %f failed validation evaluation", dist_to_half_pen)
+        else:
+            # Create our summary of tuning -- not stable
+            tune_result = TuneScorerResult(
+                args.log_barr,
+                dist_to_half_pen,
+                None,
+                -np.inf)
+            final_validation_results.append(tune_result)
+            logging.info("Pen param %f failed training", dist_to_half_pen)
 
     return final_validation_results
 
