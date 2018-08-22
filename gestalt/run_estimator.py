@@ -402,7 +402,7 @@ def main(args=sys.argv[1:]):
     raw_res = None
     refit_res = None
 
-    tune_results = hyperparam_tuner.tune(tree, bcode_meta, args, oracle_dist_measurers)
+    tune_results = hyperparam_tuner.tune(tree, bcode_meta, args)
 
     if not args.tune_only:
         # Now we can actually train the multifurc tree with the target lambda penalty param fixed
