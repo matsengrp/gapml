@@ -90,6 +90,7 @@ class CLTPenalizedEstimator(CLTEstimator):
             train_history[0]["tree_dists"] = dist_measurers.get_tree_dists([self.model.get_fitted_bifurcating_tree()])[0]
             logging.info("initial tree dists: %s", train_history[0]["tree_dists"])
 
+        st_time = time.time()
         for i in range(self.max_iters):
             var_dict = self.model.get_vars_as_dict()
             boost_probs = np.exp(var_dict["boost_softmax_weights"])/np.sum(
@@ -135,6 +136,7 @@ class CLTPenalizedEstimator(CLTEstimator):
                     logging.info("iter %d tree dists: %s", i, tree_dist)
                     iter_info["tree_dists"] = tree_dist
                     iter_info["var"] = var_dict
+                    logging.info("iter %d, train time %f", i, time.time() - st_time)
             train_history.append(iter_info)
 
             if i > min_iters and np.abs((prev_pen_log_lik - pen_log_lik[0])/prev_pen_log_lik) < conv_thres:
@@ -143,6 +145,7 @@ class CLTPenalizedEstimator(CLTEstimator):
                 break
             prev_pen_log_lik = pen_log_lik[0]
 
+        logging.info("total train time %f", time.time() - st_time)
         return train_history
 
     def create_logger(self):
