@@ -163,12 +163,12 @@ class CLTLikelihoodModel:
                     target_lams if self.known_params.target_lams else [],
                     double_cut_weight if self.known_params.double_cut_weight else [],
                     trim_long_factor if self.known_params.trim_long_factor else [],
+                    trim_short_poissons if self.known_params.indel_poissons else [],
+                    trim_long_poissons if self.known_params.indel_poissons else [],
+                    insert_poisson if self.known_params.indel_poissons else [],
                     boost_softmax_weights if self.known_params.indel_params else [],
                     trim_zero_probs if self.known_params.indel_params else [],
-                    trim_short_poissons if self.known_params.indel_params else [],
-                    trim_long_poissons if self.known_params.indel_params else [],
                     insert_zero_prob if self.known_params.indel_params else [],
-                    insert_poisson if self.known_params.indel_params else [],
                     branch_len_inners if self.known_params.branch_lens else [],
                     branch_len_offsets_proportion if self.known_params.branch_lens else []])
         self.known_vars = tf.Variable(known_model_params, dtype=tf.float64)
@@ -193,6 +193,16 @@ class CLTLikelihoodModel:
             up_to_size += trim_long_factor.size
             self.trim_long_factor = self.known_vars[prev_size: up_to_size]
         prev_size = up_to_size
+        if self.known_params.indel_poissons:
+            up_to_size += trim_short_poissons.size
+            self.trim_short_poissons = self.known_vars[prev_size: up_to_size]
+            prev_size = up_to_size
+            up_to_size += trim_long_poissons.size
+            self.trim_long_poissons = self.known_vars[prev_size: up_to_size]
+            prev_size = up_to_size
+            up_to_size += 1
+            self.insert_poisson = self.known_vars[prev_size: up_to_size]
+        prev_size = up_to_size
         if self.known_params.indel_params:
             up_to_size += boost_softmax_weights.size
             self.boost_softmax_weights = self.known_vars[prev_size: up_to_size]
@@ -203,17 +213,8 @@ class CLTLikelihoodModel:
             self.trim_zero_prob_left = self.trim_zero_probs[0]
             self.trim_zero_prob_right = self.trim_zero_probs[1]
             prev_size = up_to_size
-            up_to_size += trim_short_poissons.size
-            self.trim_short_poissons = self.known_vars[prev_size: up_to_size]
-            prev_size = up_to_size
-            up_to_size += trim_long_poissons.size
-            self.trim_long_poissons = self.known_vars[prev_size: up_to_size]
-            prev_size = up_to_size
             up_to_size += 1
             self.insert_zero_prob = self.known_vars[prev_size: up_to_size]
-            prev_size = up_to_size
-            up_to_size += 1
-            self.insert_poisson = self.known_vars[prev_size: up_to_size]
         prev_size = up_to_size
         if self.known_params.branch_lens:
             up_to_size += branch_len_inners.size
@@ -259,12 +260,12 @@ class CLTLikelihoodModel:
                     [] if self.known_params.target_lams else np.log(target_lams),
                     [] if self.known_params.double_cut_weight else np.log(double_cut_weight),
                     [] if self.known_params.trim_long_factor else inv_sigmoid(trim_long_factor),
+                    [] if self.known_params.indel_poissons else np.log(trim_short_poissons),
+                    [] if self.known_params.indel_poissons else np.log(trim_long_poissons),
+                    [] if self.known_params.indel_poissons else np.log(insert_poisson),
                     [] if self.known_params.indel_params else boost_softmax_weights,
                     [] if self.known_params.indel_params else inv_sigmoid(trim_zero_probs),
-                    [] if self.known_params.indel_params else np.log(trim_short_poissons),
-                    [] if self.known_params.indel_params else np.log(trim_long_poissons),
                     [] if self.known_params.indel_params else inv_sigmoid(insert_zero_prob),
-                    [] if self.known_params.indel_params else np.log(insert_poisson),
                     [] if self.known_params.branch_lens else np.log(branch_len_inners),
                     [] if self.known_params.branch_lens else inv_sigmoid(branch_len_offsets_proportion)])
         self.all_vars = tf.Variable(model_params, dtype=tf.float64)
@@ -289,6 +290,16 @@ class CLTLikelihoodModel:
             up_to_size += trim_long_factor.size
             self.trim_long_factor = tf.sigmoid(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
+        if not self.known_params.indel_poissons:
+            up_to_size += trim_short_poissons.size
+            self.trim_short_poissons = tf.exp(self.all_vars[prev_size: up_to_size])
+            prev_size = up_to_size
+            up_to_size += trim_long_poissons.size
+            self.trim_long_poissons = tf.exp(self.all_vars[prev_size: up_to_size])
+            prev_size = up_to_size
+            up_to_size += 1
+            self.insert_poisson = tf.exp(self.all_vars[prev_size: up_to_size])
+        prev_size = up_to_size
         if not self.known_params.indel_params:
             up_to_size += boost_softmax_weights.size
             self.boost_softmax_weights = self.all_vars[prev_size: up_to_size]
@@ -299,17 +310,8 @@ class CLTLikelihoodModel:
             self.trim_zero_prob_left = self.trim_zero_probs[0]
             self.trim_zero_prob_right = self.trim_zero_probs[1]
             prev_size = up_to_size
-            up_to_size += trim_short_poissons.size
-            self.trim_short_poissons = tf.exp(self.all_vars[prev_size: up_to_size])
-            prev_size = up_to_size
-            up_to_size += trim_long_poissons.size
-            self.trim_long_poissons = tf.exp(self.all_vars[prev_size: up_to_size])
-            prev_size = up_to_size
             up_to_size += 1
             self.insert_zero_prob = tf.sigmoid(self.all_vars[prev_size: up_to_size])
-            prev_size = up_to_size
-            up_to_size += 1
-            self.insert_poisson = tf.exp(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
         if not self.known_params.branch_lens:
             up_to_size += branch_len_inners.size
@@ -425,12 +427,12 @@ class CLTLikelihoodModel:
             [] if not self.known_params.target_lams else target_lams,
             [] if not self.known_params.double_cut_weight else double_cut_weight,
             [] if not self.known_params.trim_long_factor else trim_long_factor,
+            [] if not self.known_params.indel_poissons else trim_short_poissons,
+            [] if not self.known_params.indel_poissons else trim_long_poissons,
+            [] if not self.known_params.indel_poissons else insert_poisson,
             [] if not self.known_params.indel_params else boost_softmax_weights,
             [] if not self.known_params.indel_params else trim_zero_probs,
-            [] if not self.known_params.indel_params else trim_short_poissons,
-            [] if not self.known_params.indel_params else trim_long_poissons,
             [] if not self.known_params.indel_params else insert_zero_prob,
-            [] if not self.known_params.indel_params else insert_poisson,
             [] if not self.known_params.branch_lens else branch_len_inners,
             [] if not self.known_params.branch_lens else branch_len_offsets_proportion])
         init_val = np.concatenate([
@@ -438,12 +440,12 @@ class CLTLikelihoodModel:
             [] if self.known_params.target_lams else np.log(target_lams),
             [] if self.known_params.double_cut_weight else np.log(double_cut_weight),
             [] if self.known_params.trim_long_factor else inv_sigmoid(trim_long_factor),
+            [] if self.known_params.indel_poissons else np.log(trim_short_poissons),
+            [] if self.known_params.indel_poissons else np.log(trim_long_poissons),
+            [] if self.known_params.indel_poissons else np.log(insert_poisson),
             [] if self.known_params.indel_params else boost_softmax_weights,
             [] if self.known_params.indel_params else inv_sigmoid(trim_zero_probs),
-            [] if self.known_params.indel_params else np.log(trim_short_poissons),
-            [] if self.known_params.indel_params else np.log(trim_long_poissons),
             [] if self.known_params.indel_params else inv_sigmoid(insert_zero_prob),
-            [] if self.known_params.indel_params else np.log(insert_poisson),
             [] if self.known_params.branch_lens else np.log(branch_len_inners),
             [] if self.known_params.branch_lens else inv_sigmoid(branch_len_offsets_proportion)])
 
@@ -716,6 +718,8 @@ class CLTLikelihoodModel:
         @return List[tensorflow nodes] for each singleton in `singletons`
         """
         min_targets = [sg.min_target for sg in singletons]
+        any_trim_longs = tf.constant(
+                [sg.is_left_long or sg.is_right_long for sg in singletons], dtype=tf.float64)
         is_left_longs = tf.constant(
                 [sg.is_left_long for sg in singletons], dtype=tf.float64)
         start_posns = tf.constant(
@@ -733,6 +737,16 @@ class CLTLikelihoodModel:
 
         check_left_max = tf.cast(tf.less_equal(left_trim_len, max_left_trim), tf.float64)
         check_left_min = tf.cast(tf.less_equal(min_left_trim, left_trim_len), tf.float64)
+        # The probability of a left trim for length zero in our truncated poisson is assigned to be (for a normal poisson) Pr(0) + Pr(X > max_trim)
+        # The other probabilities for the truncated poisson are therefore equal to the usual poisson distribution
+        short_no_boost_left_prob = tf_common.ifelse(
+            tf_common.equal_float(left_trim_len, 0),
+            self.trim_zero_prob_left + (1 - self.trim_zero_prob_left) * (
+                self.poiss_short[0].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_short[0].cdf(max_left_trim)),
+            (1 - self.trim_zero_prob_left) * self.poiss_short[0].prob(left_trim_len))
+        # The long inflated poisson for left trims
+        num_positions = tf.constant(1.0, dtype=tf.float64) + max_left_trim - min_left_trim
+        long_left_prob = self.poiss_long[0].prob(left_trim_len - min_left_trim) + (tf.constant(1, dtype=tf.float64) - self.poiss_long[0].cdf(max_left_trim - min_left_trim))/num_positions
         if left_boost_len > 0:
             # If there is a left boost, there are three possibilities:
             # (1) the left trim is smaller than the left boost, so assign probability zero
@@ -751,22 +765,18 @@ class CLTLikelihoodModel:
                         self.poiss_short[0].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_short[0].cdf(max_left_trim - left_boost_len)),
                     (1 - self.trim_zero_prob_left) * self.poiss_short[0].prob(left_trim_len - left_boost_len))
                 )
-        else:
-            # The probability of a left trim for length zero in our truncated poisson is assigned to be (for a normal poisson) Pr(0) + Pr(X > max_trim)
-            # The other probabilities for the truncated poisson are therefore equal to the usual poisson distribution
-            short_left_prob = tf_common.ifelse(
-                tf_common.equal_float(left_trim_len, 0),
-                self.trim_zero_prob_left + (1 - self.trim_zero_prob_left) * (
-                    self.poiss_short[0].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_short[0].cdf(max_left_trim)),
-                (1 - self.trim_zero_prob_left) * self.poiss_short[0].prob(left_trim_len))
-        num_positions = tf.constant(1.0, dtype=tf.float64) + max_left_trim - min_left_trim
-        long_left_prob = self.poiss_long[0].prob(left_trim_len - min_left_trim) + (tf.constant(1, dtype=tf.float64) - self.poiss_long[0].cdf(max_left_trim - min_left_trim))/num_positions
-        left_prob = check_left_max * check_left_min * tf_common.ifelse(
+            return check_left_max * check_left_min * tf_common.ifelse(
                 is_left_longs,
                 long_left_prob,
-                short_left_prob)
-
-        return left_prob
+                tf_common.ifelse(
+                    any_trim_longs,
+                    short_no_boost_left_prob,
+                    short_left_prob))
+        else:
+            return check_left_max * check_left_min * tf_common.ifelse(
+                is_left_longs,
+                long_left_prob,
+                short_no_boost_left_prob)
 
     def _create_right_del_probs(self, singletons: List[Singleton], right_boost_len: int):
         """
@@ -778,6 +788,8 @@ class CLTLikelihoodModel:
         @return List[tensorflow nodes] for each singleton in `singletons`
         """
         max_targets = [sg.max_target for sg in singletons]
+        any_trim_longs = tf.constant(
+                [sg.is_left_long or sg.is_right_long for sg in singletons], dtype=tf.float64)
         is_right_longs = tf.constant(
                 [sg.is_right_long for sg in singletons], dtype=tf.float64)
         del_ends = tf.constant(
@@ -795,6 +807,16 @@ class CLTLikelihoodModel:
 
         check_right_max = tf.cast(tf.less_equal(right_trim_len, max_right_trim), tf.float64)
         check_right_min = tf.cast(tf.less_equal(min_right_trim, right_trim_len), tf.float64)
+        # The probability of a right trim for length zero in our truncated poisson is assigned to be (for a normal poisson) Pr(0) + Pr(X > max_trim)
+        # The other probabilities for the truncated poisson are therefore equal to the usual poisson distribution
+        short_no_boost_right_prob = tf_common.ifelse(
+            tf_common.equal_float(right_trim_len, 0),
+            self.trim_zero_prob_right + (1 - self.trim_zero_prob_right) * (
+                self.poiss_short[1].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_short[1].cdf(max_right_trim)),
+            (1 - self.trim_zero_prob_right) * self.poiss_short[1].prob(right_trim_len))
+        # The inflated poissons for the long right trim
+        num_positions = tf.constant(1.0, dtype=tf.float64) + max_right_trim - min_right_trim
+        long_right_prob = self.poiss_long[1].prob(right_trim_len - min_right_trim) + (tf.constant(1, dtype=tf.float64) - self.poiss_long[1].cdf(max_right_trim - min_right_trim))/num_positions
         if right_boost_len > 0:
             # If there is a right boost, there are three possibilities:
             # (1) the right trim is smaller than the right boost, so assign probability zero
@@ -813,22 +835,18 @@ class CLTLikelihoodModel:
                         self.poiss_short[0].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_short[0].cdf(max_right_trim - right_boost_len)),
                     (1 - self.trim_zero_prob_right) * self.poiss_short[0].prob(right_trim_len - right_boost_len))
                 )
-        else:
-            # The probability of a right trim for length zero in our truncated poisson is assigned to be (for a normal poisson) Pr(0) + Pr(X > max_trim)
-            # The other probabilities for the truncated poisson are therefore equal to the usual poisson distribution
-            short_right_prob = tf_common.ifelse(
-                tf_common.equal_float(right_trim_len, 0),
-                self.trim_zero_prob_right + (1 - self.trim_zero_prob_right) * (
-                    self.poiss_short[1].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_short[1].cdf(max_right_trim)),
-                (1 - self.trim_zero_prob_right) * self.poiss_short[1].prob(right_trim_len))
-        num_positions = tf.constant(1.0, dtype=tf.float64) + max_right_trim - min_right_trim
-        long_right_prob = self.poiss_long[1].prob(right_trim_len - min_right_trim) + (tf.constant(1, dtype=tf.float64) - self.poiss_long[1].cdf(max_right_trim - min_right_trim))/num_positions
-        right_prob = check_right_max * check_right_min * tf_common.ifelse(
+            return check_right_max * check_right_min * tf_common.ifelse(
                 is_right_longs,
                 long_right_prob,
-                short_right_prob)
-
-        return right_prob
+                tf_common.ifelse(
+                    any_trim_longs,
+                    short_no_boost_right_prob,
+                    short_right_prob))
+        else:
+            return check_right_max * check_right_min * tf_common.ifelse(
+                is_right_longs,
+                long_right_prob,
+                short_no_boost_right_prob)
 
     def _create_insert_probs(self, singletons: List[Singleton], insert_boost_len: int):
         """
@@ -837,10 +855,22 @@ class CLTLikelihoodModel:
 
         @return List[tensorflow nodes] for each singleton in `singletons`
         """
+        any_trim_longs = tf.constant(
+                [sg.is_left_long or sg.is_right_long for sg in singletons], dtype=tf.float64)
         insert_lens = tf.constant(
                 [sg.insert_len for sg in singletons], dtype=tf.float64)
         # Equal prob of all same length sequences
         insert_seq_prob = 1.0/tf.pow(tf.constant(4.0, dtype=tf.float64), insert_lens)
+        # If there is no boost, there are two possibilities:
+        # (1) the insertion is equal to zero, which means it is zero in the
+        # from coin flip or poiss RV
+        # (2) the insertion is nonzero, which is a nonzero value in the
+        # poiss distribution
+        insert_len_prob = self.poiss_insert.prob(insert_lens)
+        long_insert_prob = tf_common.ifelse(
+            tf_common.equal_float(insert_lens, 0),
+            self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_len_prob,
+            (1 - self.insert_zero_prob) * insert_len_prob)
         if insert_boost_len > 0:
             # If there is an insertion boost, there are three possibilities:
             # (1) the insertion is smaller than the boost, so assign probability zero
@@ -856,21 +886,12 @@ class CLTLikelihoodModel:
                 tf.constant(PERTURB_ZERO, dtype=tf.float64),
                 tf_common.ifelse(
                     tf_common.equal_float(insert_lens, insert_boost_len),
-                    (self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_boost_len_prob) * insert_seq_prob,
-                    (1 - self.insert_zero_prob) * insert_boost_len_prob * insert_seq_prob)
+                    self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_boost_len_prob,
+                    (1 - self.insert_zero_prob) * insert_boost_len_prob)
                 )
+            return tf_common.ifelse(any_trim_longs, long_insert_prob, insert_prob) * insert_seq_prob
         else:
-            # If there is no boost, there are two possibilities:
-            # (1) the insertion is equal to zero, which means it is zero in the
-            # from coin flip or poiss RV
-            # (2) the insertion is nonzero, which is a nonzero value in the
-            # poiss distribution
-            insert_len_prob = self.poiss_insert.prob(insert_lens)
-            insert_prob = tf_common.ifelse(
-                tf_common.equal_float(insert_lens, 0),
-                self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_len_prob,
-                (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob)
-        return insert_prob
+            return long_insert_prob * insert_seq_prob
 
     """
     LOG LIKELIHOOD CALCULATION section

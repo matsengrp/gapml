@@ -37,8 +37,6 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         self.bcode_meta = model.bcode_meta
         self.model = model
         self.all_target_tract_hazards = model.get_all_target_tract_hazards()
-        print(self.all_target_tract_hazards)
-        print(model.target_tract_dict)
         self.insert_zero_prob = self.model.insert_zero_prob.eval()
         self.trim_zero_probs = self.model.trim_zero_probs.eval()
 
@@ -144,12 +142,11 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         left_long = target_tract.is_left_long
         right_long = target_tract.is_right_long
 
-        insert_boost = 0
         left_short_boost = 0
         right_short_boost = 0
+        insert_boost = 0
         left_distr_key = "long" if left_long else "short"
         right_distr_key = "long" if right_long else "short"
-
         do_insertion = random() > self.insert_zero_prob
         if left_long or right_long:
             # No zero inflation if we decided to do a long left or right trim
@@ -157,13 +154,14 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             do_deletion = [True, True]
         else:
             # Determine whether to boost insert vs left del vs right del
-            len_incr_rv = np.random.multinomial(1, self.boost_probs)
+            len_incr_rv = np.random.multinomial(n=1, pvals=self.boost_probs)
+
             if len_incr_rv[0] == 1:
                 insert_boost = self.boost_len
             elif len_incr_rv[1] == 1:
                 left_distr_key = "boost_short"
                 left_short_boost = self.boost_len
-            else:
+            elif len_incr_rv[2] == 1:
                 right_distr_key = "boost_short"
                 right_short_boost = self.boost_len
 
