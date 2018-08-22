@@ -6,7 +6,7 @@ import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 
-from tree_distance import MRCADistanceMeasurer, MRCASpearmanMeasurer, RootRFDistanceMeasurer
+from tree_distance import *
 from cell_lineage_tree import CellLineageTree
 
 def get_true_model(file_name, tree_file_name, n_bcodes):
@@ -129,7 +129,7 @@ def print_results(settings, n_bcode_results, n_bcode, print_keys):
         print_template = "%s & %d & %.01f (%.01f)"
         for key in print_keys:
             size = len(n_bcode_results[key][idx])
-            print(key, idx, n_bcode_results[key][idx])
+            #print(key, idx, n_bcode_results[key][idx])
             print_list.append(np.mean(n_bcode_results[key][idx]))
             print_list.append(np.sqrt(np.var(n_bcode_results[key][idx])/size))
             print_template += "& %.03f (%.03f)"
@@ -150,6 +150,7 @@ def gather_results(
         get_rand_tree_fnc,
         seeds,
         settings,
+        n_bcode = 1,
         tree_idx = 1,
         num_rands = 10,
         do_plots = False,
@@ -188,7 +189,7 @@ def gather_results(
                 except FileNotFoundError:
                     continue
                 fitted_val = get_param_func(result)
-                dist = np.linalg.norm(fitted_val - true_model_val)
+                dist = np.linalg.norm(fitted_val - true_model_val, ord=1)/np.linalg.norm(true_model_val, ord=1)
                 n_bcode_results[key][idx].append(dist)
 
     for seed_idx, seed in enumerate(seeds):

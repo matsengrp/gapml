@@ -3,8 +3,6 @@ import json
 import six
 import numpy as np
 
-from tree_distance import *
-from cell_lineage_tree import CellLineageTree
 import plot_simulation_common
 
 np.random.seed(0)
@@ -45,7 +43,8 @@ plot_simulation_common.gather_results(
         get_rand_tree,
         seeds,
         sampling_rates,
-        tree_idx = 1,
+        n_bcode = n_bcode,
+        tree_idx = tree_idx,
         do_plots = do_plots,
         print_keys = [
             "bhv",

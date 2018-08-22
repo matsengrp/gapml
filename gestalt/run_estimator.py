@@ -215,7 +215,7 @@ def read_true_model_files(args):
         oracle_dist_measurers = TreeDistanceMeasurerAgg([
             UnrootRFDistanceMeasurer,
             RootRFDistanceMeasurer,
-            BHVDistanceMeasurer,
+            #BHVDistanceMeasurer,
             MRCADistanceMeasurer,
             MRCASpearmanMeasurer],
             collapsed_true_subtree,
