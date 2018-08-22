@@ -56,7 +56,8 @@ def generate(env, outdir, c):
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
         '--time 1',
-        '--birth-lambda 5.7',
+        '--start-birth-lambda 100',
+        '--birth-lambda 2.3',
         '--num-barcodes',
         8,
         '--min-uniq-alleles 10',
@@ -83,7 +84,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [3],
+    [1],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -145,8 +146,6 @@ def run_MLE(env, outdir, c):
     penalty_params = "0.1" if c['num_barcodes'] > 3 else "1"
     cmd = [
         #'python boto_run.py 18 25000 tune_topology.py',
-        #'srun -p matsen_e,campus',
-        #'--cpus-per-task 4' if c['num_barcodes'] < 3 else '--cpus-per-task 6',
 	'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
         '--topology-file ${SOURCES[1]}',
@@ -157,20 +156,22 @@ def run_MLE(env, outdir, c):
         '--seed',
 	c['seed'] + 100,
         '--log-barr 0.0000001',
-        '--target-lam-pens',
+        '--dist-to-half-pens',
 	penalty_params,
         '--max-sum-states 2000',
         '--max-extra-steps 2',
         '--max-iters 10000',
-        '--train-split 0.75',
-        '--num-inits',
-        1 if c['lambda_known'] else 3,
+        '--train-split 0.6667',
+        '--num-inits 1',
         '--lambda-known' if c['lambda_known'] else '',
         '--tot-time-known',
+        '--total-tune-splits',
+        3 if c['num_barcodes'] == 1 else 1,
+        '--max-topologies 4',
     ]
     return env.Command(
         [
-            join(outdir, 'tune_fitted.pkl'),
+            join(outdir, 'tune_fitted_score.pkl'),
             join(outdir, 'tune_fitted_log.txt')],
         [
             c['restrict_observed_alleles'][0],

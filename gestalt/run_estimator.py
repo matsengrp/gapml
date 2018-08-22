@@ -151,6 +151,8 @@ def parse_args():
 
     assert args.log_barr >= 0
     assert all(lam >= 0 for lam in args.dist_to_half_pens)
+    if args.lambda_known:
+        assert len(args.dist_to_half_pens) == 1
     return args
 
 def fit_tree(
@@ -208,20 +210,22 @@ def read_true_model_files(args):
     with open(args.true_model_file, "rb") as f:
         true_model_dict = six.moves.cPickle.load(f)
 
-    oracle_dist_measurers = TreeDistanceMeasurerAgg([
-        UnrootRFDistanceMeasurer,
-        RootRFDistanceMeasurer,
-        BHVDistanceMeasurer,
-        MRCADistanceMeasurer,
-        MRCASpearmanMeasurer],
-        collapsed_true_subtree,
-        args.scratch_dir)
+    oracle_dist_measurers = None
+    if len(collapsed_true_subtree) > 1:
+        oracle_dist_measurers = TreeDistanceMeasurerAgg([
+            UnrootRFDistanceMeasurer,
+            RootRFDistanceMeasurer,
+            BHVDistanceMeasurer,
+            MRCADistanceMeasurer,
+            MRCASpearmanMeasurer],
+            collapsed_true_subtree,
+            args.scratch_dir)
     return true_model_dict, oracle_dist_measurers
 
 def read_init_model_params_file(args, bcode_meta, true_model_dict):
     args.init_params = {
             "target_lams": get_init_target_lams(bcode_meta, 0),
-            "boost_softmax_weights": np.ones(3),
+            "boost_softmax_weights": np.array([1, 2, 2]),
             "trim_long_factor": 0.05 * np.ones(2),
             "trim_zero_probs": 0.5 * np.ones(2),
             "trim_short_poissons": 2.5 * np.ones(2),
