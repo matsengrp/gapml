@@ -165,7 +165,8 @@ def gather_results(
             "random_mrca": None, # custom function
             "leaves": None, # custom function
             "seeds": None, # custom function
-            "targ": get_only_target_lams,
+            "only_targ": get_only_target_lams,
+            "targ": get_target_lams,
             "double": get_double_cut}
 
     n_bcode_results = {

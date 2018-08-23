@@ -4,10 +4,12 @@ import six
 import numpy as np
 
 import plot_simulation_common
+import split_data
+from tree_distance import *
 
 np.random.seed(0)
 
-seeds = range(211,212)
+seeds = range(211,216)
 n_bcode = 1
 sampling_rates = [1, 2, 6]
 model_seed = 153
@@ -15,6 +17,7 @@ lambda_known = 0
 tree_idx = 1
 do_plots = False
 prefix = ""
+num_rands = 10
 
 TEMPLATE = "%ssimulation_topology_sampling/_output/model_seed%d/%d/sampling%d/num_barcodes%d/lambda_known%d/tot_time_known1/tune_fitted_score.pkl"
 RAND_TEMPLATE = "%ssimulation_topology_sampling/_output/model_seed%d/%d/sampling%d/num_barcodes%d/parsimony_tree0.pkl"
@@ -25,7 +28,6 @@ OUT_FITTED_MRCA_PLOT = "%ssimulation_topology_sampling/_output/model_seed%d/%d/s
 
 def get_true_model(seed, sampling_rate, n_bcodes):
     file_name = TRUE_TEMPLATE % (prefix, model_seed, seed, sampling_rate)
-    print(file_name)
     tree_file_name = COLL_TREE_TEMPLATE % (prefix, model_seed, seed, sampling_rate, n_bcodes)
     return plot_simulation_common.get_true_model(file_name, tree_file_name, n_bcodes)
 
@@ -49,10 +51,114 @@ plot_simulation_common.gather_results(
         print_keys = [
             "bhv",
             "random_bhv",
+            #"zero_bhv",
+            "super_zero_bhv",
+            #"mrca",
+            #"zero_mrca",
+            #"random_mrca",
+            "targ",
+            #"double",
+        ])
+
+"""
+Compare only the nodes that were contained in the 10% sample
+"""
+get_param_func_dict = {
+        "bhv": None,
+        "random_bhv": None,
+        "zero_bhv": None,
+        "super_zero_bhv": None,
+        "leaves": None}
+
+n_bcode_results = {
+        key: [[] for _ in sampling_rates]
+        for key in get_param_func_dict.keys()}
+
+for seed_idx, seed in enumerate(seeds):
+    try:
+        true_model = get_true_model(seed, sampling_rates[0], n_bcode)
+    except FileNotFoundError:
+        continue
+    comparison_leaves = [leaf.allele_events_list_str for leaf in true_model[tree_idx]]
+    true_bhv_meas = BHVDistanceMeasurer(true_model[tree_idx], "_output/scratch")
+
+    for idx, sampling_rate in enumerate(sampling_rates):
+        try:
+            result = get_result(seed, sampling_rate, n_bcode)
+            result[tree_idx].label_node_ids()
+            keep_idxs = []
+            for leaf in result[tree_idx]:
+                if leaf.allele_events_list_str in comparison_leaves:
+                    keep_idxs.append(leaf.node_id)
+            result_tree = split_data._prune_tree(result[tree_idx], set(keep_idxs))
+        except FileNotFoundError:
+            continue
+
+        try:
+            rand_tree = get_rand_tree(seed, sampling_rate, n_bcode)
+            rand_tree[tree_idx].label_node_ids()
+            keep_idxs = []
+            for leaf in rand_tree[tree_idx]:
+                if leaf.allele_events_list_str in comparison_leaves:
+                    keep_idxs.append(leaf.node_id)
+            rand_tree = split_data._prune_tree(rand_tree[tree_idx], set(keep_idxs))
+        except FileNotFoundError:
+            continue
+
+        rand_dists = []
+        rand_bhv_dists = []
+        for _ in range(num_rands):
+            br_scale = 0.8
+            has_neg = True
+            while has_neg:
+                has_neg = False
+                for node in rand_tree.traverse():
+                    if node.is_root():
+                        continue
+                    if node.is_leaf():
+                        node.dist = 1 - node.up.get_distance(rand_tree)
+                        if node.dist < 0:
+                            has_neg = True
+                            break
+                    else:
+                        node.dist = np.random.rand() * br_scale
+                br_scale *= 0.8
+            dist = true_bhv_meas.get_dist(rand_tree)
+            rand_bhv_dists.append(dist)
+        rand_dist = np.mean(rand_dists)
+        n_bcode_results["random_bhv"][idx].append(np.mean(rand_bhv_dists))
+
+        zero_tree = rand_tree.copy()
+        for node in zero_tree.traverse():
+            if node.is_root():
+                continue
+            if node.is_leaf():
+                node.dist = 1 - node.up.get_distance(zero_tree)
+                assert node.dist > 0
+            else:
+                node.dist = 1e-10
+        dist = true_bhv_meas.get_dist(zero_tree)
+        n_bcode_results["zero_bhv"][idx].append(dist)
+
+        for node in zero_tree:
+            node.dist = 0
+        dist = true_bhv_meas.get_dist(zero_tree)
+        n_bcode_results["super_zero_bhv"][idx].append(dist)
+
+        dist = true_bhv_meas.get_dist(result_tree)
+        n_bcode_results["bhv"][idx].append(dist)
+        n_bcode_results["leaves"][idx].append(-1)
+
+for bhvs in n_bcode_results["bhv"]:
+    print(bhvs)
+
+plot_simulation_common.print_results(
+        sampling_rates,
+        n_bcode_results,
+        n_bcode,
+        print_keys = [
+            "bhv",
+            "random_bhv",
             "zero_bhv",
             "super_zero_bhv",
-            "mrca",
-            "zero_mrca",
-            "random_mrca",
-            "targ",
-            "double"])
+        ])

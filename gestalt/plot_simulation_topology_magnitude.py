@@ -50,10 +50,11 @@ plot_simulation_common.gather_results(
         print_keys = [
             "bhv",
             "random_bhv",
-            "zero_bhv",
+            #"zero_bhv",
             "super_zero_bhv",
-            "mrca",
-            "zero_mrca",
-            "random_mrca",
+            #"mrca",
+            #"zero_mrca",
+            #"random_mrca",
             "targ",
-            "double"])
+            #"double",
+       ])
