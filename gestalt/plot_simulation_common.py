@@ -251,7 +251,6 @@ def gather_results(
                 rand_dists.append(dist)
                 dist = true_bhv_meas.get_dist(rand_tree[tree_idx])
                 rand_bhv_dists.append(dist)
-            rand_dist = np.mean(rand_dists)
             n_bcode_results["random_bhv"][idx].append(np.mean(rand_bhv_dists))
             n_bcode_results["random_mrca"][idx].append(np.mean(rand_dists))
 

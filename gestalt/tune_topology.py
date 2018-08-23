@@ -158,7 +158,7 @@ def tune_hyperparams(
     worker_list = []
     # TODO: right now we only ever do one split for training validation
     # ... mostly cause we're too lazy to implement something else
-    num_tune_splits = 1 if args.num_barcodes > 1 else args.total_tune_splits
+    #num_tune_splits = 1 if args.num_barcodes > 1 else args.total_tune_splits
 
     for file_idx, top_file in enumerate(topology_files):
         worker = RunEstimatorWorker(
@@ -181,7 +181,7 @@ def tune_hyperparams(
             max_sum_states = args.max_sum_states,
             max_extra_steps = args.max_extra_steps,
             train_split = args.train_split,
-            num_tune_splits = num_tune_splits,
+            num_tune_splits = args.total_tune_splits,
             scratch_dir = args.scratch_dir)
         worker_list.append(worker)
 
