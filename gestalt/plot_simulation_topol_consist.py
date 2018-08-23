@@ -31,12 +31,10 @@ def get_true_model(seed, n_bcodes, _):
 
 def get_result(seed, n_bcodes, _):
     res_file = TEMPLATE % (prefix, model_seed, seed, n_bcodes)
-    print(res_file)
     return plot_simulation_common.get_result(res_file)
 
 def get_rand_tree(seed, n_bcodes, _):
     res_file = RAND_TEMPLATE % (prefix, model_seed, seed, n_bcodes)
-    print(res_file)
     return plot_simulation_common.get_rand_tree(res_file)
 
 

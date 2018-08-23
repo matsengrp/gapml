@@ -96,11 +96,6 @@ def parse_args():
         type=int,
         default=3,
         help="number of random splits of the data for tuning penalty params")
-    parser.add_argument(
-        '--train-split',
-        type=float,
-        default=0.5,
-        help="fraction of data for training data. for tuning penalty param")
     parser.add_argument('--max-iters', type=int, default=2)
     parser.add_argument('--num-inits', type=int, default=1)
     parser.add_argument(
