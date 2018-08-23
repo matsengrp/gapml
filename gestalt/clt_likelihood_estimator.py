@@ -129,6 +129,7 @@ class CLTPenalizedEstimator(CLTEstimator):
                 break
 
             if i % save_iter == (save_iter - 1):
+                logging.info("iter %d, train time %f", i, time.time() - st_time)
                 if dist_measurers is not None:
                     #tt = (self.model.get_fitted_bifurcating_tree())
                     #logging.info(tt.get_ascii(attributes=["dist"], show_internal=True))
@@ -136,7 +137,6 @@ class CLTPenalizedEstimator(CLTEstimator):
                     logging.info("iter %d tree dists: %s", i, tree_dist)
                     iter_info["tree_dists"] = tree_dist
                     iter_info["var"] = var_dict
-                    logging.info("iter %d, train time %f", i, time.time() - st_time)
             train_history.append(iter_info)
 
             if i > min_iters and np.abs((prev_pen_log_lik - pen_log_lik[0])/prev_pen_log_lik) < conv_thres:
