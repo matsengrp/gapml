@@ -170,12 +170,14 @@ def run_MLE(env, outdir, c):
         '--max-extra-steps 2',
         '--max-iters 10000',
         '--train-split 0.6667',
+        '--total-tune-splits',
+        3 if c['num_barcodes'] == 1 else 1,
         '--num-inits 1',
         '--lambda-known' if c['lambda_known'] else '',
         '--tot-time-known',
         '--max-topologies 4',
     ]
-    cmd = []
+    #cmd = []
     return env.Command(
         [
             join(outdir, 'tune_fitted_score.pkl'),

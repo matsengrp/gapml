@@ -34,7 +34,7 @@ nest.add(
 
 nest.add(
     'lambda_magnitude',
-    [1],
+    [.33, 1, 3],
     label_func=lambda c: 'lambda_magnitude%d' % int(c * 10))
 
 nest.add(
