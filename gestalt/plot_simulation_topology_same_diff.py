@@ -9,7 +9,7 @@ np.random.seed(0)
 
 double = 0
 model_seed = 301
-seeds = range(0,1)
+seeds = range(0,5)
 n_bcode = 1
 lambda_types = ["same", "diff", "super_diff"]
 lambda_known = 0
@@ -29,7 +29,6 @@ def get_true_model(seed, lambda_type, n_bcodes):
 
 def get_result(seed, lambda_type, n_bcodes):
     res_file = TEMPLATE % (model_seed, seed, lambda_type, double, n_bcodes, lambda_known)
-    print(res_file)
     return plot_simulation_common.get_result(res_file)
 
 def get_rand_tree(seed, lambda_type, n_bcodes):

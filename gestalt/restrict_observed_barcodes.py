@@ -206,18 +206,18 @@ def make_likelihood_scorer(tree: CellLineageTree, true_model_dict: Dict, name: s
         node.resolved_multifurcation = True
     param_dict["branch_len_inners"] = br_lens
     param_dict["branch_len_offsets_proportion"] = np.zeros(num_nodes)
+    param_dict["log_barr_pen"] = 0
+    param_dict["dist_to_half_pen"] = 0
     param_dict.pop('cell_type_lams', None)
 
     scorer = LikelihoodScorer(
         get_randint(), # seed
         tree,
         true_model_dict["bcode_meta"],
-        log_barr = 0, # no penalty
-        target_lam_pen = 0, # no penalty
         max_iters = 0,
         num_inits = 1,
         transition_wrap_maker = TransitionWrapperMaker(tree, bcode_meta),
-        init_model_params = param_dict,
+        init_model_param_list = [param_dict],
         known_params = KnownModelParams(target_lams=True, tot_time=True))
     return scorer
 
@@ -275,7 +275,7 @@ def get_highest_likelihood_single_appearance_tree(
         assert len(scorer_results) == len(leaves_kept_combos)
     else:
         logging.info("Running locally")
-        scorer_results = [(w.run_worker(None), w) for w in scorers]
+        scorer_results = [(w.run_worker(None)[0], w) for w in scorers]
     logging.info([res.pen_log_lik for (res, _) in scorer_results])
 
     # Get the one with the highest log likelihood

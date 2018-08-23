@@ -181,12 +181,14 @@ def gather_results(
             for idx, setting in enumerate(settings):
                 try:
                     true_model = get_true_model_fnc(seed, setting, n_bcode)
-                except FileNotFoundError:
+                except FileNotFoundError as e:
+                    print(e)
                     continue
                 true_model_val = get_param_func(true_model)
                 try:
                     result = get_result_fnc(seed, setting, n_bcode)
-                except FileNotFoundError:
+                except FileNotFoundError as e:
+                    print(e)
                     continue
                 fitted_val = get_param_func(result)
                 dist = np.linalg.norm(fitted_val - true_model_val, ord=1)/np.linalg.norm(true_model_val, ord=1)
@@ -198,7 +200,6 @@ def gather_results(
                 true_model = get_true_model_fnc(seed, setting, n_bcode)
             except FileNotFoundError:
                 continue
-            n_bcode_results["leaves"][idx].append(len(true_model[2]))
             true_mrca_meas = MRCADistanceMeasurer(true_model[tree_idx])
             true_bhv_meas = BHVDistanceMeasurer(true_model[tree_idx], "_output/scratch")
 
@@ -212,6 +213,7 @@ def gather_results(
             except FileNotFoundError:
                 continue
             n_bcode_results["seeds"][idx].append(seed)
+            n_bcode_results["leaves"][idx].append(len(result[2]))
             if seed_idx == 0 and do_plots:
                 plot_mrca_matrix(
                     true_mrca_meas._get_mrca_matrix(result[tree_idx]),

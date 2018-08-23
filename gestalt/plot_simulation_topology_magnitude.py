@@ -27,11 +27,11 @@ OUT_FITTED_MRCA_PLOT = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/
 def get_true_model(seed, lambda_type, n_bcodes):
     file_name = TRUE_TEMPLATE % (prefix, model_seed, seed, lambda_type, double)
     tree_file_name = COLL_TREE_TEMPLATE % (prefix, model_seed, seed, lambda_type, double, n_bcodes)
-    return plot_simulation_common.get_true_model(file_name, tree_file_name, n_bcodes)
+    #return plot_simulation_common.get_true_model(file_name, tree_file_name, n_bcodes)
+    return plot_simulation_common.get_true_model(file_name, None, n_bcodes)
 
 def get_result(seed, lambda_type, n_bcodes):
     res_file = TEMPLATE % (prefix, model_seed, seed, lambda_type, double, n_bcodes, lambda_known)
-    print(res_file)
     return plot_simulation_common.get_result(res_file)
 
 def get_rand_tree(seed, lambda_type, n_bcodes):
