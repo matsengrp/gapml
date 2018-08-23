@@ -20,7 +20,7 @@ do_plots = False
 prefix = ""
 num_rands = 10
 
-TEMPLATE = "%ssimulation_topology_random_vs_sorted/_output/model_seed%d/%d/%s/num_barcodes%d/lambda_known%d/tot_time_known1/tune_fitted.pkl"
+TEMPLATE = "%ssimulation_topology_random_vs_sorted/_output/model_seed%d/%d/%s/num_barcodes%d/lambda_known%d/tot_time_known1/tune_fitted_score.pkl"
 RAND_TEMPLATE = "%ssimulation_topology_random_vs_sorted/_output/model_seed%d/%d/%s/num_barcodes%d/parsimony_tree0.pkl"
 TRUE_TEMPLATE = "%ssimulation_topology_random_vs_sorted/_output/model_seed%d/%d/%s/true_model.pkl"
 COLL_TREE_TEMPLATE = "%ssimulation_topology_random_vs_sorted/_output/model_seed%d/%d/%s/num_barcodes%d/collapsed_tree.pkl"
@@ -32,7 +32,6 @@ def get_true_model(seed, lambda_type, n_bcodes):
 
 def get_result(seed, lambda_type, n_bcodes):
     res_file = TEMPLATE % (prefix, model_seed, seed, lambda_type, n_bcodes, lambda_known)
-    print(res_file)
     return plot_simulation_common.get_result(res_file)
 
 def get_rand_tree(seed, lambda_type, n_bcodes):
