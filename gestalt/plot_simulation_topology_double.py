@@ -7,74 +7,52 @@ from tree_distance import *
 from cell_lineage_tree import CellLineageTree
 import plot_simulation_common
 
-seeds = range(0,5)
-n_bcode = 1
-double_cuts = [2, 8, 32]
+np.random.seed(0)
 
-TEMPLATE = "simulation_topology_double/_output/model_seed600/%d/double_cut%d/num_barcodes%d/sum_states2000/tune_fitted.pkl"
-TRUE_TEMPLATE = "simulation_topology_double/_output/model_seed600/%d/double_cut%d/true_model.pkl"
-OBS_TEMPLATE = "simulation_topology_double/_output/model_seed600/%d/double_cut%d/num_barcodes%d/obs_data.pkl"
-COLL_TREE_TEMPLATE = "simulation_topology_double/_output/model_seed600/%d/double_cut%d/num_barcodes%d/collapsed_tree.pkl"
+model_seed = 500
+seeds = range(900,905)
+double_cuts = [1, 6, 36]
+n_bcode = 1
+prefix = ""
+lambda_known = 0
+tree_idx = 1
+do_plots = False
+
+TEMPLATE = "%ssimulation_topology_double/_output/model_seed600/%d/double_cut%d/num_barcodes%d/lambda_known%d/tot_time_known1/tune_fitted.pkl"
+TRUE_TEMPLATE = "%ssimulation_topology_double/_output/model_seed600/%d/double_cut%d/true_model.pkl"
+OBS_TEMPLATE = "%ssimulation_topology_double/_output/model_seed600/%d/double_cut%d/num_barcodes%d/obs_data.pkl"
+COLL_TREE_TEMPLATE = "%ssimulation_topology_double/_output/model_seed600/%d/double_cut%d/num_barcodes%d/collapsed_tree.pkl"
 
 def get_true_model(seed, double_cut, n_bcodes):
-    file_name = TRUE_TEMPLATE % (seed, double_cut)
-    tree_file_name = COLL_TREE_TEMPLATE % (seed, double_cut, n_bcodes)
+    file_name = TRUE_TEMPLATE % (prefix, seed, double_cut)
+    tree_file_name = COLL_TREE_TEMPLATE % (prefix, seed, double_cut, n_bcodes)
     return plot_simulation_common.get_true_model(file_name, tree_file_name, n_bcodes)
 
 def get_result(seed, double_cut, n_bcodes):
-    res_file = TEMPLATE % (seed, double_cut, n_bcodes)
+    res_file = TEMPLATE % (prefix, seed, double_cut, n_bcodes, lambda_known)
     return plot_simulation_common.get_result(res_file)
 
-get_param_func_dict = {
-        "mrca": None, # custom function
-        "bhv": None, # custom function
-        "targ": plot_simulation_common.get_target_lams,
-        "double": plot_simulation_common.get_double_cut_weight,
-        "leaves": None}
+def get_rand_tree(seed, double_cut, n_bcodes):
+    res_file = RAND_TEMPLATE % (prefix, model_seed, seed, double_cut, n_bcodes)
+    return plot_simulation_common.get_rand_tree(res_file)
 
-n_bcode_results = {
-        key: [[] for _ in double_cuts]
-        for key in get_param_func_dict.keys()}
-
-for key in get_param_func_dict.keys():
-    get_param_func = get_param_func_dict[key]
-    if get_param_func is None:
-        continue
-
-    for seed in seeds:
-        for idx, double_cut in enumerate(double_cuts):
-            try:
-                true_model = get_true_model(seed, double_cut, n_bcode)
-            except FileNotFoundError:
-                continue
-            true_model_val = get_param_func(true_model)
-            try:
-                result = get_result(seed, double_cut, n_bcode)
-            except FileNotFoundError:
-                continue
-            fitted_val = get_param_func(result)
-            dist = np.linalg.norm(fitted_val - true_model_val)
-            n_bcode_results[key][idx].append(dist)
-
-for seed in seeds:
-    for idx, double_cut in enumerate(double_cuts):
-        try:
-            true_model = get_true_model(seed, double_cut, n_bcode)
-        except FileNotFoundError:
-            continue
-        true_mrca_meas = MRCADistanceMeasurer(true_model[1])
-        n_bcode_results["leaves"][idx].append(len(true_model[2]))
-        #print("true...", true_mrca_meas.ref_tree_mrca_matrix.shape)
-        try:
-            result = get_result(seed, double_cut, n_bcode)
-        except FileNotFoundError:
-            continue
-        dist = true_mrca_meas.get_dist(result[1])
-        n_bcode_results["mrca"][idx].append(dist)
-
-        true_bhv_meas = BHVDistanceMeasurer(true_model[1], "_output/scratch")
-        dist = true_bhv_meas.get_dist(result[1])
-        #print("RF", dist)
-        n_bcode_results["bhv"][idx].append(dist)
-
-plot_simulation_common.print_results(double_cuts, n_bcode_results, n_bcode)
+plot_simulation_common.gather_results(
+        get_true_model,
+        get_result,
+        get_rand_tree,
+        seeds,
+        lambda_magnitudes,
+        n_bcode = n_bcode,
+        tree_idx = tree_idx,
+        do_plots = do_plots,
+        print_keys = [
+            "bhv",
+            "random_bhv",
+            #"zero_bhv",
+            "super_zero_bhv",
+            #"mrca",
+            #"zero_mrca",
+            #"random_mrca",
+            "targ",
+            "double",
+       ])
