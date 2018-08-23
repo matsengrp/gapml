@@ -19,7 +19,7 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
-LAMBDA_SEQUENCE = [1.2,1.0,0.8,0.6,0.4,0.2]
+LAMBDA_SEQUENCE = [1.,0.85,0.7,0.55,0.4,0.25]
 
 nest.add(
     'model_seed',
@@ -29,7 +29,7 @@ nest.add(
 
 nest.add(
     'seed',
-    range(702,705),
+    range(700,705),
 )
 
 nest.add(
@@ -46,8 +46,8 @@ def generate(env, outdir, c):
     targ_lambdas = ",".join(map(str, lambda_seq))
 
     cmd = [
-        #'python boto_run.py 2 2000 generate_data.py',
-	'python generate_data.py',
+        'python boto_run.py 2 2000 generate_data.py',
+	#'python generate_data.py',
 	'--sampling-rate 0.4',
         '--model-seed',
         c['model_seed'],
@@ -57,11 +57,12 @@ def generate(env, outdir, c):
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
         '--time 1',
-        '--birth-lambda 5.1',
+        '--start-birth-lambda 100',
+        '--birth-lambda 2.3',
         '--num-barcodes',
         8,
-        '--min-uniq-alleles 15',
-        '--max-uniq-alleles 70',
+        '--min-uniq-alleles 30',
+        '--max-uniq-alleles 50',
         '--max-abundance 100',
         '--double-cut-weight 0.4',
         '--target-lambdas',
@@ -72,8 +73,9 @@ def generate(env, outdir, c):
         '--insert-zero-prob 0.1',
         '--insert-poisson 1',
         '--perturb-target-lambdas-variance 0',
-        '--max-tries 1'
+        '--max-tries 20'
     ]
+    cmd = []
     return env.Command(
         [
             join(outdir, 'obs_data.pkl'),
@@ -91,8 +93,8 @@ nest.add(
 @nest.add_target_with_env(localenv)
 def restrict_observed_alleles(env, outdir, c):
     cmd = [
-        #'python boto_run.py 2 2000 restrict_observed_barcodes.py',
-        'python restrict_observed_barcodes.py',
+        'python boto_run.py 2 2000 restrict_observed_barcodes.py',
+        #'python restrict_observed_barcodes.py',
         '--obs-file ${SOURCES[0]}',
         '--model-file ${SOURCES[1]}',
         '--num-barcodes',
@@ -101,6 +103,7 @@ def restrict_observed_alleles(env, outdir, c):
         '--out-collapsed-tree-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
     ]
+    cmd = []
     return env.Command(
         [
             join(outdir, 'obs_data.pkl'),
@@ -112,8 +115,8 @@ def restrict_observed_alleles(env, outdir, c):
 @nest.add_target_with_env(localenv)
 def run_topology(env, outdir, c):
     cmd = [
-        #'python boto_run.py 2 6000 get_parsimony_topologies.py',
-        'python get_parsimony_topologies.py',
+        'python boto_run.py 2 6000 get_parsimony_topologies.py',
+        #'python get_parsimony_topologies.py',
         '--obs-file ${SOURCES[0]}',
         '--out-template-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
@@ -123,6 +126,7 @@ def run_topology(env, outdir, c):
         4,
         '--num-jumbles 1'
     ]
+    cmd = []
     return env.Command(
         [
             join(outdir, 'parsimony_tree0.pkl'),
@@ -143,11 +147,14 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    #penalty_params = ",".join(map(str, np.power(10, np.arange(0.5, -3.0, step=-1)).tolist()))
-    penalty_params = "0.1" if c['num_barcodes'] > 3 else "1"
+    if c['num_barcodes'] == 1:
+        penalty_params = "3072,768,192,48,12,3"
+    else:
+    	penalty_params = "12,6,3,1.5,.75"
+
     cmd = [
-        #'python boto_run.py 18 25000 tune_topology.py',
-	'python tune_topology.py',
+        'python boto_run.py 18 25000 tune_topology.py',
+	#'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
         '--topology-file ${SOURCES[1]}',
         '--true-model-file ${SOURCES[2]}',
@@ -157,20 +164,21 @@ def run_MLE(env, outdir, c):
         '--seed',
 	c['seed'] + 100,
         '--log-barr 0.0000001',
-        '--target-lam-pens',
+        '--dist-to-half-pens',
 	penalty_params,
         '--max-sum-states 2000',
         '--max-extra-steps 2',
         '--max-iters 10000',
-        '--train-split 0.75',
-        '--num-inits',
-        1 if c['lambda_known'] else 3,
+        '--train-split 0.6667',
+        '--num-inits 1',
         '--lambda-known' if c['lambda_known'] else '',
         '--tot-time-known',
+        '--max-topologies 4',
     ]
+    cmd = []
     return env.Command(
         [
-            join(outdir, 'tune_fitted.pkl'),
+            join(outdir, 'tune_fitted_score.pkl'),
             join(outdir, 'tune_fitted_log.txt')],
         [
             c['restrict_observed_alleles'][0],

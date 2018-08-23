@@ -54,8 +54,8 @@ def generate(env, outdir, c):
     targ_lambdas = ",".join(map(str, lambda_seq))
 
     cmd = [
-        #'python boto_run.py 2 2000 generate_data.py',
-	'python generate_data.py',
+        'python boto_run.py 2 2000 generate_data.py',
+	#'python generate_data.py',
 	'--sampling-rate 0.2',
         '--model-seed',
         c['model_seed'],
@@ -84,6 +84,7 @@ def generate(env, outdir, c):
         '--perturb-target-lambdas-variance 0',
         '--max-tries 20',
     ]
+    cmd = []
     return env.Command(
         [
             join(outdir, 'obs_data.pkl'),
@@ -101,8 +102,8 @@ nest.add(
 @nest.add_target_with_env(localenv)
 def restrict_observed_alleles(env, outdir, c):
     cmd = [
-        #'python boto_run.py 2 2000 restrict_observed_barcodes.py',
-        'python restrict_observed_barcodes.py',
+        'python boto_run.py 2 2000 restrict_observed_barcodes.py',
+        #'python restrict_observed_barcodes.py',
         '--obs-file ${SOURCES[0]}',
         '--model-file ${SOURCES[1]}',
         '--num-barcodes',
@@ -111,6 +112,7 @@ def restrict_observed_alleles(env, outdir, c):
         '--out-collapsed-tree-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
     ]
+    cmd = []
     return env.Command(
         [
             join(outdir, 'obs_data.pkl'),
@@ -122,8 +124,8 @@ def restrict_observed_alleles(env, outdir, c):
 @nest.add_target_with_env(localenv)
 def run_topology(env, outdir, c):
     cmd = [
-        #'python boto_run.py 2 6000 get_parsimony_topologies.py',
-        'python get_parsimony_topologies.py',
+        'python boto_run.py 2 6000 get_parsimony_topologies.py',
+        #'python get_parsimony_topologies.py',
         '--obs-file ${SOURCES[0]}',
         '--out-template-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
@@ -133,6 +135,7 @@ def run_topology(env, outdir, c):
         4,
         '--num-jumbles 1'
     ]
+    cmd = []
     return env.Command(
         [
             join(outdir, 'parsimony_tree0.pkl'),
@@ -159,8 +162,8 @@ def run_MLE(env, outdir, c):
     	penalty_params = "12,6,3,1.5,.75"
 
     cmd = [
-        #'python boto_run.py 18 25000 tune_topology.py',
-	'python tune_topology.py',
+        'python boto_run.py 18 25000 tune_topology.py',
+	#'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
         '--topology-file ${SOURCES[1]}',
         '--true-model-file ${SOURCES[2]}',
@@ -183,6 +186,7 @@ def run_MLE(env, outdir, c):
         3 if c['num_barcodes'] == 1 else 1,
         '--max-topologies 4',
     ]
+    #cmd = []
     return env.Command(
         [
             join(outdir, 'tune_fitted_score.pkl'),

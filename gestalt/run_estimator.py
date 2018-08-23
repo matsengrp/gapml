@@ -222,7 +222,7 @@ def read_true_model_files(args):
             args.scratch_dir)
     return true_model_dict, oracle_dist_measurers
 
-def read_init_model_params_file(args, bcode_meta, true_model_dict):
+def read_init_model_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
     args.init_params = {
             "target_lams": get_init_target_lams(bcode_meta, 0),
             "boost_softmax_weights": np.array([1, 2, 2]),
@@ -394,7 +394,7 @@ def main(args=sys.argv[1:]):
     # Read input files
     bcode_meta, tree, obs_data_dict = read_data(args)
     true_model_dict, oracle_dist_measurers = read_true_model_files(args)
-    read_init_model_params_file(args, bcode_meta, true_model_dict)
+    read_init_model_params_file(args, bcode_meta, obs_data_dict, true_model_dict)
 
     logging.info(tree.get_ascii(attributes=["node_id"], show_internal=True))
     logging.info(tree.get_ascii(attributes=["abundance"], show_internal=True))

@@ -31,7 +31,7 @@ def read_gestalt(env, outdir, c):
         '--log-file ${TARGETS[1]}',
         '--abundance-thres',
 	c['abundance_thres'],
-	'--time 1.1',
+	'--time 1',
     ]
     return env.Command(
         [
@@ -91,17 +91,9 @@ nest.add(
     label_func=lambda c: "extra_steps_%d" % c,
 )
 
-nest.add(
-    'penalty_params',
-    [
-	'200',
-    	#",".join(map(str, np.power(10, np.arange(1.0, -2.0, step=-1)).tolist())),
-    ],
-    label_func=lambda c: "penalty_params_%s" % c,
-)
-
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
+    penalty_params = "3072,768,192,48,12,3,.75"
     cmd = [
         'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
@@ -111,7 +103,7 @@ def run_MLE(env, outdir, c):
         '--seed 100',
         '--log-barr 0.0001',
         '--dist-to-half-pens',
-        c['penalty_params'],
+        penalty_params,
         '--max-sum-states',
         c['sum_states'],
         '--max-extra-steps',
@@ -119,6 +111,7 @@ def run_MLE(env, outdir, c):
         '--max-iters 10000',
         '--num-inits 1',
         '--train-split 0.75',
+        '--total-tune-splits 3',
         '--max-topologies 1',
         '--tot-time-known',
     ]
