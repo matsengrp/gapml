@@ -1,8 +1,6 @@
 """
 Helper code for splitting trees into training and validation sets
-This is our version of training validation split.
-It's the usual method if we have more than one barcode.
-Otherwise we subsample the tree.
+This is our version of k-fold CV for trees
 """
 from typing import Set, Dict
 import numpy as np
@@ -16,20 +14,24 @@ from barcode_metadata import BarcodeMetadata
 import collapsed_tree
 
 class TreeDataSplit:
+    """
+    Stores the metadata and data for each "fold" from our variant of k-fold CV
+    """
     def __init__(self,
             tree: CellLineageTree,
-            bcode_meta: BarcodeMetadata,
-            to_orig_node_dict: Dict[int, int] = None,
-            from_orig_node_dict: Dict[int, int] = None):
+            bcode_meta: BarcodeMetadata):
         self.tree = tree
         self.bcode_meta = bcode_meta
-        self.from_orig_node_dict = from_orig_node_dict
-        self.to_orig_node_dict = to_orig_node_dict
 
 def create_kfold_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadata, n_splits: int):
     """
     Take a tree and create k-fold datasets based on children of the root node
-    @return List[TreeDataSplit]
+    This takes a tree and creates subtrees by taking a subset of the leaves,
+    We refer to this as a "fold" of the tree
+
+    @param n_splits: the number of folds requested
+
+    @return List[TreeDataSplit] corresponding to each fold
     """
     assert len(tree.get_children()) > 1 and n_splits >= 2
 
@@ -62,9 +64,12 @@ def create_kfold_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadata, n_spl
 
 def create_kfold_barcode_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadata, n_splits: int):
     """
-    @param train_split: fraction of data to reserve for training set
+    Take a tree and create k-fold datasets by splitting on the independent barcodes.
+    We refer to this as a "barcode-fold" of the tree
 
-    @return CLT for training data, CLT for validation data, train bcode metadata, val bcode metadata
+    @param n_splits: the number of folds requested
+
+    @return List[TreeDataSplit] corresponding to each fold
     """
     # Assign by splitting on children of root node -- perform k-fold cv
     # This decreases the correlation between training sets
@@ -73,51 +78,24 @@ def create_kfold_barcode_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadat
 
     kf = KFold(n_splits=n_splits, shuffle=True)
     all_train_trees = []
-    all_train_trees = []
     for bcode_idxs, _ in kf.split(np.arange(bcode_meta.num_barcodes)):
-        logging.info("train barcode idxs %s", bcode_idxs)
+        logging.info("Train fold barcode idxs %s", bcode_idxs)
         num_train_bcodes = len(bcode_idxs)
         train_bcode_meta = BarcodeMetadata(
                 bcode_meta.unedited_barcode,
                 num_train_bcodes,
                 bcode_meta.cut_site,
                 bcode_meta.crucial_pos_len)
-        train_clt = _restrict_barcodes(tree.copy(), bcode_idxs, train_bcode_meta)
+        train_clt = _restrict_barcodes(tree.copy(), bcode_idxs)
         all_train_trees.append(TreeDataSplit(
             train_clt,
             train_bcode_meta))
 
     return all_train_trees
 
-def create_train_val_tree(tree: CellLineageTree, bcode_meta: BarcodeMetadata, train_split: float):
+def _restrict_barcodes(clt: CellLineageTree, bcode_idxs: ndarray):
     """
-    @param train_split: fraction of data to reserve for training set
-
-    @return CLT for training data, CLT for validation data, train bcode metadata, val bcode metadata
-    """
-    if bcode_meta.num_barcodes == 1:
-        train_tree, val_tree, train_bcode, val_bcode = _create_train_val_tree_by_subsampling(
-                tree,
-                bcode_meta,
-                train_split)
-        train_tree.label_node_ids()
-        val_tree.label_node_ids()
-    else:
-        train_tree, val_tree, train_bcode, val_bcode = _create_train_val_tree_by_barcode(
-                tree, bcode_meta, train_split)
-
-    train_split = TreeDataSplit(train_tree, train_bcode)
-    val_split = TreeDataSplit(val_tree, val_bcode)
-    return train_split, val_split
-
-"""
-Code for train/val split for >1 barcode
-"""
-def _restrict_barcodes(clt: CellLineageTree, bcode_idxs: ndarray, bcode_meta: BarcodeMetadata):
-    """
-    @param min_bcode_idx: the start index of the barcode we observe
-    @param bcode_meta: barcode metadata, indicates how many barcodes we should restrict it to
-
+    @param bcode_idxs: the indices of the barcodes we observe
     Update the alleles for each node in the tree to correspond to only the barcodes indicated
     """
     for node in clt.traverse():
@@ -125,42 +103,9 @@ def _restrict_barcodes(clt: CellLineageTree, bcode_idxs: ndarray, bcode_meta: Ba
     clt.label_tree_with_strs()
     return clt
 
-def _create_train_val_tree_by_barcode(clt: CellLineageTree, bcode_meta: BarcodeMetadata, train_split_rate: float):
-    """
-    There are multiple barcodes, so just partition the barcodes into train vs validation
-
-    @return CLT for training data, CLT for validation data
-    """
-    num_train_bcodes = int(bcode_meta.num_barcodes * train_split_rate)
-    num_val_bcodes = bcode_meta.num_barcodes - num_train_bcodes
-    assert num_train_bcodes > 0 and num_val_bcodes > 0
-
-    shuffled_bcode_idxs = np.random.choice(bcode_meta.num_barcodes, bcode_meta.num_barcodes, replace=False)
-    train_bcode_idxs = shuffled_bcode_idxs[:num_train_bcodes]
-    logging.info("train barcode idxs %s", train_bcode_idxs)
-    val_bcode_idxs = shuffled_bcode_idxs[num_train_bcodes:]
-    train_bcode_meta = BarcodeMetadata(
-            bcode_meta.unedited_barcode,
-            num_train_bcodes,
-            bcode_meta.cut_site,
-            bcode_meta.crucial_pos_len)
-    train_clt = _restrict_barcodes(clt.copy(), train_bcode_idxs, train_bcode_meta)
-    val_bcode_meta = BarcodeMetadata(
-            bcode_meta.unedited_barcode,
-            num_val_bcodes,
-            bcode_meta.cut_site,
-            bcode_meta.crucial_pos_len)
-    val_clt = _restrict_barcodes(clt.copy(), val_bcode_idxs, val_bcode_meta)
-    return train_clt, val_clt, train_bcode_meta, val_bcode_meta
-
-
-"""
-Code for train/val split for only 1 barcode
-"""
 def _prune_tree(clt: CellLineageTree, keep_leaf_ids: Set[int]):
     """
     prune the tree to only keep the leaves indicated
-
     custom pruning (cause ete was doing weird things...)
     """
     for node in clt.iter_descendants():
@@ -168,47 +113,3 @@ def _prune_tree(clt: CellLineageTree, keep_leaf_ids: Set[int]):
             node.detach()
     collapsed_tree._remove_single_child_unobs_nodes(clt)
     return clt
-
-def _create_train_val_tree_by_subsampling(clt: CellLineageTree, bcode_meta: BarcodeMetadata, train_split_rate: float):
-    """
-    Take a tree and randomly partition leaves into training vs validation
-    Use the corresponding subtrees as a train CLT and a val CLT
-
-    @return CLT for training data, CLT for validation data
-    """
-    # Assign by splitting on children of root node
-    # This decreases the correlation between observations
-    # This train/validation split is only useful if the root node has at least two or more children.
-    assert len(clt.get_children()) > 1
-
-    # Shuffle children and assign children according to the desired
-    # split ratio.
-    children = clt.get_children()
-    num_children = len(children)
-    child_assignments = np.random.choice(num_children, num_children, replace=False)
-    n_child_train = int(np.ceil(train_split_rate * num_children))
-    train_childs = child_assignments[:n_child_train]
-    assert len(train_childs) < num_children
-
-    # Now actually assign the leaf nodes appropriately
-    train_leaf_ids = set()
-    val_leaf_ids = set()
-    for child_idx, child in enumerate(children):
-        if child_idx in train_childs:
-            train_leaf_ids.update(
-                [l.node_id for l in child])
-        else:
-            val_leaf_ids.update(
-                [l.node_id for l in child])
-    assert len(val_leaf_ids) + len(train_leaf_ids) == len(clt)
-
-    train_clt = _prune_tree(clt.copy(), train_leaf_ids)
-    val_clt = _prune_tree(clt.copy(), val_leaf_ids)
-
-    logging.info("ORIG TREE")
-    logging.info(clt.get_ascii(attributes=["node_id"], show_internal=True))
-    logging.info("TRAIN TREE")
-    logging.info(train_clt.get_ascii(attributes=["node_id"], show_internal=True))
-    logging.info("VAL TREE")
-    logging.info(val_clt.get_ascii(attributes=["node_id"], show_internal=True))
-    return train_clt, val_clt, bcode_meta, bcode_meta

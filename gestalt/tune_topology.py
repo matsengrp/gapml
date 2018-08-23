@@ -66,11 +66,6 @@ def parse_args():
         default='1',
         help="comma-separated string with penalty parameters on the target lambdas")
     parser.add_argument(
-        '--train-split',
-        type=float,
-        default=0.75,
-        help="fraction of data for training data. for tuning penalty param")
-    parser.add_argument(
         '--total-tune-splits',
         type=int,
         default=1,
@@ -137,17 +132,17 @@ def get_best_hyperparam(
 
     total_pen_param_score = np.zeros(len(args.dist_to_half_pen_list))
     for (topology_res, _) in tune_results:
-        for topology_rep_res in topology_res["tune_results"]:
-            for i, res in enumerate(topology_rep_res):
-                total_pen_param_score[i] += res.score
+        for i, res in enumerate(topology_res["tune_results"]):
+            total_pen_param_score[i] += res.score
 
     logging.info("Total tuning scores %s", total_pen_param_score)
     best_idx = np.argmax(total_pen_param_score)
     best_dist_to_half_pen = args.dist_to_half_pen_list[best_idx]
     logging.info("Best penalty param %s", best_dist_to_half_pen)
     # Create the initialization model params for warm starting
+    # Take arbitrary fitted set of model params -- we take the first one
     warm_starts = [
-            topology_res["tune_results"][0][best_idx].model_params_dict
+            topology_res["tune_results"][best_idx].model_params_dicts[0]
             for topology_res, _ in tune_results]
 
     return best_dist_to_half_pen, warm_starts
@@ -156,10 +151,6 @@ def tune_hyperparams(
         topology_files,
         args):
     worker_list = []
-    # TODO: right now we only ever do one split for training validation
-    # ... mostly cause we're too lazy to implement something else
-    #num_tune_splits = 1 if args.num_barcodes > 1 else args.total_tune_splits
-
     for file_idx, top_file in enumerate(topology_files):
         worker = RunEstimatorWorker(
             args.obs_file,
@@ -180,7 +171,6 @@ def tune_hyperparams(
             tune_only = True,
             max_sum_states = args.max_sum_states,
             max_extra_steps = args.max_extra_steps,
-            train_split = args.train_split,
             num_tune_splits = args.total_tune_splits,
             scratch_dir = args.scratch_dir)
         worker_list.append(worker)
@@ -239,7 +229,6 @@ def fit_models(
             tune_only = False,
             max_sum_states = args.max_sum_states,
             max_extra_steps = args.max_extra_steps,
-            train_split = 1,
             num_tune_splits = 1,
             scratch_dir = args.scratch_dir)
         worker_list.append(worker)
