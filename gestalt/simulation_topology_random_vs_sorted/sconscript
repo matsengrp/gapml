@@ -31,7 +31,7 @@ def get_exp_intertarg_len(targ_lams, double_targ):
     return exp_len/tot_haz
 
 def get_sorted_permutations(targ_lams, double_targ):
-    permutations = itertools.permutations(lams)
+    permutations = itertools.permutations(targ_lams)
     permutation_exp_lens = []
     for p in permutations:
         permutation_exp_lens.append((p, get_exp_intertarg_len(p, double_targ)))
@@ -39,7 +39,7 @@ def get_sorted_permutations(targ_lams, double_targ):
 
 LAMBDA_SEQUENCES = [1.,0.85,0.7,0.55,0.4,0.25]
 DOUBLE_CUT = 0.4
-sorted_permutes = get_sorted_permutations(LAMBDA_SEQEUENCES, DOUBLE_CUT)
+sorted_permutes = get_sorted_permutations(LAMBDA_SEQUENCES, DOUBLE_CUT)
 
 nest.add(
     'model_seed',
@@ -49,13 +49,21 @@ nest.add(
 
 nest.add(
     'permute_idx',
-    range(0, len(sorted_permutes), len(sorted_permutes)/10),
+    range(int(len(sorted_permutes)/20) + 2, len(sorted_permutes), int(len(sorted_permutes)/10) + 2),
     label_func=lambda c: 'permute_idx%d' % c,
+)
+
+nest.add(
+    'data_seed',
+    [0],
+    label_func=lambda c: 'data_seed%d' % c,
 )
 
 @nest.add_target_with_env(localenv)
 def generate(env, outdir, c):
-    lambda_seq = sorted_permutes[c['permute_idx']]
+    lambda_seq_tuple = sorted_permutes[c['permute_idx']]
+    lambda_seq = lambda_seq_tuple[0]
+    print("exp haz", c['permute_idx'], lambda_seq_tuple)
     targ_lambdas = ",".join(map(str, lambda_seq))
 
     cmd = [
@@ -65,7 +73,7 @@ def generate(env, outdir, c):
         '--model-seed',
         c['model_seed'],
         '--data-seed',
-        c['permute_idx'],
+        c['permute_idx'] + c['data_seed'] * 1000,
         '--out-obs-file ${TARGETS[0]}',
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
@@ -173,22 +181,20 @@ def run_MLE(env, outdir, c):
         '--out-model-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
         '--seed',
-	c['seed'] + 100,
+	c['permute_idx'] + c['data_seed'] * 1000,
         '--log-barr 0.0000001',
         '--dist-to-half-pens',
 	penalty_params,
         '--max-sum-states 2000',
         '--max-extra-steps 2',
         '--max-iters 10000',
-        '--train-split 0.6667',
-        '--total-tune-splits',
-        3 if c['num_barcodes'] == 1 else 1,
+        '--total-tune-splits 3',
         '--num-inits 1',
         '--lambda-known' if c['lambda_known'] else '',
         '--tot-time-known',
         '--max-topologies 4',
     ]
-    #cmd = []
+    cmd = []
     return env.Command(
         [
             join(outdir, 'tune_fitted_score.pkl'),
