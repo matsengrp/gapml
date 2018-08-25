@@ -505,7 +505,7 @@ def plot_gestalt_tree(
     plot_tree(
             col_tree,
             out_plot_file,
-            width=600,
+            width=400,
             show_leaf_name=False,
             legend_colors=legend_colors)
 

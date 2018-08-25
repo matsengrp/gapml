@@ -45,7 +45,7 @@ nest.add(
 
 nest.add(
     'double_cut',
-    [0.05],
+    [0.001],
     label_func=lambda c: 'double_cut%d' % c)
 
 @nest.add_target_with_env(localenv)

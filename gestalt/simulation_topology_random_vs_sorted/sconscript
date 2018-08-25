@@ -9,6 +9,7 @@ from nestly.scons import SConsWrap
 from nestly import Nest
 from SCons.Script import Environment, Command, AddOption
 import numpy as np
+import itertools
 
 Import('env')
 localenv = env.Clone()
@@ -19,7 +20,26 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
-LAMBDA_SEQUENCE = [1.,0.85,0.7,0.55,0.4,0.25]
+def get_exp_intertarg_len(targ_lams, double_targ):
+    tot_haz = sum(targ_lams)
+    exp_len = 0
+    for i, lam1 in enumerate(targ_lams):
+        for j, lam2 in enumerate(targ_lams[i + 1:]):
+            tot_haz += lam1 * lam2 * double_targ
+            exp_len += (j + 1) * lam1 * lam2 * double_targ
+
+    return exp_len/tot_haz
+
+def get_sorted_permutations(targ_lams, double_targ):
+    permutations = itertools.permutations(lams)
+    permutation_exp_lens = []
+    for p in permutations:
+        permutation_exp_lens.append((p, get_exp_intertarg_len(p, double_targ)))
+    return list(sorted(permutation_exp_lens, key=lambda m: m[1]))
+
+LAMBDA_SEQUENCES = [1.,0.85,0.7,0.55,0.4,0.25]
+DOUBLE_CUT = 0.4
+sorted_permutes = get_sorted_permutations(LAMBDA_SEQEUENCES, DOUBLE_CUT)
 
 nest.add(
     'model_seed',
@@ -28,31 +48,24 @@ nest.add(
 )
 
 nest.add(
-    'seed',
-    range(700,705),
+    'permute_idx',
+    range(0, len(sorted_permutes), len(sorted_permutes)/10),
+    label_func=lambda c: 'permute_idx%d' % c,
 )
-
-nest.add(
-    'lambda_seq',
-    [
-	'sorted',
-	'random',
-    ])
 
 @nest.add_target_with_env(localenv)
 def generate(env, outdir, c):
-    random.seed(c['seed'])
-    lambda_seq = LAMBDA_SEQUENCE if c["lambda_seq"] == 'sorted' else random.sample(LAMBDA_SEQUENCE, len(LAMBDA_SEQUENCE))
+    lambda_seq = sorted_permutes[c['permute_idx']]
     targ_lambdas = ",".join(map(str, lambda_seq))
 
     cmd = [
         'python boto_run.py 2 2000 generate_data.py',
-	#'python generate_data.py',
-	'--sampling-rate 0.4',
+    	#'python generate_data.py',
+    	'--sampling-rate 0.4',
         '--model-seed',
         c['model_seed'],
         '--data-seed',
-        c['seed'],
+        c['permute_idx'],
         '--out-obs-file ${TARGETS[0]}',
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
@@ -64,7 +77,8 @@ def generate(env, outdir, c):
         '--min-uniq-alleles 30',
         '--max-uniq-alleles 50',
         '--max-abundance 100',
-        '--double-cut-weight 0.4',
+        '--double-cut-weight',
+        DOUBLE_CUT,
         '--target-lambdas',
         targ_lambdas,
         '--trim-zero-probs 0.1 0.1',
