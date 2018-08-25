@@ -96,13 +96,11 @@ def restrict_observed_alleles(env, outdir, c):
         '--num-barcodes',
         c['num_barcodes'],
         '--out-obs-file ${TARGETS[0]}',
-        '--out-collapsed-tree-file ${TARGETS[1]}',
-        '--log-file ${TARGETS[2]}',
+        '--log-file ${TARGETS[1]}',
     ]
     return env.Command(
         [
             join(outdir, 'obs_data.pkl'),
-            join(outdir, 'collapsed_tree.pkl'),
             join(outdir, 'log_restrict.txt')],
         c['generate'],
         ' '.join(map(str, cmd)))
@@ -139,12 +137,12 @@ def run_MLE(env, outdir, c):
         penalty_params = "768,192,48,12,3"
     elif c['num_barcodes'] == 27:
         penalty_params = "192,48,12,3,.75"
+    penalty_params = "12"
     cmd = [
 	'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
         '--topology-file ${SOURCES[1]}',
         '--true-model-file ${SOURCES[2]}',
-        '--true-collapsed-tree-file ${SOURCES[3]}',
         '--out-model-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
         '--seed',
@@ -158,15 +156,14 @@ def run_MLE(env, outdir, c):
         '--num-inits 1',
         '--tot-time-known',
         '--total-tune-splits 3',
-        '--max-topologies 4',
+        '--max-topologies 1',
     ]
     return env.Command(
         [
-            join(outdir, 'tune_fitted.pkl'),
-            join(outdir, 'tune_fitted.txt')],
+            join(outdir, 'tune_example.pkl'),
+            join(outdir, 'tune_example.txt')],
         [
             c['restrict_observed_alleles'][0],
             c['run_topology'][0],
-            c['generate'][1],
-            c['restrict_observed_alleles'][1]],
+            c['generate'][1]],
         ' '.join(map(str, cmd)))

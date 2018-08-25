@@ -39,16 +39,13 @@ def get_true_model(file_name, tree_file_name, n_bcodes):
             existing_strs[node.allele_events_list_str] = 1
     return (true_model["true_model_params"], true_tree, true_coll_tree)
 
-def get_result(res_file):
+def _get_leaved_result(bifurc_tree):
     """
-    Read fitted model
+    Create appropriate number of leaves to match abundance
+    Just attach with zero distance to the existing leaf node
     """
-    with open(res_file, "rb") as f:
-        result = six.moves.cPickle.load(f)["refit"]
-    raw_tree = result.fitted_bifurc_tree.copy()
-
-    # Create appropriate number of leaves to match abundance
-    for node in result.fitted_bifurc_tree:
+    leaved_tree = bifurc_tree.copy()
+    for node in leaved_tree:
         curr_node = node
         for idx in range(node.abundance - 1):
             new_child = CellLineageTree(
@@ -72,7 +69,18 @@ def get_result(res_file):
             curr_node.add_child(new_child)
             curr_node.add_child(copy_leaf)
             curr_node = new_child
-    return (result.model_params_dict, result.fitted_bifurc_tree, raw_tree)
+    return leaved_tree
+
+def get_result(res_file):
+    """
+    Read fitted model
+    """
+    with open(res_file, "rb") as f:
+        result = six.moves.cPickle.load(f)["refit"]
+
+    # Create appropriate number of leaves to match abundance
+    leaved_bifurc_tree = _get_leaved_result(result.fitted_bifurc_tree)
+    return (result.model_params_dict, leaved_bifurc_tree, result.fitted_bifurc_tree)
 
 def get_rand_tree(res_file):
     """
@@ -155,7 +163,9 @@ def gather_results(
         tree_idx = 1,
         num_rands = 10,
         do_plots = False,
-        print_keys = []):
+        print_keys = [],
+        out_true_mrca_plot = None,
+        out_fitted_mrca_plot = None):
     get_param_func_dict = {
             "mrca": None, # custom function
             "bhv": None, # custom function
@@ -209,7 +219,7 @@ def gather_results(
             if seed_idx == 0 and do_plots:
                 plot_mrca_matrix(
                     true_mrca_meas.ref_tree_mrca_matrix,
-                    OUT_TRUE_MRCA_PLOT % (prefix, model_seed, seed, setting))
+                    out_true_mrca_plot)
 
             try:
                 result = get_result_fnc(seed, setting, n_bcode)
@@ -220,7 +230,7 @@ def gather_results(
             if seed_idx == 0 and do_plots:
                 plot_mrca_matrix(
                     true_mrca_meas._get_mrca_matrix(result[tree_idx]),
-                    OUT_FITTED_MRCA_PLOT % (prefix, model_seed, seed, setting, n_bcode, lambda_known))
+                    out_fitted_mrca_plot % setting)
 
             #print(pruned_tree.get_ascii(attributes=["dist"], show_internal=True))
             mle_dist = true_mrca_meas.get_dist(result[tree_idx])
