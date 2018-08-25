@@ -16,7 +16,7 @@ prefix = ""
 tree_idx = 1
 do_plots = False
 
-TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/tune_fitted_refitnew_tree0.pkl"
+TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/tune_fitted.pkl"
 RAND_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/parsimony_tree0.pkl"
 TRUE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/true_model.pkl"
 COLL_TREE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/collapsed_tree.pkl"
@@ -50,11 +50,11 @@ plot_simulation_common.gather_results(
         print_keys = [
             "bhv",
             "random_bhv",
-            "zero_bhv",
+            #"zero_bhv",
             "super_zero_bhv",
             "mrca",
-            "zero_mrca",
             "random_mrca",
+            "zero_mrca",
             "targ",
             #"double"
             ])

@@ -18,7 +18,7 @@ from target_status import TargetStatus, TargetDeactTract
 from anc_state import AncState
 from transition_wrapper_maker import TransitionWrapper
 import tf_common
-from common import inv_sigmoid
+from common import inv_sigmoid, assign_rand_tree_lengths
 from constants import PERTURB_ZERO
 from optim_settings import KnownModelParams
 
@@ -508,31 +508,26 @@ class CLTLikelihoodModel:
         logging.info("br lens %s", br_lens)
         return np.all(br_lens[1:] > 0)
 
-    def initialize_branch_lens(self,
-            max_attempts: int=10,
-            br_len_scale: float=0.25,
-            br_len_shrink: float=0.8):
+    def initialize_branch_lens(self, tot_time: float):
         """
         Will randomly initialize branch lengths if they are not all positive already
-        @param max_attempts: will try at most this many times to initialize branch lengths
+        @param tot_time: the total height of the tree
         """
-        for j in range(max_attempts):
-            print("tot time", self.sess.run(self.tot_time))
-            # If all branch length positive, then we are good to go
-            if self._are_all_branch_lens_positive():
-                break
-            br_len_scale *= br_len_shrink
+        tree = self.topology.copy()
+        assign_rand_tree_lengths(tree, tot_time)
+        branch_len_inners = np.zeros(self.num_nodes)
+        for node in tree.traverse():
+            branch_len_inners[node.node_id] = node.dist
 
-            print(j, "initialize again?", br_len_scale)
-            # Keep initializing branch lengths until they are all positive
-            model_vars = self.get_vars_as_dict()
-            model_vars["branch_len_inners"] = np.random.rand(self.num_nodes) * br_len_scale
+        model_vars = self.get_vars_as_dict()
+        model_vars["branch_len_inners"] = branch_len_inners
 
-            # Initialize branch length offsets
-            model_vars["branch_len_offsets_proportion"] = np.random.rand(self.num_nodes) * 0.5
-            self.set_params_from_dict(model_vars)
+        # Initialize branch length offsets
+        model_vars["branch_len_offsets_proportion"] = np.random.rand(self.num_nodes) * 0.5
+        self.set_params_from_dict(model_vars)
 
         assert self._are_all_branch_lens_positive()
+
         # This line is just to check that the tree is initialized to be ultrametric
         bifurc_tree = self.get_fitted_bifurcating_tree()
         logging.info("init DISTANCE")

@@ -95,7 +95,7 @@ class LikelihoodScorer(ParallelWorker):
             init_index: int):
         # Initialize branch lengths if not provided
         if 'branch_len_inners' not in init_model_params or 'branch_len_offsets_proportion' not in init_model_params:
-            res_model.initialize_branch_lens()
+            res_model.initialize_branch_lens(init_model_params["tot_time"])
 
         # Fill in the dictionary for initializing model params
         full_init_model_params = res_model.get_vars_as_dict()
