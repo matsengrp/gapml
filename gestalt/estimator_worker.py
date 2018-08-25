@@ -13,7 +13,6 @@ class RunEstimatorWorker(ParallelWorker):
             out_model_file: str,
             warm_start_file: str,
             true_model_file: str,
-            true_collapsed_tree_file: str,
             seed: int,
             log_barr: float,
             dist_to_half_pens: str,
@@ -33,7 +32,6 @@ class RunEstimatorWorker(ParallelWorker):
         self.warm_start_file = warm_start_file
         self.true_model_file = true_model_file
         self.out_json_file = out_model_file.replace(".pkl", ".json")
-        self.true_collapsed_tree_file = true_collapsed_tree_file
         self.seed = seed
         self.log_barr = log_barr
         self.dist_to_half_pens = dist_to_half_pens
@@ -100,9 +98,6 @@ class RunEstimatorWorker(ParallelWorker):
         if self.tune_only:
             cmd = cmd + ['--tune-only']
 
-        cmd = _add_more_args(
-                self.true_collapsed_tree_file,
-                '--true-collapsed-tree-file')
         cmd = _add_more_args(
                 self.max_sum_states,
                 '--max-sum-states')
