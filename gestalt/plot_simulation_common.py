@@ -8,6 +8,7 @@ from matplotlib import pyplot as plt
 
 from tree_distance import *
 from cell_lineage_tree import CellLineageTree
+from common import assign_rand_tree_lengths
 
 def get_true_model(file_name, tree_file_name, n_bcodes):
     """
@@ -199,6 +200,7 @@ def gather_results(
         for idx, setting in enumerate(settings):
             try:
                 true_model = get_true_model_fnc(seed, setting, n_bcode)
+                tot_height = tot_model[0]["time"]
             except FileNotFoundError:
                 continue
             true_mrca_meas = MRCADistanceMeasurer(true_model[tree_idx])
@@ -232,21 +234,8 @@ def gather_results(
             rand_dists = []
             rand_bhv_dists = []
             for _ in range(num_rands):
-                br_scale = 0.8
-                has_neg = True
-                while has_neg:
-                    has_neg = False
-                    for node in rand_tree[tree_idx].traverse():
-                        if node.is_root():
-                            continue
-                        if node.is_leaf():
-                            node.dist = 1 - node.up.get_distance(rand_tree[tree_idx])
-                            if node.dist < 0:
-                                has_neg = True
-                                break
-                        else:
-                            node.dist = np.random.rand() * br_scale
-                    br_scale *= 0.8
+                assign_rand_tree_lengths(rand_tree, tot_height)
+
                 dist = true_mrca_meas.get_dist(rand_tree[tree_idx])
                 rand_dists.append(dist)
                 dist = true_bhv_meas.get_dist(rand_tree[tree_idx])

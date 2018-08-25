@@ -43,3 +43,23 @@ def create_directory(file_name):
             print("making directory")
     except FileExistsError:
         print("directory already exists")
+
+def assign_rand_tree_lengths(rand_tree, tot_height):
+    """
+    Assign random branch lengths to the fixed rand_tree topology.
+    Branch lengths assigned by using tau-space parameterization
+    """
+    rand_tree_nodes = [node for node in rand_tree.traverse("preorder") if not node.is_leaf() and not node.is_root()]
+    num_internal_nodes = len(rand_tree_nodes)
+
+    internal_node_dists = np.sort(np.random.rand(num_internal_nodes)) * tot_height
+    rand_tree.add_feature("dist_to_root", 0)
+    for i, node in enumerate(rand_tree_nodes):
+        node.add_feature("dist_to_root", internal_node_dists[i])
+        node.dist = node.dist_to_root - node.up.dist_to_root
+
+    for leaf in rand_tree:
+        leaf.dist = tot_height - leaf.up.dist_to_root
+
+    for node in rand_tree.traverse():
+        assert node.dist >= 0

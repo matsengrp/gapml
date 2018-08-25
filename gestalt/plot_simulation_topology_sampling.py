@@ -6,6 +6,7 @@ import numpy as np
 import plot_simulation_common
 import split_data
 from tree_distance import *
+from common import assign_rand_tree_lengths
 
 np.random.seed(0)
 
@@ -77,6 +78,7 @@ n_bcode_results = {
 for seed_idx, seed in enumerate(seeds):
     try:
         true_model = get_true_model(seed, sampling_rates[0], n_bcode)
+        tot_height = true_model[0]["time"]
     except FileNotFoundError:
         continue
     comparison_leaves = [leaf.allele_events_list_str for leaf in true_model[tree_idx]]
@@ -108,21 +110,7 @@ for seed_idx, seed in enumerate(seeds):
         rand_dists = []
         rand_bhv_dists = []
         for _ in range(num_rands):
-            br_scale = 0.8
-            has_neg = True
-            while has_neg:
-                has_neg = False
-                for node in rand_tree.traverse():
-                    if node.is_root():
-                        continue
-                    if node.is_leaf():
-                        node.dist = 1 - node.up.get_distance(rand_tree)
-                        if node.dist < 0:
-                            has_neg = True
-                            break
-                    else:
-                        node.dist = np.random.rand() * br_scale
-                br_scale *= 0.8
+            assign_rand_tree_lengths(rand_tree, tot_height)
             dist = true_bhv_meas.get_dist(rand_tree)
             rand_bhv_dists.append(dist)
         rand_dist = np.mean(rand_dists)
@@ -133,7 +121,7 @@ for seed_idx, seed in enumerate(seeds):
             if node.is_root():
                 continue
             if node.is_leaf():
-                node.dist = 1 - node.up.get_distance(zero_tree)
+                node.dist = tot_height - node.up.get_distance(zero_tree)
                 assert node.dist > 0
             else:
                 node.dist = 1e-10
