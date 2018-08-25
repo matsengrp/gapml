@@ -57,7 +57,7 @@ def generate(env, outdir, c):
         '--birth-lambda 2.8',
         '--death-lambda 0.2',
         '--num-barcodes',
-        16,
+        27,
         '--min-uniq-alleles 15',
         '--max-uniq-alleles 30',
         '--max-abundance 200',
@@ -137,6 +137,8 @@ def run_MLE(env, outdir, c):
         penalty_params = "768,192,48,12,3"
     elif c['num_barcodes'] == 9:
         penalty_params = "768,192,48,12,3"
+    elif c['num_barcodes'] == 27:
+        penalty_params = "192,48,12,3,.75"
     cmd = [
 	'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',

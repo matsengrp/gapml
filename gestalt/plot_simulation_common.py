@@ -200,7 +200,7 @@ def gather_results(
         for idx, setting in enumerate(settings):
             try:
                 true_model = get_true_model_fnc(seed, setting, n_bcode)
-                tot_height = tot_model[0]["time"]
+                tot_height = true_model[0]["tot_time"]
             except FileNotFoundError:
                 continue
             true_mrca_meas = MRCADistanceMeasurer(true_model[tree_idx])
@@ -234,7 +234,7 @@ def gather_results(
             rand_dists = []
             rand_bhv_dists = []
             for _ in range(num_rands):
-                assign_rand_tree_lengths(rand_tree, tot_height)
+                assign_rand_tree_lengths(rand_tree[tree_idx], tot_height)
 
                 dist = true_mrca_meas.get_dist(rand_tree[tree_idx])
                 rand_dists.append(dist)

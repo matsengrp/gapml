@@ -225,16 +225,16 @@ def merge_by_allele(obs_leaves: List[ObservedAlignedSeq]):
     for obs in obs_leaves:
         obs_allele_key = obs.get_allele_str()
         if obs_allele_key not in observed_alleles:
-            observed_alleles[obs_allele_key] = obs
+            observed_alleles[obs_allele_key] = ObservedAlignedSeq(
+                    obs.allele_list,
+                    obs.allele_events_list,
+                    None,
+                    abundance = obs.abundance)
         else:
             matching_obs = observed_alleles[obs_allele_key]
             matching_obs.abundance += obs.abundance
-            matching_obs.cell_state = None
 
     merged_obs_list = list(observed_alleles.values())
-    # Remove cell state since we've merged by cell stsate
-    for obs in merged_obs_list:
-        obs.cell_state = None
     return merged_obs_list
 
 def main():

@@ -97,13 +97,13 @@ for seed_idx, seed in enumerate(seeds):
             continue
 
         try:
-            rand_tree = get_rand_tree(seed, sampling_rate, n_bcode)
-            rand_tree[tree_idx].label_node_ids()
+            rand_res = get_rand_tree(seed, sampling_rate, n_bcode)
+            rand_res[tree_idx].label_node_ids()
             keep_idxs = []
-            for leaf in rand_tree[tree_idx]:
+            for leaf in rand_res[tree_idx]:
                 if leaf.allele_events_list_str in comparison_leaves:
                     keep_idxs.append(leaf.node_id)
-            rand_tree = split_data._prune_tree(rand_tree[tree_idx], set(keep_idxs))
+            rand_tree = split_data._prune_tree(rand_res[tree_idx], set(keep_idxs))
         except FileNotFoundError:
             continue
 

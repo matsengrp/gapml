@@ -211,7 +211,6 @@ def create_cell_lineage_tree(
     clt_simulator, observer = create_simulators(args, clt_model)
 
     # Keep trying to make CLT until enough leaves in observed tree by modifying the max time of the tree
-    tot_time = args.time
     birth_lambda = args.birth_lambda
     for i in range(max_tries):
         try:
@@ -219,7 +218,7 @@ def create_cell_lineage_tree(
             clt = clt_simulator.simulate(
                 tree_seed = args.model_seed,
                 data_seed = args.data_seed,
-                tot_time = tot_time,
+                tot_time = args.time,
                 max_nodes = args.max_clt_nodes)
             clt.label_node_ids()
 
@@ -254,14 +253,12 @@ def create_cell_lineage_tree(
     if len(true_subtree) < args.min_uniq_alleles:
         raise Exception("Could not manage to get enough leaves")
 
-    logging.info("True subtree for the observed nodes, time %f", tot_time)
-
     true_subtree.label_tree_with_strs()
     logging.info(true_subtree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
     logging.info(true_subtree.get_ascii(attributes=["node_id"], show_internal=True))
     logging.info(true_subtree.get_ascii(attributes=["dist"], show_internal=True))
 
-    return obs_leaves, true_subtree, obs_idx_to_leaves, tot_time
+    return obs_leaves, true_subtree, obs_idx_to_leaves
 
 def initialize_lambda_rates(args, boost: float = 0.00001):
     birth_lambda = args.birth_lambda
@@ -319,12 +316,14 @@ def main(args=sys.argv[1:]):
             trim_long_poissons = np.array(args.trim_poissons),
             insert_zero_prob = np.array([args.insert_zero_prob]),
             insert_poisson = np.array([args.insert_poisson]),
-            cell_type_tree = cell_type_tree)
+            cell_type_tree = cell_type_tree,
+            tot_time = args.time,
+            tot_time_extra = 1e-10)
     tf.global_variables_initializer().run()
     logging.info("Done creating model")
 
     # Generate data!
-    obs_leaves, true_subtree, obs_idx_to_leaves, tot_time = create_cell_lineage_tree(
+    obs_leaves, true_subtree, obs_idx_to_leaves = create_cell_lineage_tree(
             args,
             clt_model,
             args.max_tries)
@@ -343,7 +342,7 @@ def main(args=sys.argv[1:]):
         out_dict = {
             "bcode_meta": bcode_meta,
             "obs_leaves": obs_leaves,
-            "time": tot_time,
+            "time": args.time,
         }
         six.moves.cPickle.dump(out_dict, f, protocol = 2)
 
@@ -354,7 +353,7 @@ def main(args=sys.argv[1:]):
             "true_subtree": true_subtree,
             "obs_idx_to_leaves": obs_idx_to_leaves,
             "bcode_meta": bcode_meta,
-            "time": tot_time,
+            "time": args.time,
             "args": args}
         six.moves.cPickle.dump(out_dict, f, protocol = 2)
 

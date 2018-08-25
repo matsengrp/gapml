@@ -10,13 +10,13 @@ import plot_simulation_common
 np.random.seed(0)
 
 model_seed = 510
-seeds = range(500,501)
-num_barcodes = [1,3,9]
+seeds = range(501,503)
+num_barcodes = [1,3,9,27]
 prefix = ""
 tree_idx = 1
 do_plots = False
 
-TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/tune_fitted_score.pkl"
+TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/tune_fitted_refitnew_tree0.pkl"
 RAND_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/parsimony_tree0.pkl"
 TRUE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/true_model.pkl"
 COLL_TREE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/collapsed_tree.pkl"
@@ -56,4 +56,5 @@ plot_simulation_common.gather_results(
             "zero_mrca",
             "random_mrca",
             "targ",
-            "double"])
+            #"double"
+            ])
