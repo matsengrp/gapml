@@ -14,7 +14,7 @@ class ObservedAlignedSeq:
     def __init__(self,
             allele_list: AlleleList,
             allele_events_list: List[AlleleEvents],
-            cell_state: List[CellState],
+            cell_state: CellState,
             abundance: float):
         """
         Stores alleles that are observed.
@@ -30,8 +30,11 @@ class ObservedAlignedSeq:
         self.allele_list = allele_list
         self.allele_events_list = allele_list.get_event_encoding()
 
-    def __str__(self):
+    def get_allele_str(self):
         return "||".join([str(allele_evts) for allele_evts in self.allele_events_list])
+
+    def __str__(self):
+        return "%s,%s" % (self.get_allele_str(), str(self.cell_state))
 
 class CLTObserver:
     def __init__(self,

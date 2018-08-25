@@ -48,31 +48,20 @@ obs_file = "tmp_mount/analyze_gestalt/_output/min_abund_5/fish_data.pkl"
 
 def get_allele_to_cell_states(obs_dict):
     # Create allele string to cell state
-    tot_uniq_cell_state_allele_pairs = 0
     allele_to_cell_state = {}
-    for obs in obs_dict["obs_leaves"]:
+    cell_state_dict = {}
+    for obs in obs_dict["obs_leaves_by_allele_cell_state"]:
         allele_str_key = CellLineageTree._allele_list_to_str(obs.allele_events_list)
-        cell_states = obs.cell_state
-        idx_to_cell_state = {str(c_state): c_state for c_state in cell_states}
-        count_dict = {}
-        for c_state in cell_states:
-            if str(c_state) in count_dict:
-                count_dict[str(c_state)] += 1
-            else:
-                count_dict[str(c_state)] = 1
-        cell_state_list = []
-        curr_thres = THRES
-        while len(cell_state_list) == 0:
-            cell_state_list = [
-                idx_to_cell_state[c_state_str]
-                for c_state_str, count in count_dict.items()
-                if count > curr_thres]
-            curr_thres -= 1
-        allele_to_cell_state[allele_str_key] = cell_state_list
-        tot_uniq_cell_state_allele_pairs += len(allele_to_cell_state[allele_str_key])
-    
-    print("Number of observed alleles", tot_uniq_cell_state_allele_pairs)
-    return allele_to_cell_state
+        if allele_str_key in allele_to_cell_state:
+            if str(obs.cell_state) not in allele_to_cell_state:
+                allele_to_cell_state[allele_str_key].add(str(obs.cell_state))
+        else:
+            allele_to_cell_state[allele_str_key] = set([str(obs.cell_state)])
+
+        if str(obs.cell_state) not in cell_state_dict:
+            cell_state_dict[str(obs.cell_state)] = obs.cell_state
+
+    return allele_to_cell_state, cell_state_dict
 
 def plot_distance_to_abundance(
         fitted_bifurc_tree,
@@ -95,7 +84,7 @@ def plot_distance_to_abundance(
         scatter_X_dists += [dist + jitter] * tot_abundance
         jitter = (np.random.rand() - 0.5) * 0.5
         scatter_Y_abundance += [tot_abundance + jitter] * tot_abundance
-    
+
     if out_plot_file:
         pyplot.clf()
         pyplot.scatter(
@@ -103,7 +92,7 @@ def plot_distance_to_abundance(
                 rand_jitter(np.log10(scatter_Y_abundance), scaling_factor=0.002))
         pyplot.savefig(out_plot_file)
     print("mle tree", stats.linregress(X_dists, np.log10(Y_abundance)))
-    
+
     rand_slopes = []
     rand_corr = []
     for _ in range(num_rands):
@@ -122,7 +111,7 @@ def plot_distance_to_abundance(
                 else:
                     node.dist = np.random.rand() * br_scale
             br_scale *= 0.8
-    
+
         X_dists = []
         Y_abundance = []
         for node in rand_tree.traverse():
@@ -157,19 +146,19 @@ def plot_distance_to_num_cell_states(
             c_state_set = set()
             for leaf in node:
                 allele_str = leaf.allele_events_list_str
-                cell_states = allele_to_cell_state[allele_str]
-                for c_state in cell_states:
-                    c_state_set.update(str(c_state))
+                cell_state_strs = allele_to_cell_state[allele_str]
+                for c_state_str in cell_state_strs:
+                    c_state_set.update(c_state_str)
                     colors.append(
-                            ORGAN_COLORS[organ_dict[str(c_state)]])
-    
+                            ORGAN_COLORS[organ_dict[c_state_str]])
+
             n_cell_states = len(c_state_set)
             Y_n_cell_states.append(n_cell_states)
             jitter = (np.random.rand() - 0.5) * 0.1
             scatter_X_dists += [dist + jitter] * n_cell_states
             jitter = (np.random.rand() - 0.5) * 0.5
             scatter_Y_n_cell_states += [n_cell_states + jitter] * n_cell_states
-    
+
     if out_plot_file:
         pyplot.clf()
         pyplot.scatter(
@@ -200,7 +189,7 @@ def plot_distance_to_num_cell_states(
                 else:
                     node.dist = np.random.rand() * br_scale
             br_scale *= 0.8
-    
+
         X_dists = []
         Y_n_cell_states = []
         for node in rand_tree.traverse():
@@ -210,9 +199,9 @@ def plot_distance_to_num_cell_states(
                 c_state_set = set()
                 for leaf in node:
                     allele_str = leaf.allele_events_list_str
-                    cell_states = allele_to_cell_state[allele_str]
-                    for c_state in cell_states:
-                        c_state_set.update(str(c_state))
+                    cell_state_strs = allele_to_cell_state[allele_str]
+                    for c_state_str in cell_state_strs:
+                        c_state_set.update(c_state_str)
                 Y_n_cell_states.append(len(c_state_set))
         slope, _, corr, _, _ = stats.linregress(X_dists, Y_n_cell_states)
         rand_slopes.append(slope)
@@ -236,30 +225,30 @@ def plot_gestalt_tree(
         fitted_bifurc_tree,
         organ_dict,
         allele_to_cell_state,
+        cell_state_dict,
         out_plot_file):
     for l in fitted_bifurc_tree:
         allele_str = l.allele_events_list_str
         if l.cell_state is None:
-            l.cell_state = allele_to_cell_state[allele_str]
-            assert len(l.cell_state) > 0
-            for c_state in l.cell_state:
+            cell_state_strs = allele_to_cell_state[allele_str]
+            for c_state_str in cell_state_strs:
                 new_child = CellLineageTree(
                     l.allele_list,
                     l.allele_events_list,
-                    [c_state],
+                    cell_state_dict[c_state_str],
                     dist = 0,
                     abundance = 1,
                     resolved_multifurcation = True)
                 l.add_child(new_child)
     print("num leaves", len(fitted_bifurc_tree))
-    
+
     for l in fitted_bifurc_tree:
         assert len(l.cell_state) == 1
         nstyle = NodeStyle()
         nstyle["fgcolor"] = ORGAN_COLORS[organ_dict[str(l.cell_state[0])]]
-        nstyle["size"] = 10 
+        nstyle["size"] = 10
         l.set_style(nstyle)
-    
+
     for leaf in fitted_bifurc_tree:
         # get the motif list for indels in the format that SeqMotifFace expects
         motifs = []
@@ -297,13 +286,13 @@ def plot_gestalt_tree(
             fgcolor='black',
             bgcolor='lightgrey')
         leaf.add_face(seqFace, 0, position="aligned")
-    
+
     # Collapse distances for plot readability
     for node in fitted_bifurc_tree.get_descendants():
         if node.dist < COLLAPSE_DIST:
             node.dist = 0
     col_tree = collapsed_tree.collapse_zero_lens(fitted_bifurc_tree)
-    
+
     legend_colors = {}
     for organ_key, color in ORGAN_COLORS.items():
         text = ORGAN_TRANSLATION[organ_key]
@@ -312,7 +301,7 @@ def plot_gestalt_tree(
             "color": "gray",
             "fontsize": 8}
         legend_colors[color] = label_dict
-    
+
     print("at plotting phase....")
     plot_tree(
             col_tree,
@@ -339,7 +328,7 @@ with open(fitted_tree_file, "rb") as f:
 with open(rand_tree_file, "rb") as f:
     rand_tree = six.moves.cPickle.load(f)["tree"]
 
-allele_to_cell_state = get_allele_to_cell_states(obs_dict)
+allele_to_cell_state, cell_state_dict = get_allele_to_cell_states(obs_dict)
 print("distance to abundance")
 plot_distance_to_abundance(
     res.fitted_bifurc_tree,
@@ -357,4 +346,5 @@ plot_distance_to_num_cell_states(
 #        res.fitted_bifurc_tree,
 #        organ_dict,
 #        allele_to_cell_state,
+#        cell_state_dict,
 #        "/Users/jeanfeng/Desktop/gestalt_fitted5.png")

@@ -157,9 +157,8 @@ def process_observed_seq_format7B(
     obs = ObservedAlignedSeq(
             None,
             [AlleleEvents(non_clashing_events)],
-            [cell_state],
+            cell_state,
             abundance=1)
-    #obs.orig_seq = target_str_list
     return obs
 
 def parse_reads_file_format7B(file_name,
@@ -201,12 +200,12 @@ def parse_reads_file_format7B(file_name,
                     cell_state,
                     bcode_meta,
                     bcode_min_pos)
-                if str(obs_aligned_seq) not in observed_alleles:
-                    observed_alleles[str(obs_aligned_seq)] = obs_aligned_seq
+                obs_key = str(obs_aligned_seq)
+                if obs_key not in observed_alleles:
+                    observed_alleles[obs_key] = obs_aligned_seq
                 else:
-                    obs = observed_alleles[str(obs_aligned_seq)]
+                    obs = observed_alleles[obs_key]
                     obs.abundance += 1
-                    obs.cell_state.append(cell_state)
                 if max_read is not None and len(all_alleles) == max_read:
                     break
 
@@ -216,6 +215,27 @@ def parse_reads_file_format7B(file_name,
     for organ_str, cell_type in cell_states_dict.items():
         organ_dict[str(cell_type)] = organ_str
     return obs_alleles_list, organ_dict
+
+def merge_by_allele(obs_leaves: List[ObservedAlignedSeq]):
+    """
+    Merge observed sequences if they share the same allele.
+    Ignore cell state
+    """
+    observed_alleles = dict()
+    for obs in obs_leaves:
+        obs_allele_key = obs.get_allele_str()
+        if obs_allele_key not in observed_alleles:
+            observed_alleles[obs_allele_key] = obs
+        else:
+            matching_obs = observed_alleles[obs_allele_key]
+            matching_obs.abundance += obs.abundance
+            matching_obs.cell_state = None
+
+    merged_obs_list = list(observed_alleles.values())
+    # Remove cell state since we've merged by cell stsate
+    for obs in merged_obs_list:
+        obs.cell_state = None
+    return merged_obs_list
 
 def main():
     args = parse_args()
@@ -237,12 +257,14 @@ def main():
             # TODO: is this correct?
             crucial_pos_len=[6,6])
 
-    obs_leaves, organ_dict = parse_reads_file_format7B(
+    obs_leaves_cell_state, organ_dict = parse_reads_file_format7B(
             args.reads_file,
             bcode_meta,
             args.bcode_min_pos - args.bcode_pad_length)
-    obs_leaves = [obs for obs in obs_leaves if obs.abundance >= args.abundance_thres]
-    logging.info("Number of leaves %d", len(obs_leaves))
+    obs_leaves_cell_state = [obs for obs in obs_leaves_cell_state if obs.abundance >= args.abundance_thres]
+    logging.info("Number of uniq allele cell state pairs %d", len(obs_leaves_cell_state))
+
+    obs_leaves = merge_by_allele(obs_leaves_cell_state)
 
     # Check trim length assignments
     for obs in obs_leaves:
@@ -256,6 +278,7 @@ def main():
         out_dict = {
             "bcode_meta": bcode_meta,
             "obs_leaves": obs_leaves,
+            "obs_leaves_by_allele_cell_state": obs_leaves_cell_state,
             "organ_dict": organ_dict,
             "time": args.time,
         }
