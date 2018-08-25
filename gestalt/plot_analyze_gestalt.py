@@ -98,6 +98,7 @@ def plot_distance_to_abundance(
 
     rand_slopes = []
     rand_corr = []
+    rand_pvals = []
     for _ in range(num_rands):
         assign_rand_tree_lengths(rand_tree, tot_time)
 
@@ -108,10 +109,11 @@ def plot_distance_to_abundance(
             X_dists.append(dist)
             tot_abundance = sum([leaf.abundance for leaf in node])
             Y_abundance.append(tot_abundance)
-        slope, _, corr, _, _ = stats.linregress(X_dists, np.log10(Y_abundance))
+        slope, _, corr, pval, _ = stats.linregress(X_dists, np.log10(Y_abundance))
         rand_slopes.append(slope)
         rand_corr.append(corr)
-    print("rand tree", np.mean(rand_slopes), np.mean(rand_corr))
+        rand_pvals.append(pval)
+    print("rand tree", np.mean(rand_slopes), np.power(np.mean(rand_corr),2), np.mean(rand_pvals))
 
 def plot_distance_to_num_cell_states(
         fitted_bifurc_tree,
@@ -163,6 +165,7 @@ def plot_distance_to_num_cell_states(
 
     rand_slopes = []
     rand_corr = []
+    rand_pvals = []
     for _ in range(num_rands):
         assign_rand_tree_lengths(rand_tree, tot_time)
 
@@ -179,10 +182,11 @@ def plot_distance_to_num_cell_states(
                     for c_state_str in cell_state_strs:
                         c_state_set.update(c_state_str)
                 Y_n_cell_states.append(len(c_state_set))
-        slope, _, corr, _, _ = stats.linregress(X_dists, Y_n_cell_states)
+        slope, _, corr, pval, _ = stats.linregress(X_dists, Y_n_cell_states)
         rand_slopes.append(slope)
         rand_corr.append(corr)
-    print("rand tree", np.mean(rand_slopes), np.mean(rand_corr))
+        rand_pvals.append(pval)
+    print("rand tree", np.mean(rand_slopes), np.power(np.mean(rand_corr),2), np.mean(rand_pvals))
 
 def plot_majority_cell_appearance_time(
         fitted_bifurc_tree,
@@ -369,6 +373,51 @@ def plot_mds(
         organ_dict,
         out_plot_file = "%s_rand.png" % out_plot_prefix)
 
+def plot_branch_len_time(
+    fitted_bifurc_tree,
+    rand_tree,
+    tot_time,
+    out_plot_file,
+    num_rands = 5):
+    """
+    Plot fitted time vs branch length
+    """
+    X_dist = []
+    Y_branch_len = []
+    for node in fitted_bifurc_tree.get_descendants():
+        if not node.is_leaf():
+            node_dist = node.get_distance(fitted_bifurc_tree)
+            X_dist.append(node_dist)
+            Y_branch_len.append(node.dist)
+
+    if out_plot_file:
+        pyplot.clf()
+        pyplot.scatter(
+                rand_jitter(X_dist, scaling_factor=0.002),
+                rand_jitter(Y_branch_len, scaling_factor=0.002),
+                s=10)
+        pyplot.savefig(out_plot_file)
+    print("mle tree", stats.linregress(X_dist, Y_branch_len))
+
+    rand_slopes = []
+    rand_corr = []
+    rand_pvals = []
+    for _ in range(num_rands):
+        assign_rand_tree_lengths(rand_tree, tot_time)
+
+        X_dist = []
+        Y_branch_len = []
+        for node in rand_tree.get_descendants():
+            if not node.is_leaf():
+                dist = node.get_distance(rand_tree)
+                X_dist.append(dist)
+                Y_branch_len.append(node.dist)
+        slope, _, corr, pval, _ = stats.linregress(X_dist, Y_branch_len)
+        rand_slopes.append(slope)
+        rand_corr.append(corr)
+        rand_pvals.append(pval)
+    print("rand tree", np.mean(rand_slopes), np.power(np.mean(rand_corr),2), np.mean(rand_pvals))
+
 """
 plotting my fitted tree now...
 """
@@ -477,6 +526,7 @@ with open(fitted_tree_file, "rb") as f:
 with open(rand_tree_file, "rb") as f:
     rand_tree = six.moves.cPickle.load(f)["tree"]
 
+print("plot mds")
 plot_mds(
     res.fitted_bifurc_tree,
     rand_tree,
@@ -489,7 +539,7 @@ plot_distance_to_abundance(
     res.fitted_bifurc_tree,
     rand_tree,
     tot_time,
-    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_abundance.png")
+    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_abundance.png",
     num_rands = 20)
 print("distance to number of descendant cell states")
 plot_distance_to_num_cell_states(
@@ -497,7 +547,7 @@ plot_distance_to_num_cell_states(
     organ_dict,
     rand_tree,
     tot_time,
-    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_cell_state.png")
+    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_cell_state.png",
     num_rands = 20)
 plot_gestalt_tree(
     res.fitted_bifurc_tree,
@@ -505,3 +555,10 @@ plot_gestalt_tree(
     allele_to_cell_state,
     cell_state_dict,
     "/Users/jeanfeng/Desktop/gestalt_fitted5.png")
+print("plot branch length distribution")
+plot_branch_len_time(
+    res.fitted_bifurc_tree,
+    rand_tree,
+    tot_time,
+    out_plot_file="/Users/jeanfeng/Desktop/scatter_dist_to_branch_len.png",
+    num_rands = 20)
