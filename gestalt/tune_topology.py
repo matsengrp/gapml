@@ -47,11 +47,6 @@ def parse_args():
         default=None,
         help='pkl file with true model if available')
     parser.add_argument(
-        '--true-collapsed-tree-file',
-        type=str,
-        default=None,
-        help='pkl file with collapsed tree if available')
-    parser.add_argument(
         '--seed',
         type=int,
         default=40)
@@ -158,7 +153,6 @@ def tune_hyperparams(
             args.out_model_file.replace(".pkl", "_tune_only_tree%d.pkl" % file_idx),
             None,
             args.true_model_file,
-            args.true_collapsed_tree_file,
             args.seed + file_idx,
             args.log_barr,
             args.dist_to_half_pens,

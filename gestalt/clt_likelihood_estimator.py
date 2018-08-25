@@ -12,7 +12,7 @@ from cell_lineage_tree import CellLineageTree
 from clt_likelihood_model import CLTLikelihoodModel
 from transition_wrapper_maker import TransitionWrapperMaker
 from tree_distance import TreeDistanceMeasurerAgg
-
+import plot_simulation_common
 
 class CLTPenalizedEstimator(CLTEstimator):
     """
@@ -87,7 +87,9 @@ class CLTPenalizedEstimator(CLTEstimator):
                     "pen_log_lik": pen_log_lik}]
 
         if dist_measurers is not None:
-            train_history[0]["tree_dists"] = dist_measurers.get_tree_dists([self.model.get_fitted_bifurcating_tree()])[0]
+            bifurc_tree = self.model.get_fitted_bifurcating_tree()
+            train_history[0]["tree_dists"] = dist_measurers.get_tree_dists([
+                plot_simulation_common._get_leaved_result(bifurc_tree)])[0]
             logging.info("initial tree dists: %s", train_history[0]["tree_dists"])
 
         st_time = time.time()
@@ -110,9 +112,6 @@ class CLTPenalizedEstimator(CLTEstimator):
                         self.model.branch_lens],
                     feed_dict=feed_dict)
 
-            #for k, p in pt_matrices.items():
-            #    print("mat", k, "max", np.diag(p))
-
             iter_info = {
                     "iter": i,
                     "log_barr": log_barr,
@@ -131,9 +130,9 @@ class CLTPenalizedEstimator(CLTEstimator):
             if i % save_iter == (save_iter - 1):
                 logging.info("iter %d, train time %f", i, time.time() - st_time)
                 if dist_measurers is not None:
-                    #tt = (self.model.get_fitted_bifurcating_tree())
-                    #logging.info(tt.get_ascii(attributes=["dist"], show_internal=True))
-                    tree_dist = dist_measurers.get_tree_dists([self.model.get_fitted_bifurcating_tree()])[0]
+                    bifurc_tree = self.model.get_fitted_bifurcating_tree()
+                    tree_dist = dist_measurers.get_tree_dists([
+                        plot_simulation_common._get_leaved_result(bifurc_tree)])[0]
                     logging.info("iter %d tree dists: %s", i, tree_dist)
                     iter_info["tree_dists"] = tree_dist
                     iter_info["var"] = var_dict

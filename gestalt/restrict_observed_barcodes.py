@@ -53,11 +53,6 @@ def parse_args():
         '--out-obs-file',
         type=str,
         default="_output/obs_data_b1.pkl",
-        help='name of the output pkl file with collapsed observed sequence data')
-    parser.add_argument(
-        '--out-collapsed-tree-file',
-        type=str,
-        default="_output/collapsed_tree_b1.pkl",
         help='name of the output pkl file with collapsed tree')
     parser.add_argument(
         '--submit-srun',
@@ -332,38 +327,34 @@ def main(args=sys.argv[1:]):
         len(obs_data_dict["obs_leaves"])))
     save_data(obs_data_dict, args.out_obs_file)
 
-    # Generate the true collapsed tree
-    if args.model_file is not None:
-        with open(args.model_file, "rb") as f:
-            true_model_dict = six.moves.cPickle.load(f)
-        # Update the bcode metadata to be the truncated version
-        true_model_dict["bcode_meta"] = bcode_meta
-        collapsed_clt = collapse_tree_by_first_alleles(
-                true_model_dict,
-                args.num_barcodes)
-        logging.info(collapsed_clt.get_ascii(
-            attributes=["allele_events_list_str"],
-            show_internal=True))
-        logging.info(collapsed_clt.get_ascii(
-            attributes=["dist"],
-            show_internal=True))
+    ## Generate the true collapsed tree
+    #if args.model_file is not None:
+    #    with open(args.model_file, "rb") as f:
+    #        true_model_dict = six.moves.cPickle.load(f)
+    #    # Update the bcode metadata to be the truncated version
+    #    true_model_dict["bcode_meta"] = bcode_meta
+    #    collapsed_clt = collapse_tree_by_first_alleles(
+    #            true_model_dict,
+    #            args.num_barcodes)
+    #    logging.info(collapsed_clt.get_ascii(
+    #        attributes=["allele_events_list_str"],
+    #        show_internal=True))
+    #    logging.info(collapsed_clt.get_ascii(
+    #        attributes=["dist"],
+    #        show_internal=True))
 
-        selected_collapsed_clt = get_highest_likelihood_single_appearance_tree(
-            collapsed_clt,
-            true_model_dict,
-            args.scratch_dir,
-            args.submit_srun)
+    #    selected_collapsed_clt = get_highest_likelihood_single_appearance_tree(
+    #        collapsed_clt,
+    #        true_model_dict,
+    #        args.scratch_dir,
+    #        args.submit_srun)
 
-        # Assert no duplicate alleles in the collapsed tree
-        assert len(selected_collapsed_clt) == len(obs_data_dict["obs_leaves"])
-        if args.num_barcodes == orig_num_barcodes:
-            assert len(obs_data_dict["obs_leaves"]) == len(raw_obs_leaves)
+    #    # Assert no duplicate alleles in the collapsed tree
+    #    assert len(selected_collapsed_clt) == len(obs_data_dict["obs_leaves"])
+    #    if args.num_barcodes == orig_num_barcodes:
+    #        assert len(obs_data_dict["obs_leaves"]) == len(raw_obs_leaves)
 
-        save_data(selected_collapsed_clt, args.out_collapsed_tree_file)
-
-        ## Plot the MRCA matrix of the true collapsed tree for fun
-        #out_png = args.out_collapsed_tree_file.replace(".pkl", "_mrca.png")
-        #plot_mrca_matrix(selected_collapsed_clt, out_png)
+    #    save_data(selected_collapsed_clt, args.out_collapsed_tree_file)
 
 if __name__ == "__main__":
     main()

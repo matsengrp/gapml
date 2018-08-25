@@ -31,6 +31,7 @@ import hyperparam_tuner
 from tree_distance import *
 from constants import *
 from common import *
+import plot_simulation_common
 
 def parse_args():
     parser = argparse.ArgumentParser(description='fit topology and branch lengths for GESTALT')
@@ -59,11 +60,6 @@ def parse_args():
         type=str,
         default=None,
         help='pkl file with true model if available')
-    parser.add_argument(
-        '--true-collapsed-tree-file',
-        type=str,
-        default=None,
-        help='pkl file with collapsed tree if available')
     parser.add_argument(
         '--seed',
         type=int,
@@ -192,29 +188,26 @@ def check_has_unresolved_multifurcs(tree: CellLineageTree):
             return True
     return False
 
-def read_true_model_files(args):
+def read_true_model_files(args, num_barcodes):
     """
     If true model files available, read them
     """
-    assert (args.true_model_file is None and args.true_collapsed_tree_file is None) or (args.true_model_file is not None and args.true_collapsed_tree_file is not None)
-    if args.true_model_file is None or args.true_collapsed_tree_file is None:
+    if args.true_model_file is None:
         return None, None
 
-    with open(args.true_collapsed_tree_file, "rb") as f:
-        collapsed_true_subtree = six.moves.cPickle.load(f)
-    with open(args.true_model_file, "rb") as f:
-        true_model_dict = six.moves.cPickle.load(f)
+    true_model_dict, true_tree, _ = plot_simulation_common.get_true_model(
+            args.true_model_file,
+            None,
+            num_barcodes)
 
-    oracle_dist_measurers = None
-    if len(collapsed_true_subtree) > 1:
-        oracle_dist_measurers = TreeDistanceMeasurerAgg([
-            UnrootRFDistanceMeasurer,
-            RootRFDistanceMeasurer,
-            #BHVDistanceMeasurer,
-            MRCADistanceMeasurer,
-            MRCASpearmanMeasurer],
-            collapsed_true_subtree,
-            args.scratch_dir)
+    oracle_dist_measurers = TreeDistanceMeasurerAgg([
+        UnrootRFDistanceMeasurer,
+        RootRFDistanceMeasurer,
+        BHVDistanceMeasurer,
+        MRCADistanceMeasurer,
+        MRCASpearmanMeasurer],
+        true_tree,
+        args.scratch_dir)
     return true_model_dict, oracle_dist_measurers
 
 def read_init_model_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
@@ -238,16 +231,16 @@ def read_init_model_params_file(args, bcode_meta, obs_data_dict, true_model_dict
     # Copy over true known params if specified
     if args.known_params.tot_time:
         if true_model_dict is not None:
-            args.init_params["tot_time"] = true_model_dict["true_model_params"]["tot_time"]
-            args.init_params["tot_time_extra"] = true_model_dict["true_model_params"]["tot_time_extra"]
+            args.init_params["tot_time"] = true_model_dict["tot_time"]
+            args.init_params["tot_time_extra"] = true_model_dict["tot_time_extra"]
         else:
             args.init_params["tot_time"] = obs_data_dict["time"]
             args.init_params["tot_time_extra"] = 1e-10
     if args.known_params.trim_long_factor:
-        args.init_params["trim_long_factor"] = true_model_dict['true_model_params']['trim_long_factor']
+        args.init_params["trim_long_factor"] = true_model_dict['trim_long_factor']
     if args.known_params.target_lams:
-        args.init_params["target_lams"] = true_model_dict['true_model_params']['target_lams']
-        args.init_params["double_cut_weight"] = true_model_dict['true_model_params']['double_cut_weight']
+        args.init_params["target_lams"] = true_model_dict['target_lams']
+        args.init_params["double_cut_weight"] = true_model_dict['double_cut_weight']
 
 def read_data(args):
     """
@@ -358,8 +351,9 @@ def write_output_json_summary(
     """
     if oracle_dist_measurers is not None:
         # do some comparisons against the true model if available
-        result_print_dict = oracle_dist_measurers.get_tree_dists([res.fitted_bifurc_tree])[0]
-        true_target_lambdas = true_model_dict["true_model_params"]["target_lams"]
+        result_print_dict = oracle_dist_measurers.get_tree_dists([
+            plot_simulation_common._get_leaved_result(res.fitted_bifurc_tree)])[0]
+        true_target_lambdas = true_model_dict["target_lams"]
         pearson_target = pearsonr(
                 true_target_lambdas,
                 res.model_params_dict["target_lams"])
@@ -388,7 +382,7 @@ def main(args=sys.argv[1:]):
 
     # Read input files
     bcode_meta, tree, obs_data_dict = read_data(args)
-    true_model_dict, oracle_dist_measurers = read_true_model_files(args)
+    true_model_dict, oracle_dist_measurers = read_true_model_files(args, bcode_meta.num_barcodes)
     read_init_model_params_file(args, bcode_meta, obs_data_dict, true_model_dict)
 
     logging.info(tree.get_ascii(attributes=["node_id"], show_internal=True))
