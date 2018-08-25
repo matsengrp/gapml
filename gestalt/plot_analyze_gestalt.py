@@ -174,21 +174,7 @@ def plot_distance_to_num_cell_states(
     rand_slopes = []
     rand_corr = []
     for _ in range(num_rands):
-        br_scale = 0.8
-        has_neg = True
-        while has_neg:
-            has_neg = False
-            for node in rand_tree.traverse():
-                if node.is_root():
-                    continue
-                if node.is_leaf():
-                    node.dist = 1 - node.up.get_distance(rand_tree)
-                    if node.dist < 0:
-                        has_neg = True
-                        break
-                else:
-                    node.dist = np.random.rand() * br_scale
-            br_scale *= 0.8
+        assign_rand_tree_lengths(rand_tree, TOT_TIME)
 
         X_dists = []
         Y_n_cell_states = []
