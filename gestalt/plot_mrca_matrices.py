@@ -39,7 +39,6 @@ def plot_tree(
         tree: CellLineageTree,
         file_name: str,
         width: int=300,
-        height: int=9000,
         show_leaf_name: bool = True,
         legend_colors: Dict = {}):
     from ete3 import CircleFace, TreeStyle, NodeStyle, RectFace
