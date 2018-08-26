@@ -22,12 +22,20 @@ nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_enviro
 
 def get_exp_intertarg_len(targ_lams, double_targ):
     tot_haz = sum(targ_lams)
+    all_haz = [t for t in targ_lams]
     exp_len = 0
+    intertarg_cuts = list(range(len(targ_lams)))
     for i, lam1 in enumerate(targ_lams):
         for j, lam2 in enumerate(targ_lams[i + 1:]):
             tot_haz += lam1 * lam2 * double_targ
+            all_haz.append(lam1 * lam2 * double_targ)
             exp_len += (j + 1) * lam1 * lam2 * double_targ
-
+            intertarg_cuts.append((i,i + j + 1))
+    haz_proportions = [h/tot_haz for h in all_haz]
+    #print(np.sort(haz_proportions))
+    #print(np.argsort(haz_proportions))
+    #for idx in np.argsort(haz_proportions):
+    #    print(intertarg_cuts[idx])
     return exp_len/tot_haz
 
 def get_sorted_permutations(targ_lams, double_targ):
@@ -37,8 +45,11 @@ def get_sorted_permutations(targ_lams, double_targ):
         permutation_exp_lens.append((p, get_exp_intertarg_len(p, double_targ)))
     return list(sorted(permutation_exp_lens, key=lambda m: m[1]))
 
-LAMBDA_SEQUENCES = [1.,0.85,0.7,0.55,0.4,0.25]
-DOUBLE_CUT = 0.4
+MIN_LAM = 0.02
+MAX_LAM = 0.75
+NUM_TARGETS = 6
+LAMBDA_SEQUENCES = np.arange(MIN_LAM, MAX_LAM, step=(MAX_LAM - MIN_LAM - 0.001)/(NUM_TARGETS - 1)).tolist()
+DOUBLE_CUT = 1.2
 sorted_permutes = get_sorted_permutations(LAMBDA_SEQUENCES, DOUBLE_CUT)
 
 nest.add(
@@ -55,7 +66,7 @@ nest.add(
 
 nest.add(
     'data_seed',
-    [0],
+    [10],
     label_func=lambda c: 'data_seed%d' % c,
 )
 

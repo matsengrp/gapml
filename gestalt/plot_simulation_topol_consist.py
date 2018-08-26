@@ -17,20 +17,18 @@ seeds = range(501,503)
 num_barcodes = [1,3,9,27]
 prefix = ""
 tree_idx = 1
-do_plots = True
+do_plots = False
 
 TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/tune_fitted.pkl"
 RAND_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/parsimony_tree0.pkl"
 TRUE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/true_model.pkl"
-COLL_TREE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/collapsed_tree.pkl"
 OUT_TRUE_MRCA_PLOT = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/true_mrca.png"
 OUT_FITTED_MRCA_PLOT = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%%d/tune_fitted_mrca.png"
 OUT_RAND_MRCA_PLOT = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/tune_rand_mrca.png"
 
 def get_true_model(seed, n_bcodes, _):
     file_name = TRUE_TEMPLATE % (prefix, model_seed, seed)
-    tree_file_name = COLL_TREE_TEMPLATE % (prefix, model_seed, seed, n_bcodes)
-    return plot_simulation_common.get_true_model(file_name, tree_file_name, n_bcodes)
+    return plot_simulation_common.get_true_model(file_name, None, n_bcodes)
 
 def get_result(seed, n_bcodes, _):
     res_file = TEMPLATE % (prefix, model_seed, seed, n_bcodes)
