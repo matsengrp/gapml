@@ -211,7 +211,6 @@ def fit_models(
             args.out_model_file.replace(".pkl", "_refitnew_tree%d.pkl" % file_idx),
             warm_start_file,
             args.true_model_file,
-            args.true_collapsed_tree_file,
             args.seed + file_idx,
             args.log_barr,
             str(pen_param),
@@ -262,6 +261,7 @@ def main(args=sys.argv[1:]):
 
     all_topology_files = glob.glob(args.topology_file_template.replace("parsimony_tree0", "parsimony_tree*[0-9]"))
     topology_files = all_topology_files[:args.max_topologies]
+    assert len(topology_files) > 0
     logging.info("Processing the tree files: %s", topology_files)
     best_pen_param, warm_start_files = tune_hyperparams(topology_files, args)
     best_worker = fit_models(topology_files, warm_start_files, args, best_pen_param)

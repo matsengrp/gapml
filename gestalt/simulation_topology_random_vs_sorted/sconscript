@@ -49,7 +49,7 @@ nest.add(
 
 nest.add(
     'permute_idx',
-    range(int(len(sorted_permutes)/20) + 2, len(sorted_permutes), int(len(sorted_permutes)/10) + 2),
+    range(0, len(sorted_permutes), int(len(sorted_permutes)/10) - 1),
     label_func=lambda c: 'permute_idx%d' % c,
 )
 
