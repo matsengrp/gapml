@@ -267,7 +267,7 @@ def plot_majority_cell_appearance_time(
     #                organ_dict[organ_time[0]],
     #                organ_time)
     #            printed_organs.add(organ_time[0])
-def plot_similar_cell_type_mrca_dist(
+def plot_mds_for_tree(
     tree,
     allele_to_cell_state,
     organ_dict,
@@ -341,7 +341,7 @@ def plot_mds(
     #        continue
     #    children_dist = min([child.get_distance(fitted_bifurc_tree) for child in node.children])
     #    if node_dist < 0.15 and children_dist > 0.15:
-    #        plot_similar_cell_type_mrca_dist(
+    #        plot_mds_for_tree(
     #            node,
     #            allele_to_cell_state,
     #            organ_dict,
@@ -353,21 +353,21 @@ def plot_mds(
     #    if len(node.children) == 0:
     #        continue
     #    children_dist = min([child.get_distance(rand_tree) for child in node.children])
-    #    plot_similar_cell_type_mrca_dist(
+    #    plot_mds_for_tree(
     #        node,
     #        allele_to_cell_state,
     #        organ_dict,
     #        out_plot_file = "%s_rand_%d.png" % (out_plot_prefix, idx))
 
     # Overall MDS for fitted
-    plot_similar_cell_type_mrca_dist(
+    plot_mds_for_tree(
         fitted_bifurc_tree,
         allele_to_cell_state,
         organ_dict,
         out_plot_file = "%s_fitted.png" % out_plot_prefix)
 
     # Overall MDS for rand tree
-    plot_similar_cell_type_mrca_dist(
+    plot_mds_for_tree(
         rand_tree,
         allele_to_cell_state,
         organ_dict,
@@ -505,7 +505,7 @@ def plot_gestalt_tree(
     plot_tree(
             col_tree,
             out_plot_file,
-            width=600,
+            width=400,
             show_leaf_name=False,
             legend_colors=legend_colors)
 

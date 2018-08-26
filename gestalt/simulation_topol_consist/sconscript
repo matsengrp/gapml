@@ -137,7 +137,7 @@ def run_MLE(env, outdir, c):
         penalty_params = "768,192,48,12,3"
     elif c['num_barcodes'] == 27:
         penalty_params = "192,48,12,3,.75"
-    penalty_params = "12"
+
     cmd = [
 	'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
@@ -160,8 +160,8 @@ def run_MLE(env, outdir, c):
     ]
     return env.Command(
         [
-            join(outdir, 'tune_example.pkl'),
-            join(outdir, 'tune_example.txt')],
+            join(outdir, 'tune_fitted.pkl'),
+            join(outdir, 'tune_fitted.txt')],
         [
             c['restrict_observed_alleles'][0],
             c['run_topology'][0],

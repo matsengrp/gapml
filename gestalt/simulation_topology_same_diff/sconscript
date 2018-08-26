@@ -45,7 +45,7 @@ nest.add(
 
 nest.add(
     'double_cut',
-    [0.05],
+    [0.001],
     label_func=lambda c: 'double_cut%d' % c)
 
 @nest.add_target_with_env(localenv)
@@ -174,13 +174,11 @@ def run_MLE(env, outdir, c):
 	penalty_params,
         '--max-sum-states 2000',
         '--max-extra-steps 2',
-        '--train-split 0.6667',
         '--max-iters 10000',
         '--num-inits 1',
         '--lambda-known' if c['lambda_known'] else '',
         '--tot-time-known',
-        '--total-tune-splits',
-        3 if c['num_barcodes'] == 1 else 1,
+        '--total-tune-splits 3',
         '--max-topologies 4',
     ]
     #cmd = []
