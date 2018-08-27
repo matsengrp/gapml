@@ -39,28 +39,29 @@ def get_rand_tree(seed, n_bcodes, _):
     return plot_simulation_common.get_rand_tree(res_file)
 
 
-#plot_simulation_common.gather_results(
-#        get_true_model,
-#        get_result,
-#        get_rand_tree,
-#        seeds,
-#        num_barcodes,
-#        n_bcode = None,
-#        tree_idx = tree_idx,
-#        do_plots = do_plots,
-#        print_keys = [
-#            "bhv",
-#            "random_bhv",
-#            #"zero_bhv",
-#            "super_zero_bhv",
-#            "mrca",
-#            "random_mrca",
-#            "zero_mrca",
-#            "targ",
-#            #"double"
-#            ],
-#        out_true_mrca_plot = OUT_TRUE_MRCA_PLOT % (prefix, model_seed, seeds[0]),
-#        out_fitted_mrca_plot = OUT_FITTED_MRCA_PLOT  % (prefix, model_seed, seeds[0]))
+plot_simulation_common.gather_results(
+        get_true_model,
+        get_result,
+        get_rand_tree,
+        seeds,
+        num_barcodes,
+        n_bcode = None,
+        tree_idx = tree_idx,
+        do_plots = do_plots,
+        num_rands = 10,
+        print_keys = [
+            "bhv",
+            "random_bhv",
+            #"zero_bhv",
+            "super_zero_bhv",
+            "internal_corr",
+            "internal_random_corr",
+            "internal_zero_corr",
+            "targ",
+            #"double"
+            ],
+        out_true_mrca_plot = OUT_TRUE_MRCA_PLOT % (prefix, model_seed, seeds[0]),
+        out_fitted_mrca_plot = OUT_FITTED_MRCA_PLOT  % (prefix, model_seed, seeds[0]))
 
 ONE_TREE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/tune_example_refitnew_tree0.pkl" % (prefix, model_seed, seeds[0], 3)
 ONE_TREE_PLOT_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/tune_example_refitnew_tree0.png" % (prefix, model_seed, seeds[0], 3)

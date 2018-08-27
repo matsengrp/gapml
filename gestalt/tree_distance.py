@@ -12,6 +12,7 @@ from cell_lineage_tree import CellLineageTree
 from collapsed_tree import _remove_single_child_unobs_nodes
 from constant_paths import RSPR_PATH, BHV_PATH, TAU_GEO_JAR_PATH
 from common import get_randint
+import collapsed_tree
 
 class TreeDistanceMeasurerAgg:
     """
@@ -395,9 +396,82 @@ class MRCASpearmanMeasurer(MRCADistanceMeasurer):
         m_shape = matrix.shape[0]
         return np.array([matrix[i,j] for i in range(m_shape) for j in range(i, m_shape)])
 
-    def get_dist(self, tree):
-        tree_mrca_matrix = self._get_mrca_matrix(tree)
+    def get_dist(self, tree, collapse_thres: float = 0):
+        raw_tree = tree.copy()
+        # Collapse distances is requested
+        for node in raw_tree.traverse("preorder"):
+            if node.is_root():
+                continue
+            if node.dist < collapse_thres:
+                old_dist = node.dist
+                node.dist = 0
+                for child in node.children:
+                    child.dist += old_dist
+        col_tree = collapsed_tree.collapse_zero_lens(raw_tree)
+
+        tree_mrca_matrix = self._get_mrca_matrix(col_tree)
+
         tree_mrca_matrix_half = MRCASpearmanMeasurer.get_upper_half(tree_mrca_matrix)
         ref_mrca_matrix_half = MRCASpearmanMeasurer.get_upper_half(self.ref_tree_mrca_matrix)
         rank_corr, _ = kendalltau(tree_mrca_matrix_half, ref_mrca_matrix_half)
+        #rank_corr, _ = spearmanr(tree_mrca_matrix_half, ref_mrca_matrix_half)
         return rank_corr
+
+class InternalCorrMeasurer(MRCADistanceMeasurer):
+    name = "internal_pearson"
+    def __init__(
+            self,
+            ref_tree: CellLineageTree,
+            scratch_dir: str = None,
+            attr="allele_events_list_str",
+            corr_func = pearsonr):
+        self.ref_tree = ref_tree
+        self.attr = attr
+        self.corr_func = pearsonr
+
+        # Number the leaves because we need to represent each tree by its pairwise
+        # MRCA distance matrix
+        leaf_str_sorted = [getattr(leaf, attr) for leaf in ref_tree]
+        self.leaf_dict = {}
+        for idx, leaf_str in enumerate(leaf_str_sorted):
+            self.leaf_dict[leaf_str] = idx
+        self.num_leaves = len(ref_tree)
+
+        self.ref_tree_mrca_matrix = self._get_mrca_matrix(ref_tree)
+
+        self.ref_internal_nodes, self.ref_node_val = self.get_ref_node_distances(ref_tree, self.ref_tree_mrca_matrix)
+
+    def get_ref_node_distances(self, tree, tree_mrca_matrix):
+        internal_nodes = [
+                node for node in tree.traverse("preorder") if not node.is_root() and not node.is_leaf()]
+        node_val = []
+        for node in internal_nodes:
+            leaf_idxs = np.array([self.leaf_dict[getattr(leaf, self.attr)] for leaf in node])
+            node_dist = np.max(tree_mrca_matrix[leaf_idxs, leaf_idxs])
+            node_val.append(node_dist)
+        return internal_nodes, node_val
+
+    def get_compare_node_distances(self, internal_nodes, tree_mrca_matrix):
+        node_val = []
+        for node in internal_nodes:
+            leaf_idxs = np.array([self.leaf_dict[getattr(leaf, self.attr)] for leaf in node])
+            node_dist = np.max(tree_mrca_matrix[leaf_idxs, leaf_idxs])
+            node_val.append(node_dist)
+        return node_val
+
+    def get_dist(self, tree):
+        tree_mrca_matrix = self._get_mrca_matrix(tree)
+        tree_node_val1 = self.get_compare_node_distances(
+                self.ref_internal_nodes,
+                tree_mrca_matrix)
+        corr1, _ = self.corr_func(self.ref_node_val, tree_node_val1)
+
+        tree_internal_nodes2, tree_node_val2 = self.get_ref_node_distances(
+                tree,
+                tree_mrca_matrix)
+        ref_node_val2 = self.get_compare_node_distances(
+                tree_internal_nodes2,
+                self.ref_tree_mrca_matrix)
+        corr2, _ = self.corr_func(ref_node_val2, tree_node_val2)
+
+        return (corr1 + corr2)/2

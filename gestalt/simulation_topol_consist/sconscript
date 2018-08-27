@@ -28,7 +28,7 @@ nest.add(
 
 nest.add(
     'seed',
-    range(500, 501),
+    range(501, 503),
 )
 
 nest.add(
@@ -156,7 +156,7 @@ def run_MLE(env, outdir, c):
         '--num-inits 1',
         '--tot-time-known',
         '--total-tune-splits 3',
-        '--max-topologies 1',
+        '--max-topologies 4',
     ]
     return env.Command(
         [
