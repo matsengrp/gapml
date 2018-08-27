@@ -20,14 +20,11 @@ do_plots = False
 TEMPLATE = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/lambda_known%d/tot_time_known1/tune_fitted_score.pkl"
 RAND_TEMPLATE = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/parsimony_tree0.pkl"
 TRUE_TEMPLATE = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/true_model.pkl"
-COLL_TREE_TEMPLATE = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/collapsed_tree.pkl"
 OUT_TRUE_MRCA_PLOT = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/true_mrca.png"
 OUT_FITTED_MRCA_PLOT = "%ssimulation_topology_magnitude/_output/model_seed%d/%d/lambda_magnitude%d/double_cut%d/num_barcodes%d/lambda_known%d/tot_time_known1/tune_fitted_mrca.png"
 
 def get_true_model(seed, lambda_type, n_bcodes):
     file_name = TRUE_TEMPLATE % (prefix, model_seed, seed, lambda_type, double)
-    tree_file_name = COLL_TREE_TEMPLATE % (prefix, model_seed, seed, lambda_type, double, n_bcodes)
-    #return plot_simulation_common.get_true_model(file_name, tree_file_name, n_bcodes)
     return plot_simulation_common.get_true_model(file_name, None, n_bcodes)
 
 def get_result(seed, lambda_type, n_bcodes):

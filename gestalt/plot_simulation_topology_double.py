@@ -22,12 +22,10 @@ TEMPLATE = "%ssimulation_topology_double/_output/model_seed%d/%d/double_cut%d/nu
 RAND_TEMPLATE = "%ssimulation_topology_double/_output/model_seed%d/%d/double_cut%d/num_barcodes%d/parsimony_tree0.pkl"
 TRUE_TEMPLATE = "%ssimulation_topology_double/_output/model_seed%d/%d/double_cut%d/true_model.pkl"
 OBS_TEMPLATE = "%ssimulation_topology_double/_output/model_seed%d/%d/double_cut%d/num_barcodes%d/obs_data.pkl"
-COLL_TREE_TEMPLATE = "%ssimulation_topology_double/_output/model_seed%d/%d/double_cut%d/num_barcodes%d/collapsed_tree.pkl"
 
 def get_true_model(seed, double_cut, n_bcodes):
     file_name = TRUE_TEMPLATE % (prefix, model_seed, seed, double_cut)
-    tree_file_name = COLL_TREE_TEMPLATE % (prefix, model_seed, seed, double_cut, n_bcodes)
-    return plot_simulation_common.get_true_model(file_name, tree_file_name, n_bcodes)
+    return plot_simulation_common.get_true_model(file_name, None, n_bcodes)
 
 def get_result(seed, double_cut, n_bcodes):
     res_file = TEMPLATE % (prefix, model_seed, seed, double_cut, n_bcodes, lambda_known)

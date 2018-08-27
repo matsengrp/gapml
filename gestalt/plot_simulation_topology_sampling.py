@@ -23,14 +23,12 @@ num_rands = 10
 TEMPLATE = "%ssimulation_topology_sampling/_output/model_seed%d/%d/sampling%d/num_barcodes%d/lambda_known%d/tot_time_known1/tune_fitted_score.pkl"
 RAND_TEMPLATE = "%ssimulation_topology_sampling/_output/model_seed%d/%d/sampling%d/num_barcodes%d/parsimony_tree0.pkl"
 TRUE_TEMPLATE = "%ssimulation_topology_sampling/_output/model_seed%d/%d/sampling%d/true_model.pkl"
-COLL_TREE_TEMPLATE = "%ssimulation_topology_sampling/_output/model_seed%d/%d/sampling%d/num_barcodes%d/collapsed_tree.pkl"
 OUT_TRUE_MRCA_PLOT = "%ssimulation_topology_sampling/_output/model_seed%d/%d/sampling%d/true_mrca.png"
 OUT_FITTED_MRCA_PLOT = "%ssimulation_topology_sampling/_output/model_seed%d/%d/sampling%d/num_barcodes%d/lambda_known%d/tot_time_known1/tune_fitted_mrca.png"
 
 def get_true_model(seed, sampling_rate, n_bcodes):
     file_name = TRUE_TEMPLATE % (prefix, model_seed, seed, sampling_rate)
-    tree_file_name = COLL_TREE_TEMPLATE % (prefix, model_seed, seed, sampling_rate, n_bcodes)
-    return plot_simulation_common.get_true_model(file_name, tree_file_name, n_bcodes)
+    return plot_simulation_common.get_true_model(file_name, None, n_bcodes)
 
 def get_result(seed, sampling_rate, n_bcodes):
     res_file = TEMPLATE % (prefix, model_seed, seed, sampling_rate, n_bcodes, lambda_known)
