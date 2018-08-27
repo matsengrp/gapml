@@ -172,7 +172,6 @@ def gather_results(
             "zero_bhv": None,
             "super_zero_bhv": None,
             "internal_corr": None,
-            "internal_zero_corr": None,
             "internal_random_corr": None,
             "leaves": None,
             "seeds": None,
@@ -259,8 +258,6 @@ def gather_results(
                     assert node.dist > 0
                 else:
                     node.dist = 1e-10
-            dist = true_internal_meas.get_dist(zero_tree)
-            n_bcode_results["internal_zero_corr"][idx].append(dist)
             dist = true_bhv_meas.get_dist(zero_tree)
             n_bcode_results["zero_bhv"][idx].append(dist)
 

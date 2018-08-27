@@ -9,7 +9,7 @@ np.random.seed(0)
 
 double = 0
 model_seed = 301
-seeds = range(0,5)
+seeds = range(10,15)
 n_bcode = 1
 lambda_types = ["same", "diff", "super_diff"]
 lambda_known = 0
@@ -20,12 +20,10 @@ do_plots = False
 TEMPLATE = "simulation_topology_same_diff/_output/model_seed%d/%d/%s/double_cut%d/num_barcodes%d/lambda_known%d/tot_time_known1/tune_fitted_score.pkl"
 RAND_TEMPLATE = "simulation_topology_same_diff/_output/model_seed%d/%d/%s/double_cut%d/num_barcodes%d/parsimony_tree0.pkl"
 TRUE_TEMPLATE = "simulation_topology_same_diff/_output/model_seed%d/%d/%s/double_cut%d/true_model.pkl"
-COLL_TREE_TEMPLATE = "simulation_topology_same_diff/_output/model_seed%d/%d/%s/double_cut%d/num_barcodes%d/collapsed_tree.pkl"
 
 def get_true_model(seed, lambda_type, n_bcodes):
     file_name = TRUE_TEMPLATE % (model_seed, seed, lambda_type, double)
-    tree_file_name = COLL_TREE_TEMPLATE % (model_seed, seed, lambda_type, double, n_bcodes)
-    return plot_simulation_common.get_true_model(file_name, tree_file_name, n_bcodes)
+    return plot_simulation_common.get_true_model(file_name, None, n_bcodes)
 
 def get_result(seed, lambda_type, n_bcodes):
     res_file = TEMPLATE % (model_seed, seed, lambda_type, double, n_bcodes, lambda_known)
@@ -47,10 +45,10 @@ plot_simulation_common.gather_results(
         print_keys = [
             "bhv",
             "random_bhv",
-            "zero_bhv",
+            #"zero_bhv",
             "super_zero_bhv",
-            "mrca",
-            "zero_mrca",
-            "random_mrca",
+            "internal_corr",
+            "internal_random_corr",
             "targ",
-            "double"])
+            #"double"
+	])

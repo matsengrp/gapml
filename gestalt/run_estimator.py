@@ -203,7 +203,7 @@ def read_true_model_files(args, num_barcodes):
     oracle_dist_measurers = TreeDistanceMeasurerAgg([
         UnrootRFDistanceMeasurer,
         RootRFDistanceMeasurer,
-        BHVDistanceMeasurer,
+        #BHVDistanceMeasurer,
         MRCADistanceMeasurer,
         MRCASpearmanMeasurer],
         true_tree,

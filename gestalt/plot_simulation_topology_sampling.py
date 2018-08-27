@@ -38,49 +38,51 @@ def get_rand_tree(seed, sampling_rate, n_bcodes):
     res_file = RAND_TEMPLATE % (prefix, model_seed, seed, sampling_rate, n_bcodes)
     return plot_simulation_common.get_rand_tree(res_file)
 
-plot_simulation_common.gather_results(
-        get_true_model,
-        get_result,
-        get_rand_tree,
-        seeds,
-        sampling_rates,
-        n_bcode = n_bcode,
-        tree_idx = tree_idx,
-        do_plots = do_plots,
-        print_keys = [
-            "bhv",
-            "random_bhv",
-            #"zero_bhv",
-            "super_zero_bhv",
-            #"mrca",
-            #"zero_mrca",
-            #"random_mrca",
-            "targ",
-            #"double",
-        ])
+#plot_simulation_common.gather_results(
+#        get_true_model,
+#        get_result,
+#        get_rand_tree,
+#        seeds,
+#        sampling_rates,
+#        n_bcode = n_bcode,
+#        tree_idx = tree_idx,
+#        do_plots = do_plots,
+#        print_keys = [
+#            "bhv",
+#            "random_bhv",
+#            #"zero_bhv",
+#            "super_zero_bhv",
+#            "internal_corr",
+#            "internal_random_corr",
+#            "targ",
+#            #"double",
+#        ])
 
 """
 Compare only the nodes that were contained in the 10% sample
 """
-get_param_func_dict = {
-        "bhv": None,
-        "random_bhv": None,
-        "zero_bhv": None,
-        "super_zero_bhv": None,
-        "leaves": None}
+metric_list = [
+        "bhv",
+        "random_bhv",
+        "zero_bhv",
+        "super_zero_bhv",
+        "internal_corr",
+        "internal_random_corr",
+        "leaves"]
 
 n_bcode_results = {
         key: [[] for _ in sampling_rates]
-        for key in get_param_func_dict.keys()}
+        for key in metric_list}
 
 for seed_idx, seed in enumerate(seeds):
     try:
         true_model = get_true_model(seed, sampling_rates[0], n_bcode)
-        tot_height = true_model[0]["time"]
+        tot_height = 1.0 #true_model[0]["time"]
     except FileNotFoundError:
         continue
     comparison_leaves = [leaf.allele_events_list_str for leaf in true_model[tree_idx]]
     true_bhv_meas = BHVDistanceMeasurer(true_model[tree_idx], "_output/scratch")
+    true_internal_meas = InternalCorrMeasurer(true_model[tree_idx], "_output/scratch")
 
     for idx, sampling_rate in enumerate(sampling_rates):
         try:
@@ -109,10 +111,13 @@ for seed_idx, seed in enumerate(seeds):
         rand_bhv_dists = []
         for _ in range(num_rands):
             assign_rand_tree_lengths(rand_tree, tot_height)
+            dist = true_internal_meas.get_dist(rand_tree)
+            rand_dists.append(dist)
             dist = true_bhv_meas.get_dist(rand_tree)
             rand_bhv_dists.append(dist)
         rand_dist = np.mean(rand_dists)
         n_bcode_results["random_bhv"][idx].append(np.mean(rand_bhv_dists))
+        n_bcode_results["internal_random_corr"][idx].append(np.mean(rand_dists))
 
         zero_tree = rand_tree.copy()
         for node in zero_tree.traverse():
@@ -133,6 +138,8 @@ for seed_idx, seed in enumerate(seeds):
 
         dist = true_bhv_meas.get_dist(result_tree)
         n_bcode_results["bhv"][idx].append(dist)
+        dist = true_internal_meas.get_dist(result[tree_idx])
+        n_bcode_results["internal_corr"][idx].append(dist)
         n_bcode_results["leaves"][idx].append(-1)
 
 for bhvs in n_bcode_results["bhv"]:
@@ -145,6 +152,7 @@ plot_simulation_common.print_results(
         print_keys = [
             "bhv",
             "random_bhv",
-            "zero_bhv",
             "super_zero_bhv",
+            "internal_corr",
+            "internal_random_corr",
         ])

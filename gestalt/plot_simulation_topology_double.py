@@ -49,9 +49,8 @@ plot_simulation_common.gather_results(
             "random_bhv",
             #"zero_bhv",
             "super_zero_bhv",
-            #"mrca",
-            #"zero_mrca",
-            #"random_mrca",
+            "internal_corr",
+            "internal_random_corr",
             "targ",
             "double",
        ])
