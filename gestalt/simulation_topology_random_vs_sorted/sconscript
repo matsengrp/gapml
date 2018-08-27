@@ -20,61 +20,39 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
-def get_exp_intertarg_len(targ_lams, double_targ):
-    tot_haz = sum(targ_lams)
-    all_haz = [t for t in targ_lams]
-    exp_len = 0
-    intertarg_cuts = list(range(len(targ_lams)))
-    for i, lam1 in enumerate(targ_lams):
-        for j, lam2 in enumerate(targ_lams[i + 1:]):
-            tot_haz += lam1 * lam2 * double_targ
-            all_haz.append(lam1 * lam2 * double_targ)
-            exp_len += (j + 1) * lam1 * lam2 * double_targ
-            intertarg_cuts.append((i,i + j + 1))
-    haz_proportions = [h/tot_haz for h in all_haz]
-    #print(np.sort(haz_proportions))
-    #print(np.argsort(haz_proportions))
-    #for idx in np.argsort(haz_proportions):
-    #    print(intertarg_cuts[idx])
-    return exp_len/tot_haz
-
-def get_sorted_permutations(targ_lams, double_targ):
-    permutations = itertools.permutations(targ_lams)
-    permutation_exp_lens = []
-    for p in permutations:
-        permutation_exp_lens.append((p, get_exp_intertarg_len(p, double_targ)))
-    return list(sorted(permutation_exp_lens, key=lambda m: m[1]))
-
-MIN_LAM = 0.02
-MAX_LAM = 0.75
-NUM_TARGETS = 6
-LAMBDA_SEQUENCES = np.arange(MIN_LAM, MAX_LAM, step=(MAX_LAM - MIN_LAM - 0.001)/(NUM_TARGETS - 1)).tolist()
-DOUBLE_CUT = 1.2
-sorted_permutes = get_sorted_permutations(LAMBDA_SEQUENCES, DOUBLE_CUT)
+HIGH_LAMS = [0.85, 0.7, 0.55]
+LOW_LAM = 0.4
+LAMBDA_SEQUENCES = [
+    [HIGH_LAMS[0], HIGH_LAMS[1], HIGH_LAMS[2], LOW_LAM, LOW_LAM, LOW_LAM],
+    [HIGH_LAMS[0], HIGH_LAMS[2], HIGH_LAMS[1], LOW_LAM, LOW_LAM, LOW_LAM],
+    [HIGH_LAMS[1], HIGH_LAMS[0], HIGH_LAMS[2], LOW_LAM, LOW_LAM, LOW_LAM],
+    [HIGH_LAMS[0], LOW_LAM, HIGH_LAMS[1], LOW_LAM, HIGH_LAMS[2], LOW_LAM],
+    [HIGH_LAMS[0], LOW_LAM, HIGH_LAMS[2], LOW_LAM, HIGH_LAMS[1], LOW_LAM],
+]
+DOUBLE_CUT = 0.7
 
 nest.add(
     'model_seed',
-    [903],
+    [900],
     label_func=lambda c: 'model_seed%d' % c,
 )
 
 nest.add(
-    'permute_idx',
-    range(0, len(sorted_permutes), int(len(sorted_permutes)/10) - 1),
-    label_func=lambda c: 'permute_idx%d' % c,
+    'seq_idx',
+    range(len(LAMBDA_SEQUENCES)),
+    label_func=lambda c: 'seq_idx%d' % c,
 )
 
 nest.add(
     'data_seed',
-    [10],
+    #range(10,15),
+    range(15,18),
     label_func=lambda c: 'data_seed%d' % c,
 )
 
 @nest.add_target_with_env(localenv)
 def generate(env, outdir, c):
-    lambda_seq_tuple = sorted_permutes[c['permute_idx']]
-    lambda_seq = lambda_seq_tuple[0]
-    print("exp haz", c['permute_idx'], lambda_seq_tuple)
+    lambda_seq = LAMBDA_SEQUENCES[c['seq_idx']]
     targ_lambdas = ",".join(map(str, lambda_seq))
 
     cmd = [
@@ -84,7 +62,7 @@ def generate(env, outdir, c):
         '--model-seed',
         c['model_seed'],
         '--data-seed',
-        c['permute_idx'] + c['data_seed'] * 1000,
+        c['seq_idx'] + c['data_seed'] * 1000,
         '--out-obs-file ${TARGETS[0]}',
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
@@ -93,8 +71,8 @@ def generate(env, outdir, c):
         '--birth-lambda 2.3',
         '--num-barcodes',
         8,
-        '--min-uniq-alleles 30',
-        '--max-uniq-alleles 50',
+        '--min-uniq-alleles 50',
+        '--max-uniq-alleles 70',
         '--max-abundance 100',
         '--double-cut-weight',
         DOUBLE_CUT,
@@ -179,7 +157,7 @@ nest.add(
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
     if c['num_barcodes'] == 1:
-        penalty_params = "3072,768,192,48,12,3"
+        penalty_params = "192,48,12,3"
     else:
     	penalty_params = "12,6,3,1.5,.75"
 
@@ -192,7 +170,7 @@ def run_MLE(env, outdir, c):
         '--out-model-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
         '--seed',
-	c['permute_idx'] + c['data_seed'] * 1000,
+	c['seq_idx'] + c['data_seed'] * 1000,
         '--log-barr 0.0000001',
         '--dist-to-half-pens',
 	penalty_params,
