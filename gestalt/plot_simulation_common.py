@@ -167,15 +167,15 @@ def gather_results(
         out_true_mrca_plot = None,
         out_fitted_mrca_plot = None):
     get_param_func_dict = {
-            "mrca": None, # custom function
-            "bhv": None, # custom function
-            "random_bhv": None, # custom function
-            "zero_bhv": None, # custom function
-            "super_zero_bhv": None, # custom function
-            "zero_mrca": None, # custom function
-            "random_mrca": None, # custom function
-            "leaves": None, # custom function
-            "seeds": None, # custom function
+            "bhv": None,
+            "random_bhv": None,
+            "zero_bhv": None,
+            "super_zero_bhv": None,
+            "internal_corr": None,
+            "internal_zero_corr": None,
+            "internal_random_corr": None,
+            "leaves": None,
+            "seeds": None,
             "only_targ": get_only_target_lams,
             "targ": get_target_lams,
             "double": get_double_cut}
@@ -213,7 +213,8 @@ def gather_results(
                 tot_height = true_model[0]["tot_time"]
             except FileNotFoundError:
                 continue
-            true_mrca_meas = MRCADistanceMeasurer(true_model[tree_idx])
+            true_internal_meas = InternalCorrMeasurer(true_model[tree_idx], "_output/scratch")
+            true_mrca_meas = MRCADistanceMeasurer(true_model[tree_idx], "_output/scratch")
             true_bhv_meas = BHVDistanceMeasurer(true_model[tree_idx], "_output/scratch")
 
             if seed_idx == 0 and do_plots:
@@ -232,10 +233,6 @@ def gather_results(
                     true_mrca_meas._get_mrca_matrix(result[tree_idx]),
                     out_fitted_mrca_plot % setting)
 
-            #print(pruned_tree.get_ascii(attributes=["dist"], show_internal=True))
-            mle_dist = true_mrca_meas.get_dist(result[tree_idx])
-            n_bcode_results["mrca"][idx].append(mle_dist)
-
             try:
                 rand_tree = get_rand_tree_fnc(seed, setting, n_bcode)
             except FileNotFoundError:
@@ -246,12 +243,12 @@ def gather_results(
             for _ in range(num_rands):
                 assign_rand_tree_lengths(rand_tree[tree_idx], tot_height)
 
-                dist = true_mrca_meas.get_dist(rand_tree[tree_idx])
+                dist = true_internal_meas.get_dist(rand_tree[tree_idx])
                 rand_dists.append(dist)
                 dist = true_bhv_meas.get_dist(rand_tree[tree_idx])
                 rand_bhv_dists.append(dist)
             n_bcode_results["random_bhv"][idx].append(np.mean(rand_bhv_dists))
-            n_bcode_results["random_mrca"][idx].append(np.mean(rand_dists))
+            n_bcode_results["internal_random_corr"][idx].append(np.mean(rand_dists))
 
             zero_tree = rand_tree[tree_idx].copy()
             for node in zero_tree.traverse():
@@ -262,8 +259,8 @@ def gather_results(
                     assert node.dist > 0
                 else:
                     node.dist = 1e-10
-            dist = true_mrca_meas.get_dist(zero_tree)
-            n_bcode_results["zero_mrca"][idx].append(dist)
+            dist = true_internal_meas.get_dist(zero_tree)
+            n_bcode_results["internal_zero_corr"][idx].append(dist)
             dist = true_bhv_meas.get_dist(zero_tree)
             n_bcode_results["zero_bhv"][idx].append(dist)
 
@@ -274,8 +271,8 @@ def gather_results(
 
             n_bcode_results["seeds"][idx].append(len(true_model[tree_idx]))
 
-            dist = true_mrca_meas.get_dist(result[tree_idx])
-            n_bcode_results["mrca"][idx].append(dist)
+            dist = true_internal_meas.get_dist(result[tree_idx])
+            n_bcode_results["internal_corr"][idx].append(dist)
 
             dist = true_bhv_meas.get_dist(result[tree_idx])
             n_bcode_results["bhv"][idx].append(dist)

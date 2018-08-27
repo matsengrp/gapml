@@ -11,6 +11,7 @@ import argparse
 import logging
 import six
 import numpy as np
+import random
 from typing import List, Tuple, Dict
 
 from parallel_worker import BatchSubmissionManager
@@ -259,7 +260,10 @@ def main(args=sys.argv[1:]):
         bcode_meta = obs_data_dict["bcode_meta"]
         args.num_barcodes = bcode_meta.num_barcodes
 
+    np.random.seed(args.seed)
+    random.seed(args.seed)
     all_topology_files = glob.glob(args.topology_file_template.replace("parsimony_tree0", "parsimony_tree*[0-9]"))
+    random.shuffle(all_topology_files)
     topology_files = all_topology_files[:args.max_topologies]
     assert len(topology_files) > 0
     logging.info("Processing the tree files: %s", topology_files)
