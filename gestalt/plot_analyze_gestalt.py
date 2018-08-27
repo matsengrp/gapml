@@ -4,7 +4,8 @@ from plot_mrca_matrices import plot_tree
 from matplotlib import pyplot
 from scipy import stats
 import numpy as np
-from sklearn.manifold import MDS
+from sklearn.manifold import MDS, TSNE
+import itertools
 
 import collapsed_tree
 from cell_lineage_tree import CellLineageTree
@@ -94,6 +95,7 @@ def plot_distance_to_abundance(
                 rand_jitter(scatter_X_dists, scaling_factor=0.002),
                 rand_jitter(np.log10(scatter_Y_abundance), scaling_factor=0.002))
         pyplot.savefig(out_plot_file)
+    fitted_slope, _, fitted_corr, pval, _ = stats.linregress(X_dists, np.log10(Y_abundance))
     print("mle tree", stats.linregress(X_dists, np.log10(Y_abundance)))
 
     rand_slopes = []
@@ -114,6 +116,8 @@ def plot_distance_to_abundance(
         rand_corr.append(corr)
         rand_pvals.append(pval)
     print("rand tree", np.mean(rand_slopes), np.power(np.mean(rand_corr),2), np.mean(rand_pvals))
+    mean_rand_slope = np.mean(rand_slopes)
+    print("p value away from random", np.mean([np.abs(s - mean_rand_slope) > np.abs(fitted_slope - mean_rand_slope) for s in rand_slopes]))
 
 def plot_distance_to_num_cell_states(
         fitted_bifurc_tree,
@@ -131,25 +135,26 @@ def plot_distance_to_num_cell_states(
     scatter_X_dists = []
     scatter_Y_n_cell_states = []
     colors = []
-    for node in fitted_bifurc_tree.traverse():
+    for node in fitted_bifurc_tree.traverse('postorder'):
         dist = node.get_distance(fitted_bifurc_tree)
-        if dist < obs_dict["time"] - 0.01:
-            X_dists.append(dist)
-            c_state_set = set()
-            for leaf in node:
-                allele_str = leaf.allele_events_list_str
-                cell_state_strs = list(allele_to_cell_state[allele_str].keys())
-                for c_state_str in cell_state_strs:
-                    c_state_set.update(c_state_str)
-                    colors.append(
-                            ORGAN_COLORS[organ_dict[c_state_str]])
+        X_dists.append(dist)
+        if node.is_leaf():
+            allele_str = node.allele_events_list_str
+            node.add_feature("cell_types", set(list(allele_to_cell_state[allele_str].keys())))
+        else:
+            node.add_feature("cell_types", set())
+            for child in node.children:
+                node.cell_types.update(child.cell_types)
 
-            n_cell_states = len(c_state_set)
-            Y_n_cell_states.append(n_cell_states)
-            jitter = (np.random.rand() - 0.5) * 0.1
-            scatter_X_dists += [dist + jitter] * n_cell_states
-            jitter = (np.random.rand() - 0.5) * 0.5
-            scatter_Y_n_cell_states += [n_cell_states + jitter] * n_cell_states
+        n_cell_states = len(node.cell_types)
+        Y_n_cell_states.append(n_cell_states)
+        for c_state_str in node.cell_types:
+            colors.append(ORGAN_COLORS[organ_dict[c_state_str]])
+
+        jitter = (np.random.rand() - 0.5) * 0.1
+        scatter_X_dists += [dist + jitter] * n_cell_states
+        jitter = (np.random.rand() - 0.5) * 0.5
+        scatter_Y_n_cell_states += [n_cell_states + jitter] * n_cell_states
 
     if out_plot_file:
         pyplot.clf()
@@ -161,6 +166,7 @@ def plot_distance_to_num_cell_states(
                 marker="o",
                 s=10)
         pyplot.savefig(out_plot_file)
+    fitted_slope = stats.linregress(X_dists, Y_n_cell_states)[0]
     print("mle tree", stats.linregress(X_dists, Y_n_cell_states))
 
     rand_slopes = []
@@ -171,22 +177,26 @@ def plot_distance_to_num_cell_states(
 
         X_dists = []
         Y_n_cell_states = []
-        for node in rand_tree.traverse():
+        for node in rand_tree.traverse('postorder'):
             dist = node.get_distance(rand_tree)
-            if dist < obs_dict["time"] - 0.01:
-                X_dists.append(dist)
-                c_state_set = set()
-                for leaf in node:
-                    allele_str = leaf.allele_events_list_str
-                    cell_state_strs = list(allele_to_cell_state[allele_str].keys())
-                    for c_state_str in cell_state_strs:
-                        c_state_set.update(c_state_str)
-                Y_n_cell_states.append(len(c_state_set))
+            X_dists.append(dist)
+            if node.is_leaf():
+                allele_str = node.allele_events_list_str
+                node.add_feature("cell_types", set(list(allele_to_cell_state[allele_str].keys())))
+            else:
+                node.add_feature("cell_types", set())
+                for child in node.children:
+                    node.cell_types.update(child.cell_types)
+
+            n_cell_states = len(node.cell_types)
+            Y_n_cell_states.append(n_cell_states)
         slope, _, corr, pval, _ = stats.linregress(X_dists, Y_n_cell_states)
         rand_slopes.append(slope)
         rand_corr.append(corr)
         rand_pvals.append(pval)
     print("rand tree", np.mean(rand_slopes), np.power(np.mean(rand_corr),2), np.mean(rand_pvals))
+    mean_rand_slope = np.mean(rand_slopes)
+    print("p value away from random", np.mean([np.abs(s - mean_rand_slope) > np.abs(fitted_slope - mean_rand_slope) for s in rand_slopes]))
 
 def plot_majority_cell_appearance_time(
         fitted_bifurc_tree,
@@ -267,7 +277,7 @@ def plot_majority_cell_appearance_time(
     #                organ_dict[organ_time[0]],
     #                organ_time)
     #            printed_organs.add(organ_time[0])
-def plot_mds_for_tree(
+def plot_mds_by_cell_type_for_tree(
     tree,
     allele_to_cell_state,
     organ_dict,
@@ -277,8 +287,6 @@ def plot_mds_for_tree(
     """
     Plot MDS of cell type distances
     """
-    similar_cell_type_pairs = [
-            ('7B_Eye1', '7B_Eye2')]
     leaves_by_cell_type = {v: [] for v in organ_dict.values()}
     for leaf in tree:
         for cell_type, abund in allele_to_cell_state[leaf.allele_events_list_str].items():
@@ -322,7 +330,7 @@ def plot_mds_for_tree(
     pyplot.savefig(out_plot_file)
     print("MDS PLOT", out_plot_file)
 
-def plot_mds(
+def plot_mds_by_cell_type(
     fitted_bifurc_tree,
     rand_tree,
     allele_to_cell_state,
@@ -341,7 +349,7 @@ def plot_mds(
     #        continue
     #    children_dist = min([child.get_distance(fitted_bifurc_tree) for child in node.children])
     #    if node_dist < 0.15 and children_dist > 0.15:
-    #        plot_mds_for_tree(
+    #        plot_mds_by_cell_type_for_tree(
     #            node,
     #            allele_to_cell_state,
     #            organ_dict,
@@ -353,25 +361,104 @@ def plot_mds(
     #    if len(node.children) == 0:
     #        continue
     #    children_dist = min([child.get_distance(rand_tree) for child in node.children])
-    #    plot_mds_for_tree(
+    #    plot_mds_by_cell_type_for_tree(
     #        node,
     #        allele_to_cell_state,
     #        organ_dict,
     #        out_plot_file = "%s_rand_%d.png" % (out_plot_prefix, idx))
 
     # Overall MDS for fitted
-    plot_mds_for_tree(
+    plot_mds_by_cell_type_for_tree(
         fitted_bifurc_tree,
         allele_to_cell_state,
         organ_dict,
         out_plot_file = "%s_fitted.png" % out_plot_prefix)
 
     # Overall MDS for rand tree
-    plot_mds_for_tree(
+    plot_mds_by_cell_type_for_tree(
         rand_tree,
         allele_to_cell_state,
         organ_dict,
         out_plot_file = "%s_rand.png" % out_plot_prefix)
+
+def plot_tsne_by_taxon_for_tree(
+    tree,
+    allele_to_cell_state,
+    organ_dict,
+    tot_time,
+    out_plot_file):
+    """
+    Plot MDS of taxon distances
+    """
+    abund_by_cell_type = {v: 0 for v in organ_dict.values()}
+    for leaf in tree:
+        for cell_type, abund in allele_to_cell_state[leaf.allele_events_list_str].items():
+            abund_by_cell_type[organ_dict[cell_type]] += abund
+
+    tree = _expand_leaved_tree(tree, allele_to_cell_state, default_dist_scale = 0.5, min_abund_thres = 5)
+
+    X_matrix = np.zeros((len(tree), len(tree)))
+    colors = []
+    sizes = []
+    for idx0, leaf0 in enumerate(tree):
+        colors.append(ORGAN_COLORS[organ_dict[str(leaf0.cell_state)]])
+        leaf0.add_feature("leaf_id", idx0)
+        sizes.append(leaf0.abundance/abund_by_cell_type[organ_dict[str(leaf0.cell_state)]])
+
+    for node in tree.traverse("postorder"):
+        if not node.is_leaf():
+            leaf_lists = []
+            for c in node.children:
+                leaf_list = [leaf.leaf_id for leaf in c]
+                leaf_lists.append(leaf_list)
+            leaf_pairs = []
+            for list_idx0, leaf_list0 in enumerate(leaf_lists):
+                for idx1, leaf_list1 in enumerate(leaf_lists[list_idx0 + 1:]):
+                    list_idx1 = list_idx0 + idx1 + 1
+                    leaf_pairs += list(itertools.product(leaf_list0, leaf_list1))
+
+            #node.add_feature("mrca_pairs", leaf_pairs)
+
+            dist = tot_time - node.get_distance(tree)
+            for (leaf_idx0, leaf_idx1) in leaf_pairs:
+                X_matrix[leaf_idx0, leaf_idx1] = dist
+                X_matrix[leaf_idx1, leaf_idx0] = dist
+
+    print("embedding....")
+    mds = TSNE(n_components=2, metric="precomputed")
+    noise = np.random.rand(X_matrix.shape[0], X_matrix.shape[1]) * 0.02
+    X_matrix += (noise + noise.T)/2
+    pos = mds.fit(X_matrix).embedding_
+    pyplot.clf()
+    fig, ax = pyplot.subplots()
+    ax.scatter(pos[:, 0], pos[:, 1], color=colors, lw=0, alpha = 0.5, s=np.array(sizes) * 1000)
+
+    pyplot.savefig(out_plot_file)
+    print("TSNE PLOT", out_plot_file)
+
+def plot_tsne_by_taxon(
+    fitted_bifurc_tree,
+    rand_tree,
+    allele_to_cell_state,
+    organ_dict,
+    tot_time,
+    out_plot_prefix = "/Users/jeanfeng/Desktop/tsne"):
+    """
+    plot TSNE of all cells based on MRCA distance
+    """
+    assign_rand_tree_lengths(rand_tree, tot_time)
+    plot_tsne_by_taxon_for_tree(
+        fitted_bifurc_tree,
+        allele_to_cell_state,
+        organ_dict,
+        tot_time,
+        out_plot_file = "%s_taxon_fitted.png" % out_plot_prefix)
+    plot_tsne_by_taxon_for_tree(
+        rand_tree,
+        allele_to_cell_state,
+        organ_dict,
+        tot_time,
+        out_plot_file = "%s_taxon_rand.png" % out_plot_prefix)
 
 def plot_branch_len_time(
     fitted_bifurc_tree,
@@ -397,6 +484,7 @@ def plot_branch_len_time(
                 rand_jitter(Y_branch_len, scaling_factor=0.002),
                 s=10)
         pyplot.savefig(out_plot_file)
+    fitted_slope = stats.linregress(X_dist, Y_branch_len)[0]
     print("mle tree", stats.linregress(X_dist, Y_branch_len))
 
     rand_slopes = []
@@ -417,6 +505,46 @@ def plot_branch_len_time(
         rand_corr.append(corr)
         rand_pvals.append(pval)
     print("rand tree", np.mean(rand_slopes), np.power(np.mean(rand_corr),2), np.mean(rand_pvals))
+    mean_rand_slope = np.mean(rand_slopes)
+    print("p value away from random", np.mean([np.abs(s - mean_rand_slope) > np.abs(fitted_slope - mean_rand_slope) for s in rand_slopes]))
+
+def _expand_leaved_tree(fitted_bifurc_tree, allele_to_cell_state, default_dist_scale = 0, min_abund_thres = 0):
+    """
+    @param default_dist_scale: how much to assign the leaf branch to the different cell types vs. preserve as internal branch length
+    @param min_abund_thres: minimum abundance for us to include that cell type leaf in the tree (we will always include
+                        the cell type with the highest abundance, regardless of absolute abundance)
+    """
+    leaved_tree = fitted_bifurc_tree.copy()
+    for l in leaved_tree:
+        allele_str = l.allele_events_list_str
+        if l.cell_state is None:
+            old_dist = l.dist
+            l.dist = old_dist * (1 - default_dist_scale)
+            sorted_cell_states = sorted(
+                    [(c_state_str, abund) for c_state_str, abund in allele_to_cell_state[allele_str].items()],
+                    key = lambda c: c[1],
+                    reverse=True)
+            for c_state_str, abund in sorted_cell_states[:1]:
+                new_child = CellLineageTree(
+                    l.allele_list,
+                    l.allele_events_list,
+                    cell_state_dict[c_state_str],
+                    dist = old_dist * default_dist_scale,
+                    abundance = abund,
+                    resolved_multifurcation = True)
+                l.add_child(new_child)
+            for c_state_str, abund in sorted_cell_states[1:]:
+                if abund > min_abund_thres:
+                    new_child = CellLineageTree(
+                        l.allele_list,
+                        l.allele_events_list,
+                        cell_state_dict[c_state_str],
+                        dist = old_dist * default_dist_scale,
+                        abundance = abund,
+                        resolved_multifurcation = True)
+                    l.add_child(new_child)
+    print("num leaves", len(leaved_tree))
+    return leaved_tree
 
 """
 plotting my fitted tree now...
@@ -427,20 +555,7 @@ def plot_gestalt_tree(
         allele_to_cell_state,
         cell_state_dict,
         out_plot_file):
-    for l in fitted_bifurc_tree:
-        allele_str = l.allele_events_list_str
-        if l.cell_state is None:
-            cell_state_strs = list(allele_to_cell_state[allele_str].keys())
-            for c_state_str in cell_state_strs:
-                new_child = CellLineageTree(
-                    l.allele_list,
-                    l.allele_events_list,
-                    cell_state_dict[c_state_str],
-                    dist = 0,
-                    abundance = 1,
-                    resolved_multifurcation = True)
-                l.add_child(new_child)
-    print("num leaves", len(fitted_bifurc_tree))
+    fitted_bifurc_tree = _expand_leaved_tree(fitted_bifurc_tree, allele_to_cell_state)
 
     for l in fitted_bifurc_tree:
         nstyle = NodeStyle()
@@ -526,8 +641,16 @@ with open(fitted_tree_file, "rb") as f:
 with open(rand_tree_file, "rb") as f:
     rand_tree = six.moves.cPickle.load(f)["tree"]
 
+print("plot mds taxon")
+plot_tsne_by_taxon(
+    res.fitted_bifurc_tree,
+    rand_tree,
+    allele_to_cell_state,
+    organ_dict,
+    tot_time,
+    out_plot_prefix = "/Users/jeanfeng/Desktop/tsne")
 print("plot mds")
-plot_mds(
+plot_mds_by_cell_type(
     res.fitted_bifurc_tree,
     rand_tree,
     allele_to_cell_state,
@@ -540,7 +663,7 @@ plot_distance_to_abundance(
     rand_tree,
     tot_time,
     out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_abundance.png",
-    num_rands = 20)
+    num_rands = 2000)
 print("distance to number of descendant cell states")
 plot_distance_to_num_cell_states(
     res.fitted_bifurc_tree,
@@ -548,17 +671,17 @@ plot_distance_to_num_cell_states(
     rand_tree,
     tot_time,
     out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_cell_state.png",
-    num_rands = 20)
-plot_gestalt_tree(
-    res.fitted_bifurc_tree,
-    organ_dict,
-    allele_to_cell_state,
-    cell_state_dict,
-    "/Users/jeanfeng/Desktop/gestalt_fitted5.png")
+    num_rands = 2000)
 print("plot branch length distribution")
 plot_branch_len_time(
     res.fitted_bifurc_tree,
     rand_tree,
     tot_time,
     out_plot_file="/Users/jeanfeng/Desktop/scatter_dist_to_branch_len.png",
-    num_rands = 20)
+    num_rands = 2000)
+plot_gestalt_tree(
+    res.fitted_bifurc_tree,
+    organ_dict,
+    allele_to_cell_state,
+    cell_state_dict,
+    "/Users/jeanfeng/Desktop/gestalt_fitted5.png")
