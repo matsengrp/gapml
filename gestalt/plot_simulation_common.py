@@ -5,6 +5,8 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
+import pandas as pd
+import seaborn as sns
 
 from tree_distance import *
 from cell_lineage_tree import CellLineageTree
@@ -154,6 +156,11 @@ def plot_mrca_matrix(mrca_mat, file_name: str, tot_time: float = 1):
     plt.tight_layout()
     plt.savefig(file_name)
 
+def plot_internal_node_heights(internal_node_heights, tot_time, setting_name, out_file):
+    internal_node_heights = pd.concat(internal_node_heights)
+    sns_plot = sns.lmplot(x="true", y="fitted", col=setting_name, data=internal_node_heights, aspect=.5)
+    sns_plot.savefig(out_file)
+
 def plot_tree(
         tree: CellLineageTree,
         ref_tree: CellLineageTree,
@@ -197,8 +204,10 @@ def gather_results(
         num_rands = 10,
         do_plots = False,
         print_keys = [],
-        out_true_mrca_plot = None,
-        out_fitted_mrca_plot = None):
+        out_true_tree_plot = None,
+        out_fitted_tree_plot = None,
+        out_node_height_plot = None,
+        setting_name= "setting"):
     get_param_func_dict = {
             "bhv": None,
             "random_bhv": None,
@@ -238,6 +247,7 @@ def gather_results(
                 dist = np.linalg.norm(fitted_val - true_model_val, ord=1)/np.linalg.norm(true_model_val, ord=1)
                 n_bcode_results[key][idx].append(dist)
 
+    internal_node_heights = []
     for seed_idx, seed in enumerate(seeds):
         for idx, setting in enumerate(settings):
             try:
@@ -256,7 +266,7 @@ def gather_results(
                 plot_tree(
                     true_model[tree_idx],
                     true_model[tree_idx],
-                    out_true_mrca_plot)
+                    out_true_tree_plot)
 
             try:
                 result = get_result_fnc(seed, setting, n_bcode)
@@ -271,7 +281,11 @@ def gather_results(
                 plot_tree(
                     result[tree_idx],
                     true_model[tree_idx],
-                    out_fitted_mrca_plot % setting)
+                    out_fitted_tree_plot % setting)
+                internal_node_heights.append(pd.DataFrame.from_dict({
+                    setting_name: [setting for _ in true_internal_meas.ref_node_val],
+                    "true": true_internal_meas.ref_node_val,
+                    "fitted": true_internal_meas._get_node_val(result[tree_idx])}))
 
             try:
                 rand_tree = get_rand_tree_fnc(seed, setting, n_bcode)
@@ -314,6 +328,13 @@ def gather_results(
 
             dist = true_bhv_meas.get_dist(result[tree_idx])
             n_bcode_results["bhv"][idx].append(dist)
+
+    if do_plots:
+        plot_internal_node_heights(
+            internal_node_heights,
+            tot_height,
+            setting_name,
+            out_node_height_plot)
 
     print_results(
             settings,

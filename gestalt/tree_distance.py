@@ -459,6 +459,12 @@ class InternalCorrMeasurer(MRCADistanceMeasurer):
             node_val.append(node_dist)
         return node_val
 
+    def _get_node_val(self, tree):
+        tree_mrca_matrix = self._get_mrca_matrix(tree)
+        return self.get_compare_node_distances(
+                self.ref_internal_nodes,
+                tree_mrca_matrix)
+
     def get_dist(self, tree):
         tree_mrca_matrix = self._get_mrca_matrix(tree)
         tree_node_val1 = self.get_compare_node_distances(
