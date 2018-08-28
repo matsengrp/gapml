@@ -9,6 +9,7 @@ from matplotlib import pyplot as plt
 from tree_distance import *
 from cell_lineage_tree import CellLineageTree
 from common import assign_rand_tree_lengths
+#from plot_mrca_matrices import plot_tree
 
 def get_true_model(file_name, tree_file_name, n_bcodes):
     """
@@ -153,6 +154,38 @@ def plot_mrca_matrix(mrca_mat, file_name: str, tot_time: float = 1):
     plt.tight_layout()
     plt.savefig(file_name)
 
+def plot_tree(
+        tree: CellLineageTree,
+        ref_tree: CellLineageTree,
+        file_name: str = "",
+        width: int=300,
+        show_leaf_name: bool = True):
+    from ete3 import CircleFace, TreeStyle, NodeStyle, RectFace
+    print(file_name)
+    tree.ladderize()
+    ref_tree.ladderize()
+
+    nstyle = NodeStyle()
+    nstyle["size"] = 0
+    for n in tree.traverse():
+        if not n.is_leaf():
+            n.set_style(nstyle)
+
+    leaf_dict = {}
+    for leaf_idx, leaf in enumerate(ref_tree):
+        leaf_dict[leaf.allele_events_list_str] = leaf_idx
+    for leaf_idx, leaf in enumerate(tree):
+        leaf.name = "%d" % leaf_dict[leaf.allele_events_list_str]
+
+    tree.show_leaf_name = show_leaf_name
+
+    tree.show_branch_length = True
+    ts = TreeStyle()
+    ts.scale = 100
+
+    tree.render(file_name, w=width, units="mm", tree_style=ts)
+    print("done")
+
 def gather_results(
         get_true_model_fnc,
         get_result_fnc,
@@ -217,8 +250,12 @@ def gather_results(
             true_bhv_meas = BHVDistanceMeasurer(true_model[tree_idx], "_output/scratch")
 
             if seed_idx == 0 and do_plots:
-                plot_mrca_matrix(
-                    true_mrca_meas.ref_tree_mrca_matrix,
+                #plot_mrca_matrix(
+                #    true_mrca_meas.ref_tree_mrca_matrix,
+                #    out_true_mrca_plot)
+                plot_tree(
+                    true_model[tree_idx],
+                    true_model[tree_idx],
                     out_true_mrca_plot)
 
             try:
@@ -228,8 +265,12 @@ def gather_results(
             n_bcode_results["seeds"][idx].append(seed)
             n_bcode_results["leaves"][idx].append(len(result[2]))
             if seed_idx == 0 and do_plots:
-                plot_mrca_matrix(
-                    true_mrca_meas._get_mrca_matrix(result[tree_idx]),
+                #plot_mrca_matrix(
+                #    true_mrca_meas._get_mrca_matrix(result[tree_idx]),
+                #    out_fitted_mrca_plot % setting)
+                plot_tree(
+                    result[tree_idx],
+                    true_model[tree_idx],
                     out_fitted_mrca_plot % setting)
 
             try:

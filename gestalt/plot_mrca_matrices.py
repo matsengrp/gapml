@@ -42,6 +42,7 @@ def plot_tree(
         show_leaf_name: bool = True,
         legend_colors: Dict = {}):
     from ete3 import CircleFace, TreeStyle, NodeStyle, RectFace
+    print(file_name)
 
     nstyle = NodeStyle()
     nstyle["size"] = 0
@@ -69,6 +70,7 @@ def plot_tree(
                     label=label_dict),
                 column=0)
     tree.render(file_name, w=width, units="mm", tree_style=ts)
+    print("done")
 
 #sampling = "same"
 #n_bcode = 1

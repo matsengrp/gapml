@@ -45,7 +45,7 @@ ORGAN_TRANSLATION = {
 THRES = 5
 COLLAPSE_DIST = 0.001
 
-fitted_tree_file = "tmp_mount/analyze_gestalt/_output/min_abund_5/sum_states_10/extra_steps_0/tune_topology_fitted.pkl"
+fitted_tree_file = "tmp_mount/analyze_gestalt/_output/min_abund_5/sum_states_10/extra_steps_0/tune_topology_pretuned.pkl"
 rand_tree_file = "tmp_mount/analyze_gestalt/_output/min_abund_5/parsimony_tree1.pkl"
 obs_file = "tmp_mount/analyze_gestalt/_output/min_abund_0/fish_data.pkl"
 
@@ -641,47 +641,47 @@ with open(fitted_tree_file, "rb") as f:
 with open(rand_tree_file, "rb") as f:
     rand_tree = six.moves.cPickle.load(f)["tree"]
 
-print("plot mds taxon")
-plot_tsne_by_taxon(
-    res.fitted_bifurc_tree,
-    rand_tree,
-    allele_to_cell_state,
-    organ_dict,
-    tot_time,
-    out_plot_prefix = "/Users/jeanfeng/Desktop/tsne")
-print("plot mds")
-plot_mds_by_cell_type(
-    res.fitted_bifurc_tree,
-    rand_tree,
-    allele_to_cell_state,
-    organ_dict,
-    tot_time,
-    out_plot_prefix = "/Users/jeanfeng/Desktop/mds")
-print("distance to abundance")
-plot_distance_to_abundance(
-    res.fitted_bifurc_tree,
-    rand_tree,
-    tot_time,
-    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_abundance.png",
-    num_rands = 2000)
-print("distance to number of descendant cell states")
-plot_distance_to_num_cell_states(
-    res.fitted_bifurc_tree,
-    organ_dict,
-    rand_tree,
-    tot_time,
-    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_cell_state.png",
-    num_rands = 2000)
-print("plot branch length distribution")
-plot_branch_len_time(
-    res.fitted_bifurc_tree,
-    rand_tree,
-    tot_time,
-    out_plot_file="/Users/jeanfeng/Desktop/scatter_dist_to_branch_len.png",
-    num_rands = 2000)
+#print("plot mds taxon")
+#plot_tsne_by_taxon(
+#    res.fitted_bifurc_tree,
+#    rand_tree,
+#    allele_to_cell_state,
+#    organ_dict,
+#    tot_time,
+#    out_plot_prefix = "/Users/jeanfeng/Desktop/tsne")
+#print("plot mds")
+#plot_mds_by_cell_type(
+#    res.fitted_bifurc_tree,
+#    rand_tree,
+#    allele_to_cell_state,
+#    organ_dict,
+#    tot_time,
+#    out_plot_prefix = "/Users/jeanfeng/Desktop/mds")
+#print("distance to abundance")
+#plot_distance_to_abundance(
+#    res.fitted_bifurc_tree,
+#    rand_tree,
+#    tot_time,
+#    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_abundance.png",
+#    num_rands = 1000)
+#print("distance to number of descendant cell states")
+#plot_distance_to_num_cell_states(
+#    res.fitted_bifurc_tree,
+#    organ_dict,
+#    rand_tree,
+#    tot_time,
+#    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_cell_state.png",
+#    num_rands = 1000)
+#print("plot branch length distribution")
+#plot_branch_len_time(
+#    res.fitted_bifurc_tree,
+#    rand_tree,
+#    tot_time,
+#    out_plot_file="/Users/jeanfeng/Desktop/scatter_dist_to_branch_len.png",
+#    num_rands = 1000)
 plot_gestalt_tree(
     res.fitted_bifurc_tree,
     organ_dict,
     allele_to_cell_state,
     cell_state_dict,
-    "/Users/jeanfeng/Desktop/gestalt_fitted5.png")
+    "/Users/jeanfeng/Desktop/gestalt_fitted5_more.png")
