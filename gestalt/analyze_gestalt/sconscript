@@ -93,7 +93,7 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = "3072,768,192,48,12,3,.75"
+    penalty_params = "12"
     cmd = [
         'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
@@ -110,15 +110,14 @@ def run_MLE(env, outdir, c):
         c['extra_steps'],
         '--max-iters 10000',
         '--num-inits 1',
-        '--train-split 0.75',
         '--total-tune-splits 3',
-        '--max-topologies 1',
+        '--max-topologies 10',
         '--tot-time-known',
     ]
     return env.Command(
         [
-            join(outdir, 'tune_topology_fitted.pkl'),
-            join(outdir, 'log_tune_topology.txt'),
+            join(outdir, 'tune_topology_pretuned.pkl'),
+            join(outdir, 'tune_topology_pretuned_log.txt'),
 	],
         [
             c['restrict_observed_alleles'][0],

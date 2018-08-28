@@ -183,7 +183,7 @@ def run_MLE(env, outdir, c):
         '--tot-time-known',
         '--max-topologies 4',
     ]
-    cmd = []
+    #cmd = []
     return env.Command(
         [
             join(outdir, 'tune_fitted_score.pkl'),

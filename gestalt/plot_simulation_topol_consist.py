@@ -19,7 +19,7 @@ prefix = "tmp_mount/"
 tree_idx = 1
 do_plots = True
 
-TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/tune_fitted.pkl"
+TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/tune_fitted_refitnew_tree0.pkl"
 RAND_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/parsimony_tree0.pkl"
 TRUE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/true_model.pkl"
 OUT_TRUE_TREE_PLOT = "/Users/jeanfeng/Desktop/true_tree.png"

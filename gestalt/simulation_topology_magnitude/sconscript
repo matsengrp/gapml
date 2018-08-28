@@ -29,12 +29,14 @@ nest.add(
 
 nest.add(
     'seed',
-    range(151, 152),
+    #range(151, 152),
+    [150, 152, 154],
 )
 
 nest.add(
     'lambda_magnitude',
-    [.33, 1, 3],
+    #[.33, 1, 3],
+    [3],
     label_func=lambda c: 'lambda_magnitude%d' % int(c * 10))
 
 nest.add(
@@ -175,7 +177,7 @@ def run_MLE(env, outdir, c):
         '--total-tune-splits 3',
         '--max-topologies 4',
     ]
-    cmd = []
+    #cmd = []
     return env.Command(
         [
             join(outdir, 'tune_fitted_score.pkl'),

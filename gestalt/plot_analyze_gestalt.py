@@ -1,5 +1,5 @@
 import six
-from ete3 import NodeStyle, SeqMotifFace
+#from ete3 import NodeStyle, SeqMotifFace
 from plot_mrca_matrices import plot_tree
 from matplotlib import pyplot
 from scipy import stats
@@ -641,47 +641,47 @@ with open(fitted_tree_file, "rb") as f:
 with open(rand_tree_file, "rb") as f:
     rand_tree = six.moves.cPickle.load(f)["tree"]
 
-#print("plot mds taxon")
-#plot_tsne_by_taxon(
-#    res.fitted_bifurc_tree,
-#    rand_tree,
-#    allele_to_cell_state,
-#    organ_dict,
-#    tot_time,
-#    out_plot_prefix = "/Users/jeanfeng/Desktop/tsne")
-#print("plot mds")
-#plot_mds_by_cell_type(
-#    res.fitted_bifurc_tree,
-#    rand_tree,
-#    allele_to_cell_state,
-#    organ_dict,
-#    tot_time,
-#    out_plot_prefix = "/Users/jeanfeng/Desktop/mds")
-#print("distance to abundance")
-#plot_distance_to_abundance(
-#    res.fitted_bifurc_tree,
-#    rand_tree,
-#    tot_time,
-#    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_abundance.png",
-#    num_rands = 1000)
-#print("distance to number of descendant cell states")
-#plot_distance_to_num_cell_states(
-#    res.fitted_bifurc_tree,
-#    organ_dict,
-#    rand_tree,
-#    tot_time,
-#    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_cell_state.png",
-#    num_rands = 1000)
-#print("plot branch length distribution")
-#plot_branch_len_time(
-#    res.fitted_bifurc_tree,
-#    rand_tree,
-#    tot_time,
-#    out_plot_file="/Users/jeanfeng/Desktop/scatter_dist_to_branch_len.png",
-#    num_rands = 1000)
+print("plot mds taxon")
+plot_tsne_by_taxon(
+    res.fitted_bifurc_tree,
+    rand_tree,
+    allele_to_cell_state,
+    organ_dict,
+    tot_time,
+    out_plot_prefix = "/Users/jeanfeng/Desktop/tsne")
+print("plot mds")
+plot_mds_by_cell_type(
+    res.fitted_bifurc_tree,
+    rand_tree,
+    allele_to_cell_state,
+    organ_dict,
+    tot_time,
+    out_plot_prefix = "/Users/jeanfeng/Desktop/mds")
+print("distance to abundance")
+plot_distance_to_abundance(
+    res.fitted_bifurc_tree,
+    rand_tree,
+    tot_time,
+    out_plot_file = None, # "/Users/jeanfeng/Desktop/scatter_dist_to_abundance.png",
+    num_rands = 2000)
+print("distance to number of descendant cell states")
+plot_distance_to_num_cell_states(
+    res.fitted_bifurc_tree,
+    organ_dict,
+    rand_tree,
+    tot_time,
+    out_plot_file = None, #"/Users/jeanfeng/Desktop/scatter_dist_to_cell_state.png",
+    num_rands = 2000)
+print("plot branch length distribution")
+plot_branch_len_time(
+    res.fitted_bifurc_tree,
+    rand_tree,
+    tot_time,
+    out_plot_file=None, #"/Users/jeanfeng/Desktop/scatter_dist_to_branch_len.png",
+    num_rands = 2000)
 plot_gestalt_tree(
     res.fitted_bifurc_tree,
     organ_dict,
     allele_to_cell_state,
     cell_state_dict,
-    "/Users/jeanfeng/Desktop/gestalt_fitted5_more.png")
+    "/Users/jeanfeng/Desktop/gestalt_fitted5.png")

@@ -28,7 +28,8 @@ nest.add(
 
 nest.add(
     'seed',
-    range(501, 503),
+    #range(501, 503),
+    [500]
 )
 
 nest.add(
@@ -82,7 +83,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [1,3,9],
+    [1,3,9,27],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -130,11 +131,11 @@ def run_topology(env, outdir, c):
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
     if c['num_barcodes'] == 1:
-        penalty_params = "3072,768,192,48,12"
+        penalty_params = "768,192,48,12"
     elif c['num_barcodes'] == 3:
-        penalty_params = "768,192,48,12,3"
+        penalty_params = "192,48,12,3"
     elif c['num_barcodes'] == 9:
-        penalty_params = "768,192,48,12,3"
+        penalty_params = "192,48,12,3"
     elif c['num_barcodes'] == 27:
         penalty_params = "192,48,12,3,.75"
 
