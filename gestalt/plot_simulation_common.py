@@ -80,6 +80,8 @@ def get_result(res_file):
     """
     with open(res_file, "rb") as f:
         result = six.moves.cPickle.load(f)["refit"]
+        #print(res_file)
+        #print(result.pen_log_lik, result.log_lik)
 
     # Create appropriate number of leaves to match abundance
     leaved_bifurc_tree = _get_leaved_result(result.fitted_bifurc_tree)

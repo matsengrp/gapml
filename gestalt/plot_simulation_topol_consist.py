@@ -12,30 +12,31 @@ import plot_simulation_common
 
 np.random.seed(0)
 
-model_seed = 510
-seeds = range(501,502)
-num_barcodes = [1,3,9,27]
-prefix = "tmp_mount/"
+model_seed = 200 # 510
+seeds = [500] #range(500,503)
+num_barcodes = [1]
+prefix = ""
+growth_stage = "larval" # "lambda_diff"
 tree_idx = 1
-do_plots = True
+do_plots = False
 
-TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/tune_fitted_refitnew_tree0.pkl"
-RAND_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/parsimony_tree0.pkl"
-TRUE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/true_model.pkl"
+TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/%s/num_barcodes%d/tune_fitted.pkl"
+RAND_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/%s/num_barcodes%d/parsimony_tree0.pkl"
+TRUE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/%s/true_model.pkl"
 OUT_TRUE_TREE_PLOT = "/Users/jeanfeng/Desktop/true_tree.png"
 OUT_FITTED_TREE_PLOT = "/Users/jeanfeng/Desktop/fitted_tree%d.png"
 OUT_NODE_PLOT = "/Users/jeanfeng/Desktop/node_heights.png"
 
 def get_true_model(seed, n_bcodes, _):
-    file_name = TRUE_TEMPLATE % (prefix, model_seed, seed)
+    file_name = TRUE_TEMPLATE % (prefix, model_seed, seed, growth_stage)
     return plot_simulation_common.get_true_model(file_name, None, n_bcodes)
 
 def get_result(seed, n_bcodes, _):
-    res_file = TEMPLATE % (prefix, model_seed, seed, n_bcodes)
+    res_file = TEMPLATE % (prefix, model_seed, seed, growth_stage, n_bcodes)
     return plot_simulation_common.get_result(res_file)
 
 def get_rand_tree(seed, n_bcodes, _):
-    res_file = RAND_TEMPLATE % (prefix, model_seed, seed, n_bcodes)
+    res_file = RAND_TEMPLATE % (prefix, model_seed, seed, growth_stage, n_bcodes)
     return plot_simulation_common.get_rand_tree(res_file)
 
 
@@ -52,7 +53,7 @@ plot_simulation_common.gather_results(
         print_keys = [
             "bhv",
             "random_bhv",
-            #"zero_bhv",
+            "zero_bhv",
             "super_zero_bhv",
             "internal_corr",
             "internal_random_corr",

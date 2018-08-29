@@ -71,14 +71,16 @@ class BirthDeathTreeSimulator:
     """
     def __init__(self,
         start_birth_rate: float,
-        birth_rate: float,
+        birth_decay: float,
+        birth_intercept: float,
         death_rate: float):
         """
         @param birth_rate: the CTMC rate param for cell division
         @param death_rate: the CTMC rate param for cell death
         """
-        self.start_birth_scale = 1.0 / start_birth_rate
-        self.birth_scale = 1.0 / birth_rate
+        self.start_birth_rate = start_birth_rate
+        self.birth_decay = birth_decay
+        self.birth_intercept = birth_intercept
         self.death_scale = 1.0 / death_rate
 
     def simulate(self, root_allele_list: AlleleList, time: float, max_nodes: int = 10):
@@ -134,7 +136,7 @@ class BirthDeathTreeSimulator:
 
         # Determine branch length and event at end of branch
         division_happens, branch_length = self._run_race(
-            self.start_birth_scale if remain_time > self.tot_time - 0.02 else self.birth_scale,
+            1.0/(self.start_birth_rate * np.exp(self.birth_decay * (self.tot_time - remain_time)) + self.birth_intercept),
             self.death_scale)
         obs_branch_length = min(branch_length, remain_time)
         remain_time = remain_time - obs_branch_length
@@ -225,8 +227,9 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
     """
 
     def __init__(self,
-        birth_rate: float,
         start_birth_rate: float,
+        birth_decay: float,
+        birth_intercept: float,
         death_rate: float,
         cell_state_simulator: CellStateSimulator,
         allele_simulator: AlleleSimulator):
@@ -237,7 +240,8 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
         @param allele_simulator: a simulator for how alleles get modified
         """
         self.start_birth_rate = start_birth_rate
-        self.birth_rate = birth_rate
+        self.birth_decay = birth_decay
+        self.birth_intercept = birth_intercept
         self.death_rate = death_rate
         self.cell_state_simulator = cell_state_simulator
         self.allele_simulator = allele_simulator
@@ -265,7 +269,8 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
         # Run the simulation to just create the tree topology
         bd_tree_simulator = BirthDeathTreeSimulator(
                 self.start_birth_rate,
-                self.birth_rate,
+                self.birth_decay,
+                self.birth_intercept,
                 self.death_rate)
         tree = bd_tree_simulator.simulate(
                 root_allele,

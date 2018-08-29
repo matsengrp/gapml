@@ -60,7 +60,7 @@ class CLTObserver:
             if not leaf.dead:
                 is_sampled = np.random.uniform() < sampling_rate
                 if is_sampled:
-                    logging.info("sampled id %d" % leaf.node_id)
+                    #logging.info("sampled id %d" % leaf.node_id)
                     observed_leaf_ids.add(leaf.node_id)
         return observed_leaf_ids
 
