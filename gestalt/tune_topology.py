@@ -241,11 +241,11 @@ def fit_models(
         logging.info("Running locally")
         successful_workers = [(w.run_worker(None), w) for w in worker_list]
 
-    best_pen_log_lik = successful_workers[0][0]["refit"].pen_log_lik
+    best_log_lik = successful_workers[0][0]["refit"].log_lik
     best_worker = successful_workers[0][1]
     for (result, succ_worker) in successful_workers[1:]:
-        if result["refit"].pen_log_lik > best_pen_log_lik:
-            best_pen_log_lik = result["refit"].pen_log_lik
+        if result["refit"].log_lik > best_log_lik:
+            best_log_lik = result["refit"].log_lik
             best_worker = succ_worker
     logging.info("Best worker %s", best_worker.out_model_file)
     return best_worker

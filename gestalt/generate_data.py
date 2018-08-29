@@ -104,9 +104,11 @@ def parse_args():
         default=1,
         help='poisson parameter for distribution of insertion in cut site(s)')
     parser.add_argument(
-        '--birth-lambda', type=float, default=2, help='birth rate')
+        '--birth-decay', type=float, default=-1, help='birth rate decay')
     parser.add_argument(
-        '--start-birth-lambda', type=float, default=20, help='birth rate')
+        '--start-birth-lambda', type=float, default=20, help='start birth rate')
+    parser.add_argument(
+        '--birth-intercept', type=float, default=0.1, help='birth rate intercept')
     parser.add_argument(
         '--death-lambda', type=float, default=0.001, help='death rate')
     parser.add_argument(
@@ -130,7 +132,7 @@ def parse_args():
         help="Seed for generating data")
     parser.add_argument('--min-uniq-alleles', type=int, default=3)
     parser.add_argument('--max-uniq-alleles', type=int, default=10)
-    parser.add_argument('--max-clt-nodes', type=int, default=40000)
+    parser.add_argument('--max-clt-nodes', type=int, default=1000000)
     parser.add_argument(
         '--max-abundance',
         type=int,
@@ -191,8 +193,9 @@ def create_simulators(args, clt_model):
                 allele_simulator)
     else:
         clt_simulator = CLTSimulatorBifurcating(
-            args.birth_lambda,
             args.start_birth_lambda,
+            args.birth_decay,
+            args.birth_intercept,
             args.death_lambda,
             cell_type_simulator,
             allele_simulator)
@@ -211,10 +214,10 @@ def create_cell_lineage_tree(
     clt_simulator, observer = create_simulators(args, clt_model)
 
     # Keep trying to make CLT until enough leaves in observed tree by modifying the max time of the tree
-    birth_lambda = args.birth_lambda
+    birth_intercept = args.birth_intercept
     for i in range(max_tries):
         try:
-            clt_simulator.birth_rate = birth_lambda
+            clt_simulator.birth_intercept = birth_intercept
             clt = clt_simulator.simulate(
                 tree_seed = args.model_seed,
                 data_seed = args.data_seed,
@@ -230,15 +233,15 @@ def create_cell_lineage_tree(
 
             logging.info(
                 "birth lambda %f, num uniq alleles %d, num sampled leaves %d, num tot_leaves %d",
-                birth_lambda,
+                birth_intercept,
                 len(obs_leaves),
                 len(true_subtree),
                 len(clt))
-            print("le....", len(true_subtree))
+            print("le....", len(true_subtree), birth_intercept)
             if len(true_subtree) < args.min_uniq_alleles:
-                birth_lambda += incr
+                birth_intercept += incr
             elif len(true_subtree) >= args.max_uniq_alleles:
-                birth_lambda -= incr
+                birth_intercept -= incr
             else:
                 # We got a good number of leaves! Stop trying
                 print("done!")
@@ -260,24 +263,24 @@ def create_cell_lineage_tree(
 
     return obs_leaves, true_subtree, obs_idx_to_leaves
 
-def initialize_lambda_rates(args, boost: float = 0.00001):
-    birth_lambda = args.birth_lambda
-    death_lambda = args.death_lambda
-
-    # initialize the target lambdas with some perturbation to ensure we don't have eigenvalues that are exactly equal
-    if args.perturb_target_lambdas_variance > 0:
-        perturbations = np.random.uniform(size=args.num_targets) - 0.5
-        perturbations = perturbations / np.sqrt(np.var(perturbations)) * np.sqrt(args.perturb_target_lambdas_variance)
-        target_lambdas = np.array(args.target_lambdas) + perturbations
-    else:
-        target_lambdas = np.array(args.target_lambdas)
-    min_lambda = np.min(target_lambdas)
-    if min_lambda < 0:
-        # Make sure all target lambdas are positive
-        target_lambdas = target_lambdas - min_lambda + boost
-        birth_lambda += -min_lambda + boost
-        death_lambda += -min_lambda + boost
-    return target_lambdas, birth_lambda, death_lambda
+#def initialize_lambda_rates(args, boost: float = 0.00001):
+#    birth_intercept = args.birth_intercept
+#    death_lambda = args.death_lambda
+#
+#    # initialize the target lambdas with some perturbation to ensure we don't have eigenvalues that are exactly equal
+#    if args.perturb_target_lambdas_variance > 0:
+#        perturbations = np.random.uniform(size=args.num_targets) - 0.5
+#        perturbations = perturbations / np.sqrt(np.var(perturbations)) * np.sqrt(args.perturb_target_lambdas_variance)
+#        target_lambdas = np.array(args.target_lambdas) + perturbations
+#    else:
+#        target_lambdas = np.array(args.target_lambdas)
+#    min_lambda = np.min(target_lambdas)
+#    if min_lambda < 0:
+#        # Make sure all target lambdas are positive
+#        target_lambdas = target_lambdas - min_lambda + boost
+#        birth_intercept += -min_lambda + boost
+#        death_lambda += -min_lambda + boost
+#    return target_lambdas, birth_intercept, death_lambda
 
 def main(args=sys.argv[1:]):
     args = parse_args()
@@ -289,7 +292,7 @@ def main(args=sys.argv[1:]):
     bcode_meta = BarcodeMetadata(unedited_barcode = barcode_orig, num_barcodes = args.num_barcodes)
 
     # initialize the target lambdas with some perturbation to ensure we don't have eigenvalues that are exactly equal
-    args.target_lambdas, args.birth_lambda, args.death_lambda = initialize_lambda_rates(args)
+    #args.target_lambdas, args.birth_intercept, args.death_lambda = initialize_lambda_rates(args)
     logging.info("args.target_lambdas %s" % str(args.target_lambdas))
     print("args.target_lambdas %s" % str(args.target_lambdas))
 
@@ -336,6 +339,7 @@ def main(args=sys.argv[1:]):
                     "Number of barcodes does not seem to be enough. There are leaves with %d abundance" % obs.abundance)
 
     logging.info("Number of uniq obs alleles %d", len(obs_leaves))
+    print("Number of uniq obs alleles %d" % len(obs_leaves))
 
     # Save the observed data
     with open(args.out_obs_file, "wb") as f:

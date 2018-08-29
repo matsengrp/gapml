@@ -109,6 +109,8 @@ def _tune_hyperparams(
         init_model_param_list.append(new_init_model_params)
 
     # Actually fit the trees using the kfold barcodes
+    # TODO: if one of the penalty params fails, then remove it from the subsequent
+    # kfold runs
     train_results = [LikelihoodScorer(
         get_randint(),
         tree_split.tree,

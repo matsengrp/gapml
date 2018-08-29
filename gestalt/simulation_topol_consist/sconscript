@@ -18,34 +18,59 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
-LAMBDA_SEQUENCE = [1., 0.9, 0.8, 0.7, 0.6]
+GROWTH_DICT = {
+    "larval": {
+        "sampling_rate": 0.03,
+        "start_birth": 70,
+        "birth_intercept": 3.1,
+        "death_lambda": 0.2,
+        "birth_decay": -12,
+        "lambda_sequence": [.65, .6, .55, .5, .45, .4],
+        "double": 0.2,
+        "min_leaves": 50,
+        "max_leaves": 200,
+    },
+    "dome": {
+        "sampling_rate": 0.2,
+        "start_birth": 14,
+        "birth_intercept": -2.1,
+        "death_lambda": 0.2,
+        "birth_decay": -0.7,
+        "lambda_sequence": [.65, .6, .55, .5, .45, .4],
+        "double": 0.2,
+        "min_leaves": 70,
+        "max_leaves": 150,
+    }
+}
 
 nest.add(
     'model_seed',
-    [510],
+    [200],
     label_func=lambda c: 'model_seed%d' % c,
 )
 
 nest.add(
     'seed',
-    #range(501, 503),
     [500]
 )
 
 nest.add(
-    'lambda_type',
+    'growth_stage',
     [
-       'lambda_diff'
+       'larval',
+       #'dome'
     ])
 
 @nest.add_target_with_env(localenv)
 def generate(env, outdir, c):
-    targ_lambdas = ",".join(map(str, LAMBDA_SEQUENCE))
+    targ_lambdas = ",".join(map(str,
+        GROWTH_DICT[c['growth_stage']]['lambda_sequence']))
 
     cmd = [
         #'python boto_run.py 2 2000 generate_data.py',
 	'python generate_data.py',
-	'--sampling-rate 0.2',
+	'--sampling-rate',
+        GROWTH_DICT[c['growth_stage']]['sampling_rate'],
         '--model-seed',
         c['model_seed'],
         '--data-seed',
@@ -54,15 +79,23 @@ def generate(env, outdir, c):
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
         '--time 1',
-        '--start-birth-lambda 95',
-        '--birth-lambda 2.8',
-        '--death-lambda 0.2',
+        '--start-birth-lambda',
+        GROWTH_DICT[c['growth_stage']]['start_birth'],
+        '--birth-decay',
+        GROWTH_DICT[c['growth_stage']]['birth_decay'],
+        '--birth-intercept',
+        GROWTH_DICT[c['growth_stage']]['birth_intercept'],
+        '--death-lambda',
+        GROWTH_DICT[c['growth_stage']]['death_lambda'],
         '--num-barcodes',
-        27,
-        '--min-uniq-alleles 15',
-        '--max-uniq-alleles 30',
-        '--max-abundance 200',
-        '--double-cut-weight 0.2',
+        3,
+        '--min-uniq-alleles',
+        GROWTH_DICT[c['growth_stage']]['min_leaves'],
+        '--max-uniq-alleles',
+        GROWTH_DICT[c['growth_stage']]['max_leaves'],
+        '--max-abundance 20000',
+        '--double-cut-weight',
+        GROWTH_DICT[c['growth_stage']]['double'],
         '--target-lambdas',
         targ_lambdas,
         '--trim-zero-probs 0.1 0.1',
@@ -83,7 +116,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [1,3,9,27],
+    [1,3],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -117,7 +150,7 @@ def run_topology(env, outdir, c):
         '--max-random',
         0,
         '--max-random-multifurc',
-        4,
+        20,
         '--num-jumbles 1'
     ]
     return env.Command(
@@ -131,7 +164,7 @@ def run_topology(env, outdir, c):
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
     if c['num_barcodes'] == 1:
-        penalty_params = "768,192,48,12"
+        penalty_params = "192,48,12,3"
     elif c['num_barcodes'] == 3:
         penalty_params = "192,48,12,3"
     elif c['num_barcodes'] == 9:
@@ -157,7 +190,7 @@ def run_MLE(env, outdir, c):
         '--num-inits 1',
         '--tot-time-known',
         '--total-tune-splits 3',
-        '--max-topologies 4',
+        '--max-topologies 20',
     ]
     return env.Command(
         [
