@@ -103,8 +103,12 @@ def parse_args():
         type=int,
         default=10,
         help='max topologies to tune over')
+    parser.add_argument(
+        '--fit-all-topologies',
+        action='store_true',
+        help='whether to fit all topologies anyways')
 
-    parser.set_defaults()
+    parser.set_defaults(fit_all_topologies=False, submit_srun=False)
     args = parser.parse_args()
 
     assert args.log_barr >= 0
@@ -125,7 +129,19 @@ def parse_args():
 def get_best_hyperparam(
         args,
         tune_results: List[Tuple[Dict, RunEstimatorWorker]]):
+    """
+    Grabs out the best hyperparam given the results
+    Figures out best penalty param first by aggregating across different topologies.
+    Then for that chosen penalty param, find the highest scoring topology.
 
+    @return (
+        list of LikelihoodScorerResult,
+        best dist-to-half penalty,
+        best topology idx in the list of TuneScorerResult)
+    """
+    # First pick out the best penalty param
+    # TODO: aggregating across different topologies
+    # for a bit of stability... i think this helps?
     total_pen_param_score = np.zeros(len(args.dist_to_half_pen_list))
     for (topology_res, _) in tune_results:
         for i, res in enumerate(topology_res["tune_results"]):
@@ -135,17 +151,35 @@ def get_best_hyperparam(
     best_idx = np.argmax(total_pen_param_score)
     best_dist_to_half_pen = args.dist_to_half_pen_list[best_idx]
     logging.info("Best penalty param %s", best_dist_to_half_pen)
-    # Create the initialization model params for warm starting
-    # Take arbitrary fitted set of model params -- we take the first one
-    warm_starts = [
-            topology_res["tune_results"][best_idx].model_params_dicts[0]
-            for topology_res, _ in tune_results]
 
-    return best_dist_to_half_pen, warm_starts
+    # Now identify the best topology
+    topology_scores = [
+        topology_res["tune_results"][best_idx].score
+        for (topology_res, _) in tune_results]
+    best_topology_idx = np.argmax(topology_scores)
+    logging.info("Worker scores %s", topology_scores)
+    logging.info("Best topology %d, %s",
+            best_topology_idx,
+            tune_results[best_topology_idx][1].topology_file)
+
+    if not args.fit_all_topologies:
+        return [tune_results[best_topology_idx]], best_idx, 0
+    else:
+        return tune_results, best_idx, best_topology_idx
 
 def tune_hyperparams(
-        topology_files,
+        topology_files: List[str],
         args):
+    """
+    Tunes both the penalty parameter as well as the topology
+    Uses the "score" of the topology penalty parameter pair to pick out which
+    final model to fit. (score here is the stability score)
+
+    @return (
+        list of LikelihoodScorerResult,
+        best dist-to-half penalty,
+        best topology idx in the list of TuneScorerResult)
+    """
     worker_list = []
     for file_idx, top_file in enumerate(topology_files):
         worker = RunEstimatorWorker(
@@ -170,6 +204,10 @@ def tune_hyperparams(
             scratch_dir = args.scratch_dir)
         worker_list.append(worker)
 
+    # Just print the things I plan to run
+    for w in worker_list:
+        w.run_worker(None, debug=True)
+
     if args.submit_srun:
         logging.info("Submitting jobs")
         job_manager = BatchSubmissionManager(
@@ -184,32 +222,51 @@ def tune_hyperparams(
         logging.info("Running locally")
         successful_workers = [(w.run_worker(None), w) for w in worker_list]
 
-    best_hyperparam, warm_starts = get_best_hyperparam(
+    return get_best_hyperparam(
             args,
             successful_workers)
 
-    # Create warm start model params file
-    warm_start_files = []
-    for file_idx, (top_file, warm_start) in enumerate(zip(topology_files, warm_starts)):
-        warm_start_file_name = args.out_model_file.replace(".pkl", "_warm%d.pkl" % file_idx)
-        warm_start_files.append(warm_start_file_name)
-        with open(warm_start_file_name, "wb") as f:
-            print("WARMSART", warm_start)
-            six.moves.cPickle.dump(warm_start, f, protocol=2)
+def create_topology_warm_start_files(
+        tune_results: List[LikelihoodScorerResult],
+        best_pen_param_idx: int,
+        args):
+    """
+    Creates warm start files for refitting topologies
 
-    return best_hyperparam, warm_start_files
+    @return List[topology file name, warm start file name] for each element in `tune_results`
+    """
+    topology_warm_start_files = []
+    for idx, (topology_res, worker) in enumerate(tune_results):
+        # Pick an arbitrary model param setting for warm start
+        warm_start = topology_res["tune_results"][best_pen_param_idx].model_params_dicts[0]
+        warm_start_file_name = args.out_model_file.replace(
+                ".pkl",
+                "_warm%d_all%d.pkl" % (idx, args.fit_all_topologies))
+        with open(warm_start_file_name, "wb") as f:
+            six.moves.cPickle.dump(warm_start, f, protocol=2)
+        topology_warm_start_files.append((
+            worker.topology_file,
+            warm_start_file_name))
+    return topology_warm_start_files
 
 def fit_models(
-        topology_files,
-        warm_start_files,
+        topology_warm_start_files: List[Tuple[str, str]],
         args,
-        pen_param):
+        pen_param: float):
+    """
+    Fits the models for the list of files in `topology_warm_start_files`
+
+    @param topology_warm_start_files: list of topology file and warm start file pairs
+    @param pen_param: the dist-to-half penalty parameter to fit
+
+    @return a list of results in the form of List[(LikelihoodScorerResult, EstimatorWorker)]
+    """
     worker_list = []
-    for file_idx, (top_file, warm_start_file) in enumerate(zip(topology_files, warm_start_files)):
+    for file_idx, (top_file, warm_start_file) in enumerate(topology_warm_start_files):
         worker = RunEstimatorWorker(
             args.obs_file,
             top_file,
-            args.out_model_file.replace(".pkl", "_refitnew_tree%d.pkl" % file_idx),
+            args.out_model_file.replace(".pkl", "_refit%d_all%s.pkl" % (file_idx, args.fit_all_topologies)),
             warm_start_file,
             args.true_model_file,
             args.seed + file_idx,
@@ -223,9 +280,12 @@ def fit_models(
             tune_only = False,
             max_sum_states = args.max_sum_states,
             max_extra_steps = args.max_extra_steps,
-            num_tune_splits = 1,
+            num_tune_splits = 0, # No more tuning
             scratch_dir = args.scratch_dir)
         worker_list.append(worker)
+
+    for w in worker_list:
+        w.run_worker(None, debug=True)
 
     if args.submit_srun:
         logging.info("Submitting jobs")
@@ -235,20 +295,12 @@ def fit_models(
                 len(worker_list),
                 args.scratch_dir,
                 threads=args.cpu_threads)
-        successful_workers = job_manager.run(successful_only=True)
-        assert len(successful_workers) > 0
+        successful_workers = job_manager.run()
     else:
         logging.info("Running locally")
         successful_workers = [(w.run_worker(None), w) for w in worker_list]
 
-    best_log_lik = successful_workers[0][0]["refit"].log_lik
-    best_worker = successful_workers[0][1]
-    for (result, succ_worker) in successful_workers[1:]:
-        if result["refit"].log_lik > best_log_lik:
-            best_log_lik = result["refit"].log_lik
-            best_worker = succ_worker
-    logging.info("Best worker %s", best_worker.out_model_file)
-    return best_worker
+    return successful_workers
 
 def main(args=sys.argv[1:]):
     args = parse_args()
@@ -262,18 +314,31 @@ def main(args=sys.argv[1:]):
 
     np.random.seed(args.seed)
     random.seed(args.seed)
+
+    # Find all the relevant topology files from max parsimony
     all_topology_files = glob.glob(args.topology_file_template.replace("parsimony_tree0", "parsimony_tree*[0-9]"))
     random.shuffle(all_topology_files)
     topology_files = all_topology_files[:args.max_topologies]
     assert len(topology_files) > 0
     logging.info("Processing the tree files: %s", topology_files)
-    best_pen_param, warm_start_files = tune_hyperparams(topology_files, args)
-    best_worker = fit_models(topology_files, warm_start_files, args, best_pen_param)
 
+    # Actually tune things -- tune penalty params and tune topology
+    tune_results, best_pen_param_idx, best_topology_idx = tune_hyperparams(topology_files, args)
+    topology_warm_start_files = create_topology_warm_start_files(
+            tune_results,
+            best_pen_param_idx,
+            args)
+    results = fit_models(
+            topology_warm_start_files,
+            args,
+            args.dist_to_half_pen_list[best_pen_param_idx])
+
+    # Copy out the results from the worker that we chose according to our scoring criteria
+    best_worker = results[best_topology_idx][1]
     with open(best_worker.out_model_file, "rb") as f:
         results = six.moves.cPickle.load(f)
     with open(args.out_model_file, "wb") as f:
-         six.moves.cPickle.dump(results, f, protocol = 2)
+        six.moves.cPickle.dump(results, f, protocol = 2)
     logging.info("Complete!!!")
 
 if __name__ == "__main__":
