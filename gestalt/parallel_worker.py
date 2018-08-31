@@ -3,8 +3,9 @@ import os
 import shutil
 import traceback
 import six
+import time
 import custom_utils
-from custom_utils import CustomCommand
+from custom_utils import CustomCommand, run_cmd, finish_process
 import numpy as np
 
 class BatchParallelWorkers:
@@ -55,69 +56,13 @@ class ParallelWorkerManager:
     def run(self):
         raise NotImplementedError()
 
-class BatchSubmissionManager(ParallelWorkerManager):
-    """
-    Handles submitting jobs to a job submission system (e.g. slurm)
-    """
-    def __init__(self,
-            worker_list,
-            shared_obj,
-            num_approx_batches,
-            worker_folder,
-            threads=None,
-            retry=False):
-        """
-        @param worker_list: List of ParallelWorkers
-        @param shared_obj: object shared across parallel workers - useful to minimize disk space usage
-        @param num_approx_batches: number of batches to make approximately (might be a bit more)
-        @param worker_folder: the folder to make all the results from the workers
-        @param threads: number of threads to request per machine
-        @param retry: whether to retry the jobs locally if they fail
-        """
-        self.retry = retry
-        self.batch_worker_cmds = []
-        self.batched_workers = [] # Tracks the batched workers if something fails
-        self.output_folders = []
-        self.output_files = []
-        self.worker_list = worker_list
-        self.worker_folder = worker_folder
-        self.threads = threads
-        self.create_batch_worker_cmds(worker_list, shared_obj, num_approx_batches, worker_folder)
-
-    def run(self, successful_only=False):
-        """
-        @param successful_only: whether to return successful jobs only
-                                unsuccessful jobs have None as their result
-        @return list of tuples (result, worker)
-        """
-        custom_utils.run_cmds(self.batch_worker_cmds)
-        res = self.read_batch_worker_results()
-        self.clean_outputs()
-        if successful_only:
-            return self._get_successful_jobs(res, self.worker_list)
-        else:
-            return [(r, w) for r, w in zip(res, self.worker_list)]
-
-    def _get_successful_jobs(self, results, workers):
-        """
-        filters our the results that were not successful
-        @return list of tuples with (result, worker)
-        """
-        successful_res_workers = []
-        for res, worker in zip(results, workers):
-            if res is None:
-                continue
-            successful_res_workers.append((res, worker))
-        return successful_res_workers
-
-    def create_batch_worker_cmds(self, worker_list, shared_obj, num_approx_batches, worker_folder):
+    def create_batch_worker_cmds(self, worker_list, num_approx_batches, worker_folder):
         """
         Create commands for submitting to a batch manager
         Pickles the workers as input files to the jobs
         The commands specify the output file names for each job - read these output files
         to retrieve the results from the jobs
         """
-        self.shared_obj = shared_obj
         num_workers = len(worker_list)
         num_per_batch = int(max(np.ceil(float(num_workers)/num_approx_batches), 1))
         for batch_idx, start_idx in enumerate(range(0, num_workers, num_per_batch)):
@@ -137,7 +82,7 @@ class BatchSubmissionManager(ParallelWorkerManager):
             with open(input_file_name, "wb") as cmd_input_file:
                 # Pickle the worker as input to the job
                 six.moves.cPickle.dump(
-                    BatchParallelWorkers(batched_workers, shared_obj),
+                    BatchParallelWorkers(batched_workers, self.shared_obj),
                     cmd_input_file,
                     protocol=2,
                 )
@@ -176,6 +121,138 @@ class BatchSubmissionManager(ParallelWorkerManager):
                     worker_results.append(r)
 
         return worker_results
+
+
+class SubprocessManager(ParallelWorkerManager):
+    """
+    Creates separate processes on the same CPU to run the workers
+    """
+    def __init__(self,
+            worker_list,
+            shared_obj,
+            worker_folder,
+            threads,
+            retry=False):
+        self.batch_worker_cmds = []
+        self.batched_workers = [] # Tracks the batched workers if something fails
+        self.output_folders = []
+        self.output_files = []
+
+        self.retry = retry
+        self.worker_list = worker_list
+        self.worker_folder = worker_folder
+        self.threads = threads
+        self.shared_obj = shared_obj
+        self.create_batch_worker_cmds(worker_list, len(worker_list), worker_folder)
+        self.batch_system = "subprocess"
+
+    def run(self, successful_only=False, sleep = 0.01):
+        """
+        @param successful_only: whether to return successful jobs only
+                                unsuccessful jobs have None as their result
+        @return list of tuples (result, worker)
+        """
+        cmdfos = self.batch_worker_cmds
+        batch_system = "subprocess"
+
+        procs = []
+        n_tries = []
+        up_to_idx = 0
+        def get_num_unused_threads(procs):
+            return self.threads - (len(procs) - procs.count(None))
+
+        while up_to_idx < len(cmdfos) or len(procs) != procs.count(None):
+            num_unused_threads = get_num_unused_threads(procs)
+            if num_unused_threads > 0 and up_to_idx <= len(cmdfos):
+                old_idx = up_to_idx
+                up_to_idx += num_unused_threads
+                for cmd in cmdfos[old_idx:up_to_idx]:
+                    procs.append(run_cmd(
+                        cmd,
+                        batch_system=self.batch_system))
+                    n_tries.append(1)
+                    if sleep:
+                        time.sleep(sleep)
+
+            while get_num_unused_threads(procs) == 0:
+                # we set each proc to None when it finishes
+                for iproc in range(len(procs)):
+                    if procs[iproc] is None:  # already finished
+                        continue
+                    if procs[iproc].poll() is not None:  # it just finished
+                        finish_process(
+                                iproc,
+                                procs,
+                                n_tries,
+                                cmdfos[iproc],
+                                batch_system=self.batch_system,
+                                max_num_tries = 0)
+                sys.stdout.flush()
+                if sleep:
+                    time.sleep(sleep)
+
+        res = self.read_batch_worker_results()
+        self.clean_outputs()
+        if successful_only:
+            return self._get_successful_jobs(res, self.worker_list)
+        else:
+            return [(r, w) for r, w in zip(res, self.worker_list)]
+
+class BatchSubmissionManager(ParallelWorkerManager):
+    """
+    Handles submitting jobs to a job submission system (e.g. slurm)
+    """
+    def __init__(self,
+            worker_list,
+            shared_obj,
+            num_approx_batches,
+            worker_folder,
+            threads=None,
+            retry=False):
+        """
+        @param worker_list: List of ParallelWorkers
+        @param shared_obj: object shared across parallel workers - useful to minimize disk space usage
+        @param num_approx_batches: number of batches to make approximately (might be a bit more)
+        @param worker_folder: the folder to make all the results from the workers
+        @param threads: number of threads to request per machine
+        @param retry: whether to retry the jobs locally if they fail
+        """
+        self.retry = retry
+        self.batch_worker_cmds = []
+        self.batched_workers = [] # Tracks the batched workers if something fails
+        self.output_folders = []
+        self.output_files = []
+        self.worker_list = worker_list
+        self.worker_folder = worker_folder
+        self.threads = threads
+        self.shared_obj = shared_obj
+        self.create_batch_worker_cmds(worker_list, num_approx_batches, worker_folder)
+
+    def run(self, successful_only=False):
+        """
+        @param successful_only: whether to return successful jobs only
+                                unsuccessful jobs have None as their result
+        @return list of tuples (result, worker)
+        """
+        custom_utils.run_cmds(self.batch_worker_cmds)
+        res = self.read_batch_worker_results()
+        self.clean_outputs()
+        if successful_only:
+            return self._get_successful_jobs(res, self.worker_list)
+        else:
+            return [(r, w) for r, w in zip(res, self.worker_list)]
+
+    def _get_successful_jobs(self, results, workers):
+        """
+        filters our the results that were not successful
+        @return list of tuples with (result, worker)
+        """
+        successful_res_workers = []
+        for res, worker in zip(results, workers):
+            if res is None:
+                continue
+            successful_res_workers.append((res, worker))
+        return successful_res_workers
 
     def clean_outputs(self):
         for fname in self.output_folders:

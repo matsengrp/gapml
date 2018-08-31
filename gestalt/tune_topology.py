@@ -14,7 +14,7 @@ import numpy as np
 import random
 from typing import List, Tuple, Dict
 
-from parallel_worker import BatchSubmissionManager
+from parallel_worker import BatchSubmissionManager, SubprocessManager
 from estimator_worker import RunEstimatorWorker
 from likelihood_scorer import LikelihoodScorerResult
 from common import create_directory
@@ -90,6 +90,11 @@ def parse_args():
         '--submit-srun',
         action='store_true',
         help='is using slurm to submit jobs')
+    parser.add_argument(
+        '--num-processes',
+        type=int,
+        default=1,
+        help='number of subprocesses to invoke for running')
     parser.add_argument(
         '--lambda-known',
         action='store_true',
@@ -185,7 +190,7 @@ def tune_hyperparams(
         worker = RunEstimatorWorker(
             args.obs_file,
             top_file,
-            args.out_model_file.replace(".pkl", "_tune_only_tree%d.pkl" % file_idx),
+            args.out_model_file.replace(".pkl", "_tune_tree%d.pkl" % file_idx),
             None,
             args.true_model_file,
             args.seed + file_idx,
@@ -216,7 +221,16 @@ def tune_hyperparams(
                 len(worker_list),
                 args.scratch_dir,
                 threads=args.cpu_threads)
-        successful_workers = job_manager.run(successful_only=True)
+        successful_workers = job_manager.run()
+        assert len(successful_workers) > 0
+    elif args.num_processes > 1:
+        logging.info("Submitting new processes")
+        job_manager = SubprocessManager(
+                worker_list,
+                None,
+                args.scratch_dir,
+                threads=args.num_processes)
+        successful_workers = job_manager.run()
         assert len(successful_workers) > 0
     else:
         logging.info("Running locally")
@@ -295,6 +309,14 @@ def fit_models(
                 len(worker_list),
                 args.scratch_dir,
                 threads=args.cpu_threads)
+        successful_workers = job_manager.run()
+    elif args.num_processes > 1:
+        logging.info("Submitting new processes")
+        job_manager = SubprocessManager(
+                worker_list,
+                None,
+                args.scratch_dir,
+                threads=args.num_processes)
         successful_workers = job_manager.run()
     else:
         logging.info("Running locally")

@@ -383,7 +383,8 @@ def main(args=sys.argv[1:]):
 
     np.random.seed(seed=args.seed)
 
-    if os.path.exists(args.pickle_out):
+    if os.path.exists(args.pickle_out) and args.max_iters > 0:
+        print('exists....')
         logging.info("model exists...")
         return
 
