@@ -91,7 +91,7 @@ def parse_args():
         '--num-tune-splits',
         type=int,
         default=3,
-        help="number of random splits of the data for tuning penalty params")
+        help="number of random splits of the data for tuning penalty params. if 0, no tuning to do")
     parser.add_argument('--max-iters', type=int, default=2)
     parser.add_argument('--num-inits', type=int, default=1)
     parser.add_argument(
@@ -143,6 +143,10 @@ def parse_args():
     assert args.log_barr >= 0
     assert all(lam >= 0 for lam in args.dist_to_half_pens)
     if args.lambda_known:
+        assert len(args.dist_to_half_pens) == 1
+
+    if args.num_tune_splits == 0:
+        # If we aren't tuning anything, then there better only be one penalty param
         assert len(args.dist_to_half_pens) == 1
     return args
 
@@ -227,6 +231,9 @@ def read_init_model_params_file(args, bcode_meta, obs_data_dict, true_model_dict
     if args.init_model_params_file is not None:
         with open(args.init_model_params_file, "rb") as f:
             args.init_params = six.moves.cPickle.load(f)
+
+    args.init_params["log_barr_pen"] = args.log_barr
+    args.init_params["dist_to_half_pen"] = args.dist_to_half_pens[0]
 
     # Copy over true known params if specified
     if args.known_params.tot_time:
@@ -376,7 +383,8 @@ def main(args=sys.argv[1:]):
 
     np.random.seed(seed=args.seed)
 
-    if os.path.exists(args.pickle_out):
+    if os.path.exists(args.pickle_out) and args.max_iters > 0:
+        print('exists....')
         logging.info("model exists...")
         return
 
@@ -394,8 +402,7 @@ def main(args=sys.argv[1:]):
 
     raw_res = None
     refit_res = None
-
-    tune_results = hyperparam_tuner.tune(tree, bcode_meta, args)
+    tune_results, args.init_params = hyperparam_tuner.tune(tree, bcode_meta, args)
 
     if not args.tune_only:
         # Now we can actually train the multifurc tree with the target lambda penalty param fixed

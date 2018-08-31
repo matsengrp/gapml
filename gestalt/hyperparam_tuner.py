@@ -38,27 +38,26 @@ def tune(
 
     @return List[TuneScorerResult] -- corresponding to each penalty param
                 being considered
+            As well as the best model params to initialize with
     """
-    best_params = args.init_params
-    best_params["log_barr_pen"] = args.log_barr
-    best_params["dist_to_half_pen"] = args.dist_to_half_pens[0]
-    if len(args.dist_to_half_pens) == 1:
-        # There is nothing to tune -- no fitting to do.
-        # Sends back the same initialization params.
-        return [TuneScorerResult(
-            args.log_barr,
-            args.dist_to_half_pens,
-            [best_params],
+    if args.num_tune_splits <= 0:
+        # If no splits, then don't do any tuning
+        assert len(args.dist_to_half_pens) == 1
+        tune_results = [TuneScorerResult(
+            log_barr_pen = args.log_barr,
+            dist_to_half_pen = args.dist_to_half_pens[0],
+            model_params_dicts = [args.init_params],
             score = 0)]
-
-    if bcode_meta.num_barcodes > 1:
-        return _tune_hyperparams(
+    elif bcode_meta.num_barcodes > 1:
+        # For many barcodes, we split by barcode
+        tune_results = _tune_hyperparams(
             tree,
             bcode_meta,
             args,
             create_kfold_barcode_trees,
             _get_many_bcode_stability_score)
     else:
+        # For many barcodes, we split into subtrees
         tune_results = _tune_hyperparams(
             tree,
             bcode_meta,
@@ -73,7 +72,10 @@ def tune(
                 param_dict.pop('branch_len_inners', None)
                 param_dict.pop('branch_len_offsets_proportion', None)
 
-        return tune_results
+    pen_param_scores = np.array([res.score for res in tune_results])
+    logging.info("Tuning scores %s", pen_param_scores)
+    best_idx = np.argmax(pen_param_scores)
+    return tune_results, tune_results[best_idx].model_params_dicts[0]
 
 def _tune_hyperparams(
         tree: CellLineageTree,
@@ -220,10 +222,11 @@ def _get_one_bcode_stability_score(pen_param_results: List[LikelihoodScorerResul
 
     if is_stable:
         mean_target_param_est = sum(target_param_ests)/len(target_param_ests)
-        logging.info("mean targ %s", mean_target_param_est)
-        stability_score = -np.mean([
+        targ_stability_score = -np.mean([
             np.power(np.linalg.norm(targ_param_est - mean_target_param_est), 2)
-            for targ_param_est in target_param_ests])
-        return stability_score
+            for targ_param_est in target_param_ests])/np.power(np.linalg.norm(mean_target_param_est), 2)
+        logging.info("mean targ %s", mean_target_param_est)
+        logging.info("targ stablity %s", targ_stability_score)
+        return targ_stability_score
     else:
         return -np.inf

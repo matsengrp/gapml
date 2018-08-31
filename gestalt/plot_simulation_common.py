@@ -255,7 +255,8 @@ def gather_results(
             try:
                 true_model = get_true_model_fnc(seed, setting, n_bcode)
                 tot_height = true_model[0]["tot_time"]
-            except FileNotFoundError:
+            except FileNotFoundError as e:
+                print(e)
                 continue
             true_internal_meas = InternalCorrMeasurer(true_model[tree_idx], "_output/scratch")
             true_mrca_meas = MRCADistanceMeasurer(true_model[tree_idx], "_output/scratch")
@@ -272,7 +273,8 @@ def gather_results(
 
             try:
                 result = get_result_fnc(seed, setting, n_bcode)
-            except FileNotFoundError:
+            except FileNotFoundError as e:
+                print(e)
                 continue
             n_bcode_results["seeds"][idx].append(seed)
             n_bcode_results["leaves"][idx].append(len(result[2]))
@@ -291,7 +293,8 @@ def gather_results(
 
             try:
                 rand_tree = get_rand_tree_fnc(seed, setting, n_bcode)
-            except FileNotFoundError:
+            except FileNotFoundError as e:
+                print(e)
                 continue
 
             rand_dists = []

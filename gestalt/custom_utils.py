@@ -45,7 +45,7 @@ def run_cmd(cmdfo, batch_system=None, batch_options=None):
     Creates a process command
 
     @param cmdfo: class CustomCommand
-    @param batch_system: "slurm" or "sge" -- right now we only accept slurm
+    @param batch_system: "slurm" or "subprocess" -- subprocess will run locally in a new process
     @param batch_options: other options to pass to the batch system manager
     """
     cmd_str = cmdfo.cmd_str  # don't want to modify the str in <cmdfo>
@@ -58,10 +58,8 @@ def run_cmd(cmdfo, batch_system=None, batch_options=None):
             prefix = 'srun -p matsen_e,campus --exclude=data/gizmod.txt'
             if cmdfo.threads is not None:
                 prefix += ' --cpus-per-task %d' % cmdfo.threads
-        elif batch_system == 'sge':
-            prefix = 'qsub -sync y -b y -V -o ' + fout + ' -e ' + ferr
-            fout = None
-            ferr = None
+        elif batch_system == "subprocess":
+            prefix = ''
         else:
             assert False
         if batch_options is not None:

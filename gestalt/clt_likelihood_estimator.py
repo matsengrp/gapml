@@ -73,18 +73,24 @@ class CLTPenalizedEstimator(CLTEstimator):
                     self.model.dist_to_half_pen_ph: dist_to_half_pen,
                 }
 
-        pen_log_lik, log_lik = self.model.sess.run(
-            [self.model.smooth_log_lik, self.model.log_lik],
+        pen_log_lik, log_lik, branch_lens, dist_to_half_pen = self.model.sess.run(
+            [self.model.smooth_log_lik,
+                self.model.log_lik,
+                self.model.branch_lens,
+                self.model.dist_to_half_pen],
             feed_dict=feed_dict)
 
         prev_pen_log_lik = pen_log_lik[0]
+        logging.info("dist pen %f", dist_to_half_pen)
         logging.info("initial penalized log lik %f, unpen log lik %f", pen_log_lik, log_lik)
         print("initial penalized log lik obtained %f" % pen_log_lik)
         assert not np.isnan(pen_log_lik)
         train_history = [{
                     "iter": -1,
                     "log_lik": log_lik,
-                    "pen_log_lik": pen_log_lik}]
+                    "pen_log_lik": pen_log_lik,
+                    "dist_to_half_pen": dist_to_half_pen,
+                    "branch_lens": branch_lens}]
 
         if dist_measurers is not None:
             bifurc_tree = self.model.get_fitted_bifurcating_tree()

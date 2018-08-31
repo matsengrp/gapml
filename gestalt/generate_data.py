@@ -106,7 +106,7 @@ def parse_args():
     parser.add_argument(
         '--birth-decay', type=float, default=-1, help='birth rate decay')
     parser.add_argument(
-        '--start-birth-lambda', type=float, default=20, help='start birth rate')
+        '--start-birth-lambda', type=float, default=3, help='start birth rate')
     parser.add_argument(
         '--birth-intercept', type=float, default=0.1, help='birth rate intercept')
     parser.add_argument(

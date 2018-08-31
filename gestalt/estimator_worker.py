@@ -46,7 +46,7 @@ class RunEstimatorWorker(ParallelWorker):
         self.scratch_dir = scratch_dir
         self.num_tune_splits = num_tune_splits
 
-    def run_worker(self, shared_obj):
+    def run_worker(self, shared_obj, debug=False):
         """
         @param shared_obj: ignored
         """
@@ -103,6 +103,9 @@ class RunEstimatorWorker(ParallelWorker):
                 '--max-sum-states')
 
         print(" ".join(map(str, cmd)))
+        if debug:
+            return
+
         subprocess.check_call(list(map(lambda x: str(x), cmd)))
 
         assert os.path.exists(self.out_model_file)

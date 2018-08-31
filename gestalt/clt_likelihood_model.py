@@ -912,6 +912,8 @@ class CLTLikelihoodModel:
         else:
             self.branch_log_barr = tf.constant(0, dtype=tf.float64)
 
+        self.dist_to_half_pen = tf.reduce_mean(tf.stack(self.dist_to_half_pen_list))
+
         self.smooth_log_lik = (
                 self.log_lik/self.bcode_meta.num_barcodes
                 + self.log_barr_ph * self.branch_log_barr
@@ -979,12 +981,14 @@ class CLTLikelihoodModel:
                         index_vals,
                         output_shape=[transition_wrapper.num_possible_states + 1, 1],
                         name="haz_away.multifurc")
-                return -haz_aways * time_stays_constant
+                haz_stay_scaled = -haz_aways * time_stays_constant
+                return haz_stay_scaled, haz_stay_scaled[:-1]
             else:
                 root_haz_away = self.hazard_away_dict[TargetStatus()]
-                return -root_haz_away * time_stays_constant
+                haz_stay_scaled = -root_haz_away * time_stays_constant
+                return haz_stay_scaled, haz_stay_scaled
         else:
-            return tf.constant(0, dtype=tf.float64)
+            return tf.constant(0, dtype=tf.float64), None
 
     @profile
     def _create_topology_log_lik_barcode(
@@ -1007,7 +1011,8 @@ class CLTLikelihoodModel:
         down_probs_dict = dict()
         # Store all the scaling terms addressing numerical underflow
         log_scaling_terms = dict()
-        self.dist_to_half_pen = tf.constant(0, dtype=tf.float64)
+        self.dist_to_half_pen_list = []
+        #self.shapes = []
         # Tree traversal order should be postorder
         for node in self.topology.traverse("postorder"):
             if node.is_leaf():
@@ -1017,14 +1022,15 @@ class CLTLikelihoodModel:
                 prob_array[observed_key] = 1
                 Lprob[node.node_id] = tf.constant(prob_array, dtype=tf.float64)
             else:
-                log_Lprob_node = self._initialize_lower_log_prob(
+                log_Lprob_node, haz_to_pen = self._initialize_lower_log_prob(
                         transition_wrappers,
                         node,
                         bcode_idx)
                 # For a multifurcating tree, this is where we penalize spine length
                 # (constant penalty if no spine)
-                self.dist_to_half_pen += tf.reduce_mean(
-                        tf.abs(tf.exp(log_Lprob_node) - tf.constant(0.5, tf.float64)))
+                if haz_to_pen is not None:
+                    self.dist_to_half_pen_list.append(
+                            tf.reduce_mean(tf.abs(tf.exp(haz_to_pen) - tf.constant(0.5, tf.float64))))
 
                 for child in node.children:
                     child_wrapper = transition_wrappers[child.node_id][bcode_idx]
@@ -1050,16 +1056,17 @@ class CLTLikelihoodModel:
                             # a single spine -- we use the instantaneous transition matrix from the top node and multiply by the entire
                             # spine length
                             if len(child.spine_children):
-                                haz_away = tf.exp(tf.diag_part(tr_mat) * tf.reduce_sum(
+                                prob_stay = tf.exp(tf.diag_part(tr_mat)[:-1] * tf.reduce_sum(
                                         tf.gather(
                                             params = self.branch_lens,
                                             indices = child.spine_children)))
-                                self.dist_to_half_pen += tf.reduce_mean(tf.abs(
-                                    haz_away - tf.constant(0.5, dtype=tf.float64)))
+                                self.dist_to_half_pen_list.append(tf.reduce_mean(tf.abs(
+                                    prob_stay - tf.constant(0.5, dtype=tf.float64))))
                         else:
-                            haz_away = tf.diag_part(pt_matrix[child.node_id])
-                            self.dist_to_half_pen += tf.reduce_mean(tf.abs(
-                                    haz_away - tf.constant(0.5, tf.float64)))
+                            prob_stay = tf.diag_part(pt_matrix[child.node_id])[:-1]
+                            #self.shapes.append([prob_stay, tf.diag_part(pt_matrix[child.node_id])])
+                            self.dist_to_half_pen_list.append(tf.reduce_mean(tf.abs(
+                                    prob_stay - tf.constant(0.5, tf.float64))))
 
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.
@@ -1306,10 +1313,21 @@ class CLTLikelihoodModel:
             elif len(node.spine_children):
                 node.dist = br_lens[node.node_id]
 
-        # Collapse tree but preserve node id ordering
         collapsed_tree._remove_single_child_unobs_nodes(scratch_tree)
 
-        scratch_tree.label_node_ids()
+        # label node ids but dont override existing leaf node ids
+        leaf_ids = set([leaf.node_id for leaf in scratch_tree])
+        node_id_counter = 0
+        tot_nodes = 0
+        for node in scratch_tree.traverse():
+            tot_nodes += 1
+            if not node.is_leaf():
+                while node_id_counter in leaf_ids:
+                    node_id_counter += 1
+                node.add_feature("node_id", node_id_counter)
+                node_id_counter += 1
+        assert node_id_counter == tot_nodes
+
         remaining_nodes = set([node for node in scratch_tree.traverse()])
         for node in scratch_tree.traverse():
             node.spine_children = [c.node_id for c in node.spine_children if c in remaining_nodes]
