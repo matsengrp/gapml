@@ -60,8 +60,6 @@ def run_cmd(cmdfo, batch_system=None, batch_options=None):
                 prefix += ' --cpus-per-task %d' % cmdfo.threads
         elif batch_system == "subprocess":
             prefix = ''
-            fout = None
-            ferr = None
         else:
             assert False
         if batch_options is not None:

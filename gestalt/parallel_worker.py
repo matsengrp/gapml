@@ -56,7 +56,7 @@ class ParallelWorkerManager:
     def run(self):
         raise NotImplementedError()
 
-    def create_batch_worker_cmds(self, worker_list, num_approx_batches, worker_folder):
+    def create_batch_worker_cmds(self, worker_list, num_approx_batches):
         """
         Create commands for submitting to a batch manager
         Pickles the workers as input files to the jobs
@@ -70,7 +70,7 @@ class ParallelWorkerManager:
             self.batched_workers.append(batched_workers)
 
             # Create the folder for the output from this batch worker
-            worker_batch_folder = "%s/batch_%d" % (worker_folder, batch_idx)
+            worker_batch_folder = "%s/batch_%d" % (self.worker_folder, batch_idx)
             if not os.path.exists(worker_batch_folder):
                 os.makedirs(worker_batch_folder)
             self.output_folders.append(worker_batch_folder)
@@ -122,6 +122,11 @@ class ParallelWorkerManager:
 
         return worker_results
 
+    def clean_outputs(self):
+        for fname in self.output_folders:
+            if os.path.exists(fname):
+                shutil.rmtree(fname)
+
 
 class SubprocessManager(ParallelWorkerManager):
     """
@@ -143,7 +148,7 @@ class SubprocessManager(ParallelWorkerManager):
         self.worker_folder = worker_folder
         self.threads = threads
         self.shared_obj = shared_obj
-        self.create_batch_worker_cmds(worker_list, len(worker_list), worker_folder)
+        self.create_batch_worker_cmds(worker_list, len(worker_list))
         self.batch_system = "subprocess"
 
     def run(self, successful_only=False, sleep = 0.01):
@@ -161,7 +166,7 @@ class SubprocessManager(ParallelWorkerManager):
         def get_num_unused_threads(procs):
             return self.threads - (len(procs) - procs.count(None))
 
-        while up_to_idx < len(cmdfos) or len(procs) != procs.count(None):
+        while up_to_idx < len(cmdfos) - 1 or len(cmdfos) != procs.count(None):
             num_unused_threads = get_num_unused_threads(procs)
             if num_unused_threads > 0 and up_to_idx <= len(cmdfos):
                 old_idx = up_to_idx
@@ -174,22 +179,21 @@ class SubprocessManager(ParallelWorkerManager):
                     if sleep:
                         time.sleep(sleep)
 
-            while get_num_unused_threads(procs) == 0:
-                # we set each proc to None when it finishes
-                for iproc in range(len(procs)):
-                    if procs[iproc] is None:  # already finished
-                        continue
-                    if procs[iproc].poll() is not None:  # it just finished
-                        finish_process(
-                                iproc,
-                                procs,
-                                n_tries,
-                                cmdfos[iproc],
-                                batch_system=self.batch_system,
-                                max_num_tries = 0)
-                sys.stdout.flush()
-                if sleep:
-                    time.sleep(sleep)
+            # we set each proc to None when it finishes
+            for iproc in range(len(procs)):
+                if procs[iproc] is None:  # already finished
+                    continue
+                if procs[iproc].poll() is not None:  # it just finished
+                    finish_process(
+                            iproc,
+                            procs,
+                            n_tries,
+                            cmdfos[iproc],
+                            batch_system=self.batch_system,
+                            max_num_tries = 0)
+            sys.stdout.flush()
+            if sleep:
+                time.sleep(sleep)
 
         res = self.read_batch_worker_results()
         self.clean_outputs()
@@ -226,7 +230,7 @@ class BatchSubmissionManager(ParallelWorkerManager):
         self.worker_folder = worker_folder
         self.threads = threads
         self.shared_obj = shared_obj
-        self.create_batch_worker_cmds(worker_list, num_approx_batches, worker_folder)
+        self.create_batch_worker_cmds(worker_list, num_approx_batches)
 
     def run(self, successful_only=False):
         """
@@ -253,8 +257,3 @@ class BatchSubmissionManager(ParallelWorkerManager):
                 continue
             successful_res_workers.append((res, worker))
         return successful_res_workers
-
-    def clean_outputs(self):
-        for fname in self.output_folders:
-            if os.path.exists(fname):
-                shutil.rmtree(fname)
