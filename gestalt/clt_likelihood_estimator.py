@@ -121,6 +121,7 @@ class CLTPenalizedEstimator(CLTEstimator):
             iter_info = {
                     "iter": i,
                     "log_barr": log_barr,
+                    "dist_to_half_pen": ridge_pen,
                     "log_lik": log_lik,
                     "pen_log_lik": pen_log_lik,
                     "branch_lens": branch_lens}

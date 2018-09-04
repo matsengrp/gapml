@@ -55,10 +55,18 @@ def create_kfold_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadata, n_spl
         logging.info("SAMPLED TREE")
         logging.info(train_tree.get_ascii(attributes=["node_id"], show_internal=True))
 
+        for leaf in train_tree:
+            leaf.add_feature("orig_node_id", leaf.node_id)
         train_tree.label_node_ids()
+
+        node_to_orig_id = dict()
+        for leaf in train_tree:
+            node_to_orig_id[leaf.node_id] = leaf.orig_node_id
+
         all_train_trees.append(TreeDataSplit(
             train_tree,
-            bcode_meta))
+            bcode_meta,
+            node_to_orig_id))
 
     return all_train_trees
 

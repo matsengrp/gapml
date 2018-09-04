@@ -281,14 +281,6 @@ def main(args=sys.argv[1:]):
         logging.info(tree_pickle_out)
         logging.info(tree_topology_dict)
 
-        for node in tree_topology_dict["tree"].traverse():
-            target_tracts = []
-            for evt in node.allele_events_list[0].events:
-                min_deact, max_deact = evt.get_min_max_deact_targets(bcode_meta)
-                target_tracts.append((min_deact, evt.min_target, evt.max_target, max_deact))
-            node.add_feature("tt_string", str(target_tracts))
-
-        logging.info(tree_topology_dict["tree"].get_ascii(attributes=["tt_string"], show_internal=True))
         logging.info(tree_topology_dict["tree"].get_ascii(attributes=["allele_events_list_str"], show_internal=True))
         with open(tree_pickle_out, "wb") as f:
             six.moves.cPickle.dump(tree_topology_dict, f, protocol = 2)
