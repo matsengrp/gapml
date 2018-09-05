@@ -32,6 +32,19 @@ class LikelihoodScorerResult:
         self.pen_log_lik = train_history[-1]["pen_log_lik"]
         self.log_lik = train_history[-1]["log_lik"]
 
+    def get_fit_params(self):
+        # TODO: careful -- this isnt a deep copy
+        fit_params = self.model_params_dict.copy()
+        fit_params["log_barr_pen"] = self.log_barr_pen
+        fit_params["dist_to_half_pen"] = self.dist_to_half_pen
+        return fit_params
+
+    def get_all_target_params(self):
+        return np.concatenate([
+            self.model_params_dict["target_lams"],
+            self.model_params_dict["double_cut_weight"],
+            self.model_params_dict["trim_long_factor"]])
+
 class LikelihoodScorer(ParallelWorker):
     """
     Fits model parameters and branch lengths for a given tree

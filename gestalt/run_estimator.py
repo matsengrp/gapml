@@ -33,6 +33,7 @@ from tree_distance import *
 from constants import *
 from common import *
 import plot_simulation_common
+import hanging_chad_finder
 
 def parse_args():
     parser = argparse.ArgumentParser(description='fit topology and branch lengths for GESTALT')
@@ -407,46 +408,49 @@ def main(args=sys.argv[1:]):
 
     raw_res = None
     refit_res = None
-    tune_results, _ = hyperparam_tuner.tune(tree, bcode_meta, args)
+    tune_results, args.init_params = hyperparam_tuner.tune(tree, bcode_meta, args)
+    chad_results, no_chad_res = hanging_chad_finder.tune(tree, bcode_meta, args, args.init_params)
 
-    save_dicts = []
     if not args.tune_only:
-        worker_list = []
-        for tune_res in tune_results:
-            # Now we can actually train the multifurc tree with the target lambda penalty param fixed
-            worker = fit_multifurc_tree(
-                    tune_res.tree,
-                    bcode_meta,
-                    args,
-                    tune_res.model_params_dicts[0],
-                    oracle_dist_measurers)
-            worker_list.append(worker)
+        #worker_list = []
+        #for tune_res in tune_results:
+        #    # Now we can actually train the multifurc tree with the target lambda penalty param fixed
+        #    worker = fit_multifurc_tree(
+        #            tune_res.tree,
+        #            bcode_meta,
+        #            args,
+        #            tune_res.model_params_dicts[0],
+        #            oracle_dist_measurers)
+        #    worker_list.append(worker)
 
-        job_manager = SubprocessManager(worker_list, None, args.scratch_dir, threads = args.num_processes)
-        worker_results = [r[0] for r, _ in job_manager.run()]
+        #job_manager = SubprocessManager(worker_list, None, args.scratch_dir, threads = args.num_processes)
+        #worker_results = [r[0] for r, _ in job_manager.run()]
 
-        for tune_res, raw_res in zip(tune_results, worker_results):
-            # Refit the bifurcating tree if needed
-            if not has_unresolved_multifurcs:
-                # The tree is already fully resolved. No refitting to do
-                refit_res = raw_res
-            elif has_unresolved_multifurcs and args.do_refit:
-                logging.info("Doing refit")
-                refit_res = do_refit_bifurc_tree(
-                        raw_res,
-                        bcode_meta,
-                        args,
-                        oracle_dist_measurers)
-            save_dicts.append({
-                "tune_results": tune_res,
-                "raw": raw_res,
-                "refit": refit_res})
+        #for tune_res, raw_res in zip(tune_results, worker_results):
+        #    # Refit the bifurcating tree if needed
+        #    if not has_unresolved_multifurcs:
+        #        # The tree is already fully resolved. No refitting to do
+        #        refit_res = raw_res
+        #    elif has_unresolved_multifurcs and args.do_refit:
+        #        logging.info("Doing refit")
+        #        refit_res = do_refit_bifurc_tree(
+        #                raw_res,
+        #                bcode_meta,
+        #                args,
+        #                oracle_dist_measurers)
+        save_dicts = {
+            "tune_results": tune_results,
+            "chad_results": chad_results,
+            "no_chad_res": no_chad_res,
+            "raw": None,
+            "refit": None}
     else:
-        for tune_res in tune_results:
-            save_dicts.append({
-                "tune_results": tune_res,
-                "raw": None,
-                "refit": None})
+        save_dicts = {
+            "tune_results": tune_results,
+            "chad_results": chad_results,
+            "no_chad_res": no_chad_res,
+            "raw": None,
+            "refit": None}
 
         ##### Mostly a section for printing
         #res = refit_res if refit_res is not None else raw_res

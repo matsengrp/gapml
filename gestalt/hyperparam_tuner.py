@@ -4,12 +4,11 @@ from typing import List, Dict
 from allele_events import Event
 from optim_settings import KnownModelParams
 from cell_lineage_tree import CellLineageTree
-from likelihood_scorer import LikelihoodScorer
 from barcode_metadata import BarcodeMetadata
 from transition_wrapper_maker import TransitionWrapperMaker
 from split_data import create_kfold_trees, create_kfold_barcode_trees, TreeDataSplit
 from tree_distance import TreeDistanceMeasurerAgg
-from likelihood_scorer import LikelihoodScorerResult
+from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from parallel_worker import SubprocessManager
 import hanging_chad_finder
 from common import *
@@ -20,7 +19,6 @@ class TuneScorerResult:
             dist_to_half_pen: float,
             model_params_dicts: List[Dict],
             score: float,
-            hanging_chad_tuple: Tuple[CellLineageTree, CellLineageTree] = None,
             tree: CellLineageTree = None,
             tree_splits: List[TreeDataSplit] = []):
         """
@@ -33,7 +31,6 @@ class TuneScorerResult:
         self.log_barr_pen = log_barr_pen
         self.dist_to_half_pen = dist_to_half_pen
         self.model_params_dicts = model_params_dicts
-        self.hanging_chad_tuple = hanging_chad_tuple
         self.score = score
         self.tree = tree
         self.tree_splits = tree_splits
@@ -82,111 +79,33 @@ def tune(
                 param_dict.pop('branch_len_inners', None)
                 param_dict.pop('branch_len_offsets_proportion', None)
 
-    #pen_param_scores = np.array([res.score for res in tune_results])
-    #logging.info("Tuning scores %s", pen_param_scores)
-    #best_idx = np.argmax(pen_param_scores)
+    pen_param_scores = np.array([res.score for res in tune_results])
+    logging.info("Tuning scores %s", pen_param_scores)
+    best_idx = np.argmax(pen_param_scores)
 
-    #init_model_params = tune_results[best_idx].model_params_dicts[0].copy()
-    #init_model_params["log_barr_pen"] = args.log_barr
-    #init_model_params["dist_to_half_pen"] = args.dist_to_half_pens[best_idx]
-    return tune_results, None #init_model_params
+    init_model_params = tune_results[best_idx].model_params_dicts[0].copy()
+    init_model_params["log_barr_pen"] = args.log_barr
+    init_model_params["dist_to_half_pen"] = args.dist_to_half_pens[best_idx]
+    return tune_results, init_model_params
 
 def _tune_hyperparams(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
         args,
         kfold_fnc,
-        stability_score_fnc,
-        max_num_chad_parents: int = 30):
+        stability_score_fnc):
     """
     @param max_num_chad_parents: max number of chad parents to consider
 
     @return List[TuneScorerResult] -- corresponding to each hyperparam
                 being tuned
     """
-    hanging_chad_dict = hanging_chad_finder.get_chads(tree)
-    sorted_chad_keys = sorted(list(hanging_chad_dict.keys()))
-
     # First split the barcode into kfold groups
     tree_splits = kfold_fnc(
             tree,
             bcode_meta,
             args.num_tune_splits)
 
-    all_tune_res = []
-    for chad_evt in sorted_chad_keys[12:13]:
-        hanging_chad = hanging_chad_dict[chad_evt]
-        logging.info("%s %s", chad_evt, hanging_chad.node.up.allele_events_list_str)
-        chad_tuning_results = []
-        logging.info("number of chad parents %d", len(hanging_chad.possible_parents))
-        for chad_par in hanging_chad.possible_parents[:max_num_chad_parents]:
-            tree_split_copy = [
-                    TreeDataSplit(s.tree.copy(), s.bcode_meta, {})
-                    for s in tree_splits]
-
-            # Remove my hanging chad from the orig tree
-            tree_copy = tree.copy()
-            for node in tree_copy.traverse():
-                if node.node_id == hanging_chad.node.node_id:
-                    node.detach()
-                    break
-            # And then add back the hanging chad to the designated parent
-            for node in tree_copy.traverse():
-                if node.node_id == chad_par.node_id:
-                    if node.is_leaf():
-                        node.add_child(node.copy())
-                    node.add_child(hanging_chad.node.copy())
-                    break
-            tree_copy.label_node_ids()
-            print("attached....", chad_evt, chad_par.allele_events_list_str)
-            print(tree_copy.get_ascii(attributes=["allele_events_list_str"]))
-
-            # remove my hanging chad from the kfold splits
-            for tree_split in tree_split_copy:
-                for node in tree_split.tree.traverse():
-                    if node.orig_node_id == hanging_chad.node.node_id:
-                        node.detach()
-                        break
-                #print(tree_split.tree.get_ascii(attributes=["allele_events_list_str"]))
-
-            # Now add my new possibility
-            for tree_split in tree_split_copy:
-                for node in tree_split.tree.traverse():
-                    if node.orig_node_id == chad_par.node_id:
-                        node.add_child(hanging_chad.node.copy())
-                        break
-                tree_split.tree.label_node_ids()
-                #print(tree_split.tree.get_ascii(attributes=["allele_events_list_str"]))
-                #print("attached", chad_evt, chad_par.allele_events_list_str)
-
-            tuning_results = _get_tuning_results(
-                tree_copy,
-                tree_split_copy,
-                args,
-                stability_score_fnc,
-                chad_tuple = (hanging_chad.node, chad_par))
-            chad_tuning_results.append(tuning_results)
-
-        best_hanging_chad_idx = np.argmax([
-                np.max([r.score for r in tune_res]) for tune_res in chad_tuning_results])
-        for chad_par, tune_res in zip(hanging_chad.possible_parents, chad_tuning_results):
-            logging.info(chad_par.allele_events_list_str, [r.score for r in tune_res])
-        all_tune_res += chad_tuning_results
-
-        #TODO: remove this. we are only trying one hanging chad first
-        break
-    # TODO: right now we just flatten the list
-    return [r for res in all_tune_res for r in res]
-
-def _get_tuning_results(
-        tree: CellLineageTree,
-        tree_splits: List[TreeDataSplit],
-        args,
-        stability_score_fnc,
-        chad_tuple = None):
-    """
-    @return List[TuneScorerResult]
-    """
     trans_wrap_makers = [TransitionWrapperMaker(
             tree_split.tree,
             tree_split.bcode_meta,
@@ -238,7 +157,6 @@ def _get_tuning_results(
             dist_to_half_pen,
             [res.model_params_dict for res in res_folds if res is not None],
             stability_score,
-            hanging_chad_tuple = chad_tuple,
             tree = tree,
             tree_splits = tree_splits)
         for init_model_params in tune_result.model_params_dicts:
