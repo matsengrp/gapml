@@ -25,6 +25,7 @@ from barcode_metadata import BarcodeMetadata
 from common import create_directory
 from constants import NUM_BARCODE_V7_TARGETS, BARCODE_V7
 
+
 def parse_args():
     parser = argparse.ArgumentParser(description='simulate GESTALT')
     parser.add_argument(
@@ -50,7 +51,7 @@ def parse_args():
     parser.add_argument(
         '--target-lambdas',
         type=str,
-        default=",".join(["1.99", "2.1", "1.9"]),
+        default=",".join([".4", ".5", ".9", "0.5", "0.8", "0.8"]),
         help='target cut rates -- will get slightly perturbed for the true value')
     parser.add_argument(
         '--perturb-target-lambdas-variance',
@@ -104,11 +105,11 @@ def parse_args():
         default=1,
         help='poisson parameter for distribution of insertion in cut site(s)')
     parser.add_argument(
-        '--birth-decay', type=float, default=-1, help='birth rate decay')
+        '--birth-decay', type=float, default=-0.3, help='birth rate decay')
     parser.add_argument(
         '--start-birth-lambda', type=float, default=3, help='start birth rate')
     parser.add_argument(
-        '--birth-intercept', type=float, default=0.1, help='birth rate intercept')
+        '--birth-intercept', type=float, default=1, help='birth rate intercept')
     parser.add_argument(
         '--death-lambda', type=float, default=0.001, help='death rate')
     parser.add_argument(

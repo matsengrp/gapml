@@ -1,7 +1,5 @@
 """
-Tunes over different multifurcating topologies.
-Basically a wrapper around `run_estimator.py`
-This will create jobs to run on the cluster for each of the trees
+Tunes penalty params, tree topology, and model params
 """
 import sys
 import six
@@ -17,23 +15,26 @@ from typing import List, Tuple, Dict
 from parallel_worker import BatchSubmissionManager, SubprocessManager
 from estimator_worker import RunEstimatorWorker
 from likelihood_scorer import LikelihoodScorerResult
+import hanging_chad_finder
 from common import create_directory
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='tune over many multifurcating topologies and fit model parameters')
+    parser = argparse.ArgumentParser(
+            description='tune over topologies and fit model parameters')
+    parser.add_argument(
+        '--seed',
+        type=int,
+        default=40)
     parser.add_argument(
         '--obs-file',
         type=str,
-        default="_output/obs_data.pkl",
+        default="_output/obs_data_b1.pkl",
         help='pkl file with observed sequence data, should be a dict with ObservedAlignSeq')
     parser.add_argument(
-        '--topology-file-template',
+        '--topology-file',
         type=str,
         default="_output/parsimony_tree0.pkl",
-        help="""
-        We look in the directory of this path for any trees that need to be processed.
-        We replace the 0 with a *[0-9] when we grep for matching trees.
-        """)
+        help="Topology file")
     parser.add_argument(
         '--out-model-file',
         type=str,
@@ -48,10 +49,6 @@ def parse_args():
         default=None,
         help='pkl file with true model if available')
     parser.add_argument(
-        '--seed',
-        type=int,
-        default=40)
-    parser.add_argument(
         '--log-barr',
         type=float,
         default=0.001,
@@ -60,14 +57,37 @@ def parse_args():
         '--dist-to-half-pens',
         type=str,
         default='1',
-        help="comma-separated string with penalty parameters on the target lambdas")
+        help="""
+        Comma-separated string with penalty parameters on the target lambdas.
+        We will tune over the different penalty params given
+        """)
     parser.add_argument(
-        '--total-tune-splits',
+        '--num-penalty-tune-iters',
         type=int,
         default=1,
         help="""
-        number of random splits of the data for tuning penalty params
-        across all topologies we tune
+        Number of iterations to tune the penalty params
+        """)
+    parser.add_argument(
+        '--num-penalty-tune-splits',
+        type=int,
+        default=1,
+        help="""
+        Number of random splits of the data for tuning penalty params.
+        """)
+    parser.add_argument(
+        '--num-chad-tune-iters',
+        type=int,
+        default=2,
+        help="""
+        Number of iterations to tune the tree topology (aka hanging chads)
+        """)
+    parser.add_argument(
+        '--max-chad-tune-search',
+        type=int,
+        default=2,
+        help="""
+        Maximum number of new hanging chad locations to consider at a time
         """)
     parser.add_argument('--max-iters', type=int, default=20)
     parser.add_argument('--num-inits', type=int, default=1)
@@ -82,20 +102,6 @@ def parse_args():
         default=1,
         help='maximum number of extra steps to explore possible ancestral states')
     parser.add_argument(
-        '--cpu-threads',
-        type=int,
-        default=6,
-        help='number of cpu threads to request in srun when submitting jobs')
-    parser.add_argument(
-        '--submit-srun',
-        action='store_true',
-        help='is using slurm to submit jobs')
-    parser.add_argument(
-        '--num-processes',
-        type=int,
-        default=1,
-        help='number of subprocesses to invoke for running')
-    parser.add_argument(
         '--lambda-known',
         action='store_true',
         help='are target rates known?')
@@ -104,16 +110,12 @@ def parse_args():
         action='store_true',
         help='is total time known?')
     parser.add_argument(
-        '--max-topologies',
+        '--num-processes',
         type=int,
-        default=10,
-        help='max topologies to tune over')
-    parser.add_argument(
-        '--fit-all-topologies',
-        action='store_true',
-        help='whether to fit all topologies anyways')
+        default=1,
+        help='number of subprocesses to invoke for running')
 
-    parser.set_defaults(fit_all_topologies=False, submit_srun=False)
+    parser.set_defaults()
     args = parser.parse_args()
 
     assert args.log_barr >= 0
@@ -122,13 +124,14 @@ def parse_args():
         reverse=True))
 
     create_directory(args.out_model_file)
-    args.topology_folder = os.path.dirname(args.topology_file_template)
+    args.topology_folder = os.path.dirname(args.topology_file)
     args.scratch_dir = os.path.join(
             args.topology_folder,
             'scratch')
     if not os.path.exists(args.scratch_dir):
         os.mkdir(args.scratch_dir)
 
+    assert args.num_chad_tune_iters >= args.num_penalty_tune_iters
     return args
 
 def get_best_hyperparam(
@@ -329,38 +332,69 @@ def main(args=sys.argv[1:]):
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
 
+    # Load data
     with open(args.obs_file, "rb") as f:
         obs_data_dict = six.moves.cPickle.load(f)
         bcode_meta = obs_data_dict["bcode_meta"]
         args.num_barcodes = bcode_meta.num_barcodes
 
+    # load tree
+    with open(args.topology_file, "rb") as f:
+        tree_topology_info = six.moves.cPickle.load(f)
+        tree = tree_topology_info["tree"]
+        tree.label_node_ids()
+
     np.random.seed(args.seed)
     random.seed(args.seed)
 
-    # Find all the relevant topology files from max parsimony
-    all_topology_files = glob.glob(args.topology_file_template.replace("parsimony_tree0", "parsimony_tree*[0-9]"))
-    random.shuffle(all_topology_files)
-    topology_files = all_topology_files[:args.max_topologies]
-    assert len(topology_files) > 0
-    logging.info("Processing the tree files: %s", topology_files)
+    hanging_chads = hanging_chad_finder.get_chads(tree)
+
+    tuning_history = []
+    for i in range(args.num_chad_tune_iters):
+        penalty_tune_result = None
+        if i < args.num_penalty_tune_iters:
+            penalty_tune_result = hyperparam_tuner.tune(tree, bcode_meta, args)
+            init_model_params = create_init_model_params(tune_results)
+
+        # pick a chad at random
+        chad_tune_result = None
+        if len(hanging_chads) > 0:
+            random_chad = np.random.choice(hanging_chads)
+            chad_tune_result = hanging_chad_finder.tune(
+                random_chad,
+                tree,
+                bcode_meta,
+                args,
+                init_model_params
+            )
+
+        tuning_history.append({
+            "chad_tune_result": chad_tune_result,
+            "penalty_tune_result": penalty_tune_result,
+        })
+        if len(hanging_chads) == 0:
+            break
 
     # Actually tune things -- tune penalty params and tune topology
-    tune_results, best_pen_param_idx, best_topology_idx = tune_hyperparams(topology_files, args)
-    topology_warm_start_files = create_topology_warm_start_files(
-            tune_results,
-            best_pen_param_idx,
-            args)
-    results = fit_models(
-            topology_warm_start_files,
-            args,
-            args.dist_to_half_pen_list[best_pen_param_idx])
+    # tune_results, best_pen_param_idx, best_topology_idx = tune_hyperparams(topology_files, args)
+    # topology_warm_start_files = create_topology_warm_start_files(
+    #         tune_results,
+    #         best_pen_param_idx,
+    #         args)
+    # results = fit_models(
+    #         topology_warm_start_files,
+    #         args,
+    #         args.dist_to_half_pen_list[best_pen_param_idx])
 
     # Copy out the results from the worker that we chose according to our scoring criteria
-    best_worker = results[best_topology_idx][1]
-    with open(best_worker.out_model_file, "rb") as f:
-        results = six.moves.cPickle.load(f)
+    # best_worker = results[best_topology_idx][1]
+    # with open(best_worker.out_model_file, "rb") as f:
+    #     results = six.moves.cPickle.load(f)
     with open(args.out_model_file, "wb") as f:
-        six.moves.cPickle.dump(results, f, protocol = 2)
+        result = {
+            "tuning_history": tuning_history
+        }
+        six.moves.cPickle.dump(result, f, protocol=2)
     logging.info("Complete!!!")
 
 if __name__ == "__main__":

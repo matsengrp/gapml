@@ -3,3 +3,4 @@
 
 .sconsign.dblite
 *.pyc
+.Rproj.user

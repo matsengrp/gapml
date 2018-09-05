@@ -28,7 +28,7 @@ def parse_args():
     parser.add_argument(
         '--obs-file',
         type=str,
-        default="_output/obs_data.pkl",
+        default="_output/obs_data_b1.pkl",
         help='pkl file with observed sequence data, should be a dict with ObservedAlignSeq')
     parser.add_argument(
         '--model-file',
@@ -60,7 +60,7 @@ def parse_args():
         default=MIX_PATH)
     parser.add_argument('--max-random',
         type=int,
-        default=1,
+        default=0,
         help="""
             Output `max-random` bifurcating trees estimated from parsimony
             Random selection among those estimated from parsimony.
