@@ -127,6 +127,17 @@ class ParallelWorkerManager:
             if os.path.exists(fname):
                 shutil.rmtree(fname)
 
+    def _get_successful_jobs(self, results, workers):
+        """
+        filters our the results that were not successful
+        @return list of tuples with (result, worker)
+        """
+        successful_res_workers = []
+        for res, worker in zip(results, workers):
+            if res is None:
+                continue
+            successful_res_workers.append((res, worker))
+        return successful_res_workers
 
 class SubprocessManager(ParallelWorkerManager):
     """
@@ -245,15 +256,3 @@ class BatchSubmissionManager(ParallelWorkerManager):
             return self._get_successful_jobs(res, self.worker_list)
         else:
             return [(r, w) for r, w in zip(res, self.worker_list)]
-
-    def _get_successful_jobs(self, results, workers):
-        """
-        filters our the results that were not successful
-        @return list of tuples with (result, worker)
-        """
-        successful_res_workers = []
-        for res, worker in zip(results, workers):
-            if res is None:
-                continue
-            successful_res_workers.append((res, worker))
-        return successful_res_workers

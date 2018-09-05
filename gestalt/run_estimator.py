@@ -27,11 +27,13 @@ from transition_wrapper_maker import TransitionWrapperMaker
 from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from plot_mrca_matrices import plot_mrca_matrix
 from barcode_metadata import BarcodeMetadata
+from parallel_worker import SubprocessManager
 import hyperparam_tuner
 from tree_distance import *
 from constants import *
 from common import *
 import plot_simulation_common
+import hanging_chad_finder
 
 def parse_args():
     parser = argparse.ArgumentParser(description='fit topology and branch lengths for GESTALT')
@@ -117,6 +119,10 @@ def parse_args():
         type=str,
         default='_output/scratch',
         help='not used at the moment... eventually used by SPR')
+    parser.add_argument(
+        '--num-processes',
+        type=int,
+        default=1)
 
     args = parser.parse_args()
     if args.pickle_out is None:
@@ -150,7 +156,7 @@ def parse_args():
         assert len(args.dist_to_half_pens) == 1
     return args
 
-def fit_tree(
+def make_worker(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
         args,
@@ -174,8 +180,7 @@ def fit_tree(
         known_params = args.known_params if known_model_params is None else known_model_params,
         dist_measurers = oracle_dist_measurers,
         abundance_weight = args.abundance_weight)
-    res = worker.run_worker(None)
-    return res
+    return worker
 
 def get_init_target_lams(bcode_meta, mean_val):
     random_perturb = np.random.uniform(size=bcode_meta.n_targets) * 0.001
@@ -207,7 +212,7 @@ def read_true_model_files(args, num_barcodes):
     oracle_dist_measurers = TreeDistanceMeasurerAgg([
         UnrootRFDistanceMeasurer,
         RootRFDistanceMeasurer,
-        #BHVDistanceMeasurer,
+        BHVDistanceMeasurer,
         MRCADistanceMeasurer,
         MRCASpearmanMeasurer],
         true_tree,
@@ -293,6 +298,7 @@ def fit_multifurc_tree(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
         args,
+        init_params,
         oracle_dist_measurers: TreeDistanceMeasurerAgg = None):
     """
     @return LikelihoodScorerResult from fitting model on multifurcating tree
@@ -302,14 +308,14 @@ def fit_multifurc_tree(
             bcode_meta,
             args.max_extra_steps,
             args.max_sum_states)
-    raw_res = fit_tree(
+    worker = make_worker(
             tree,
             bcode_meta,
             args,
             transition_wraps_multifurc,
-            [args.init_params],
+            [init_params],
             oracle_dist_measurers = oracle_dist_measurers)
-    return raw_res[0]
+    return worker
 
 def do_refit_bifurc_tree(
         raw_res: LikelihoodScorerResult,
@@ -383,7 +389,7 @@ def main(args=sys.argv[1:]):
 
     np.random.seed(seed=args.seed)
 
-    if os.path.exists(args.pickle_out) and args.max_iters > 0:
+    if os.path.exists(args.pickle_out):
         print('exists....')
         logging.info("model exists...")
         return
@@ -403,43 +409,65 @@ def main(args=sys.argv[1:]):
     raw_res = None
     refit_res = None
     tune_results, args.init_params = hyperparam_tuner.tune(tree, bcode_meta, args)
+    chad_results, no_chad_res = hanging_chad_finder.tune(tree, bcode_meta, args, args.init_params)
 
     if not args.tune_only:
-        # Now we can actually train the multifurc tree with the target lambda penalty param fixed
-        raw_res = fit_multifurc_tree(
-                tree,
-                bcode_meta,
-                args,
-                oracle_dist_measurers)
+        #worker_list = []
+        #for tune_res in tune_results:
+        #    # Now we can actually train the multifurc tree with the target lambda penalty param fixed
+        #    worker = fit_multifurc_tree(
+        #            tune_res.tree,
+        #            bcode_meta,
+        #            args,
+        #            tune_res.model_params_dicts[0],
+        #            oracle_dist_measurers)
+        #    worker_list.append(worker)
 
-        # Refit the bifurcating tree if needed
-        if not has_unresolved_multifurcs:
-            # The tree is already fully resolved. No refitting to do
-            refit_res = raw_res
-        elif has_unresolved_multifurcs and args.do_refit:
-            logging.info("Doing refit")
-            refit_res = do_refit_bifurc_tree(
-                    raw_res,
-                    bcode_meta,
-                    args,
-                    oracle_dist_measurers)
+        #job_manager = SubprocessManager(worker_list, None, args.scratch_dir, threads = args.num_processes)
+        #worker_results = [r[0] for r, _ in job_manager.run()]
 
-        #### Mostly a section for printing
-        res = refit_res if refit_res is not None else raw_res
-        print(res.model_params_dict)
-        logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["node_id"], show_internal=True))
-        logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
-        logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+        #for tune_res, raw_res in zip(tune_results, worker_results):
+        #    # Refit the bifurcating tree if needed
+        #    if not has_unresolved_multifurcs:
+        #        # The tree is already fully resolved. No refitting to do
+        #        refit_res = raw_res
+        #    elif has_unresolved_multifurcs and args.do_refit:
+        #        logging.info("Doing refit")
+        #        refit_res = do_refit_bifurc_tree(
+        #                raw_res,
+        #                bcode_meta,
+        #                args,
+        #                oracle_dist_measurers)
+        save_dicts = {
+            "tune_results": tune_results,
+            "chad_results": chad_results,
+            "no_chad_res": no_chad_res,
+            "raw": None,
+            "refit": None}
+    else:
+        save_dicts = {
+            "tune_results": tune_results,
+            "chad_results": chad_results,
+            "no_chad_res": no_chad_res,
+            "raw": None,
+            "refit": None}
 
-        write_output_json_summary(res, args, oracle_dist_measurers, true_model_dict)
+        ##### Mostly a section for printing
+        #res = refit_res if refit_res is not None else raw_res
+        #print(res.model_params_dict)
+        #logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["node_id"], show_internal=True))
+        #logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
+        #logging.info(res.fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+
+        #write_output_json_summary(res, args, oracle_dist_measurers, true_model_dict)
 
     # Save the data
     with open(args.pickle_out, "wb") as f:
-        save_dict = {
-                "tune_results": tune_results,
-                "raw": raw_res,
-                "refit": refit_res}
-        six.moves.cPickle.dump(save_dict, f, protocol = 2)
+        #save_dict = {
+        #        "tune_results": tune_results,
+        #        "raw": raw_res,
+        #        "refit": refit_res}
+        six.moves.cPickle.dump(save_dicts, f, protocol = 2)
 
     logging.info("Complete!")
 

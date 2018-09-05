@@ -143,6 +143,8 @@ class CellLineageTree(TreeNode):
         Label each node with `node_id` attribute.
         Supposes we are starting from this node, which is the root node
         Numbers nodes according to order in preorder traversal
+
+        @return number of nodes
         """
         assert order == "preorder"
         assert self.is_root()
@@ -153,6 +155,7 @@ class CellLineageTree(TreeNode):
                 root_node_id = node_id
             node_id += 1
         assert root_node_id == 0
+        return node_id
 
     def get_num_nodes(self):
         assert self.is_root()

@@ -121,9 +121,11 @@ class CLTPenalizedEstimator(CLTEstimator):
             iter_info = {
                     "iter": i,
                     "log_barr": log_barr,
+                    "dist_to_half_pen": ridge_pen,
                     "log_lik": log_lik,
                     "pen_log_lik": pen_log_lik,
-                    "branch_lens": branch_lens}
+                    "branch_lens": branch_lens,
+                    "target_rates": var_dict["target_lams"]}
             if i % print_iter == (print_iter - 1):
                 logging.info(
                     "iter %d pen log lik %f log lik %f dist-to-half pen %f log barr %f min branch len %f",
@@ -149,6 +151,12 @@ class CLTPenalizedEstimator(CLTEstimator):
                 logging.info("Convergence reached")
                 break
             prev_pen_log_lik = pen_log_lik[0]
+
+        if dist_measurers is not None:
+            bifurc_tree = self.model.get_fitted_bifurcating_tree()
+            tree_dist = dist_measurers.get_tree_dists([
+                plot_simulation_common._get_leaved_result(bifurc_tree)])[0]
+            logging.info("last_iter tree dists: %s", tree_dist)
 
         logging.info("total train time %f", time.time() - st_time)
         return train_history
