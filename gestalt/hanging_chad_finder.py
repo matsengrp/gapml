@@ -11,6 +11,13 @@ from split_data import create_kfold_trees, create_kfold_barcode_trees, TreeDataS
 from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from common import get_randint
 
+"""
+Hanging chad is our affectionate name for the inter-target cuts that have ambiguous placement
+in the tree. For example, if we don't know if the 1-3 inter-target cut is a child of the root
+node or a child of another allele with a 2-2 intra-target cut.
+
+"""
+
 class HangingChadResult:
     def __init__(self,
             score: float,
