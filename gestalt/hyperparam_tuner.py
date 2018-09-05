@@ -82,14 +82,14 @@ def tune(
                 param_dict.pop('branch_len_inners', None)
                 param_dict.pop('branch_len_offsets_proportion', None)
 
-    pen_param_scores = np.array([res.score for res in tune_results])
-    logging.info("Tuning scores %s", pen_param_scores)
-    best_idx = np.argmax(pen_param_scores)
+    #pen_param_scores = np.array([res.score for res in tune_results])
+    #logging.info("Tuning scores %s", pen_param_scores)
+    #best_idx = np.argmax(pen_param_scores)
 
-    init_model_params = tune_results[best_idx].model_params_dicts[0].copy()
-    init_model_params["log_barr_pen"] = args.log_barr
-    init_model_params["dist_to_half_pen"] = args.dist_to_half_pens[best_idx]
-    return tune_results, init_model_params
+    #init_model_params = tune_results[best_idx].model_params_dicts[0].copy()
+    #init_model_params["log_barr_pen"] = args.log_barr
+    #init_model_params["dist_to_half_pen"] = args.dist_to_half_pens[best_idx]
+    return tune_results, None #init_model_params
 
 def _tune_hyperparams(
         tree: CellLineageTree,
@@ -97,7 +97,7 @@ def _tune_hyperparams(
         args,
         kfold_fnc,
         stability_score_fnc,
-        max_num_chad_parents: int = 20):
+        max_num_chad_parents: int = 30):
     """
     @param max_num_chad_parents: max number of chad parents to consider
 
@@ -114,11 +114,11 @@ def _tune_hyperparams(
             args.num_tune_splits)
 
     all_tune_res = []
-    for chad_evt in sorted_chad_keys:
+    for chad_evt in sorted_chad_keys[12:13]:
         hanging_chad = hanging_chad_dict[chad_evt]
-        print(chad_evt, hanging_chad.node.up.allele_events_list_str)
+        logging.info("%s %s", chad_evt, hanging_chad.node.up.allele_events_list_str)
         chad_tuning_results = []
-        print("number of chad parents", len(hanging_chad.possible_parents))
+        logging.info("number of chad parents %d", len(hanging_chad.possible_parents))
         for chad_par in hanging_chad.possible_parents[:max_num_chad_parents]:
             tree_split_copy = [
                     TreeDataSplit(s.tree.copy(), s.bcode_meta, {})
@@ -170,12 +170,11 @@ def _tune_hyperparams(
         best_hanging_chad_idx = np.argmax([
                 np.max([r.score for r in tune_res]) for tune_res in chad_tuning_results])
         for chad_par, tune_res in zip(hanging_chad.possible_parents, chad_tuning_results):
-            print(chad_par.allele_events_list_str, [r.score for r in tune_res])
+            logging.info(chad_par.allele_events_list_str, [r.score for r in tune_res])
         all_tune_res += chad_tuning_results
 
         #TODO: remove this. we are only trying one hanging chad first
         break
-    print(all_tune_res)
     # TODO: right now we just flatten the list
     return [r for res in all_tune_res for r in res]
 

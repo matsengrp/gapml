@@ -124,7 +124,8 @@ class CLTPenalizedEstimator(CLTEstimator):
                     "dist_to_half_pen": ridge_pen,
                     "log_lik": log_lik,
                     "pen_log_lik": pen_log_lik,
-                    "branch_lens": branch_lens}
+                    "branch_lens": branch_lens,
+                    "target_rates": var_dict["target_lams"]}
             if i % print_iter == (print_iter - 1):
                 logging.info(
                     "iter %d pen log lik %f log lik %f dist-to-half pen %f log barr %f min branch len %f",
