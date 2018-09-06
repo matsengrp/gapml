@@ -140,7 +140,7 @@ def tune(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
         args,
-        init_model_params: Dict,
+        fit_params: Dict,
         dist_measurers: TreeDistanceMeasurerAgg = None):
     """
     Tune the given hanging chad
@@ -170,7 +170,7 @@ def tune(
         args.max_iters,
         args.num_inits,
         trans_wrap_maker,
-        init_model_param_list=[init_model_params],
+        fit_param_list=[fit_params],
         known_params=args.known_params).run_worker(None)[0]
 
     warm_start_params = no_chad_res.get_fit_params()
@@ -232,7 +232,7 @@ def tune(
             args.max_iters,
             args.num_inits,
             trans_wrap_maker,
-            init_model_param_list=[warm_start_params],
+            fit_param_list=[warm_start_params],
             known_params=args.known_params,
             dist_measurers=dist_measurers)
         worker_list.append(worker)

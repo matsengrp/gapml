@@ -59,7 +59,7 @@ class LikelihoodScorer(ParallelWorker):
             max_iters: int,
             num_inits: int,
             transition_wrap_maker: TransitionWrapperMaker,
-            init_model_param_list: List[Dict],
+            fit_param_list: List[Dict],
             known_params: KnownModelParams,
             dist_measurers: TreeDistanceMeasurerAgg = None,
             max_try_per_init: int = 2,
@@ -73,7 +73,7 @@ class LikelihoodScorer(ParallelWorker):
                                 are from having 1/2 on the diagonal
         @param max_iters: maximum number of iterations for MLE
         @param transition_wrap_maker: TransitionWrapperMaker
-        @param init_model_param_list: a list of dictionaries specifying model parameter initializations as well
+        @param fit_param_list: a list of dictionaries specifying model parameter initializations as well
                                     as penalty parameter values. At the very least, each model param list
                                     must contain the penalty parameter settings (dist_to_half_pen and log_barr_pen).
                                     If dictionaries for indices >= 1 have few model param initialization values,
@@ -88,7 +88,7 @@ class LikelihoodScorer(ParallelWorker):
         self.max_iters = max_iters
         self.num_inits = num_inits
         self.transition_wrap_maker = transition_wrap_maker
-        self.init_model_param_list = init_model_param_list
+        self.fit_param_list = fit_param_list
         self.known_params = known_params
         self.dist_measurers = dist_measurers
         self.max_tries = max_try_per_init * num_inits
@@ -106,22 +106,22 @@ class LikelihoodScorer(ParallelWorker):
     def fit_one_init(self,
             estimator: CLTPenalizedEstimator,
             res_model: CLTLikelihoodModel,
-            init_model_params: Dict,
+            fit_params: Dict,
             init_index: int):
         # Initialize branch lengths if not provided
-        if 'branch_len_inners' not in init_model_params or 'branch_len_offsets_proportion' not in init_model_params:
-            res_model.initialize_branch_lens(init_model_params["tot_time"])
+        if 'branch_len_inners' not in fit_params or 'branch_len_offsets_proportion' not in fit_params:
+            res_model.initialize_branch_lens(fit_params["tot_time"])
 
         # Fill in the dictionary for initializing model params
-        full_init_model_params = res_model.get_vars_as_dict()
-        for key, val in init_model_params.items():
-            if key in full_init_model_params.keys():
-                if key not in ["tot_time", "tot_time_extra"] and val.shape != full_init_model_params[key].shape:
+        full_fit_params = res_model.get_vars_as_dict()
+        for key, val in fit_params.items():
+            if key in full_fit_params.keys():
+                if key not in ["tot_time", "tot_time_extra"] and val.shape != full_fit_params[key].shape:
                     raise ValueError(
                             "Something went wrong. not same shape for key %s (%s vs %s)" %
-                            (key, val.shape, full_init_model_params[key].shape))
-                full_init_model_params[key] = val
-        res_model.set_params_from_dict(full_init_model_params)
+                            (key, val.shape, full_fit_params[key].shape))
+                full_fit_params[key] = val
+        res_model.set_params_from_dict(full_fit_params)
 
         # Just checking branch lengths positive and that tree is ultrametric
         br_lens = res_model.get_branch_lens()[1:]
@@ -134,12 +134,12 @@ class LikelihoodScorer(ParallelWorker):
 
         # Actually fit the model
         train_history = estimator.fit(
-                log_barr_pen = init_model_params["log_barr_pen"],
-                dist_to_half_pen = init_model_params["dist_to_half_pen"],
-                dist_measurers = self.dist_measurers)
+                log_barr_pen=fit_params["log_barr_pen"],
+                dist_to_half_pen=fit_params["dist_to_half_pen"],
+                dist_measurers=self.dist_measurers)
         result = LikelihoodScorerResult(
-            init_model_params["log_barr_pen"],
-            init_model_params["dist_to_half_pen"],
+            fit_params["log_barr_pen"],
+            fit_params["dist_to_half_pen"],
             res_model.get_vars_as_dict(),
             res_model.topology,
             res_model.get_fitted_bifurcating_tree(),
@@ -153,15 +153,15 @@ class LikelihoodScorer(ParallelWorker):
     def _get_best_result(self,
             estimator: CLTPenalizedEstimator,
             model: CLTLikelihoodModel,
-            init_model_params: Dict):
+            fit_params: Dict):
         """
         For a given set of penalty parameters, get the best fit.
         Does multiple initializations
         """
         logging.info(
                 "RUNNING log pen param %f dist to half pen param %f",
-                init_model_params["log_barr_pen"],
-                init_model_params["dist_to_half_pen"])
+                fit_params["log_barr_pen"],
+                fit_params["dist_to_half_pen"])
         results = []
         for i in range(self.max_tries):
             try:
@@ -171,7 +171,7 @@ class LikelihoodScorer(ParallelWorker):
                 result = self.fit_one_init(
                         estimator,
                         model,
-                        init_model_params,
+                        fit_params,
                         i)
             except tf.errors.InvalidArgumentError as e:
                 logging.info(e)
@@ -209,7 +209,7 @@ class LikelihoodScorer(ParallelWorker):
             self.known_params,
             # doesnt matter what value is set here for now. will be overridden
             # TODO: remove this line/argument...
-            target_lams = self.init_model_param_list[0]['target_lams'],
+            target_lams = self.fit_param_list[0]['target_lams'],
             abundance_weight = self.abundance_weight)
         estimator = CLTPenalizedEstimator(
                 res_model,
@@ -218,22 +218,22 @@ class LikelihoodScorer(ParallelWorker):
 
         # Fit each initialzation/optimization setting
         result_list = []
-        for raw_init_model_params in self.init_model_param_list:
-            init_model_params = raw_init_model_params.copy()
+        for raw_fit_params in self.fit_param_list:
+            fit_params = raw_fit_params.copy()
             if len(result_list):
                 # Do warm start from previous results if there are model parameters
                 # that the init dictionary does not have
                 prev_res = result_list[-1]
                 if prev_res is not None:
-                    other_keys = set(list(prev_res.model_params_dict.keys())) - set(list(raw_init_model_params.keys()))
+                    other_keys = set(list(prev_res.model_params_dict.keys())) - set(list(raw_fit_params.keys()))
                     for k, v in prev_res.model_params_dict.items():
-                        if k not in init_model_params:
-                            init_model_params[k] = v
+                        if k not in fit_params:
+                            fit_params[k] = v
 
             res = self._get_best_result(
                     estimator,
                     res_model,
-                    init_model_params)
+                    fit_params)
             result_list.append(res)
         return result_list
 

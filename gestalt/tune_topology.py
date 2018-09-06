@@ -160,9 +160,8 @@ def get_init_target_lams(bcode_meta, mean_val):
     return np.exp(mean_val * np.ones(bcode_meta.n_targets) + random_perturb)
 
 
-# TODO: rem init_fit_params to signify model params initialization + optimization parameters
-def read_init_model_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
-    args.init_params = {
+def read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
+    fit_params = {
             "target_lams": get_init_target_lams(bcode_meta, 0),
             "boost_softmax_weights": np.array([1, 2, 2]),
             "trim_long_factor": 0.05 * np.ones(2),
@@ -177,24 +176,22 @@ def read_init_model_params_file(args, bcode_meta, obs_data_dict, true_model_dict
     # Use warm-start info if available
     if args.init_model_params_file is not None:
         with open(args.init_model_params_file, "rb") as f:
-            args.init_params = six.moves.cPickle.load(f)
-
-    args.init_params["log_barr_pen"] = args.log_barr
-    args.init_params["dist_to_half_pen"] = args.dist_to_half_pens[0]
+            fit_params = six.moves.cPickle.load(f)
 
     # Copy over true known params if specified
     if args.known_params.tot_time:
         if true_model_dict is not None:
-            args.init_params["tot_time"] = true_model_dict["tot_time"]
-            args.init_params["tot_time_extra"] = true_model_dict["tot_time_extra"]
+            fit_params["tot_time"] = true_model_dict["tot_time"]
+            fit_params["tot_time_extra"] = true_model_dict["tot_time_extra"]
         else:
-            args.init_params["tot_time"] = obs_data_dict["time"]
-            args.init_params["tot_time_extra"] = 1e-10
+            fit_params["tot_time"] = obs_data_dict["time"]
+            fit_params["tot_time_extra"] = 1e-10
     if args.known_params.trim_long_factor:
-        args.init_params["trim_long_factor"] = true_model_dict['trim_long_factor']
+        fit_params["trim_long_factor"] = true_model_dict['trim_long_factor']
     if args.known_params.target_lams:
-        args.init_params["target_lams"] = true_model_dict['target_lams']
-        args.init_params["double_cut_weight"] = true_model_dict['double_cut_weight']
+        fit_params["target_lams"] = true_model_dict['target_lams']
+        fit_params["double_cut_weight"] = true_model_dict['double_cut_weight']
+    return fit_params
 
 
 def read_data(args):
@@ -264,7 +261,7 @@ def fit_multifurc_tree(
         args.max_iters,
         args.num_inits,
         transition_wrap_maker,
-        init_model_param_list=[param_dict],
+        fit_param_list=[param_dict],
         known_params=args.known_params,
         dist_measurers=oracle_dist_measurers).run_worker(None)[0]
     return result
@@ -302,7 +299,7 @@ def do_refit_bifurc_tree(
         args.max_iters,
         args.num_inits,
         transition_wrap_maker,
-        init_model_param_list=[param_dict],
+        fit_param_list=[param_dict],
         known_params=args.known_params,
         dist_measurers=oracle_dist_measurers).run_worker(None)[0]
     return bifurc_res
@@ -319,7 +316,7 @@ def main(args=sys.argv[1:]):
     # Load data
     bcode_meta, tree, obs_data_dict = read_data(args)
     true_model_dict, oracle_dist_measurers = read_true_model_files(args, bcode_meta.num_barcodes)
-    read_init_model_params_file(args, bcode_meta, obs_data_dict, true_model_dict)
+    fit_params = read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict)
 
     print(tree.get_ascii(attributes=["allele_events_list_str"]))
     print(tree.get_ascii(attributes=["node_id"]))
@@ -337,12 +334,13 @@ def main(args=sys.argv[1:]):
         if i < args.num_penalty_tune_iters:
             if len(args.dist_to_half_pens) == 1:
                 # If nothing to tune... do nothing
-                init_model_params = args.init_params
+                fit_params["log_barr_pen"] = args.log_barr
+                fit_params["dist_to_half_pen"] = args.dist_to_half_pens[0]
             else:
                 # Tune penalty params!
                 logging.info("Iter %d: Tuning penalty params", i)
-                penalty_tune_result = hyperparam_tuner.tune(tree, bcode_meta, args)
-                init_model_params, best_res = penalty_tune_result.get_best_result()
+                penalty_tune_result = hyperparam_tuner.tune(tree, bcode_meta, args, fit_params)
+                fit_params, best_res = penalty_tune_result.get_best_result()
 
         # pick a chad at random
         chad_tune_result = None
@@ -355,16 +353,16 @@ def main(args=sys.argv[1:]):
                 tree,
                 bcode_meta,
                 args,
-                init_model_params,
+                fit_params,
                 oracle_dist_measurers,
             )
-            tree, init_model_params, best_res = chad_tune_result.get_best_result()
+            tree, fit_params, best_res = chad_tune_result.get_best_result()
         else:
             best_res = fit_multifurc_tree(
                     tree,
                     bcode_meta,
                     args,
-                    init_model_params,
+                    fit_params,
                     oracle_dist_measurers)
 
         tuning_history.append({

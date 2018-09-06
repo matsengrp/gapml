@@ -212,7 +212,7 @@ def make_likelihood_scorer(tree: CellLineageTree, true_model_dict: Dict, name: s
         max_iters = 0,
         num_inits = 1,
         transition_wrap_maker = TransitionWrapperMaker(tree, bcode_meta),
-        init_model_param_list = [param_dict],
+        fit_param_list = [param_dict],
         known_params = KnownModelParams(target_lams=True, tot_time=True))
     return scorer
 

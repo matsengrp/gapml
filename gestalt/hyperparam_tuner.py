@@ -60,7 +60,8 @@ class PenaltyTuneResult:
 def tune(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
-        args):
+        args,
+        fit_params: Dict):
     """
     Tunes the `dist_to_half_pen` penalty parameter
 
@@ -74,6 +75,7 @@ def tune(
             tree,
             bcode_meta,
             args,
+            fit_params,
             create_kfold_barcode_trees,
             _get_many_bcode_stability_score)
     else:
@@ -82,6 +84,7 @@ def tune(
             tree,
             bcode_meta,
             args,
+            fit_params,
             create_kfold_trees,
             _get_one_bcode_stability_score)
 
@@ -90,6 +93,7 @@ def _tune_hyperparams(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
         args,
+        fit_params: Dict,
         kfold_fnc,
         stability_score_fnc):
     """
@@ -111,15 +115,15 @@ def _tune_hyperparams(
             args.max_sum_states) for tree_split in tree_splits]
 
     # First create the initialization/optimization settings
-    init_model_param_list = []
+    fit_param_list = []
     for idx, dist_to_half_pen in enumerate(args.dist_to_half_pens):
         if idx == 0:
-            new_init_model_params = args.init_params.copy()
+            new_fit_params = fit_params.copy()
         else:
-            new_init_model_params = {}
-        new_init_model_params["log_barr_pen"] = args.log_barr
-        new_init_model_params["dist_to_half_pen"] = dist_to_half_pen
-        init_model_param_list.append(new_init_model_params)
+            new_fit_params = {}
+        new_fit_params["log_barr_pen"] = args.log_barr
+        new_fit_params["dist_to_half_pen"] = dist_to_half_pen
+        fit_param_list.append(new_fit_params)
 
     # Actually fit the trees using the kfold barcodes
     # TODO: if one of the penalty params fails, then remove it from the subsequent
@@ -131,8 +135,8 @@ def _tune_hyperparams(
         args.max_iters,
         args.num_inits,
         transition_wrap_maker,
-        init_model_param_list = init_model_param_list,
-        known_params = args.known_params)
+        fit_param_list=fit_param_list,
+        known_params=args.known_params)
         for tree_split, transition_wrap_maker in zip(tree_splits, trans_wrap_makers)]
 
     if args.num_processes > 1 and len(worker_list) > 1:
