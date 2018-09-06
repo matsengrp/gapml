@@ -9,7 +9,7 @@ from parallel_worker import ParallelWorker
 from transition_wrapper_maker import TransitionWrapperMaker
 from clt_likelihood_model import CLTLikelihoodModel
 from clt_likelihood_estimator import CLTPenalizedEstimator
-from tree_distance import TreeDistanceMeasurerAgg
+from model_assessor import ModelAssessor
 from optim_settings import KnownModelParams
 
 
@@ -63,7 +63,7 @@ class LikelihoodScorer(ParallelWorker):
             transition_wrap_maker: TransitionWrapperMaker,
             fit_param_list: List[Dict],
             known_params: KnownModelParams,
-            dist_measurers: TreeDistanceMeasurerAgg = None,
+            assessor: ModelAssessor = None,
             max_try_per_init: int = 2):
         """
         @param seed: required to set the seed of each parallel worker
@@ -80,7 +80,7 @@ class LikelihoodScorer(ParallelWorker):
                                     If dictionaries for indices >= 1 have few model param initialization values,
                                     we copy the fitted values over from the previous optimization results. This
                                     serves as a way to warm start.
-        @param dist_measurers: if not None, TreeDistanceMeasurerAgg is used to measure the distance between the estimated
+        @param assessor: if not None, ModelAssessor is used to measure the distance between the estimated
                                 tree and the oracle tree at each iteration
         """
         self.seed = seed
@@ -91,7 +91,7 @@ class LikelihoodScorer(ParallelWorker):
         self.transition_wrap_maker = transition_wrap_maker
         self.fit_param_list = fit_param_list
         self.known_params = known_params
-        self.dist_measurers = dist_measurers
+        self.assessor = assessor
         self.max_tries = max_try_per_init * num_inits
 
     def run_worker(self, shared_obj):
@@ -133,7 +133,7 @@ class LikelihoodScorer(ParallelWorker):
         train_history = estimator.fit(
                 log_barr_pen_param=fit_params["log_barr_pen_param"],
                 dist_to_half_pen_param=fit_params["dist_to_half_pen_param"],
-                dist_measurers=self.dist_measurers)
+                assessor=self.assessor)
         result = LikelihoodScorerResult(
             fit_params["log_barr_pen_param"],
             fit_params["dist_to_half_pen_param"],

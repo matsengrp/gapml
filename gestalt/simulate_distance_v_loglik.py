@@ -291,7 +291,7 @@ def main(args=sys.argv[1:]):
                 MRCADistanceMeasurer],
                 true_tree,
                 args.scratch_dir)
-        final_dist_dicts = tree_dist_measurers.get_tree_dists(final_trees)
+        final_dist_dicts = tree_dist_measurers.assess(final_trees)
 
         # Correlation between dist and likelihood among nearby max parsimony trees
         pen_log_liks = np.array(pen_log_liks)

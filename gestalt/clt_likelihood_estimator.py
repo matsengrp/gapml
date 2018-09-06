@@ -6,7 +6,7 @@ import logging
 from clt_estimator import CLTEstimator
 from clt_likelihood_model import CLTLikelihoodModel
 from transition_wrapper_maker import TransitionWrapperMaker
-from tree_distance import TreeDistanceMeasurerAgg
+from model_assessor import ModelAssessor
 
 
 class CLTPenalizedEstimator(CLTEstimator):
@@ -52,7 +52,7 @@ class CLTPenalizedEstimator(CLTEstimator):
             dist_to_half_pen_param: float = 0,
             print_iter: int = 1,
             save_iter: int = 20,
-            dist_measurers: TreeDistanceMeasurerAgg = None,
+            assessor: ModelAssessor = None,
             conv_thres: float = 1e-5,
             min_iters: int = 10):
         """
@@ -76,6 +76,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         pen_log_lik, log_lik = self.model.sess.run(
             [self.model.smooth_log_lik, self.model.log_lik],
             feed_dict=feed_dict)
+        var_dict = self.model.get_vars_as_dict()
 
         logging.info("initial penalized log lik %f, unpen log lik %f", pen_log_lik, log_lik)
         assert not np.isnan(pen_log_lik)
@@ -83,10 +84,10 @@ class CLTPenalizedEstimator(CLTEstimator):
                     "iter": -1,
                     "log_lik": log_lik,
                     "pen_log_lik": pen_log_lik}]
-        if dist_measurers is not None:
+        if assessor is not None:
             bifurc_tree = self.model.get_fitted_bifurcating_tree()
-            train_history[0]["tree_dists"] = dist_measurers.get_tree_dists([bifurc_tree])[0]
-            logging.info("initial tree dists: %s", train_history[0]["tree_dists"])
+            train_history[0]["performance"] = assessor.assess(var_dict, bifurc_tree)
+            logging.info("initial tree dists: %s", train_history[0]["performance"])
 
         st_time = time.time()
         prev_pen_log_lik = pen_log_lik[0]
@@ -125,11 +126,11 @@ class CLTPenalizedEstimator(CLTEstimator):
             if i % save_iter == (save_iter - 1):
                 iter_info["var_dict"] = var_dict
                 logging.info("iter %d, train time %f", i, time.time() - st_time)
-                if dist_measurers is not None:
+                if assessor is not None:
                     bifurc_tree = self.model.get_fitted_bifurcating_tree()
-                    tree_dist = dist_measurers.get_tree_dists([bifurc_tree])[0]
-                    logging.info("iter %d tree dists: %s", i, tree_dist)
-                    iter_info["tree_dists"] = tree_dist
+                    performance_dict = assessor.assess(var_dict, bifurc_tree)
+                    logging.info("iter %d assess: %s", i, performance_dict)
+                    iter_info["performance"] = performance_dict
 
             train_history.append(iter_info)
             if i > min_iters and np.abs((prev_pen_log_lik - pen_log_lik[0])/prev_pen_log_lik) < conv_thres:
@@ -138,11 +139,11 @@ class CLTPenalizedEstimator(CLTEstimator):
                 break
             prev_pen_log_lik = pen_log_lik[0]
 
-        if dist_measurers is not None:
+        if assessor is not None:
             bifurc_tree = self.model.get_fitted_bifurcating_tree()
-            tree_dist = dist_measurers.get_tree_dists([bifurc_tree])[0]
-            train_history[-1]["tree_dists"] = tree_dist
-            logging.info("last_iter tree dists: %s", tree_dist)
+            performance_dict = assessor.assess(var_dict, bifurc_tree)
+            train_history[-1]["performance"] = performance_dict
+            logging.info("last_iter tree dists: %s", performance_dict)
 
         logging.info("total train time %f", time.time() - st_time)
         return train_history
