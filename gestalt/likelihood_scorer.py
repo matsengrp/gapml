@@ -22,11 +22,13 @@ class LikelihoodScorerResult:
             log_barr_pen: float,
             dist_to_half_pen: float,
             model_params_dict: Dict,
+            orig_tree: CellLineageTree,
             fitted_bifurc_tree: CellLineageTree,
             train_history: List):
         self.log_barr_pen = log_barr_pen
         self.dist_to_half_pen = dist_to_half_pen
         self.model_params_dict = model_params_dict
+        self.orig_tree = orig_tree
         self.fitted_bifurc_tree = fitted_bifurc_tree
         self.train_history = train_history
         self.pen_log_lik = train_history[-1]["pen_log_lik"]
@@ -139,6 +141,7 @@ class LikelihoodScorer(ParallelWorker):
             init_model_params["log_barr_pen"],
             init_model_params["dist_to_half_pen"],
             res_model.get_vars_as_dict(),
+            res_model.topology,
             res_model.get_fitted_bifurcating_tree(),
             train_history)
         logging.info("Initialization %d result: %f", init_index, result.pen_log_lik)

@@ -56,7 +56,7 @@ class ParallelWorkerManager:
     def run(self):
         raise NotImplementedError()
 
-    def create_batch_worker_cmds(self, worker_list, num_approx_batches):
+    def create_batch_worker_cmds(self, worker_list, num_approx_batches, batch_folder_offset=0):
         """
         Create commands for submitting to a batch manager
         Pickles the workers as input files to the jobs
@@ -70,7 +70,7 @@ class ParallelWorkerManager:
             self.batched_workers.append(batched_workers)
 
             # Create the folder for the output from this batch worker
-            worker_batch_folder = "%s/batch_%d" % (self.worker_folder, batch_idx)
+            worker_batch_folder = "%s/batch_%d" % (self.worker_folder, batch_idx + batch_folder_offset)
             if not os.path.exists(worker_batch_folder):
                 os.makedirs(worker_batch_folder)
             self.output_folders.append(worker_batch_folder)
@@ -78,6 +78,7 @@ class ParallelWorkerManager:
             # Create the command for this batch worker
             input_file_name = "%s/in.pkl" % worker_batch_folder
             output_file_name = "%s/out.pkl" % worker_batch_folder
+            log_file_name = "%s/log.txt" % worker_batch_folder
             self.output_files.append(output_file_name)
             with open(input_file_name, "wb") as cmd_input_file:
                 # Pickle the worker as input to the job
@@ -86,7 +87,8 @@ class ParallelWorkerManager:
                     cmd_input_file,
                     protocol=2,
                 )
-                cmd_str = "python run_worker.py --input-file %s --output-file %s" % (input_file_name, output_file_name)
+                cmd_str = "python run_worker.py --input-file %s --output-file %s --log-file %s" % (input_file_name, output_file_name, log_file_name)
+                print(cmd_str)
                 batch_cmd = CustomCommand(
                     cmd_str,
                     outfname=output_file_name,
@@ -147,6 +149,7 @@ class SubprocessManager(ParallelWorkerManager):
             worker_list,
             shared_obj,
             worker_folder,
+            batch_folder_offset,
             threads,
             retry=False):
         self.batch_worker_cmds = []
@@ -159,7 +162,7 @@ class SubprocessManager(ParallelWorkerManager):
         self.worker_folder = worker_folder
         self.threads = threads
         self.shared_obj = shared_obj
-        self.create_batch_worker_cmds(worker_list, len(worker_list))
+        self.create_batch_worker_cmds(worker_list, len(worker_list), batch_folder_offset)
         self.batch_system = "subprocess"
 
     def run(self, successful_only=False, sleep = 0.01):
@@ -207,7 +210,7 @@ class SubprocessManager(ParallelWorkerManager):
                 time.sleep(sleep)
 
         res = self.read_batch_worker_results()
-        self.clean_outputs()
+        # self.clean_outputs()
         if successful_only:
             return self._get_successful_jobs(res, self.worker_list)
         else:

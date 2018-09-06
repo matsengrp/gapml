@@ -5,6 +5,7 @@ Pickles results to an output file
 """
 import sys
 import argparse
+import logging
 import six
 
 def parse_args():
@@ -20,12 +21,18 @@ def parse_args():
         type=str,
         help='a pickle file',
         default='output.pkl')
-
+    parser.add_argument('--log-file',
+        type=str,
+        help='a log file',
+        default='log.txt')
     parser.set_defaults()
     return parser.parse_args()
 
 def main(args=sys.argv[1:]):
     args = parse_args()
+    logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
+    logging.info(str(args))
+
     with open(args.input_file, "rb") as input_file:
         batched_workers = six.moves.cPickle.load(input_file)
 

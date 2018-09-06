@@ -151,7 +151,7 @@ def parse_args():
     if args.lambda_known:
         assert len(args.dist_to_half_pens) == 1
 
-    if args.num_tune_splits == 0:
+    if args.num_penalty_tune_splits == 0:
         # If we aren't tuning anything, then there better only be one penalty param
         assert len(args.dist_to_half_pens) == 1
     return args

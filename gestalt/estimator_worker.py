@@ -24,7 +24,7 @@ class RunEstimatorWorker(ParallelWorker):
             tune_only: bool,
             max_sum_states: int,
             max_extra_steps: int,
-            num_tune_splits: int,
+            num_penalty_tune_splits: int,
             scratch_dir: str):
         self.obs_file = obs_file
         self.topology_file = topology_file
@@ -44,7 +44,7 @@ class RunEstimatorWorker(ParallelWorker):
         self.max_sum_states = max_sum_states
         self.max_extra_steps = max_extra_steps
         self.scratch_dir = scratch_dir
-        self.num_tune_splits = num_tune_splits
+        self.num_penalty_tune_splits = num_penalty_tune_splits
 
     def run_worker(self, shared_obj, debug=False):
         """
@@ -74,7 +74,7 @@ class RunEstimatorWorker(ParallelWorker):
             '--scratch-dir',
             self.scratch_dir,
             '--num-tune-splits',
-            self.num_tune_splits
+            self.num_penalty_tune_splits
         ]
         def _add_more_args(arg_val, arg_key):
             if arg_val is not None:

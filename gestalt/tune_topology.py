@@ -4,17 +4,14 @@ Tunes penalty params, tree topology, and model params
 import sys
 import six
 import os
-import glob
 import argparse
 import logging
-import six
 import numpy as np
 import random
-from typing import List, Tuple, Dict
 
-from parallel_worker import BatchSubmissionManager, SubprocessManager
-from estimator_worker import RunEstimatorWorker
-from likelihood_scorer import LikelihoodScorerResult
+from optim_settings import KnownModelParams
+from tree_distance import TreeDistanceMeasurerAgg, BHVDistanceMeasurer
+import hyperparam_tuner
 import hanging_chad_finder
 from common import create_directory
 
@@ -35,6 +32,11 @@ def parse_args():
         type=str,
         default="_output/parsimony_tree0.pkl",
         help="Topology file")
+    parser.add_argument(
+        '--init-model-params-file',
+        type=str,
+        default=None,
+        help='pkl file with initializations')
     parser.add_argument(
         '--out-model-file',
         type=str,
@@ -71,7 +73,7 @@ def parse_args():
     parser.add_argument(
         '--num-penalty-tune-splits',
         type=int,
-        default=1,
+        default=2,
         help="""
         Number of random splits of the data for tuning penalty params.
         """)
@@ -115,11 +117,11 @@ def parse_args():
         default=1,
         help='number of subprocesses to invoke for running')
 
-    parser.set_defaults()
+    parser.set_defaults(tot_time_known=True)
     args = parser.parse_args()
 
     assert args.log_barr >= 0
-    args.dist_to_half_pen_list = list(sorted(
+    args.dist_to_half_pens = list(sorted(
         [float(lam) for lam in args.dist_to_half_pens.split(",")],
         reverse=True))
 
@@ -131,235 +133,148 @@ def parse_args():
     if not os.path.exists(args.scratch_dir):
         os.mkdir(args.scratch_dir)
 
+    args.known_params = KnownModelParams(
+         target_lams=args.lambda_known,
+         tot_time=args.tot_time_known)
+
+    assert args.num_penalty_tune_iters >= 1
     assert args.num_chad_tune_iters >= args.num_penalty_tune_iters
     return args
 
-def get_best_hyperparam(
-        args,
-        tune_results: List[Tuple[Dict, RunEstimatorWorker]]):
+
+def get_init_target_lams(bcode_meta, mean_val):
+    random_perturb = np.random.uniform(size=bcode_meta.n_targets) * 0.001
+    random_perturb = random_perturb - np.mean(random_perturb)
+    random_perturb[0] = 0
+    return np.exp(mean_val * np.ones(bcode_meta.n_targets) + random_perturb)
+
+
+def read_init_model_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
+    args.init_params = {
+            "target_lams": get_init_target_lams(bcode_meta, 0),
+            "boost_softmax_weights": np.array([1, 2, 2]),
+            "trim_long_factor": 0.05 * np.ones(2),
+            "trim_zero_probs": 0.5 * np.ones(2),
+            "trim_short_poissons": 2.5 * np.ones(2),
+            "trim_long_poissons": 2.5 * np.ones(2),
+            "insert_zero_prob": np.array([0.5]),
+            "insert_poisson": np.array([0.5]),
+            "double_cut_weight": np.array([0.5]),
+            "tot_time": 1,
+            "tot_time_extra": 1.3}
+    # Use warm-start info if available
+    if args.init_model_params_file is not None:
+        with open(args.init_model_params_file, "rb") as f:
+            args.init_params = six.moves.cPickle.load(f)
+
+    args.init_params["log_barr_pen"] = args.log_barr
+    args.init_params["dist_to_half_pen"] = args.dist_to_half_pens[0]
+
+    # Copy over true known params if specified
+    if args.known_params.tot_time:
+        if true_model_dict is not None:
+            args.init_params["tot_time"] = true_model_dict["tot_time"]
+            args.init_params["tot_time_extra"] = true_model_dict["tot_time_extra"]
+        else:
+            args.init_params["tot_time"] = obs_data_dict["time"]
+            args.init_params["tot_time_extra"] = 1e-10
+    if args.known_params.trim_long_factor:
+        args.init_params["trim_long_factor"] = true_model_dict['trim_long_factor']
+    if args.known_params.target_lams:
+        args.init_params["target_lams"] = true_model_dict['target_lams']
+        args.init_params["double_cut_weight"] = true_model_dict['double_cut_weight']
+
+def read_data(args):
     """
-    Grabs out the best hyperparam given the results
-    Figures out best penalty param first by aggregating across different topologies.
-    Then for that chosen penalty param, find the highest scoring topology.
-
-    @return (
-        list of LikelihoodScorerResult,
-        best dist-to-half penalty,
-        best topology idx in the list of TuneScorerResult)
+    Read the data files...
     """
-    # First pick out the best penalty param
-    # TODO: aggregating across different topologies
-    # for a bit of stability... i think this helps?
-    total_pen_param_score = np.zeros(len(args.dist_to_half_pen_list))
-    for (topology_res, _) in tune_results:
-        for i, res in enumerate(topology_res["tune_results"]):
-            total_pen_param_score[i] += res.score
+    with open(args.obs_file, "rb") as f:
+        obs_data_dict = six.moves.cPickle.load(f)
+        bcode_meta = obs_data_dict["bcode_meta"]
+        obs_leaves = obs_data_dict["obs_leaves"]
 
-    logging.info("Total tuning scores %s", total_pen_param_score)
-    best_idx = np.argmax(total_pen_param_score)
-    best_dist_to_half_pen = args.dist_to_half_pen_list[best_idx]
-    logging.info("Best penalty param %s", best_dist_to_half_pen)
+    obs_leaf = obs_data_dict["obs_leaves"][0]
+    no_evts_prop = np.mean([len(evts.events) == 0 for evts in obs_leaf.allele_events_list])
+    print("proportion of no events", no_evts_prop)
 
-    # Now identify the best topology
-    topology_scores = [
-        topology_res["tune_results"][best_idx].score
-        for (topology_res, _) in tune_results]
-    best_topology_idx = np.argmax(topology_scores)
-    logging.info("Worker scores %s", topology_scores)
-    logging.info("Best topology %d, %s",
-            best_topology_idx,
-            tune_results[best_topology_idx][1].topology_file)
+    evt_set = set()
+    for obs in obs_data_dict["obs_leaves"]:
+        for evts_list in obs.allele_events_list:
+            for evt in evts_list.events:
+                evt_set.add(evt)
+    logging.info("uniq events %s", evt_set)
+    logging.info("num uniq events %d", len(evt_set))
+    logging.info("propoertion of double cuts %f", np.mean([e.min_target != e.max_target for e in evt_set]))
 
-    if not args.fit_all_topologies:
-        return [tune_results[best_topology_idx]], best_idx, 0
-    else:
-        return tune_results, best_idx, best_topology_idx
+    logging.info("Number of uniq obs alleles %d", len(obs_leaves))
+    logging.info("Barcode cut sites %s", str(bcode_meta.abs_cut_sites))
 
-def tune_hyperparams(
-        topology_files: List[str],
-        args):
+    with open(args.topology_file, "rb") as f:
+        tree_topology_info = six.moves.cPickle.load(f)
+        tree = tree_topology_info["tree"]
+        tree.label_node_ids()
+
+    # If this tree is not unresolved, then mark all the multifurcations as resolved
+    if not tree_topology_info["multifurc"]:
+        for node in tree.traverse():
+            node.resolved_multifurcation = True
+
+    logging.info("Tree topology info: %s", tree_topology_info)
+    logging.info("Tree topology num leaves: %d", len(tree))
+
+    return bcode_meta, tree, obs_data_dict
+
+def read_true_model_files(args, num_barcodes):
     """
-    Tunes both the penalty parameter as well as the topology
-    Uses the "score" of the topology penalty parameter pair to pick out which
-    final model to fit. (score here is the stability score)
-
-    @return (
-        list of LikelihoodScorerResult,
-        best dist-to-half penalty,
-        best topology idx in the list of TuneScorerResult)
+    If true model files available, read them
     """
-    worker_list = []
-    for file_idx, top_file in enumerate(topology_files):
-        worker = RunEstimatorWorker(
-            args.obs_file,
-            top_file,
-            args.out_model_file.replace(".pkl", "_tune_tree%d.pkl" % file_idx),
+    if args.true_model_file is None:
+        return None, None
+
+    true_model_dict, true_tree, _ = plot_simulation_common.get_true_model(
+            args.true_model_file,
             None,
-            args.true_model_file,
-            args.seed + file_idx,
-            args.log_barr,
-            args.dist_to_half_pens,
-            args.max_iters,
-            # When tuning hyper-params, we just use one initialization
-            num_inits = 1,
-            lambda_known = args.lambda_known,
-            tot_time_known = args.tot_time_known,
-            do_refit = False,
-            tune_only = True,
-            max_sum_states = args.max_sum_states,
-            max_extra_steps = args.max_extra_steps,
-            num_tune_splits = args.total_tune_splits,
-            scratch_dir = args.scratch_dir)
-        worker_list.append(worker)
+            num_barcodes)
 
-    # Just print the things I plan to run
-    for w in worker_list:
-        w.run_worker(None, debug=True)
-
-    if args.submit_srun:
-        logging.info("Submitting jobs")
-        job_manager = BatchSubmissionManager(
-                worker_list,
-                None,
-                len(worker_list),
-                args.scratch_dir,
-                threads=args.cpu_threads)
-        successful_workers = job_manager.run()
-        assert len(successful_workers) > 0
-    elif args.num_processes > 1:
-        logging.info("Submitting new processes")
-        job_manager = SubprocessManager(
-                worker_list,
-                None,
-                args.scratch_dir,
-                threads=args.num_processes)
-        successful_workers = job_manager.run()
-        assert len(successful_workers) > 0
-    else:
-        logging.info("Running locally")
-        successful_workers = [(w.run_worker(None), w) for w in worker_list]
-
-    return get_best_hyperparam(
-            args,
-            successful_workers)
-
-def create_topology_warm_start_files(
-        tune_results: List[LikelihoodScorerResult],
-        best_pen_param_idx: int,
-        args):
-    """
-    Creates warm start files for refitting topologies
-
-    @return List[topology file name, warm start file name] for each element in `tune_results`
-    """
-    topology_warm_start_files = []
-    for idx, (topology_res, worker) in enumerate(tune_results):
-        # Pick an arbitrary model param setting for warm start
-        warm_start = topology_res["tune_results"][best_pen_param_idx].model_params_dicts[0]
-        warm_start_file_name = args.out_model_file.replace(
-                ".pkl",
-                "_warm%d_all%d.pkl" % (idx, args.fit_all_topologies))
-        with open(warm_start_file_name, "wb") as f:
-            six.moves.cPickle.dump(warm_start, f, protocol=2)
-        topology_warm_start_files.append((
-            worker.topology_file,
-            warm_start_file_name))
-    return topology_warm_start_files
-
-def fit_models(
-        topology_warm_start_files: List[Tuple[str, str]],
-        args,
-        pen_param: float):
-    """
-    Fits the models for the list of files in `topology_warm_start_files`
-
-    @param topology_warm_start_files: list of topology file and warm start file pairs
-    @param pen_param: the dist-to-half penalty parameter to fit
-
-    @return a list of results in the form of List[(LikelihoodScorerResult, EstimatorWorker)]
-    """
-    worker_list = []
-    for file_idx, (top_file, warm_start_file) in enumerate(topology_warm_start_files):
-        worker = RunEstimatorWorker(
-            args.obs_file,
-            top_file,
-            args.out_model_file.replace(".pkl", "_refit%d_all%s.pkl" % (file_idx, args.fit_all_topologies)),
-            warm_start_file,
-            args.true_model_file,
-            args.seed + file_idx,
-            args.log_barr,
-            str(pen_param),
-            args.max_iters,
-            num_inits = args.num_inits,
-            lambda_known = args.lambda_known,
-            tot_time_known = args.tot_time_known,
-            do_refit = True,
-            tune_only = False,
-            max_sum_states = args.max_sum_states,
-            max_extra_steps = args.max_extra_steps,
-            num_tune_splits = 0, # No more tuning
-            scratch_dir = args.scratch_dir)
-        worker_list.append(worker)
-
-    for w in worker_list:
-        w.run_worker(None, debug=True)
-
-    if args.submit_srun:
-        logging.info("Submitting jobs")
-        job_manager = BatchSubmissionManager(
-                worker_list,
-                None,
-                len(worker_list),
-                args.scratch_dir,
-                threads=args.cpu_threads)
-        successful_workers = job_manager.run()
-    elif args.num_processes > 1:
-        logging.info("Submitting new processes")
-        job_manager = SubprocessManager(
-                worker_list,
-                None,
-                args.scratch_dir,
-                threads=args.num_processes)
-        successful_workers = job_manager.run()
-    else:
-        logging.info("Running locally")
-        successful_workers = [(w.run_worker(None), w) for w in worker_list]
-
-    return successful_workers
+    oracle_dist_measurers = TreeDistanceMeasurerAgg(
+        [BHVDistanceMeasurer],
+        true_tree,
+        args.scratch_dir)
+    return true_model_dict, oracle_dist_measurers
 
 def main(args=sys.argv[1:]):
     args = parse_args()
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
 
-    # Load data
-    with open(args.obs_file, "rb") as f:
-        obs_data_dict = six.moves.cPickle.load(f)
-        bcode_meta = obs_data_dict["bcode_meta"]
-        args.num_barcodes = bcode_meta.num_barcodes
+    bcode_meta, tree, obs_data_dict = read_data(args)
+    true_model_dict, oracle_dist_measurers = read_true_model_files(args, bcode_meta.num_barcodes)
+    read_init_model_params_file(args, bcode_meta, obs_data_dict, true_model_dict)
 
-    # load tree
-    with open(args.topology_file, "rb") as f:
-        tree_topology_info = six.moves.cPickle.load(f)
-        tree = tree_topology_info["tree"]
-        tree.label_node_ids()
+    print(tree.get_ascii(attributes=["allele_events_list_str"]))
+    print(tree.get_ascii(attributes=["node_id"]))
 
     np.random.seed(args.seed)
     random.seed(args.seed)
 
     hanging_chads = hanging_chad_finder.get_chads(tree)
+    logging.info("total number of hanging chads %d", len(hanging_chads))
+    logging.info(hanging_chads)
 
     tuning_history = []
     for i in range(args.num_chad_tune_iters):
         penalty_tune_result = None
         if i < args.num_penalty_tune_iters:
+            # Tune penalty params!
             penalty_tune_result = hyperparam_tuner.tune(tree, bcode_meta, args)
-            init_model_params = create_init_model_params(tune_results)
+            init_model_params = penalty_tune_result.get_best_warm_model_params()
 
         # pick a chad at random
         chad_tune_result = None
         if len(hanging_chads) > 0:
-            random_chad = np.random.choice(hanging_chads)
+            # Now tune the hanging chads!
+            random_chad = random.choice(hanging_chads)
+            logging.info("Randomly picking %s", random_chad)
             chad_tune_result = hanging_chad_finder.tune(
                 random_chad,
                 tree,
@@ -367,6 +282,7 @@ def main(args=sys.argv[1:]):
                 args,
                 init_model_params
             )
+            tree, init_model_params = chad_tune_result.get_best_result()
 
         tuning_history.append({
             "chad_tune_result": chad_tune_result,
@@ -375,21 +291,6 @@ def main(args=sys.argv[1:]):
         if len(hanging_chads) == 0:
             break
 
-    # Actually tune things -- tune penalty params and tune topology
-    # tune_results, best_pen_param_idx, best_topology_idx = tune_hyperparams(topology_files, args)
-    # topology_warm_start_files = create_topology_warm_start_files(
-    #         tune_results,
-    #         best_pen_param_idx,
-    #         args)
-    # results = fit_models(
-    #         topology_warm_start_files,
-    #         args,
-    #         args.dist_to_half_pen_list[best_pen_param_idx])
-
-    # Copy out the results from the worker that we chose according to our scoring criteria
-    # best_worker = results[best_topology_idx][1]
-    # with open(best_worker.out_model_file, "rb") as f:
-    #     results = six.moves.cPickle.load(f)
     with open(args.out_model_file, "wb") as f:
         result = {
             "tuning_history": tuning_history
