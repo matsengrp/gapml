@@ -1,5 +1,4 @@
-from typing import List, Tuple, Dict
-from numpy import ndarray
+from typing import List, Dict
 import numpy as np
 import tensorflow as tf
 import logging
@@ -18,7 +17,8 @@ class LikelihoodScorerResult:
     """
     Stores results from LikelihoodScorer below
     """
-    def __init__(self,
+    def __init__(
+            self,
             log_barr_pen: float,
             dist_to_half_pen: float,
             model_params_dict: Dict,
@@ -47,12 +47,14 @@ class LikelihoodScorerResult:
             self.model_params_dict["double_cut_weight"],
             self.model_params_dict["trim_long_factor"]])
 
+
 class LikelihoodScorer(ParallelWorker):
     """
     Fits model parameters and branch lengths for a given tree
     Since this is a parallel worker, it may be used through the job management system SLURM
     """
-    def __init__(self,
+    def __init__(
+            self,
             seed: int,
             tree: CellLineageTree,
             bcode_meta: BarcodeMetadata,
@@ -62,8 +64,7 @@ class LikelihoodScorer(ParallelWorker):
             fit_param_list: List[Dict],
             known_params: KnownModelParams,
             dist_measurers: TreeDistanceMeasurerAgg = None,
-            max_try_per_init: int = 2,
-            abundance_weight: float = 0):
+            max_try_per_init: int = 2):
         """
         @param seed: required to set the seed of each parallel worker
         @param tree: the cell lineage tree topology to fit the likelihood for
@@ -92,7 +93,6 @@ class LikelihoodScorer(ParallelWorker):
         self.known_params = known_params
         self.dist_measurers = dist_measurers
         self.max_tries = max_try_per_init * num_inits
-        self.abundance_weight = abundance_weight
 
     def run_worker(self, shared_obj):
         """
@@ -103,11 +103,14 @@ class LikelihoodScorer(ParallelWorker):
             tf.global_variables_initializer().run()
             return self.do_work_directly(sess)
 
-    def fit_one_init(self,
+    def _fit_one_init(
+            self,
             estimator: CLTPenalizedEstimator,
             res_model: CLTLikelihoodModel,
-            fit_params: Dict,
-            init_index: int):
+            fit_params: Dict):
+        """
+        Fit single initialization
+        """
         # Initialize branch lengths if not provided
         if 'branch_len_inners' not in fit_params or 'branch_len_offsets_proportion' not in fit_params:
             res_model.initialize_branch_lens(fit_params["tot_time"])
@@ -123,15 +126,6 @@ class LikelihoodScorer(ParallelWorker):
                 full_fit_params[key] = val
         res_model.set_params_from_dict(full_fit_params)
 
-        # Just checking branch lengths positive and that tree is ultrametric
-        br_lens = res_model.get_branch_lens()[1:]
-        if not np.all(br_lens > 0):
-            raise ValueError("not all positive %s" % br_lens)
-        assert res_model._are_all_branch_lens_positive()
-        bifurc_tree = res_model.get_fitted_bifurcating_tree()
-        logging.info("init DISTANCE")
-        logging.info(bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
-
         # Actually fit the model
         train_history = estimator.fit(
                 log_barr_pen=fit_params["log_barr_pen"],
@@ -144,19 +138,20 @@ class LikelihoodScorer(ParallelWorker):
             res_model.topology,
             res_model.get_fitted_bifurcating_tree(),
             train_history)
-        logging.info("Initialization %d result: %f", init_index, result.pen_log_lik)
         logging.info(result.fitted_bifurc_tree.get_ascii(attributes=["node_id"], show_internal=True))
         logging.info(result.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
         logging.info(result.fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
         return result
 
-    def _get_best_result(self,
+    def _get_best_result(
+            self,
             estimator: CLTPenalizedEstimator,
             model: CLTLikelihoodModel,
             fit_params: Dict):
         """
-        For a given set of penalty parameters, get the best fit.
-        Does multiple initializations
+        For the given `fit_params`, performs multiple initializations -- only returns the best one
+
+        @return LikelihoodScorerResult, returns None if all attempts failed
         """
         logging.info(
                 "RUNNING log pen param %f dist to half pen param %f",
@@ -166,13 +161,13 @@ class LikelihoodScorer(ParallelWorker):
         for i in range(self.max_tries):
             try:
                 # Note that we will be warm-starting from all the model params
-                # Except that we re-initialize branch lengths.
-                # Pretty reasonable assuming the target lambdas are relatively stable
-                result = self.fit_one_init(
+                # Except that we re-initialize branch lengths if they are not provided
+                # Pretty reasonable assuming the target lambdas are relatively stable?
+                result = self._fit_one_init(
                         estimator,
                         model,
-                        fit_params,
-                        i)
+                        fit_params)
+                logging.info("Initialization %d result: %f", i, result.pen_log_lik)
             except tf.errors.InvalidArgumentError as e:
                 logging.info(e)
                 continue
@@ -182,11 +177,8 @@ class LikelihoodScorer(ParallelWorker):
 
         # Pick out the best result
         if len(results):
-            best_res = results[0]
-            for res in results:
-                if res.pen_log_lik > best_res.pen_log_lik:
-                    best_res = res
-            return best_res
+            best_idx = np.argmax([r.pen_log_lik for r in results])
+            return results[best_idx]
         else:
             logging.info("No training attempt worked")
             return None
@@ -199,7 +191,7 @@ class LikelihoodScorer(ParallelWorker):
 
         @param sess: tensorflow session
 
-        @return LikelihoodScorerResult
+        @return List[LikelihoodScorerResult]
         """
         np.random.seed(self.seed)
         res_model = CLTLikelihoodModel(
@@ -209,14 +201,14 @@ class LikelihoodScorer(ParallelWorker):
             self.known_params,
             # doesnt matter what value is set here for now. will be overridden
             # TODO: remove this line/argument...
-            target_lams = self.fit_param_list[0]['target_lams'],
-            abundance_weight = self.abundance_weight)
+            target_lams=self.fit_param_list[0]['target_lams'],
+            abundance_weight=self.abundance_weight)
         estimator = CLTPenalizedEstimator(
-                res_model,
-                self.transition_wrap_maker,
-                self.max_iters)
+            res_model,
+            self.transition_wrap_maker,
+            self.max_iters)
 
-        # Fit each initialzation/optimization setting
+        # Fit for each fit-param setting
         result_list = []
         for raw_fit_params in self.fit_param_list:
             fit_params = raw_fit_params.copy()
@@ -225,7 +217,6 @@ class LikelihoodScorer(ParallelWorker):
                 # that the init dictionary does not have
                 prev_res = result_list[-1]
                 if prev_res is not None:
-                    other_keys = set(list(prev_res.model_params_dict.keys())) - set(list(raw_fit_params.keys()))
                     for k, v in prev_res.model_params_dict.items():
                         if k not in fit_params:
                             fit_params[k] = v
@@ -236,6 +227,3 @@ class LikelihoodScorer(ParallelWorker):
                     fit_params)
             result_list.append(res)
         return result_list
-
-    def __str__(self):
-        return self.name

@@ -75,6 +75,11 @@ class CLTPenalizedEstimator(CLTEstimator):
                 self.model.dist_to_half_pen],
             feed_dict=feed_dict)
 
+        # Check branch lengths positive
+        assert self.model._are_all_branch_lens_positive()
+        # Check tree is ultrametric
+        self.model.get_fitted_bifurcating_tree()
+
         prev_pen_log_lik = pen_log_lik[0]
         logging.info("dist pen %f", dist_to_half_pen)
         logging.info("initial penalized log lik %f, unpen log lik %f", pen_log_lik, log_lik)

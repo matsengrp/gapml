@@ -212,6 +212,9 @@ def tune(
 
         num_nodes = tree_copy.label_node_ids()
 
+        # warm start the branch length estimates
+        # TODO: doesn't transfer over every single branch length estimate... is that ok?
+        # Is there a way to transfer over more branch length estimates?
         warm_start_params = no_chad_res.get_fit_params()
         warm_start_params["branch_len_inners"] = np.ones(num_nodes) * 1e-10
         warm_start_params["branch_len_offsets_proportion"] = np.ones(num_nodes) * 1e-10
