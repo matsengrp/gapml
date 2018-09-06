@@ -13,67 +13,6 @@ from cell_lineage_tree import CellLineageTree
 from common import assign_rand_tree_lengths
 #from plot_mrca_matrices import plot_tree
 
-def get_true_model(file_name, tree_file_name, n_bcodes):
-    """
-    Read true model
-    """
-    with open(file_name, "rb") as f:
-        true_model = six.moves.cPickle.load(f)
-    if tree_file_name is not None:
-        with open(tree_file_name, "rb") as f:
-            true_coll_tree = six.moves.cPickle.load(f)
-    else:
-        true_coll_tree = None
-
-    # Rename nodes if they have the same first few barcodes
-    true_tree = true_model["true_subtree"]
-    existing_strs = {}
-    for node in true_tree:
-        node.set_allele_list(
-                node.allele_list.create_truncated_version(n_bcodes))
-        node.sync_allele_events_list_str()
-        if node.allele_events_list_str in existing_strs:
-            count = existing_strs[node.allele_events_list_str]
-            existing_strs[node.allele_events_list_str] += 1
-            node.allele_events_list_str = "%s==%d" % (
-                     node.allele_events_list_str,
-                     count)
-        else:
-            existing_strs[node.allele_events_list_str] = 1
-    return (true_model["true_model_params"], true_tree, true_coll_tree)
-
-def _get_leaved_result(bifurc_tree):
-    """
-    Create appropriate number of leaves to match abundance
-    Just attach with zero distance to the existing leaf node
-    """
-    leaved_tree = bifurc_tree.copy()
-    for node in leaved_tree:
-        curr_node = node
-        for idx in range(node.abundance - 1):
-            new_child = CellLineageTree(
-                curr_node.allele_list,
-                curr_node.allele_events_list,
-                curr_node.cell_state,
-                dist = 0,
-                abundance = 1,
-                resolved_multifurcation = True)
-            new_child.allele_events_list_str = "%s==%d" % (
-                new_child.allele_events_list_str,
-                idx + 1)
-            copy_leaf = CellLineageTree(
-                curr_node.allele_list,
-                curr_node.allele_events_list,
-                curr_node.cell_state,
-                dist = 0,
-                abundance = 1,
-                resolved_multifurcation = True)
-            copy_leaf.allele_events_list_str = curr_node.allele_events_list_str
-            curr_node.add_child(new_child)
-            curr_node.add_child(copy_leaf)
-            curr_node = new_child
-    return leaved_tree
-
 def get_result(res_file):
     """
     Read fitted model

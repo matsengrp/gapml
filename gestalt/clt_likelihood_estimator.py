@@ -1,18 +1,13 @@
 import time
-from tensorflow import Session
 import numpy as np
-import scipy.linalg
-from typing import List, Tuple, Dict
-from numpy import ndarray
 import tensorflow as tf
 import logging
 
 from clt_estimator import CLTEstimator
-from cell_lineage_tree import CellLineageTree
 from clt_likelihood_model import CLTLikelihoodModel
 from transition_wrapper_maker import TransitionWrapperMaker
 from tree_distance import TreeDistanceMeasurerAgg
-import plot_simulation_common
+
 
 class CLTPenalizedEstimator(CLTEstimator):
     """
@@ -21,10 +16,10 @@ class CLTPenalizedEstimator(CLTEstimator):
     TODO: Right now this ignores cell type. we'll add it in later
     """
     def __init__(
-        self,
-        model: CLTLikelihoodModel,
-        transition_wrapper_maker: TransitionWrapperMaker,
-        max_iters: int):
+            self,
+            model: CLTLikelihoodModel,
+            transition_wrapper_maker: TransitionWrapperMaker,
+            max_iters: int):
         """
         @param model: initial CLT model params
         @param transition_wrapper_maker: TransitionWrapperMaker
@@ -38,7 +33,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         logging.info("Done creating transition wrappers")
         self.model.create_log_lik(
                 transition_wrappers,
-                create_gradient = max_iters > 0)
+                create_gradient=max_iters > 0)
         logging.info("Done creating tensorflow graph")
         tf.global_variables_initializer().run()
 
@@ -94,8 +89,7 @@ class CLTPenalizedEstimator(CLTEstimator):
 
         if dist_measurers is not None:
             bifurc_tree = self.model.get_fitted_bifurcating_tree()
-            train_history[0]["tree_dists"] = dist_measurers.get_tree_dists([
-                plot_simulation_common._get_leaved_result(bifurc_tree)])[0]
+            train_history[0]["tree_dists"] = dist_measurers.get_tree_dists([bifurc_tree])[0]
             logging.info("initial tree dists: %s", train_history[0]["tree_dists"])
 
         st_time = time.time()
@@ -139,8 +133,7 @@ class CLTPenalizedEstimator(CLTEstimator):
                 logging.info("iter %d, train time %f", i, time.time() - st_time)
                 if dist_measurers is not None:
                     bifurc_tree = self.model.get_fitted_bifurcating_tree()
-                    tree_dist = dist_measurers.get_tree_dists([
-                        plot_simulation_common._get_leaved_result(bifurc_tree)])[0]
+                    tree_dist = dist_measurers.get_tree_dists([bifurc_tree])[0]
                     logging.info("iter %d tree dists: %s", i, tree_dist)
                     iter_info["tree_dists"] = tree_dist
                     iter_info["var"] = var_dict
@@ -154,8 +147,7 @@ class CLTPenalizedEstimator(CLTEstimator):
 
         if dist_measurers is not None:
             bifurc_tree = self.model.get_fitted_bifurcating_tree()
-            tree_dist = dist_measurers.get_tree_dists([
-                plot_simulation_common._get_leaved_result(bifurc_tree)])[0]
+            tree_dist = dist_measurers.get_tree_dists([bifurc_tree])[0]
             train_history[-1]["tree_dists"] = tree_dist
             logging.info("last_iter tree dists: %s", tree_dist)
 

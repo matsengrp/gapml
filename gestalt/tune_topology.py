@@ -19,6 +19,7 @@ from barcode_metadata import BarcodeMetadata
 import hyperparam_tuner
 import hanging_chad_finder
 from common import create_directory, get_randint
+import file_readers
 
 
 def parse_args():
@@ -159,6 +160,7 @@ def get_init_target_lams(bcode_meta, mean_val):
     return np.exp(mean_val * np.ones(bcode_meta.n_targets) + random_perturb)
 
 
+# TODO: rem init_fit_params to signify model params initialization + optimization parameters
 def read_init_model_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
     args.init_params = {
             "target_lams": get_init_target_lams(bcode_meta, 0),
@@ -199,39 +201,18 @@ def read_data(args):
     """
     Read the data files...
     """
-    with open(args.obs_file, "rb") as f:
-        obs_data_dict = six.moves.cPickle.load(f)
-        bcode_meta = obs_data_dict["bcode_meta"]
-        obs_leaves = obs_data_dict["obs_leaves"]
+    tree, obs_data_dict = file_readers.read_data(args.obs_file, args.topology_file)
+    bcode_meta = obs_data_dict["bcode_meta"]
 
-    obs_leaf = obs_data_dict["obs_leaves"][0]
-    no_evts_prop = np.mean([len(evts.events) == 0 for evts in obs_leaf.allele_events_list])
-    print("proportion of no events", no_evts_prop)
-
+    # This section just prints interesting things...
     evt_set = set()
     for obs in obs_data_dict["obs_leaves"]:
         for evts_list in obs.allele_events_list:
             for evt in evts_list.events:
                 evt_set.add(evt)
-    logging.info("uniq events %s", evt_set)
-    logging.info("num uniq events %d", len(evt_set))
-    logging.info("propoertion of double cuts %f", np.mean([e.min_target != e.max_target for e in evt_set]))
-
-    logging.info("Number of uniq obs alleles %d", len(obs_leaves))
-    logging.info("Barcode cut sites %s", str(bcode_meta.abs_cut_sites))
-
-    with open(args.topology_file, "rb") as f:
-        tree_topology_info = six.moves.cPickle.load(f)
-        tree = tree_topology_info["tree"]
-        tree.label_node_ids()
-
-    # If this tree is not unresolved, then mark all the multifurcations as resolved
-    if not tree_topology_info["multifurc"]:
-        for node in tree.traverse():
-            node.resolved_multifurcation = True
-
-    logging.info("Tree topology info: %s", tree_topology_info)
-    logging.info("Tree topology num leaves: %d", len(tree))
+    logging.info("Num uniq events %d", len(evt_set))
+    logging.info("Proportion of double cuts %f", np.mean([e.min_target != e.max_target for e in evt_set]))
+    logging.info("Number of leaves %d", len(tree))
 
     return bcode_meta, tree, obs_data_dict
 
@@ -243,16 +224,12 @@ def read_true_model_files(args, num_barcodes):
     if args.true_model_file is None:
         return None, None
 
-    # TODO: take the tree loading comparison code out of plot code
-    true_model_dict, true_tree, _ = plot_simulation_common.get_true_model(
+    true_model_dict, _, oracle_dist_measurers = file_readers.get_true_model(
             args.true_model_file,
-            None,
-            num_barcodes)
+            num_barcodes,
+            measurer_classes=[BHVDistanceMeasurer],
+            scratch_dir=args.scratch_dir)
 
-    oracle_dist_measurers = TreeDistanceMeasurerAgg(
-        [BHVDistanceMeasurer],
-        true_tree,
-        args.scratch_dir)
     return true_model_dict, oracle_dist_measurers
 
 
