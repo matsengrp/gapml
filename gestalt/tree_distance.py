@@ -52,7 +52,6 @@ class TreeDistanceMeasurerAgg:
 
     @staticmethod
     def create_single_abundance_measurer(
-            cls,
             raw_tree: CellLineageTree,
             n_bcodes: int,
             measurer_classes: List,
@@ -89,7 +88,7 @@ class TreeDistanceMeasurerAgg:
             do_expand_abundance=True)
 
     @staticmethod
-    def create_single_abundance_tree(cls, tree: CellLineageTree):
+    def create_single_abundance_tree(tree: CellLineageTree):
         """
         Create tree with appropriate number of leaves to match abundance
         Just attach with zero distance to the existing leaf node

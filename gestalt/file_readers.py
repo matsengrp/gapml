@@ -24,7 +24,7 @@ def read_data(obs_file: str, topology_file: str):
     return tree, obs_data_dict
 
 
-def read_true_model_files(
+def read_true_model(
         true_model_file: str,
         n_bcodes: int,
         measurer_classes: List = [],
@@ -38,7 +38,7 @@ def read_true_model_files(
 
     oracle_dist_measurers = None
     if len(measurer_classes):
-        oracle_dist_measurers = TreeDistanceMeasurerAgg.create(
+        oracle_dist_measurers = TreeDistanceMeasurerAgg.create_single_abundance_measurer(
             true_model["true_subtree"],
             n_bcodes,
             measurer_classes,

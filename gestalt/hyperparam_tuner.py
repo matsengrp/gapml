@@ -123,7 +123,7 @@ def _tune_hyperparams(
             new_fit_params = fit_params.copy()
         else:
             new_fit_params = {}
-        new_fit_params["log_barr_pen_param"] = args.log_barr
+        new_fit_params["log_barr_pen_param"] = args.log_barr_pen_param
         new_fit_params["dist_to_half_pen_param"] = dist_to_half_pen_param
         fit_param_list.append(new_fit_params)
 
@@ -146,8 +146,7 @@ def _tune_hyperparams(
                 worker_list,
                 None,
                 args.scratch_dir,
-                get_randint(),
-                threads=args.num_processes)
+                args.num_processes)
         train_results = [r for r, _ in job_manager.run()]
     else:
         train_results = [w.run_worker(None) for w in worker_list]
@@ -162,7 +161,7 @@ def _tune_hyperparams(
         # Create our summary of tuning
         tune_result = PenaltyScorerResult(
             stability_score,
-            args.log_barr,
+            args.log_barr_pen_param,
             dist_to_half_pen_param,
             res_folds)
         tune_results.append(tune_result)

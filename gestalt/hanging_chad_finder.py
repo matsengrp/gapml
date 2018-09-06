@@ -58,7 +58,9 @@ class HangingChadTuneResult:
     def get_best_result(self):
         best_chad_idx = np.argmax([
                 chad_res.score for chad_res in self.new_chad_results])
-        best_fit_res = self.new_chad_results[best_chad_idx].fit_res
+        best_chad = self.new_chad_results[best_chad_idx]
+        print("best chad", best_chad)
+        best_fit_res = best_chad.fit_res
 
         fit_params = best_fit_res.get_fit_params()
         fit_params.pop('branch_len_inners', None)
@@ -239,7 +241,7 @@ def tune(
         # Is there a way to transfer over more branch length estimates?
         warm_start_params = no_chad_res.get_fit_params()
         warm_start_params["branch_len_inners"] = np.ones(num_nodes) * 1e-10
-        warm_start_params["branch_len_offsets_proportion"] = np.ones(num_nodes) * 1e-10
+        warm_start_params["branch_len_offsets_proportion"] = np.ones(num_nodes) * 0.45 + np.random.rand(num_nodes) * 0.1
         for node in tree_copy.traverse():
             if node.nochad_id is not None:
                 nochad_id = int(node.nochad_id)
@@ -265,12 +267,13 @@ def tune(
             dist_measurers=dist_measurers)
         worker_list.append(worker)
 
+    logging.info("CHAD TUNING")
     if args.num_processes > 1 and len(worker_list) > 1:
         job_manager = SubprocessManager(
                 worker_list,
                 None,
                 args.scratch_dir,
-                threads=args.num_processes)
+                args.num_processes)
         worker_results = job_manager.run()
     else:
         worker_results = [(w.run_worker(None), w) for w in worker_list]

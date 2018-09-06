@@ -149,6 +149,7 @@ def parse_args():
          tot_time=args.tot_time_known)
 
     assert args.num_penalty_tune_iters >= 1
+    assert args.tot_time_known
     assert args.num_chad_tune_iters >= args.num_penalty_tune_iters
     return args
 
@@ -221,7 +222,7 @@ def read_true_model_files(args, num_barcodes):
     if args.true_model_file is None:
         return None, None
 
-    true_model_dict, _, oracle_dist_measurers = file_readers.get_true_model(
+    true_model_dict, oracle_dist_measurers = file_readers.read_true_model(
             args.true_model_file,
             num_barcodes,
             measurer_classes=[BHVDistanceMeasurer],
@@ -278,14 +279,16 @@ def do_refit_bifurc_tree(
     # Copy over the latest model parameters for warm start
     param_dict = raw_res.get_fit_params()
     refit_bifurc_tree = raw_res.fitted_bifurc_tree.copy()
+    print(refit_bifurc_tree.get_ascii(attributes=["node_id"]))
     num_nodes = refit_bifurc_tree.get_num_nodes()
     # Copy over the branch lengths
-    br_lens = np.zeros(num_nodes)
+    br_lens = np.ones(num_nodes) * 1e-10
     for node in refit_bifurc_tree.traverse():
+        print("dist....", node.node_id, node.dist)
         br_lens[node.node_id] = node.dist
         node.resolved_multifurcation = True
     param_dict["branch_len_inners"] = br_lens
-    param_dict["branch_len_offsets_proportion"] = np.zeros(num_nodes)
+    param_dict["branch_len_offsets_proportion"] = np.ones(num_nodes) * 1e-10
 
     # Fit the bifurcating tree
     transition_wrap_maker = TransitionWrapperMaker(
@@ -374,6 +377,7 @@ def main(args=sys.argv[1:]):
         if not has_chads:
             break
 
+    logging.info("Iter refit bifurc tree!")
     # Tune the final bifurcating tree one more time?
     bifurc_res = None
     if not has_unresolved_multifurcs(tree):

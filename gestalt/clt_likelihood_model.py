@@ -125,8 +125,9 @@ class CLTLikelihoodModel:
         self._create_poisson_distributions()
         if self.topology:
             assert not self.topology.is_leaf()
-            self.dist_to_root = self._create_distance_to_root_dict()
-            self.tot_time = self._create_total_time(tot_time)
+            self.tot_time = tf.constant(tot_time, dtype=tf.float64)
+            self._create_distance_to_root_dict()
+            #self.tot_time = self._create_total_time(tot_time)
             self.branch_lens = self._create_branch_lens()
         else:
             self.tot_time = tf.constant(tot_time, dtype=tf.float64)
@@ -223,9 +224,6 @@ class CLTLikelihoodModel:
             prev_size = up_to_size
             up_to_size += branch_len_offsets_proportion.size
             self.branch_len_offsets_proportion = self.known_vars[prev_size: up_to_size]
-            self.branch_len_offsets = tf.multiply(
-                    self.branch_len_inners,
-                    self.branch_len_offsets_proportion)
 
     def _create_poisson_distributions(self):
         # Create my poisson distributions
@@ -321,44 +319,52 @@ class CLTLikelihoodModel:
             prev_size = up_to_size
             up_to_size += branch_len_offsets_proportion.size
             self.branch_len_offsets_proportion = tf.sigmoid(self.all_vars[prev_size: up_to_size])
-            self.branch_len_offsets = tf.multiply(
-                    self.branch_len_inners,
-                    self.branch_len_offsets_proportion)
 
     def _create_distance_to_root_dict(self):
         # Create distance to root tensors for all internal nodes
-        dist_to_root = {self.root_node_id: 0}
-        for node in self.topology.traverse("preorder"):
-            if node.is_root() or node.is_leaf():
+        self.dist_to_root = {self.root_node_id: 0}
+        for node in self.topology.get_descendants("preorder"):
+            if node.is_leaf():
                 continue
-            dist_to_root[node.node_id] = dist_to_root[node.up.node_id] + self.branch_len_inners[node.node_id]
-        return dist_to_root
 
-    def _create_total_time(self, tot_time: float):
-        """
-        If total time is unknown, we need to create our own total time node
-        by adding the `tot_time_extra` to the distance of the farthest-away internal node
-        """
-        if self.known_params.tot_time:
-            return tf.constant(tot_time, dtype=tf.float64)
-        else:
-            internal_dist_to_roots = []
-            for leaf in self.topology:
-                if leaf.is_root():
-                    continue
+            self.dist_to_root[node.node_id] = self.dist_to_root[node.up.node_id] + self.branch_len_inners[node.node_id]
 
-                if not leaf.up.is_resolved_multifurcation():
-                    int_dist = self.dist_to_root[leaf.up.node_id] + self.branch_len_offsets[leaf.node_id]
-                else:
-                    int_dist = self.dist_to_root[leaf.up.node_id]
-                internal_dist_to_roots.append(int_dist)
-
-            if len(internal_dist_to_roots) >= 2:
-                self.dist_to_root_tensor = tf.reduce_max(tf.stack(internal_dist_to_roots))
-                return self.tot_time_extra + self.dist_to_root_tensor
+        branch_offsets = {self.root_node_id: 0}
+        for node in self.topology.get_descendants("preorder"):
+            if not node.up.is_resolved_multifurcation() and node.is_leaf():
+                # A leaf node, use its offset to determine branch length
+                br_len_inner = self.tot_time - self.dist_to_root[node.up.node_id]
+                branch_offsets[node.node_id] = self.branch_len_offsets_proportion[node.node_id] * br_len_inner
             else:
-                self.dist_to_root_tensor = tf.constant(0, dtype=tf.float64)
-                return self.tot_time_extra
+                branch_offsets[node.node_id] = self.branch_len_inners[node.node_id] * self.branch_len_offsets_proportion[node.node_id]
+        branch_offsets = [branch_offsets[j] for j in range(self.num_nodes)]
+        self.branch_len_offsets = tf.stack(branch_offsets)
+
+   # def _create_total_time(self, tot_time: float):
+   #     """
+   #     If total time is unknown, we need to create our own total time node
+   #     by adding the `tot_time_extra` to the distance of the farthest-away internal node
+   #     """
+   #     if self.known_params.tot_time:
+   #         return tf.constant(tot_time, dtype=tf.float64)
+   #     else:
+   #         internal_dist_to_roots = []
+   #         for leaf in self.topology:
+   #             if leaf.is_root():
+   #                 continue
+
+   #             if not leaf.up.is_resolved_multifurcation():
+   #                 int_dist = self.dist_to_root[leaf.up.node_id] + self.branch_len_offsets[leaf.node_id]
+   #             else:
+   #                 int_dist = self.dist_to_root[leaf.up.node_id]
+   #             internal_dist_to_roots.append(int_dist)
+
+   #         if len(internal_dist_to_roots) >= 2:
+   #             self.dist_to_root_tensor = tf.reduce_max(tf.stack(internal_dist_to_roots))
+   #             return self.tot_time_extra + self.dist_to_root_tensor
+   #         else:
+   #             self.dist_to_root_tensor = tf.constant(0, dtype=tf.float64)
+   #             return self.tot_time_extra
 
     def _create_branch_lens(self):
         """
