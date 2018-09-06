@@ -199,7 +199,11 @@ def tune(
     prev_branch_proportions = warm_start_params["branch_len_offsets_proportion"].copy()
 
     worker_list = []
-    possible_chad_parents = hanging_chad.possible_parents[:args.max_chad_tune_search]
+    num_total_parents = len(hanging_chad.possible_parents)
+    random_order = np.random.choice(num_total_parents, num_total_parents, replace=False)
+    possible_chad_parents = [
+        hanging_chad.possible_parents[idx]
+        for idx in random_order[:args.max_chad_tune_search]]
     for chad_par in possible_chad_parents:
         # From the no chad tree, add back the hanging chad to the designated parent
         tree_copy = nochad_tree.copy()

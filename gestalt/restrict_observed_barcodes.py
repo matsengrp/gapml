@@ -44,7 +44,7 @@ def parse_args():
         '--out-obs-file',
         type=str,
         default="_output/obs_data_b1.pkl",
-        help='name of the output pkl file with collapsed tree')
+        help='name of the output pkl file with collapsed observations')
 
     args = parser.parse_args()
     create_directory(args.out_obs_file)
