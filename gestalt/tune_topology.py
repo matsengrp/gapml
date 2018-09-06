@@ -18,7 +18,7 @@ from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from barcode_metadata import BarcodeMetadata
 import hyperparam_tuner
 import hanging_chad_finder
-from common import create_directory, get_randint
+from common import create_directory, get_randint, save_data
 import file_readers
 
 
@@ -279,12 +279,10 @@ def do_refit_bifurc_tree(
     # Copy over the latest model parameters for warm start
     param_dict = raw_res.get_fit_params()
     refit_bifurc_tree = raw_res.fitted_bifurc_tree.copy()
-    print(refit_bifurc_tree.get_ascii(attributes=["node_id"]))
     num_nodes = refit_bifurc_tree.get_num_nodes()
     # Copy over the branch lengths
     br_lens = np.ones(num_nodes) * 1e-10
     for node in refit_bifurc_tree.traverse():
-        print("dist....", node.node_id, node.dist)
         br_lens[node.node_id] = node.dist
         node.resolved_multifurcation = True
     param_dict["branch_len_inners"] = br_lens
@@ -314,26 +312,21 @@ def main(args=sys.argv[1:]):
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
 
-    np.random.seed(args.seed)
-    random.seed(args.seed)
-
     # Load data
     bcode_meta, tree, obs_data_dict = read_data(args)
     true_model_dict, oracle_dist_measurers = read_true_model_files(args, bcode_meta.num_barcodes)
     fit_params = read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict)
 
-    print(tree.get_ascii(attributes=["allele_events_list_str"]))
-    print(tree.get_ascii(attributes=["node_id"]))
-
-    # Find hanging chads
-    hanging_chads = hanging_chad_finder.get_chads(tree)
-    has_chads = len(hanging_chads) > 0
-    logging.info("total number of hanging chads %d", len(hanging_chads))
-    logging.info(hanging_chads)
+    logging.info("STARTING!")
+    logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))
+    logging.info(tree.get_ascii(attributes=["node_id"]))
 
     # Begin tuning
     tuning_history = []
     for i in range(args.num_chad_tune_iters):
+        np.random.seed(args.seed + i)
+        random.seed(args.seed + i)
+
         penalty_tune_result = None
         if i < args.num_penalty_tune_iters:
             if len(args.dist_to_half_pen_params) == 1:
@@ -346,6 +339,15 @@ def main(args=sys.argv[1:]):
                 penalty_tune_result = hyperparam_tuner.tune(tree, bcode_meta, args, fit_params)
                 fit_params, best_res = penalty_tune_result.get_best_result()
             logging.info("Iter %d: Best pen param %f", i, fit_params["dist_to_half_pen_param"])
+
+        # Find hanging chads
+        # TODO: dont rerun this code in the future? we have to do it right now
+        # cause nodes are getting renumbered...
+        hanging_chads = hanging_chad_finder.get_chads(tree)
+        has_chads = len(hanging_chads) > 0
+        logging.info("total number of hanging chads %d", len(hanging_chads))
+        for c in hanging_chads:
+            logging.info("Chad %s", c)
 
         # pick a chad at random
         chad_tune_result = None
@@ -382,6 +384,7 @@ def main(args=sys.argv[1:]):
         })
         if not has_chads:
             break
+        save_data(tuning_history, args.out_model_file)
 
     logging.info("Iter refit bifurc tree!")
     # Tune the final bifurcating tree one more time?
@@ -394,6 +397,7 @@ def main(args=sys.argv[1:]):
                 bcode_meta,
                 args,
                 oracle_dist_measurers)
+        logging.info("Final bifurc dists %s", bifurc_res.train_history[-1]["tree_dists"])
 
     # Save results
     with open(args.out_model_file, "wb") as f:

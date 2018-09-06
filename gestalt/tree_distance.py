@@ -119,6 +119,7 @@ class TreeDistanceMeasurerAgg:
                 curr_node.add_child(new_child)
                 curr_node.add_child(copy_leaf)
                 curr_node = new_child
+            node.abundance = 1
         return leaved_tree
 
 
@@ -279,6 +280,7 @@ class BHVDistanceMeasurer(TreeDistanceMeasurer):
             leaf.name = getattr(leaf, attr)
 
         self._rename_nodes(tree)
+        assert len(ref_tree) == len(tree)
 
         # Write tree out in newick format
         suffix = "%d%d" % (int(time.time()), np.random.randint(1000000))

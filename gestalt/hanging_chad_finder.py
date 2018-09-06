@@ -178,7 +178,7 @@ def tune(
         if node.node_id == hanging_chad.node.node_id:
             node.detach()
     nochad_tree.label_node_ids()
-    print("no chad tree leaves", len(nochad_tree))
+    logging.info("no chad tree leaves %d", len(nochad_tree))
 
     # Now fit the tree without the hanging chad
     trans_wrap_maker = TransitionWrapperMaker(
@@ -234,8 +234,10 @@ def tune(
                     descendant.add_feature("node_id", None)
                     descendant.add_feature("nochad_id", None)
                 node.add_child(new_hanging_chad)
+                break
 
         num_nodes = tree_copy.label_node_ids()
+        assert len(tree_copy) == len(tree)
 
         # warm start the branch length estimates
         # TODO: doesn't transfer over every single branch length estimate... is that ok?
@@ -285,6 +287,8 @@ def tune(
 
     for chad_res in chad_results:
         logging.info("Chad res: %s", str(chad_res))
+        if dist_measurers is not None:
+            logging.info("  chad truth: %s", chad_res.fit_res.train_history[-1]["tree_dists"])
 
     return HangingChadTuneResult(no_chad_res, chad_results)
 
