@@ -18,7 +18,8 @@ node or a child of another allele with a 2-2 intra-target cut.
 
 
 class HangingChadResult:
-    def __init__(self,
+    def __init__(
+            self,
             score: float,
             chad_node: CellLineageTree,
             parent_node: CellLineageTree,
@@ -36,7 +37,8 @@ class HangingChadResult:
 
 
 class HangingChadTuneResult:
-    def __init__(self,
+    def __init__(
+            self,
             no_chad_res: LikelihoodScorerResult,
             new_chad_results: List[HangingChadResult]):
         self.no_chad_res = no_chad_res
@@ -54,7 +56,8 @@ class HangingChadTuneResult:
 
 
 class HangingChad:
-    def __init__(self,
+    def __init__(
+            self,
             node: CellLineageTree,
             possible_parents: List[CellLineageTree],
             parsimony_contribution: int):
