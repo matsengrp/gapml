@@ -2,20 +2,20 @@ import numpy as np
 from typing import List, Dict
 import logging
 
-from allele_events import Event
 from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
 from transition_wrapper_maker import TransitionWrapperMaker
 from parallel_worker import SubprocessManager
-from split_data import create_kfold_trees, create_kfold_barcode_trees, TreeDataSplit
 from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from common import get_randint
+from tree_distance import TreeDistanceMeasurerAgg
 
 """
 Hanging chad is our affectionate name for the inter-target cuts that have ambiguous placement
 in the tree. For example, if we don't know if the 1-3 inter-target cut is a child of the root
 node or a child of another allele with a 2-2 intra-target cut.
 """
+
 
 class HangingChadResult:
     def __init__(self,
@@ -34,6 +34,7 @@ class HangingChadResult:
                 self.chad_node.allele_events_list_str,
                 self.score)
 
+
 class HangingChadTuneResult:
     def __init__(self,
             no_chad_res: LikelihoodScorerResult,
@@ -44,8 +45,13 @@ class HangingChadTuneResult:
     def get_best_result(self):
         best_chad_idx = np.argmax([
                 chad_res.score for chad_res in self.new_chad_results])
-        best_fit_res = new_chad_results[best_chad_idx].fit_res
-        return best_fit_res.orig_tree, best_fit_res.get_fit_params()
+        best_fit_res = self.new_chad_results[best_chad_idx].fit_res
+
+        fit_params = best_fit_res.get_fit_params()
+        fit_params.pop('branch_len_inners', None)
+        fit_params.pop('branch_len_offsets_proportion', None)
+        return best_fit_res.orig_tree, fit_params, best_fit_res
+
 
 class HangingChad:
     def __init__(self,
@@ -126,15 +132,16 @@ def get_chads(tree: CellLineageTree):
                     parsimony_score))
 
     logging.info("Number of hanging chads found: %d", len(hanging_chads))
-
     return hanging_chads
+
 
 def tune(
         hanging_chad: HangingChad,
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
         args,
-        init_model_params):
+        init_model_params: Dict,
+        dist_measurers: TreeDistanceMeasurerAgg = None):
     """
     Tune the given hanging chad
     @return HangingChadTuneResult
@@ -164,8 +171,7 @@ def tune(
         args.num_inits,
         trans_wrap_maker,
         init_model_param_list=[init_model_params],
-        known_params=args.known_params,
-        abundance_weight=args.abundance_weight).run_worker(None)[0]
+        known_params=args.known_params).run_worker(None)[0]
 
     warm_start_params = no_chad_res.get_fit_params()
     prev_branch_inners = warm_start_params["branch_len_inners"].copy()
@@ -228,7 +234,7 @@ def tune(
             trans_wrap_maker,
             init_model_param_list=[warm_start_params],
             known_params=args.known_params,
-            abundance_weight=args.abundance_weight)
+            dist_measurers=dist_measurers)
         worker_list.append(worker)
 
     if args.num_processes > 1 and len(worker_list) > 1:

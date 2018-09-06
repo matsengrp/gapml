@@ -8,12 +8,18 @@ import argparse
 import logging
 import numpy as np
 import random
+from typing import Dict
 
+from cell_lineage_tree import CellLineageTree
 from optim_settings import KnownModelParams
 from tree_distance import TreeDistanceMeasurerAgg, BHVDistanceMeasurer
+from transition_wrapper_maker import TransitionWrapperMaker
+from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
+from barcode_metadata import BarcodeMetadata
 import hyperparam_tuner
 import hanging_chad_finder
-from common import create_directory
+from common import create_directory, get_randint
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -112,6 +118,10 @@ def parse_args():
         action='store_true',
         help='is total time known?')
     parser.add_argument(
+        '--do-refit',
+        action='store_true',
+        help='refit the bifurc tree?')
+    parser.add_argument(
         '--num-processes',
         type=int,
         default=1,
@@ -184,6 +194,7 @@ def read_init_model_params_file(args, bcode_meta, obs_data_dict, true_model_dict
         args.init_params["target_lams"] = true_model_dict['target_lams']
         args.init_params["double_cut_weight"] = true_model_dict['double_cut_weight']
 
+
 def read_data(args):
     """
     Read the data files...
@@ -224,6 +235,7 @@ def read_data(args):
 
     return bcode_meta, tree, obs_data_dict
 
+
 def read_true_model_files(args, num_barcodes):
     """
     If true model files available, read them
@@ -231,6 +243,7 @@ def read_true_model_files(args, num_barcodes):
     if args.true_model_file is None:
         return None, None
 
+    # TODO: take the tree loading comparison code out of plot code
     true_model_dict, true_tree, _ = plot_simulation_common.get_true_model(
             args.true_model_file,
             None,
@@ -242,11 +255,91 @@ def read_true_model_files(args, num_barcodes):
         args.scratch_dir)
     return true_model_dict, oracle_dist_measurers
 
+
+def has_unresolved_multifurcs(tree: CellLineageTree):
+    """
+    @return whether or not this tree is an unresolved multifurcating tree
+    """
+    for node in tree.traverse():
+        if not node.is_resolved_multifurcation():
+            return True
+    return False
+
+
+def fit_multifurc_tree(
+        tree: CellLineageTree,
+        bcode_meta: BarcodeMetadata,
+        args,
+        param_dict: Dict,
+        oracle_dist_measurers: TreeDistanceMeasurerAgg = None):
+    """
+    @return LikelihoodScorerResult from fitting model on multifurcating tree
+    """
+    transition_wrap_maker = TransitionWrapperMaker(
+            tree,
+            bcode_meta,
+            args.max_extra_steps,
+            args.max_sum_states)
+    result = LikelihoodScorer(
+        get_randint(),
+        tree,
+        bcode_meta,
+        args.max_iters,
+        args.num_inits,
+        transition_wrap_maker,
+        init_model_param_list=[param_dict],
+        known_params=args.known_params,
+        dist_measurers=oracle_dist_measurers).run_worker(None)[0]
+    return result
+
+def do_refit_bifurc_tree(
+        raw_res: LikelihoodScorerResult,
+        bcode_meta: BarcodeMetadata,
+        args,
+        oracle_dist_measurers: TreeDistanceMeasurerAgg = None):
+    """
+    we need to refit using the bifurcating tree
+    """
+    # Copy over the latest model parameters for warm start
+    param_dict = raw_res.get_fit_params()
+    refit_bifurc_tree = raw_res.fitted_bifurc_tree.copy()
+    num_nodes = refit_bifurc_tree.get_num_nodes()
+    # Copy over the branch lengths
+    br_lens = np.zeros(num_nodes)
+    for node in refit_bifurc_tree.traverse():
+        br_lens[node.node_id] = node.dist
+        node.resolved_multifurcation = True
+    param_dict["branch_len_inners"] = br_lens
+    param_dict["branch_len_offsets_proportion"] = np.zeros(num_nodes)
+
+    # Fit the bifurcating tree
+    transition_wrap_maker = TransitionWrapperMaker(
+            raw_res.fitted_bifurc_tree,
+            bcode_meta,
+            args.max_extra_steps,
+            args.max_sum_states)
+    bifurc_res = LikelihoodScorer(
+        get_randint(),
+        raw_res.fitted_bifurc_tree,
+        bcode_meta,
+        args.max_iters,
+        args.num_inits,
+        transition_wrap_maker,
+        init_model_param_list=[param_dict],
+        known_params=args.known_params,
+        dist_measurers=oracle_dist_measurers).run_worker(None)[0]
+    return bifurc_res
+
+
 def main(args=sys.argv[1:]):
     args = parse_args()
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
 
+    np.random.seed(args.seed)
+    random.seed(args.seed)
+
+    # Load data
     bcode_meta, tree, obs_data_dict = read_data(args)
     true_model_dict, oracle_dist_measurers = read_true_model_files(args, bcode_meta.num_barcodes)
     read_init_model_params_file(args, bcode_meta, obs_data_dict, true_model_dict)
@@ -254,49 +347,76 @@ def main(args=sys.argv[1:]):
     print(tree.get_ascii(attributes=["allele_events_list_str"]))
     print(tree.get_ascii(attributes=["node_id"]))
 
-    np.random.seed(args.seed)
-    random.seed(args.seed)
-
+    # Find hanging chads
     hanging_chads = hanging_chad_finder.get_chads(tree)
+    has_chads = len(hanging_chads) > 0
     logging.info("total number of hanging chads %d", len(hanging_chads))
     logging.info(hanging_chads)
 
+    # Begin tuning
     tuning_history = []
     for i in range(args.num_chad_tune_iters):
         penalty_tune_result = None
         if i < args.num_penalty_tune_iters:
-            # Tune penalty params!
-            penalty_tune_result = hyperparam_tuner.tune(tree, bcode_meta, args)
-            init_model_params = penalty_tune_result.get_best_warm_model_params()
+            if len(args.dist_to_half_pens) == 1:
+                # If nothing to tune... do nothing
+                init_model_params = args.init_params
+            else:
+                # Tune penalty params!
+                logging.info("Iter %d: Tuning penalty params", i)
+                penalty_tune_result = hyperparam_tuner.tune(tree, bcode_meta, args)
+                init_model_params, best_res = penalty_tune_result.get_best_result()
 
         # pick a chad at random
         chad_tune_result = None
-        if len(hanging_chads) > 0:
+        if has_chads:
             # Now tune the hanging chads!
             random_chad = random.choice(hanging_chads)
-            logging.info("Randomly picking %s", random_chad)
+            logging.info("Iter %d: Tuning chad %s", i, random_chad)
             chad_tune_result = hanging_chad_finder.tune(
                 random_chad,
                 tree,
                 bcode_meta,
                 args,
-                init_model_params
+                init_model_params,
+                oracle_dist_measurers,
             )
-            tree, init_model_params = chad_tune_result.get_best_result()
+            tree, init_model_params, best_res = chad_tune_result.get_best_result()
+        else:
+            best_res = fit_multifurc_tree(
+                    tree,
+                    bcode_meta,
+                    args,
+                    init_model_params,
+                    oracle_dist_measurers)
 
         tuning_history.append({
             "chad_tune_result": chad_tune_result,
             "penalty_tune_result": penalty_tune_result,
         })
-        if len(hanging_chads) == 0:
+        if not has_chads:
             break
 
+    # Tune the final bifurcating tree one more time?
+    bifurc_res = None
+    if not has_unresolved_multifurcs(tree):
+        bifurc_res = best_res
+    elif args.do_refit:
+        bifurc_res = do_refit_bifurc_tree(
+                best_res,
+                bcode_meta,
+                args,
+                oracle_dist_measurers)
+
+    # Save results
     with open(args.out_model_file, "wb") as f:
         result = {
-            "tuning_history": tuning_history
+            "tuning_history": tuning_history,
+            "bifurc_res": bifurc_res,
         }
         six.moves.cPickle.dump(result, f, protocol=2)
     logging.info("Complete!!!")
+
 
 if __name__ == "__main__":
     main()

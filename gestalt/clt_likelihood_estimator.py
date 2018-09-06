@@ -156,6 +156,7 @@ class CLTPenalizedEstimator(CLTEstimator):
             bifurc_tree = self.model.get_fitted_bifurcating_tree()
             tree_dist = dist_measurers.get_tree_dists([
                 plot_simulation_common._get_leaved_result(bifurc_tree)])[0]
+            train_history[-1]["tree_dists"] = tree_dist
             logging.info("last_iter tree dists: %s", tree_dist)
 
         logging.info("total train time %f", time.time() - st_time)

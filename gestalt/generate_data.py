@@ -51,7 +51,7 @@ def parse_args():
     parser.add_argument(
         '--target-lambdas',
         type=str,
-        default=",".join([".4", ".5", ".9", "0.5", "0.8", "0.8"]),
+        default=",".join([".4", ".5", ".1", "0.5", "0.3", "0.6"]),
         help='target cut rates -- will get slightly perturbed for the true value')
     parser.add_argument(
         '--perturb-target-lambdas-variance',
@@ -61,7 +61,7 @@ def parse_args():
     parser.add_argument(
         '--double-cut-weight',
         type=float,
-        default=1,
+        default=2,
         help='Weight for double cuts')
     parser.add_argument(
         '--boost-probs',

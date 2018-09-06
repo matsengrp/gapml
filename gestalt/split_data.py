@@ -20,10 +20,16 @@ class TreeDataSplit:
     def __init__(self,
             tree: CellLineageTree,
             bcode_meta: BarcodeMetadata,
-            node_to_orig_id: Dict[int, int]):
+            node_to_orig_id: Dict[int, int],
+            is_kfold_tree: bool = False):
+        """
+        @param is_kfold_tree: True = we split the tree into subtrees (for the 1 bcode case)
+        """
         self.tree = tree
         self.bcode_meta = bcode_meta
         self.node_to_orig_id = node_to_orig_id
+        self.is_kfold_tree = is_kfold_tree
+
 
 def create_kfold_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadata, n_splits: int):
     """
@@ -41,9 +47,7 @@ def create_kfold_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadata, n_spl
     # This decreases the correlation between training sets
     children = tree.get_children()
     children_indices = [c.node_id for c in children]
-    n_splits = min(int(len(children_indices)/2), n_splits)
     logging.info("Splitting tree into %d, total %d children", n_splits, len(children))
-    assert n_splits > 1
 
     kf = KFold(n_splits=n_splits, shuffle=True)
     all_train_trees = []
@@ -68,7 +72,8 @@ def create_kfold_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadata, n_spl
         all_train_trees.append(TreeDataSplit(
             train_tree,
             bcode_meta,
-            node_to_orig_id))
+            node_to_orig_id,
+            is_kfold_tree=True))
 
     return all_train_trees
 
@@ -99,7 +104,8 @@ def create_kfold_barcode_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadat
         train_clt = _restrict_barcodes(tree.copy(), bcode_idxs)
         all_train_trees.append(TreeDataSplit(
             train_clt,
-            train_bcode_meta))
+            train_bcode_meta,
+            is_kfold_tree=False))
 
     return all_train_trees
 

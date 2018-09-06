@@ -13,12 +13,10 @@ from common import *
 
 class PenaltyScorerResult:
     def __init__(self,
+            score: float,
             log_barr_pen: float,
             dist_to_half_pen: float,
-            model_params_dicts: List[Dict],
-            score: float,
-            tree: CellLineageTree = None,
-            tree_splits: List[TreeDataSplit] = []):
+            fit_results: List[LikelihoodScorerResult]):
         """
         @param log_barr_pen: the log barrier penalty param used when fitting the model
         @param dist_to_half_pen: the distance to 0.5 diagonal penalty param used when fitting the model
@@ -26,32 +24,38 @@ class PenaltyScorerResult:
                         train/validation split/kfold CV. (this is used mostly as a warm start)
         @param score: assumed to be higher the better
         """
+        self.score = score
         self.log_barr_pen = log_barr_pen
         self.dist_to_half_pen = dist_to_half_pen
-        self.model_params_dicts = model_params_dicts
-        self.score = score
-        self.tree = tree
-        self.tree_splits = tree_splits
+        self.fit_results = fit_results
+
 
 class PenaltyTuneResult:
     def __init__(self,
+            tree: CellLineageTree,
+            tree_splits: List[TreeDataSplit],
             results: List[PenaltyScorerResult]):
+        self.tree = tree
+        self.tree_splits = tree_splits
         self.results = results
 
-    def get_best_warm_model_params(self):
+    def get_best_result(self, warm_idx=0):
         """
-        TODO: make this actually a thing. not sure what im trying to return here
-        @return Dict with model/optimization params?
+        @param warm_idx: the index of the fitted model params to use for warm starts
+        @return Dict with model/optimization params
         """
-        pen_param_scores = np.array([res.score for res in self.results])
+        pen_param_scores = np.array([r.score for r in self.results])
         logging.info("Tuning scores %s", pen_param_scores)
         best_idx = np.argmax(pen_param_scores)
+        best_pen_result = self.results[best_idx]
 
-        init_model_params = self.results[best_idx].model_params_dicts[0].copy()
-        init_model_params["log_barr_pen"] = self.results[best_idx].log_barr_pen
-        init_model_params["dist_to_half_pen"] = self.results[best_idx].dist_to_half_pen
+        chosen_best_res = best_pen_result.fit_results[warm_idx]
 
-        return init_model_params
+        fit_params = chosen_best_res.get_fit_params()
+        fit_params.pop('branch_len_inners', None)
+        fit_params.pop('branch_len_offsets_proportion', None)
+        return fit_params, chosen_best_res
+
 
 def tune(
         tree: CellLineageTree,
@@ -62,18 +66,11 @@ def tune(
 
     @return PenaltyTuneResult
     """
-    if args.num_penalty_tune_splits <= 0:
-        # If no splits, then don't do any tuning
-        assert len(args.dist_to_half_pens) == 1
-        tune_results = [PenaltyScorerResult(
-            log_barr_pen=args.log_barr,
-            dist_to_half_pen=args.dist_to_half_pens[0],
-            model_params_dicts=[args.init_params],
-            score=0,
-            tree=tree)]
-    elif bcode_meta.num_barcodes > 1:
+    assert len(args.dist_to_half_pens) > 1
+
+    if bcode_meta.num_barcodes > 1:
         # For many barcodes, we split by barcode
-        tune_results = _tune_hyperparams(
+        return _tune_hyperparams(
             tree,
             bcode_meta,
             args,
@@ -81,21 +78,13 @@ def tune(
             _get_many_bcode_stability_score)
     else:
         # For single barcode, we split into subtrees
-        tune_results = _tune_hyperparams(
+        return _tune_hyperparams(
             tree,
             bcode_meta,
             args,
             create_kfold_trees,
             _get_one_bcode_stability_score)
 
-        # Cannot use branch lengths as warm start parameters
-        # Therefore we remove them from the model param dict
-        # for res in tune_results:
-        #     for param_dict in res.model_params_dicts:
-        #         param_dict.pop('branch_len_inners', None)
-        #         param_dict.pop('branch_len_offsets_proportion', None)
-
-    return PenaltyTuneResult(tune_results)
 
 def _tune_hyperparams(
         tree: CellLineageTree,
@@ -166,23 +155,21 @@ def _tune_hyperparams(
 
         # Create our summary of tuning
         tune_result = PenaltyScorerResult(
+            stability_score,
             args.log_barr,
             dist_to_half_pen,
-            [res.model_params_dict for res in res_folds if res is not None],
-            stability_score,
-            tree = tree,
-            tree_splits = tree_splits)
-        for init_model_params in tune_result.model_params_dicts:
-            init_model_params["log_barr_pen"] = args.log_barr
-            init_model_params["dist_to_half_pen"] = args.dist_to_half_pens[idx]
-
+            res_folds)
         tune_results.append(tune_result)
         logging.info(
                 "Pen param %f stability score %s",
                 dist_to_half_pen,
                 tune_result.score)
 
-    return tune_results
+    return PenaltyTuneResult(
+                tree,
+                tree_splits,
+                tune_results)
+
 
 def _get_many_bcode_stability_score(
         pen_param_results: List[LikelihoodScorerResult],
@@ -239,6 +226,7 @@ def _get_many_bcode_stability_score(
         return stability_score
     else:
         return -np.inf
+
 
 def _get_one_bcode_stability_score(
         pen_param_results: List[LikelihoodScorerResult],
