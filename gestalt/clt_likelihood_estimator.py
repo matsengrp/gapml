@@ -48,8 +48,8 @@ class CLTPenalizedEstimator(CLTEstimator):
         #self.model.check_grad(transition_wrappers)
 
     def fit(self,
-            log_barr_pen: float,
-            dist_to_half_pen: float = 0,
+            log_barr_pen_param: float,
+            dist_to_half_pen_param: float = 0,
             print_iter: int = 1,
             save_iter: int = 20,
             dist_measurers: TreeDistanceMeasurerAgg = None,
@@ -64,40 +64,32 @@ class CLTPenalizedEstimator(CLTEstimator):
                             useful to see how progress is being made
         """
         feed_dict = {
-                    self.model.log_barr_ph: log_barr_pen,
-                    self.model.dist_to_half_pen_ph: dist_to_half_pen,
-                }
-
-        pen_log_lik, log_lik, branch_lens, dist_to_half_pen = self.model.sess.run(
-            [self.model.smooth_log_lik,
-                self.model.log_lik,
-                self.model.branch_lens,
-                self.model.dist_to_half_pen],
-            feed_dict=feed_dict)
+            self.model.log_barr_pen_param_ph: log_barr_pen_param,
+            self.model.dist_to_half_pen_param_ph: dist_to_half_pen_param,
+        }
 
         # Check branch lengths positive
         assert self.model._are_all_branch_lens_positive()
         # Check tree is ultrametric
         self.model.get_fitted_bifurcating_tree()
 
-        prev_pen_log_lik = pen_log_lik[0]
-        logging.info("dist pen %f", dist_to_half_pen)
+        pen_log_lik, log_lik = self.model.sess.run(
+            [self.model.smooth_log_lik, self.model.log_lik],
+            feed_dict=feed_dict)
+
         logging.info("initial penalized log lik %f, unpen log lik %f", pen_log_lik, log_lik)
-        print("initial penalized log lik obtained %f" % pen_log_lik)
         assert not np.isnan(pen_log_lik)
         train_history = [{
                     "iter": -1,
                     "log_lik": log_lik,
-                    "pen_log_lik": pen_log_lik,
-                    "dist_to_half_pen": dist_to_half_pen,
-                    "branch_lens": branch_lens}]
-
+                    "pen_log_lik": pen_log_lik}]
         if dist_measurers is not None:
             bifurc_tree = self.model.get_fitted_bifurcating_tree()
             train_history[0]["tree_dists"] = dist_measurers.get_tree_dists([bifurc_tree])[0]
             logging.info("initial tree dists: %s", train_history[0]["tree_dists"])
 
         st_time = time.time()
+        prev_pen_log_lik = pen_log_lik[0]
         for i in range(self.max_iters):
             var_dict = self.model.get_vars_as_dict()
             boost_probs = np.exp(var_dict["boost_softmax_weights"])/np.sum(
@@ -107,43 +99,39 @@ class CLTPenalizedEstimator(CLTEstimator):
                 if k not in ["branch_len_offsets_proportion", "branch_len_inners", "boost_probs"]:
                     logging.info("%s: %s", k, v)
 
-            _, pen_log_lik, log_lik, ridge_pen, log_barr, branch_lens = self.model.sess.run(
+            _, pen_log_lik, log_lik, dist_to_half_pen = self.model.sess.run(
                     [
                         self.model.adam_train_op,
                         self.model.smooth_log_lik,
                         self.model.log_lik,
-                        self.model.dist_to_half_pen,
-                        self.model.branch_log_barr,
-                        self.model.branch_lens],
+                        self.model.dist_to_half_pen],
                     feed_dict=feed_dict)
 
             iter_info = {
                     "iter": i,
-                    "log_barr": log_barr,
-                    "dist_to_half_pen": ridge_pen,
+                    "dist_to_half_pen": dist_to_half_pen,
                     "log_lik": log_lik,
                     "pen_log_lik": pen_log_lik,
-                    "branch_lens": branch_lens,
                     "target_rates": var_dict["target_lams"]}
             if i % print_iter == (print_iter - 1):
                 logging.info(
-                    "iter %d pen log lik %f log lik %f dist-to-half pen %f log barr %f min branch len %f",
-                    i, pen_log_lik, log_lik, ridge_pen, log_barr, np.min(branch_lens[1:]))
+                    "iter %d pen log lik %f log lik %f dist-to-half pen %f",
+                    i, pen_log_lik, log_lik, dist_to_half_pen)
 
             if np.isnan(pen_log_lik):
                 logging.info("ERROR: pen log like is nan. branch lengths are negative?")
                 break
 
             if i % save_iter == (save_iter - 1):
+                iter_info["var_dict"] = var_dict
                 logging.info("iter %d, train time %f", i, time.time() - st_time)
                 if dist_measurers is not None:
                     bifurc_tree = self.model.get_fitted_bifurcating_tree()
                     tree_dist = dist_measurers.get_tree_dists([bifurc_tree])[0]
                     logging.info("iter %d tree dists: %s", i, tree_dist)
                     iter_info["tree_dists"] = tree_dist
-                    iter_info["var"] = var_dict
-            train_history.append(iter_info)
 
+            train_history.append(iter_info)
             if i > min_iters and np.abs((prev_pen_log_lik - pen_log_lik[0])/prev_pen_log_lik) < conv_thres:
                 # Convergence reached
                 logging.info("Convergence reached")
@@ -158,9 +146,3 @@ class CLTPenalizedEstimator(CLTEstimator):
 
         logging.info("total train time %f", time.time() - st_time)
         return train_history
-
-    def create_logger(self):
-        self.model.create_logger()
-
-    def close_logger(self):
-        self.model.close_logger()

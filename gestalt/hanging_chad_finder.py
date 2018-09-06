@@ -37,10 +37,21 @@ class HangingChadResult:
 
 
 class HangingChadTuneResult:
+    """
+    Stores the results when we considered all the different possible places
+    to place our hanging chad in the tree. Includes the fitted results when we
+    removed the hanging chad from the tree entirely and the results for each possible
+    place in the tree.
+    """
     def __init__(
             self,
             no_chad_res: LikelihoodScorerResult,
             new_chad_results: List[HangingChadResult]):
+        """
+        @param no_chad_res: result when we fit the tree without the hanging chad
+        @param new_chad_results: each result when we place the hanging chad in the different
+                            possible locations in the tree
+        """
         self.no_chad_res = no_chad_res
         self.new_chad_results = new_chad_results
 
@@ -61,6 +72,13 @@ class HangingChad:
             node: CellLineageTree,
             possible_parents: List[CellLineageTree],
             parsimony_contribution: int):
+        """
+        @param node: the hanging chad
+        @param possible_parents: possible nodes that can be the parent of this node
+                                while preserving the total parsimony score of the tree
+        @param parsimony_contribution: the contributio to the total parsimony score
+                                from this hanging chad
+        """
         self.node = node
         self.parsimony_contribution = parsimony_contribution
         self.possible_parents = possible_parents

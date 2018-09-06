@@ -8,10 +8,12 @@ import custom_utils
 from custom_utils import CustomCommand, run_cmd, finish_process
 import numpy as np
 
+
 class BatchParallelWorkers:
     def __init__(self, workers, shared_obj):
         self.workers = workers
         self.shared_obj = shared_obj
+
 
 class ParallelWorker:
     """
@@ -48,6 +50,7 @@ class ParallelWorker:
         Returns whatever value needed from this task
         """
         raise NotImplementedError()
+
 
 class ParallelWorkerManager:
     """
@@ -141,11 +144,13 @@ class ParallelWorkerManager:
             successful_res_workers.append((res, worker))
         return successful_res_workers
 
+
 class SubprocessManager(ParallelWorkerManager):
     """
     Creates separate processes on the same CPU to run the workers
     """
-    def __init__(self,
+    def __init__(
+            self,
             worker_list,
             shared_obj,
             worker_folder,
@@ -165,7 +170,7 @@ class SubprocessManager(ParallelWorkerManager):
         self.create_batch_worker_cmds(worker_list, len(worker_list), batch_folder_offset)
         self.batch_system = "subprocess"
 
-    def run(self, successful_only=False, sleep = 0.01):
+    def run(self, successful_only=False, sleep=0.01):
         """
         @param successful_only: whether to return successful jobs only
                                 unsuccessful jobs have None as their result
@@ -204,57 +209,13 @@ class SubprocessManager(ParallelWorkerManager):
                             n_tries,
                             cmdfos[iproc],
                             batch_system=self.batch_system,
-                            max_num_tries = 0)
+                            max_num_tries=0)
             sys.stdout.flush()
             if sleep:
                 time.sleep(sleep)
 
         res = self.read_batch_worker_results()
         # self.clean_outputs()
-        if successful_only:
-            return self._get_successful_jobs(res, self.worker_list)
-        else:
-            return [(r, w) for r, w in zip(res, self.worker_list)]
-
-class BatchSubmissionManager(ParallelWorkerManager):
-    """
-    Handles submitting jobs to a job submission system (e.g. slurm)
-    """
-    def __init__(self,
-            worker_list,
-            shared_obj,
-            num_approx_batches,
-            worker_folder,
-            threads=None,
-            retry=False):
-        """
-        @param worker_list: List of ParallelWorkers
-        @param shared_obj: object shared across parallel workers - useful to minimize disk space usage
-        @param num_approx_batches: number of batches to make approximately (might be a bit more)
-        @param worker_folder: the folder to make all the results from the workers
-        @param threads: number of threads to request per machine
-        @param retry: whether to retry the jobs locally if they fail
-        """
-        self.retry = retry
-        self.batch_worker_cmds = []
-        self.batched_workers = [] # Tracks the batched workers if something fails
-        self.output_folders = []
-        self.output_files = []
-        self.worker_list = worker_list
-        self.worker_folder = worker_folder
-        self.threads = threads
-        self.shared_obj = shared_obj
-        self.create_batch_worker_cmds(worker_list, num_approx_batches)
-
-    def run(self, successful_only=False):
-        """
-        @param successful_only: whether to return successful jobs only
-                                unsuccessful jobs have None as their result
-        @return list of tuples (result, worker)
-        """
-        custom_utils.run_cmds(self.batch_worker_cmds)
-        res = self.read_batch_worker_results()
-        self.clean_outputs()
         if successful_only:
             return self._get_successful_jobs(res, self.worker_list)
         else:

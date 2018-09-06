@@ -11,11 +11,9 @@ from tensorflow import Session
 import collapsed_tree
 from cell_state import CellTypeTree
 from cell_lineage_tree import CellLineageTree
-from cell_state import CellTypeTree
 from barcode_metadata import BarcodeMetadata
-from indel_sets import TargetTract, SingletonWC, Singleton
-from target_status import TargetStatus, TargetDeactTract
-from anc_state import AncState
+from indel_sets import Singleton
+from target_status import TargetStatus
 from transition_wrapper_maker import TransitionWrapper
 import tf_common
 from common import inv_sigmoid, assign_rand_tree_lengths
@@ -24,13 +22,15 @@ from optim_settings import KnownModelParams
 
 from profile_support import profile
 
+
 class CLTLikelihoodModel:
     """
     Stores model parameters and branch lengths
     """
     NODE_ORDER = "preorder"
 
-    def __init__(self,
+    def __init__(
+            self,
             topology: CellLineageTree,
             bcode_meta: BarcodeMetadata,
             sess: Session,
@@ -86,8 +86,8 @@ class CLTLikelihoodModel:
         self.known_params = known_params
 
         # Stores the penalty parameters
-        self.log_barr_ph = tf.placeholder(tf.float64)
-        self.dist_to_half_pen_ph = tf.placeholder(tf.float64)
+        self.log_barr_pen_param_ph = tf.placeholder(tf.float64)
+        self.dist_to_half_pen_param_ph = tf.placeholder(tf.float64)
 
         if branch_len_inners.size == 0:
             branch_len_inners = np.random.rand(self.num_nodes) * 0.3
@@ -142,7 +142,8 @@ class CLTLikelihoodModel:
         self.step_size = step_size
         self.adam_opt = tf.train.AdamOptimizer(learning_rate=self.step_size)
 
-    def _create_known_parameters(self,
+    def _create_known_parameters(
+            self,
             target_lams: ndarray,
             double_cut_weight: ndarray,
             boost_softmax_weights: ndarray,
@@ -236,7 +237,8 @@ class CLTLikelihoodModel:
                 tf.contrib.distributions.Poisson(self.trim_long_poissons[1])]
         self.poiss_insert = tf.contrib.distributions.Poisson(self.insert_poisson)
 
-    def _create_parameters(self,
+    def _create_parameters(
+            self,
             target_lams: ndarray,
             double_cut_weight: ndarray,
             boost_softmax_weights: ndarray,
@@ -326,7 +328,6 @@ class CLTLikelihoodModel:
     def _create_distance_to_root_dict(self):
         # Create distance to root tensors for all internal nodes
         dist_to_root = {self.root_node_id: 0}
-        branch_lens_dict = []
         for node in self.topology.traverse("preorder"):
             if node.is_root() or node.is_leaf():
                 continue
@@ -405,7 +406,8 @@ class CLTLikelihoodModel:
                 param_dict["branch_len_offsets_proportion"],
                 param_dict["tot_time_extra"])
 
-    def set_params(self,
+    def set_params(
+            self,
             target_lams: ndarray,
             double_cut_weight: float,
             boost_softmax_weights: ndarray,
@@ -554,7 +556,8 @@ class CLTLikelihoodModel:
         all_hazards = self._create_hazard_target_tract(min_targets, max_targets, long_left_statuses, long_right_statuses)
         return all_hazards, tt_dict
 
-    def _create_hazard_target_tract(self,
+    def _create_hazard_target_tract(
+            self,
             min_target: Tensor,
             max_target: Tensor,
             long_left_statuses: Tensor,
@@ -643,7 +646,8 @@ class CLTLikelihoodModel:
             right_trim_allows[deact_tract.min_deact_target:deact_tract.max_deact_target + 1] = 0
         return left_trim_allows.tolist(), right_trim_allows.tolist()
 
-    def _create_hazard_list(self,
+    def _create_hazard_list(
+            self,
             trim_left: bool,
             trim_right: bool,
             left_trimmables: List[List[int]],
@@ -688,12 +692,12 @@ class CLTLikelihoodModel:
         if not singletons:
             return []
         else:
-            insert_probs_boost = self._create_insert_probs(singletons, insert_boost_len = self.boost_len)
-            insert_probs = self._create_insert_probs(singletons, insert_boost_len = 0)
-            left_del_probs_boost = self._create_left_del_probs(singletons, left_boost_len = self.boost_len)
-            left_del_probs = self._create_left_del_probs(singletons, left_boost_len = 0)
-            right_del_probs_boost = self._create_right_del_probs(singletons, right_boost_len = self.boost_len)
-            right_del_probs = self._create_right_del_probs(singletons, right_boost_len = 0)
+            insert_probs_boost = self._create_insert_probs(singletons, insert_boost_len=self.boost_len)
+            insert_probs = self._create_insert_probs(singletons, insert_boost_len=0)
+            left_del_probs_boost = self._create_left_del_probs(singletons, left_boost_len=self.boost_len)
+            left_del_probs = self._create_left_del_probs(singletons, left_boost_len=0)
+            right_del_probs_boost = self._create_right_del_probs(singletons, right_boost_len=self.boost_len)
+            right_del_probs = self._create_right_del_probs(singletons, right_boost_len=0)
 
             insert_log_p = tf.log(self.boost_probs[0]) + tf.log(left_del_probs) + tf.log(right_del_probs) + tf.log(insert_probs_boost)
             left_del_log_p = tf.log(self.boost_probs[1]) + tf.log(left_del_probs_boost) + tf.log(right_del_probs) + tf.log(insert_probs)
@@ -907,7 +911,7 @@ class CLTLikelihoodModel:
         if self.known_params.tot_time:
             branch_lens_to_penalize = tf.gather(
                 self.branch_lens,
-                indices = [node.node_id for node in self.topology.traverse() if not node.is_root()])
+                indices=[node.node_id for node in self.topology.traverse() if not node.is_root()])
             self.branch_log_barr = tf.reduce_mean(tf.log(branch_lens_to_penalize))
         else:
             self.branch_log_barr = tf.constant(0, dtype=tf.float64)
@@ -916,8 +920,8 @@ class CLTLikelihoodModel:
 
         self.smooth_log_lik = (
                 self.log_lik/self.bcode_meta.num_barcodes
-                + self.log_barr_ph * self.branch_log_barr
-                - self.dist_to_half_pen * self.dist_to_half_pen_ph)
+                + self.log_barr_pen_param_ph * self.branch_log_barr
+                - self.dist_to_half_pen * self.dist_to_half_pen_param_ph)
 
         if create_gradient:
             logging.info("Computing gradients....")
@@ -954,7 +958,8 @@ class CLTLikelihoodModel:
             self.Ddiags_list.append(Ddiags)
         self.log_lik_alleles = tf.add_n(self.log_lik_alleles_list)
 
-    def _initialize_lower_log_prob(self,
+    def _initialize_lower_log_prob(
+            self,
             transition_wrappers: Dict[int, List[TransitionWrapper]],
             node: CellLineageTree,
             bcode_idx: int):
@@ -1012,7 +1017,6 @@ class CLTLikelihoodModel:
         # Store all the scaling terms addressing numerical underflow
         log_scaling_terms = dict()
         self.dist_to_half_pen_list = []
-        #self.shapes = []
         # Tree traversal order should be postorder
         for node in self.topology.traverse("postorder"):
             if node.is_leaf():
@@ -1058,13 +1062,12 @@ class CLTLikelihoodModel:
                             if len(child.spine_children):
                                 prob_stay = tf.exp(tf.diag_part(tr_mat)[:-1] * tf.reduce_sum(
                                         tf.gather(
-                                            params = self.branch_lens,
-                                            indices = child.spine_children)))
+                                            params=self.branch_lens,
+                                            indices=child.spine_children)))
                                 self.dist_to_half_pen_list.append(tf.reduce_mean(tf.abs(
                                     prob_stay - tf.constant(0.5, dtype=tf.float64))))
                         else:
                             prob_stay = tf.diag_part(pt_matrix[child.node_id])[:-1]
-                            #self.shapes.append([prob_stay, tf.diag_part(pt_matrix[child.node_id])])
                             self.dist_to_half_pen_list.append(tf.reduce_mean(tf.abs(
                                     prob_stay - tf.constant(0.5, tf.float64))))
 
@@ -1138,7 +1141,6 @@ class CLTLikelihoodModel:
                 for sgwc in transition_wrapper.anc_state.get_singleton_wcs()])
 
         possible_states = set(transition_wrapper.states)
-        impossible_key = transition_wrapper.num_possible_states
 
         single_tt_sparse_indices = []
         single_tt_gather_indices = []
@@ -1174,8 +1176,8 @@ class CLTLikelihoodModel:
                     else:
                         hazard_idxs = [self.target_tract_dict[tt] for tt in target_tracts_for_transition]
                         hazard = tf.reduce_sum(tf.gather(
-                            params = self.target_tract_hazards,
-                            indices = hazard_idxs))
+                            params=self.target_tract_hazards,
+                            indices=hazard_idxs))
 
                         # Store this hazard if we need it in the future
                         self.targ_stat_transition_hazards_dict[start_state][end_state] = hazard
@@ -1186,8 +1188,8 @@ class CLTLikelihoodModel:
         matrix_len = transition_wrapper.num_possible_states + 1
         if single_tt_gather_indices:
             single_tt_sparse_vals = tf.gather(
-                params = self.target_tract_hazards,
-                indices = single_tt_gather_indices)
+                params=self.target_tract_hazards,
+                indices=single_tt_gather_indices)
             q_single_tt_matrix = tf.scatter_nd(
                 single_tt_sparse_indices,
                 single_tt_sparse_vals,
@@ -1291,10 +1293,10 @@ class CLTLikelihoodModel:
                 spine_nodes = []
                 for idx in sort_indexes:
                     new_spine_node = CellLineageTree(
-                            allele_list = node.allele_list,
-                            allele_events_list = node.allele_events_list,
-                            cell_state = node.cell_state,
-                            dist = children_offsets[idx] - curr_offset)
+                            allele_list=node.allele_list,
+                            allele_events_list=node.allele_events_list,
+                            cell_state=node.cell_state,
+                            dist=children_offsets[idx] - curr_offset)
                     curr_spine_node.add_child(new_spine_node)
                     new_spine_node.add_feature("spine_children", [])
                     spine_nodes.append(new_spine_node)
@@ -1429,7 +1431,6 @@ class CLTLikelihoodModel:
             return log_lik, grad
         else:
             return self.sess.run(self.log_lik), None
-
 
     def check_grad(self, transition_matrices, epsilon=PERTURB_ZERO):
         """

@@ -58,12 +58,12 @@ def parse_args():
         default=None,
         help='pkl file with true model if available')
     parser.add_argument(
-        '--log-barr',
+        '--log-barr-pen-param',
         type=float,
         default=0.001,
         help="log barrier parameter on the branch lengths")
     parser.add_argument(
-        '--dist-to-half-pens',
+        '--dist-to-half-pen-params',
         type=str,
         default='1',
         help="""
@@ -131,9 +131,9 @@ def parse_args():
     parser.set_defaults(tot_time_known=True)
     args = parser.parse_args()
 
-    assert args.log_barr >= 0
-    args.dist_to_half_pens = list(sorted(
-        [float(lam) for lam in args.dist_to_half_pens.split(",")],
+    assert args.log_barr_pen_param >= 0
+    args.dist_to_half_pen_params = list(sorted(
+        [float(lam) for lam in args.dist_to_half_pen_params.split(",")],
         reverse=True))
 
     create_directory(args.out_model_file)
@@ -266,6 +266,7 @@ def fit_multifurc_tree(
         dist_measurers=oracle_dist_measurers).run_worker(None)[0]
     return result
 
+
 def do_refit_bifurc_tree(
         raw_res: LikelihoodScorerResult,
         bcode_meta: BarcodeMetadata,
@@ -332,10 +333,10 @@ def main(args=sys.argv[1:]):
     for i in range(args.num_chad_tune_iters):
         penalty_tune_result = None
         if i < args.num_penalty_tune_iters:
-            if len(args.dist_to_half_pens) == 1:
+            if len(args.dist_to_half_pen_params) == 1:
                 # If nothing to tune... do nothing
-                fit_params["log_barr_pen"] = args.log_barr
-                fit_params["dist_to_half_pen"] = args.dist_to_half_pens[0]
+                fit_params["log_barr_pen_param"] = args.log_barr_pen_param
+                fit_params["dist_to_half_pen_param"] = args.dist_to_half_pen_params[0]
             else:
                 # Tune penalty params!
                 logging.info("Iter %d: Tuning penalty params", i)

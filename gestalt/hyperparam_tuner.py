@@ -8,30 +8,32 @@ from transition_wrapper_maker import TransitionWrapperMaker
 from split_data import create_kfold_trees, create_kfold_barcode_trees, TreeDataSplit
 from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from parallel_worker import SubprocessManager
-from common import *
+from common import get_randint
 
 
 class PenaltyScorerResult:
-    def __init__(self,
+    def __init__(
+            self,
             score: float,
-            log_barr_pen: float,
-            dist_to_half_pen: float,
+            log_barr_pen_param: float,
+            dist_to_half_pen_param: float,
             fit_results: List[LikelihoodScorerResult]):
         """
-        @param log_barr_pen: the log barrier penalty param used when fitting the model
-        @param dist_to_half_pen: the distance to 0.5 diagonal penalty param used when fitting the model
+        @param log_barr_pen_param: the log barrier penalty param used when fitting the model
+        @param dist_to_half_pen_param: the distance to 0.5 diagonal penalty param used when fitting the model
         @param model_params_dict: an example of the final fitted parameters when we did
                         train/validation split/kfold CV. (this is used mostly as a warm start)
         @param score: assumed to be higher the better
         """
         self.score = score
-        self.log_barr_pen = log_barr_pen
-        self.dist_to_half_pen = dist_to_half_pen
+        self.log_barr_pen_param = log_barr_pen_param
+        self.dist_to_half_pen_param = dist_to_half_pen_param
         self.fit_results = fit_results
 
 
 class PenaltyTuneResult:
-    def __init__(self,
+    def __init__(
+            self,
             tree: CellLineageTree,
             tree_splits: List[TreeDataSplit],
             results: List[PenaltyScorerResult]):
@@ -63,11 +65,11 @@ def tune(
         args,
         fit_params: Dict):
     """
-    Tunes the `dist_to_half_pen` penalty parameter
+    Tunes the `dist_to_half_pen_param` penalty parameter
 
     @return PenaltyTuneResult
     """
-    assert len(args.dist_to_half_pens) > 1
+    assert len(args.dist_to_half_pen_params) > 1
 
     if bcode_meta.num_barcodes > 1:
         # For many barcodes, we split by barcode
@@ -116,13 +118,13 @@ def _tune_hyperparams(
 
     # First create the initialization/optimization settings
     fit_param_list = []
-    for idx, dist_to_half_pen in enumerate(args.dist_to_half_pens):
+    for idx, dist_to_half_pen_param in enumerate(args.dist_to_half_pen_params):
         if idx == 0:
             new_fit_params = fit_params.copy()
         else:
             new_fit_params = {}
-        new_fit_params["log_barr_pen"] = args.log_barr
-        new_fit_params["dist_to_half_pen"] = dist_to_half_pen
+        new_fit_params["log_barr_pen_param"] = args.log_barr
+        new_fit_params["dist_to_half_pen_param"] = dist_to_half_pen_param
         fit_param_list.append(new_fit_params)
 
     # Actually fit the trees using the kfold barcodes
@@ -153,7 +155,7 @@ def _tune_hyperparams(
     # Now find the best penalty param by finding the most stable one
     # Stability is defined as the least variable target lambda estimates and branch length estimates
     tune_results = []
-    for idx, dist_to_half_pen in enumerate(args.dist_to_half_pens):
+    for idx, dist_to_half_pen_param in enumerate(args.dist_to_half_pen_params):
         res_folds = [train_res[idx] for train_res in train_results]
         stability_score = stability_score_fnc(res_folds, tree_splits, tree)
 
@@ -161,12 +163,12 @@ def _tune_hyperparams(
         tune_result = PenaltyScorerResult(
             stability_score,
             args.log_barr,
-            dist_to_half_pen,
+            dist_to_half_pen_param,
             res_folds)
         tune_results.append(tune_result)
         logging.info(
                 "Pen param %f stability score %s",
-                dist_to_half_pen,
+                dist_to_half_pen_param,
                 tune_result.score)
 
     return PenaltyTuneResult(

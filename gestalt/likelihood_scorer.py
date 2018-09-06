@@ -19,14 +19,14 @@ class LikelihoodScorerResult:
     """
     def __init__(
             self,
-            log_barr_pen: float,
-            dist_to_half_pen: float,
+            log_barr_pen_param: float,
+            dist_to_half_pen_param: float,
             model_params_dict: Dict,
             orig_tree: CellLineageTree,
             fitted_bifurc_tree: CellLineageTree,
             train_history: List):
-        self.log_barr_pen = log_barr_pen
-        self.dist_to_half_pen = dist_to_half_pen
+        self.log_barr_pen_param = log_barr_pen_param
+        self.dist_to_half_pen_param = dist_to_half_pen_param
         self.model_params_dict = model_params_dict
         self.orig_tree = orig_tree
         self.fitted_bifurc_tree = fitted_bifurc_tree
@@ -37,8 +37,8 @@ class LikelihoodScorerResult:
     def get_fit_params(self):
         # TODO: careful -- this isnt a deep copy
         fit_params = self.model_params_dict.copy()
-        fit_params["log_barr_pen"] = self.log_barr_pen
-        fit_params["dist_to_half_pen"] = self.dist_to_half_pen
+        fit_params["log_barr_pen_param"] = self.log_barr_pen_param
+        fit_params["dist_to_half_pen_param"] = self.dist_to_half_pen_param
         return fit_params
 
     def get_all_target_params(self):
@@ -70,13 +70,13 @@ class LikelihoodScorer(ParallelWorker):
         @param tree: the cell lineage tree topology to fit the likelihood for
         @param bcode_meta: BarcodeMetadata
         @param log_barr: log barrier penalty parameter, i.e. how much to scale the penalty
-        @param dist_to_half_pen: penalty parameter for penalizing how far the prob transition matrices
+        @param dist_to_half_pen_param: penalty parameter for penalizing how far the prob transition matrices
                                 are from having 1/2 on the diagonal
         @param max_iters: maximum number of iterations for MLE
         @param transition_wrap_maker: TransitionWrapperMaker
         @param fit_param_list: a list of dictionaries specifying model parameter initializations as well
                                     as penalty parameter values. At the very least, each model param list
-                                    must contain the penalty parameter settings (dist_to_half_pen and log_barr_pen).
+                                    must contain the penalty parameter settings (dist_to_half_pen_param and log_barr_pen_param).
                                     If dictionaries for indices >= 1 have few model param initialization values,
                                     we copy the fitted values over from the previous optimization results. This
                                     serves as a way to warm start.
@@ -128,12 +128,12 @@ class LikelihoodScorer(ParallelWorker):
 
         # Actually fit the model
         train_history = estimator.fit(
-                log_barr_pen=fit_params["log_barr_pen"],
-                dist_to_half_pen=fit_params["dist_to_half_pen"],
+                log_barr_pen_param=fit_params["log_barr_pen_param"],
+                dist_to_half_pen_param=fit_params["dist_to_half_pen_param"],
                 dist_measurers=self.dist_measurers)
         result = LikelihoodScorerResult(
-            fit_params["log_barr_pen"],
-            fit_params["dist_to_half_pen"],
+            fit_params["log_barr_pen_param"],
+            fit_params["dist_to_half_pen_param"],
             res_model.get_vars_as_dict(),
             res_model.topology,
             res_model.get_fitted_bifurcating_tree(),
@@ -155,8 +155,8 @@ class LikelihoodScorer(ParallelWorker):
         """
         logging.info(
                 "RUNNING log pen param %f dist to half pen param %f",
-                fit_params["log_barr_pen"],
-                fit_params["dist_to_half_pen"])
+                fit_params["log_barr_pen_param"],
+                fit_params["dist_to_half_pen_param"])
         results = []
         for i in range(self.max_tries):
             try:
@@ -201,8 +201,7 @@ class LikelihoodScorer(ParallelWorker):
             self.known_params,
             # doesnt matter what value is set here for now. will be overridden
             # TODO: remove this line/argument...
-            target_lams=self.fit_param_list[0]['target_lams'],
-            abundance_weight=self.abundance_weight)
+            target_lams=self.fit_param_list[0]['target_lams'])
         estimator = CLTPenalizedEstimator(
             res_model,
             self.transition_wrap_maker,
