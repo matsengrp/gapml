@@ -341,7 +341,7 @@ def main(args=sys.argv[1:]):
             logging.info("Iter %d: Best pen param %f", i, fit_params["dist_to_half_pen_param"])
 
         # Find hanging chads
-        # TODO: dont rerun this code in the future? we have to do it right now
+        # TODO: kind slow right now... reruns chad-finding code
         # cause nodes are getting renumbered...
         hanging_chads = hanging_chad_finder.get_chads(tree)
         has_chads = len(hanging_chads) > 0
@@ -351,7 +351,7 @@ def main(args=sys.argv[1:]):
 
         # pick a chad at random
         chad_tune_result = None
-        if has_chads:
+        if has_chads and args.max_chad_tune_search > 1:
             # Now tune the hanging chads!
             random_chad = random.choice(hanging_chads)
             logging.info("Iter %d: Tuning chad %s", i, random_chad)

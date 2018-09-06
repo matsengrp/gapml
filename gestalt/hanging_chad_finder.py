@@ -211,28 +211,27 @@ def tune(
         # From the no chad tree, add back the hanging chad to the designated parent
         tree_copy = nochad_tree.copy()
         for node in tree_copy.traverse():
-            if not node.is_leaf():
-                # only copy over branch length inners/proportions if not leaf
-                node.add_feature("nochad_id", node.node_id)
-            else:
-                node.add_feature("nochad_id", None)
+            node.add_feature("nochad_id", node.node_id)
 
         for node in tree_copy.traverse():
             if node.orig_node_id is not None and node.orig_node_id == chad_par.node_id:
                 if node.is_leaf():
                     new_child = node.copy()
-                    new_child.add_feature("orig_node_id", None)
-                    new_child.add_feature("node_id", None)
-                    new_child.add_feature("nochad_id", None)
+                    new_child.add_features(
+                        orig_node_id=None,
+                        node_id=None,
+                        nochad_id=None)
                     node.add_child(new_child)
                 new_hanging_chad = hanging_chad.node.copy()
-                new_hanging_chad.add_feature("orig_node_id", None)
-                new_hanging_chad.add_feature("node_id", None)
-                new_hanging_chad.add_feature("nochad_id", None)
+                new_hanging_chad.add_features(
+                        orig_node_id=None,
+                        node_id=None,
+                        nochad_id=None)
                 for descendant in new_hanging_chad.get_descendants():
-                    descendant.add_feature("orig_node_id", None)
-                    descendant.add_feature("node_id", None)
-                    descendant.add_feature("nochad_id", None)
+                    descendant.add_features(
+                        orig_node_id=None,
+                        node_id=None,
+                        nochad_id=None)
                 node.add_child(new_hanging_chad)
                 break
 
@@ -246,10 +245,19 @@ def tune(
         warm_start_params["branch_len_inners"] = np.ones(num_nodes) * 1e-10
         warm_start_params["branch_len_offsets_proportion"] = np.ones(num_nodes) * 0.45 + np.random.rand(num_nodes) * 0.1
         for node in tree_copy.traverse():
-            if node.nochad_id is not None:
+            if node.nochad_id is not None and node.orig_node_id != chad_par.node_id:
+                # Copy over existing branch length estimates -- it it matches an existing branch in the no-chad tree
+                # However we DO NOT copy over the branch length estimate for the new parent of the hanging chad.
+                # This is because the new placement of the hanging chad may have changed this node from a leaf to an
+                # internal node. In that case, the branch len inner that was previously a nonsense param
+                # in the optimization is now meangingful. We make sure we don't use the nonsense
+                # param by omitting the branch length estimate
                 nochad_id = int(node.nochad_id)
                 node_id = int(node.node_id)
-                warm_start_params["branch_len_inners"][node_id] = max(
+                if not node.is_leaf():
+                    # Only copy branch_len_inners for non-leaf nodes because branch_len_inner values are meaningless for
+                    # leaf nodes
+                    warm_start_params["branch_len_inners"][node_id] = max(
                         prev_branch_inners[nochad_id] - 1e-9, 1e-10)
                 warm_start_params["branch_len_offsets_proportion"][node_id] = prev_branch_proportions[nochad_id]
 

@@ -513,7 +513,10 @@ class CLTLikelihoodModel:
 
     def _are_all_branch_lens_positive(self):
         br_lens = self.get_branch_lens()
+        logging.info(self.topology.get_ascii(attributes=["allele_events_list_str"]))
+        logging.info(self.topology.get_ascii(attributes=["node_id"]))
         logging.info("br lens %s", br_lens)
+        logging.info("where neg %s", np.where(br_lens < 0))
         return np.all(br_lens[1:] > 0)
 
     def initialize_branch_lens(self, tot_time: float):
