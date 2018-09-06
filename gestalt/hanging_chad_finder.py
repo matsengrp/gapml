@@ -59,7 +59,7 @@ class HangingChadTuneResult:
         best_chad_idx = np.argmax([
                 chad_res.score for chad_res in self.new_chad_results])
         best_chad = self.new_chad_results[best_chad_idx]
-        print("best chad", best_chad)
+        logging.info("Best chad %s", best_chad)
         best_fit_res = best_chad.fit_res
 
         fit_params = best_fit_res.get_fit_params()
@@ -206,6 +206,7 @@ def tune(
     possible_chad_parents = [
         hanging_chad.possible_parents[idx]
         for idx in random_order[:args.max_chad_tune_search]]
+    logging.info("chad parent idxs considered %s", random_order[:args.max_chad_tune_search])
     for chad_par in possible_chad_parents:
         # From the no chad tree, add back the hanging chad to the designated parent
         tree_copy = nochad_tree.copy()

@@ -345,6 +345,7 @@ def main(args=sys.argv[1:]):
                 logging.info("Iter %d: Tuning penalty params", i)
                 penalty_tune_result = hyperparam_tuner.tune(tree, bcode_meta, args, fit_params)
                 fit_params, best_res = penalty_tune_result.get_best_result()
+            logging.info("Iter %d: Best pen param %f", i, fit_params["dist_to_half_pen_param"])
 
         # pick a chad at random
         chad_tune_result = None
@@ -368,6 +369,11 @@ def main(args=sys.argv[1:]):
                     args,
                     fit_params,
                     oracle_dist_measurers)
+        logging.info("Iter %d, begin dists %s", i, best_res.train_history[0]["tree_dists"])
+        logging.info("Iter %d, end dists %s (num iters %d)",
+                i,
+                best_res.train_history[-1]["tree_dists"],
+                len(best_res.train_history) - 1)
 
         tuning_history.append({
             "chad_tune_result": chad_tune_result,
