@@ -42,7 +42,7 @@ def get_result(seed, n_bcodes):
         for result in results["chad_results"]:
             scores.append(result.score)
             print("bif", len(result.fit_res.fitted_bifurc_tree))
-            leaved_bifurc_tree = plot_simulation_common._get_leaved_result(
+            leaved_bifurc_tree = TreeDistanceMeasurerAgg.create_single_abundance_tree(
                     result.fit_res.fitted_bifurc_tree)
             print("leaved", len(leaved_bifurc_tree))
             trees.append(leaved_bifurc_tree)

@@ -1,5 +1,5 @@
 import six
-#from ete3 import NodeStyle, SeqMotifFace
+from ete3 import NodeStyle, SeqMotifFace
 from plot_mrca_matrices import plot_tree
 from matplotlib import pyplot
 from scipy import stats

@@ -1,7 +1,6 @@
 import os
 import subprocess
 import numpy as np
-import typing
 from typing import List
 import random
 import time
@@ -11,25 +10,31 @@ from scipy.stats import spearmanr, kendalltau, pearsonr
 from cell_lineage_tree import CellLineageTree
 from collapsed_tree import _remove_single_child_unobs_nodes
 from constant_paths import RSPR_PATH, BHV_PATH, TAU_GEO_JAR_PATH
-from common import get_randint
 import collapsed_tree
+
 
 class TreeDistanceMeasurerAgg:
     """
     Aggregates tree distances
     """
-    def __init__(self,
-        measurer_classes: List,
-        ref_tree: CellLineageTree,
-        scratch_dir: str):
+    def __init__(
+            self,
+            ref_tree: CellLineageTree,
+            measurer_classes: List,
+            scratch_dir: str,
+            do_expand_abundance: bool = False):
         """
         @param measurer_classes: list of classes (subclasses of TreeDistanceMeasurer)
                                 to instantiate for tree distance measurements
                                 ex. [SPRDistanceMeasurer]
         @param ref_tree: the reference tree to measure distances from
         @param scratch_dir: a scratch directory used by TreeDistanceMeasurer
+        @param do_expand_abundance: for all tree comparisons, create leaves with abundance one
+                                for each multi-abundance leaf
         """
+        self.ref_tree = ref_tree
         self.measurers = [meas_cls(ref_tree, scratch_dir) for meas_cls in measurer_classes]
+        self.do_expand_abundance = do_expand_abundance
 
     def get_tree_dists(self, trees: List[CellLineageTree]):
         """
@@ -38,11 +43,85 @@ class TreeDistanceMeasurerAgg:
         all_dists = []
         for tree in trees:
             tree_dists = {}
+            compare_tree = TreeDistanceMeasurerAgg.create_single_abundance_tree(tree) if self.do_expand_abundance else tree
             for measurer in self.measurers:
-                dist = measurer.get_dist(tree)
+                dist = measurer.get_dist(compare_tree)
                 tree_dists[measurer.name] = dist
             all_dists.append(tree_dists)
         return all_dists
+
+    @staticmethod
+    def create_single_abundance_measurer(
+            raw_tree: CellLineageTree,
+            n_bcodes: int,
+            measurer_classes: List,
+            scratch_dir: str):
+        """
+        @param raw_tree: this tree may have more than the requested number of barcodes
+                        to restrict to
+        @param n_bcodes: number of barcodes to restrict in the true tree
+        @return TreeDistanceMeasurer
+        """
+        ref_tree = raw_tree.copy()
+
+        # First restrict down to the requested number of barcodes
+        # Rename nodes if they have the same first few barcodes
+        # TODO: better way to ID the tree leaves?
+        existing_strs = {}
+        for node in ref_tree:
+            node.set_allele_list(
+                    node.allele_list.create_truncated_version(n_bcodes))
+            node.sync_allele_events_list_str()
+            if node.allele_events_list_str in existing_strs:
+                count = existing_strs[node.allele_events_list_str]
+                existing_strs[node.allele_events_list_str] += 1
+                node.allele_events_list_str = "%s==%d" % (
+                         node.allele_events_list_str,
+                         count)
+            else:
+                existing_strs[node.allele_events_list_str] = 1
+
+        return TreeDistanceMeasurerAgg(
+            ref_tree,
+            measurer_classes,
+            scratch_dir,
+            do_expand_abundance=True)
+
+    @staticmethod
+    def create_single_abundance_tree(tree: CellLineageTree):
+        """
+        Create tree with appropriate number of leaves to match abundance
+        Just attach with zero distance to the existing leaf node
+        Now we can compare it to the tree created in the `create` func
+        """
+        leaved_tree = tree.copy()
+        for node in leaved_tree:
+            curr_node = node
+            for idx in range(node.abundance - 1):
+                new_child = CellLineageTree(
+                    curr_node.allele_list,
+                    curr_node.allele_events_list,
+                    curr_node.cell_state,
+                    dist=0,
+                    abundance=1,
+                    resolved_multifurcation=True)
+                new_child.allele_events_list_str = "%s==%d" % (
+                    new_child.allele_events_list_str,
+                    idx + 1)
+                copy_leaf = CellLineageTree(
+                    curr_node.allele_list,
+                    curr_node.allele_events_list,
+                    curr_node.cell_state,
+                    dist=0,
+                    abundance=1,
+                    resolved_multifurcation=True)
+                copy_leaf.allele_events_list_str = curr_node.allele_events_list_str
+                curr_node.add_child(new_child)
+                curr_node.add_child(copy_leaf)
+                curr_node = new_child
+            node.abundance = 1
+        return leaved_tree
+
 
 class TreeDistanceMeasurer:
     """
@@ -138,11 +217,13 @@ class TreeDistanceMeasurer:
                     break
         return uniq_trees
 
+
 class UnrootRFDistanceMeasurer(TreeDistanceMeasurer):
     """
     Robinson foulds distance, unrooted trees
     """
     name = "ete_rf_unroot"
+
     def get_dist(self, tree):
         rf_res = self.ref_tree.robinson_foulds(
                 tree,
@@ -152,11 +233,13 @@ class UnrootRFDistanceMeasurer(TreeDistanceMeasurer):
                 unrooted_trees=True)
         return rf_res[0]
 
+
 class RootRFDistanceMeasurer(TreeDistanceMeasurer):
     """
     Robinson foulds distance, rooted trees
     """
     name = "ete_rf_root"
+
     def get_dist(self, tree):
         try:
             rf_res = self.ref_tree.robinson_foulds(
@@ -171,11 +254,13 @@ class RootRFDistanceMeasurer(TreeDistanceMeasurer):
             print("cannot get root RF distance: %s", str(err))
             return np.NaN
 
+
 class BHVDistanceMeasurer(TreeDistanceMeasurer):
     """
     BHV distance
     """
     name = "bhv"
+
     def get_dist(self, raw_tree, attr="allele_events_list_str"):
         """
         http://comet.lehman.cuny.edu/owen/code.html
@@ -195,6 +280,7 @@ class BHVDistanceMeasurer(TreeDistanceMeasurer):
             leaf.name = getattr(leaf, attr)
 
         self._rename_nodes(tree)
+        assert len(ref_tree) == len(tree)
 
         # Write tree out in newick format
         suffix = "%d%d" % (int(time.time()), np.random.randint(1000000))
@@ -223,17 +309,18 @@ class BHVDistanceMeasurer(TreeDistanceMeasurer):
             lines = f.readlines()
             bhv_dist = float(lines[0].split("\t")[-1])
 
-        #print(tree_in_file)
         os.remove(tree_in_file)
         os.remove(bhv_out_file)
         os.remove(verbose_out_file)
         return bhv_dist
+
 
 class SPRDistanceMeasurer(TreeDistanceMeasurer):
     """
     SPR distance
     """
     name = "spr"
+
     def get_dist(self, tree):
         """
         Run rspr software from Chris Whidden
@@ -272,6 +359,7 @@ class SPRDistanceMeasurer(TreeDistanceMeasurer):
 
         return spr_dist
 
+
 class GavruskinMeasurer(TreeDistanceMeasurer):
     """
     "BHV" distance but for ultrametric trees
@@ -280,7 +368,7 @@ class GavruskinMeasurer(TreeDistanceMeasurer):
     """
     name = "tau-bhv"
 
-    def _perturb_distances(self, raw_tree, perturb_err = 0.5 * 1e-4):
+    def _perturb_distances(self, raw_tree, perturb_err=0.5 * 1e-4):
         tree = raw_tree.copy()
         for node in tree.traverse():
             node.dist += np.random.rand() * perturb_err
@@ -331,11 +419,13 @@ class GavruskinMeasurer(TreeDistanceMeasurer):
                 os.remove(out_file)
         raise ValueError("Failed to calculate tau dist")
 
+
 class MRCADistanceMeasurer(TreeDistanceMeasurer):
     """
     Use mrca dist in "Mapping Phylogenetic Trees to Reveal Distinct Patterns of Evolution", Kendall and Colijn
     """
     name = "mrca"
+
     def __init__(
             self,
             ref_tree: CellLineageTree,
@@ -417,14 +507,16 @@ class MRCASpearmanMeasurer(MRCADistanceMeasurer):
         #rank_corr, _ = spearmanr(tree_mrca_matrix_half, ref_mrca_matrix_half)
         return rank_corr
 
+
 class InternalCorrMeasurer(MRCADistanceMeasurer):
     name = "internal_pearson"
+
     def __init__(
             self,
             ref_tree: CellLineageTree,
             scratch_dir: str = None,
             attr="allele_events_list_str",
-            corr_func = pearsonr):
+            corr_func=pearsonr):
         self.ref_tree = ref_tree
         self.attr = attr
         self.corr_func = pearsonr

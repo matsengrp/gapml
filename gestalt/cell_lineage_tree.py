@@ -1,24 +1,15 @@
 import re
-import copy
-import six
 import scipy
 import pandas as pd
-from ete3 import TreeNode #, NodeStyle, SeqMotifFace, TreeStyle, TextFace, RectFace
-import matplotlib
-matplotlib.use('Agg')
-from matplotlib import pyplot as plt
-from matplotlib.colors import LogNorm
-import seaborn as sns
-sns.set(style="white", color_codes=True)
-sns.set_style('ticks')
+from ete3 import TreeNode
 from typing import List
 
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio.Alphabet import generic_dna
-from Bio import AlignIO, SeqIO
+from Bio import SeqIO
 
-from allele import Allele, AlleleList
+from allele import AlleleList
 from allele_events import AlleleEvents
 from cell_state import CellState
 from common import get_color

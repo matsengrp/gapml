@@ -8,10 +8,12 @@ import custom_utils
 from custom_utils import CustomCommand, run_cmd, finish_process
 import numpy as np
 
+
 class BatchParallelWorkers:
     def __init__(self, workers, shared_obj):
         self.workers = workers
         self.shared_obj = shared_obj
+
 
 class ParallelWorker:
     """
@@ -49,6 +51,7 @@ class ParallelWorker:
         """
         raise NotImplementedError()
 
+
 class ParallelWorkerManager:
     """
     Runs many ParallelWorkers
@@ -78,6 +81,7 @@ class ParallelWorkerManager:
             # Create the command for this batch worker
             input_file_name = "%s/in.pkl" % worker_batch_folder
             output_file_name = "%s/out.pkl" % worker_batch_folder
+            log_file_name = "%s/log.txt" % worker_batch_folder
             self.output_files.append(output_file_name)
             with open(input_file_name, "wb") as cmd_input_file:
                 # Pickle the worker as input to the job
@@ -86,12 +90,12 @@ class ParallelWorkerManager:
                     cmd_input_file,
                     protocol=2,
                 )
-                cmd_str = "python run_worker.py --input-file %s --output-file %s" % (input_file_name, output_file_name)
+                cmd_str = "python run_worker.py --input-file %s --output-file %s --log-file %s" % (input_file_name, output_file_name, log_file_name)
+                print(cmd_str)
                 batch_cmd = CustomCommand(
                     cmd_str,
                     outfname=output_file_name,
                     logdir=worker_batch_folder,
-                    threads=self.threads,
                     env=os.environ.copy(),
                 )
                 self.batch_worker_cmds.append(batch_cmd)
@@ -123,9 +127,12 @@ class ParallelWorkerManager:
         return worker_results
 
     def clean_outputs(self):
-        for fname in self.output_folders:
-            if os.path.exists(fname):
-                shutil.rmtree(fname)
+        try:
+            for fname in self.output_folders:
+                if os.path.exists(fname):
+                    shutil.rmtree(fname)
+        except Exception as e:
+            logging.info("failed to clean: %s", e)
 
     def _get_successful_jobs(self, results, workers):
         """
@@ -139,15 +146,17 @@ class ParallelWorkerManager:
             successful_res_workers.append((res, worker))
         return successful_res_workers
 
+
 class SubprocessManager(ParallelWorkerManager):
     """
     Creates separate processes on the same CPU to run the workers
     """
-    def __init__(self,
+    def __init__(
+            self,
             worker_list,
             shared_obj,
             worker_folder,
-            threads,
+            num_processes,
             retry=False):
         self.batch_worker_cmds = []
         self.batched_workers = [] # Tracks the batched workers if something fails
@@ -157,12 +166,12 @@ class SubprocessManager(ParallelWorkerManager):
         self.retry = retry
         self.worker_list = worker_list
         self.worker_folder = worker_folder
-        self.threads = threads
+        self.num_processes = num_processes
         self.shared_obj = shared_obj
         self.create_batch_worker_cmds(worker_list, len(worker_list))
         self.batch_system = "subprocess"
 
-    def run(self, successful_only=False, sleep = 0.01):
+    def run(self, successful_only=False, sleep=0.01):
         """
         @param successful_only: whether to return successful jobs only
                                 unsuccessful jobs have None as their result
@@ -174,14 +183,14 @@ class SubprocessManager(ParallelWorkerManager):
         procs = []
         n_tries = []
         up_to_idx = 0
-        def get_num_unused_threads(procs):
-            return self.threads - (len(procs) - procs.count(None))
+        def get_num_unused_num_processes(procs):
+            return self.num_processes - (len(procs) - procs.count(None))
 
         while up_to_idx < len(cmdfos) - 1 or len(cmdfos) != procs.count(None):
-            num_unused_threads = get_num_unused_threads(procs)
-            if num_unused_threads > 0 and up_to_idx <= len(cmdfos):
+            num_unused_num_processes = get_num_unused_num_processes(procs)
+            if num_unused_num_processes > 0 and up_to_idx <= len(cmdfos):
                 old_idx = up_to_idx
-                up_to_idx += num_unused_threads
+                up_to_idx += num_unused_num_processes
                 for cmd in cmdfos[old_idx:up_to_idx]:
                     procs.append(run_cmd(
                         cmd,
@@ -201,55 +210,11 @@ class SubprocessManager(ParallelWorkerManager):
                             n_tries,
                             cmdfos[iproc],
                             batch_system=self.batch_system,
-                            max_num_tries = 0)
+                            max_num_tries=0)
             sys.stdout.flush()
             if sleep:
                 time.sleep(sleep)
 
-        res = self.read_batch_worker_results()
-        self.clean_outputs()
-        if successful_only:
-            return self._get_successful_jobs(res, self.worker_list)
-        else:
-            return [(r, w) for r, w in zip(res, self.worker_list)]
-
-class BatchSubmissionManager(ParallelWorkerManager):
-    """
-    Handles submitting jobs to a job submission system (e.g. slurm)
-    """
-    def __init__(self,
-            worker_list,
-            shared_obj,
-            num_approx_batches,
-            worker_folder,
-            threads=None,
-            retry=False):
-        """
-        @param worker_list: List of ParallelWorkers
-        @param shared_obj: object shared across parallel workers - useful to minimize disk space usage
-        @param num_approx_batches: number of batches to make approximately (might be a bit more)
-        @param worker_folder: the folder to make all the results from the workers
-        @param threads: number of threads to request per machine
-        @param retry: whether to retry the jobs locally if they fail
-        """
-        self.retry = retry
-        self.batch_worker_cmds = []
-        self.batched_workers = [] # Tracks the batched workers if something fails
-        self.output_folders = []
-        self.output_files = []
-        self.worker_list = worker_list
-        self.worker_folder = worker_folder
-        self.threads = threads
-        self.shared_obj = shared_obj
-        self.create_batch_worker_cmds(worker_list, num_approx_batches)
-
-    def run(self, successful_only=False):
-        """
-        @param successful_only: whether to return successful jobs only
-                                unsuccessful jobs have None as their result
-        @return list of tuples (result, worker)
-        """
-        custom_utils.run_cmds(self.batch_worker_cmds)
         res = self.read_batch_worker_results()
         self.clean_outputs()
         if successful_only:

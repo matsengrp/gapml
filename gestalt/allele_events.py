@@ -54,6 +54,10 @@ class Event(tuple):
         return self[3]
 
     @property
+    def can_hide_cuts(self):
+        return self.min_target + 2 <= self.max_target
+
+    @property
     def insert_str(self):
         return self[4]
 

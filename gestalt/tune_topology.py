@@ -1,39 +1,49 @@
 """
-Tunes over different multifurcating topologies.
-Basically a wrapper around `run_estimator.py`
-This will create jobs to run on the cluster for each of the trees
+Tunes penalty params, tree topology, and model params
 """
 import sys
 import six
 import os
-import glob
 import argparse
 import logging
-import six
 import numpy as np
 import random
-from typing import List, Tuple, Dict
+from typing import Dict
 
-from parallel_worker import BatchSubmissionManager, SubprocessManager
-from estimator_worker import RunEstimatorWorker
-from likelihood_scorer import LikelihoodScorerResult
-from common import create_directory
+from cell_lineage_tree import CellLineageTree
+from optim_settings import KnownModelParams
+from tree_distance import TreeDistanceMeasurerAgg, BHVDistanceMeasurer
+from transition_wrapper_maker import TransitionWrapperMaker
+from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
+from barcode_metadata import BarcodeMetadata
+import hyperparam_tuner
+import hanging_chad_finder
+from common import create_directory, get_randint, save_data
+import file_readers
+
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='tune over many multifurcating topologies and fit model parameters')
+    parser = argparse.ArgumentParser(
+            description='tune over topologies and fit model parameters')
+    parser.add_argument(
+        '--seed',
+        type=int,
+        default=40)
     parser.add_argument(
         '--obs-file',
         type=str,
-        default="_output/obs_data.pkl",
+        default="_output/obs_data_b1.pkl",
         help='pkl file with observed sequence data, should be a dict with ObservedAlignSeq')
     parser.add_argument(
-        '--topology-file-template',
+        '--topology-file',
         type=str,
         default="_output/parsimony_tree0.pkl",
-        help="""
-        We look in the directory of this path for any trees that need to be processed.
-        We replace the 0 with a *[0-9] when we grep for matching trees.
-        """)
+        help="Topology file")
+    parser.add_argument(
+        '--init-model-params-file',
+        type=str,
+        default=None,
+        help='pkl file with initializations')
     parser.add_argument(
         '--out-model-file',
         type=str,
@@ -48,26 +58,45 @@ def parse_args():
         default=None,
         help='pkl file with true model if available')
     parser.add_argument(
-        '--seed',
-        type=int,
-        default=40)
-    parser.add_argument(
-        '--log-barr',
+        '--log-barr-pen-param',
         type=float,
         default=0.001,
         help="log barrier parameter on the branch lengths")
     parser.add_argument(
-        '--dist-to-half-pens',
+        '--dist-to-half-pen-params',
         type=str,
         default='1',
-        help="comma-separated string with penalty parameters on the target lambdas")
+        help="""
+        Comma-separated string with penalty parameters on the target lambdas.
+        We will tune over the different penalty params given
+        """)
     parser.add_argument(
-        '--total-tune-splits',
+        '--num-penalty-tune-iters',
         type=int,
         default=1,
         help="""
-        number of random splits of the data for tuning penalty params
-        across all topologies we tune
+        Number of iterations to tune the penalty params
+        """)
+    parser.add_argument(
+        '--num-penalty-tune-splits',
+        type=int,
+        default=2,
+        help="""
+        Number of random splits of the data for tuning penalty params.
+        """)
+    parser.add_argument(
+        '--num-chad-tune-iters',
+        type=int,
+        default=2,
+        help="""
+        Number of iterations to tune the tree topology (aka hanging chads)
+        """)
+    parser.add_argument(
+        '--max-chad-tune-search',
+        type=int,
+        default=2,
+        help="""
+        Maximum number of new hanging chad locations to consider at a time
         """)
     parser.add_argument('--max-iters', type=int, default=20)
     parser.add_argument('--num-inits', type=int, default=1)
@@ -82,20 +111,6 @@ def parse_args():
         default=1,
         help='maximum number of extra steps to explore possible ancestral states')
     parser.add_argument(
-        '--cpu-threads',
-        type=int,
-        default=6,
-        help='number of cpu threads to request in srun when submitting jobs')
-    parser.add_argument(
-        '--submit-srun',
-        action='store_true',
-        help='is using slurm to submit jobs')
-    parser.add_argument(
-        '--num-processes',
-        type=int,
-        default=1,
-        help='number of subprocesses to invoke for running')
-    parser.add_argument(
         '--lambda-known',
         action='store_true',
         help='are target rates known?')
@@ -104,264 +119,295 @@ def parse_args():
         action='store_true',
         help='is total time known?')
     parser.add_argument(
-        '--max-topologies',
-        type=int,
-        default=10,
-        help='max topologies to tune over')
-    parser.add_argument(
-        '--fit-all-topologies',
+        '--do-refit',
         action='store_true',
-        help='whether to fit all topologies anyways')
+        help='refit the bifurc tree?')
+    parser.add_argument(
+        '--num-processes',
+        type=int,
+        default=1,
+        help='number of subprocesses to invoke for running')
 
-    parser.set_defaults(fit_all_topologies=False, submit_srun=False)
+    parser.set_defaults(tot_time_known=True)
     args = parser.parse_args()
 
-    assert args.log_barr >= 0
-    args.dist_to_half_pen_list = list(sorted(
-        [float(lam) for lam in args.dist_to_half_pens.split(",")],
+    assert args.log_barr_pen_param >= 0
+    args.dist_to_half_pen_params = list(sorted(
+        [float(lam) for lam in args.dist_to_half_pen_params.split(",")],
         reverse=True))
 
     create_directory(args.out_model_file)
-    args.topology_folder = os.path.dirname(args.topology_file_template)
+    args.topology_folder = os.path.dirname(args.topology_file)
     args.scratch_dir = os.path.join(
             args.topology_folder,
             'scratch')
     if not os.path.exists(args.scratch_dir):
         os.mkdir(args.scratch_dir)
 
+    args.known_params = KnownModelParams(
+         target_lams=args.lambda_known,
+         tot_time=args.tot_time_known)
+
+    assert args.num_penalty_tune_iters >= 1
+    assert args.tot_time_known
+    assert args.num_chad_tune_iters >= args.num_penalty_tune_iters
     return args
 
-def get_best_hyperparam(
-        args,
-        tune_results: List[Tuple[Dict, RunEstimatorWorker]]):
+
+def get_init_target_lams(bcode_meta, mean_val):
+    random_perturb = np.random.uniform(size=bcode_meta.n_targets) * 0.001
+    random_perturb = random_perturb - np.mean(random_perturb)
+    random_perturb[0] = 0
+    return np.exp(mean_val * np.ones(bcode_meta.n_targets) + random_perturb)
+
+
+def read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
+    fit_params = {
+            "target_lams": get_init_target_lams(bcode_meta, 0),
+            "boost_softmax_weights": np.array([1, 2, 2]),
+            "trim_long_factor": 0.05 * np.ones(2),
+            "trim_zero_probs": 0.5 * np.ones(2),
+            "trim_short_poissons": 2.5 * np.ones(2),
+            "trim_long_poissons": 2.5 * np.ones(2),
+            "insert_zero_prob": np.array([0.5]),
+            "insert_poisson": np.array([0.5]),
+            "double_cut_weight": np.array([0.5]),
+            "tot_time": 1,
+            "tot_time_extra": 1.3}
+    # Use warm-start info if available
+    if args.init_model_params_file is not None:
+        with open(args.init_model_params_file, "rb") as f:
+            fit_params = six.moves.cPickle.load(f)
+
+    # Copy over true known params if specified
+    if args.known_params.tot_time:
+        if true_model_dict is not None:
+            fit_params["tot_time"] = true_model_dict["tot_time"]
+            fit_params["tot_time_extra"] = true_model_dict["tot_time_extra"]
+        else:
+            fit_params["tot_time"] = obs_data_dict["time"]
+            fit_params["tot_time_extra"] = 1e-10
+    if args.known_params.trim_long_factor:
+        fit_params["trim_long_factor"] = true_model_dict['trim_long_factor']
+    if args.known_params.target_lams:
+        fit_params["target_lams"] = true_model_dict['target_lams']
+        fit_params["double_cut_weight"] = true_model_dict['double_cut_weight']
+    return fit_params
+
+
+def read_data(args):
     """
-    Grabs out the best hyperparam given the results
-    Figures out best penalty param first by aggregating across different topologies.
-    Then for that chosen penalty param, find the highest scoring topology.
-
-    @return (
-        list of LikelihoodScorerResult,
-        best dist-to-half penalty,
-        best topology idx in the list of TuneScorerResult)
+    Read the data files...
     """
-    # First pick out the best penalty param
-    # TODO: aggregating across different topologies
-    # for a bit of stability... i think this helps?
-    total_pen_param_score = np.zeros(len(args.dist_to_half_pen_list))
-    for (topology_res, _) in tune_results:
-        for i, res in enumerate(topology_res["tune_results"]):
-            total_pen_param_score[i] += res.score
+    tree, obs_data_dict = file_readers.read_data(args.obs_file, args.topology_file)
+    bcode_meta = obs_data_dict["bcode_meta"]
 
-    logging.info("Total tuning scores %s", total_pen_param_score)
-    best_idx = np.argmax(total_pen_param_score)
-    best_dist_to_half_pen = args.dist_to_half_pen_list[best_idx]
-    logging.info("Best penalty param %s", best_dist_to_half_pen)
+    # This section just prints interesting things...
+    evt_set = set()
+    for obs in obs_data_dict["obs_leaves"]:
+        for evts_list in obs.allele_events_list:
+            for evt in evts_list.events:
+                evt_set.add(evt)
+    logging.info("Num uniq events %d", len(evt_set))
+    logging.info("Proportion of double cuts %f", np.mean([e.min_target != e.max_target for e in evt_set]))
+    logging.info("Number of leaves %d", len(tree))
 
-    # Now identify the best topology
-    topology_scores = [
-        topology_res["tune_results"][best_idx].score
-        for (topology_res, _) in tune_results]
-    best_topology_idx = np.argmax(topology_scores)
-    logging.info("Worker scores %s", topology_scores)
-    logging.info("Best topology %d, %s",
-            best_topology_idx,
-            tune_results[best_topology_idx][1].topology_file)
+    return bcode_meta, tree, obs_data_dict
 
-    if not args.fit_all_topologies:
-        return [tune_results[best_topology_idx]], best_idx, 0
-    else:
-        return tune_results, best_idx, best_topology_idx
 
-def tune_hyperparams(
-        topology_files: List[str],
-        args):
+def read_true_model_files(args, num_barcodes):
     """
-    Tunes both the penalty parameter as well as the topology
-    Uses the "score" of the topology penalty parameter pair to pick out which
-    final model to fit. (score here is the stability score)
-
-    @return (
-        list of LikelihoodScorerResult,
-        best dist-to-half penalty,
-        best topology idx in the list of TuneScorerResult)
+    If true model files available, read them
     """
-    worker_list = []
-    for file_idx, top_file in enumerate(topology_files):
-        worker = RunEstimatorWorker(
-            args.obs_file,
-            top_file,
-            args.out_model_file.replace(".pkl", "_tune_tree%d.pkl" % file_idx),
-            None,
+    if args.true_model_file is None:
+        return None, None
+
+    true_model_dict, oracle_dist_measurers = file_readers.read_true_model(
             args.true_model_file,
-            args.seed + file_idx,
-            args.log_barr,
-            args.dist_to_half_pens,
-            args.max_iters,
-            # When tuning hyper-params, we just use one initialization
-            num_inits = 1,
-            lambda_known = args.lambda_known,
-            tot_time_known = args.tot_time_known,
-            do_refit = False,
-            tune_only = True,
-            max_sum_states = args.max_sum_states,
-            max_extra_steps = args.max_extra_steps,
-            num_tune_splits = args.total_tune_splits,
-            scratch_dir = args.scratch_dir)
-        worker_list.append(worker)
+            num_barcodes,
+            measurer_classes=[BHVDistanceMeasurer],
+            scratch_dir=args.scratch_dir)
 
-    # Just print the things I plan to run
-    for w in worker_list:
-        w.run_worker(None, debug=True)
+    return true_model_dict, oracle_dist_measurers
 
-    if args.submit_srun:
-        logging.info("Submitting jobs")
-        job_manager = BatchSubmissionManager(
-                worker_list,
-                None,
-                len(worker_list),
-                args.scratch_dir,
-                threads=args.cpu_threads)
-        successful_workers = job_manager.run()
-        assert len(successful_workers) > 0
-    elif args.num_processes > 1:
-        logging.info("Submitting new processes")
-        job_manager = SubprocessManager(
-                worker_list,
-                None,
-                args.scratch_dir,
-                threads=args.num_processes)
-        successful_workers = job_manager.run()
-        assert len(successful_workers) > 0
-    else:
-        logging.info("Running locally")
-        successful_workers = [(w.run_worker(None), w) for w in worker_list]
 
-    return get_best_hyperparam(
-            args,
-            successful_workers)
-
-def create_topology_warm_start_files(
-        tune_results: List[LikelihoodScorerResult],
-        best_pen_param_idx: int,
-        args):
+def has_unresolved_multifurcs(tree: CellLineageTree):
     """
-    Creates warm start files for refitting topologies
-
-    @return List[topology file name, warm start file name] for each element in `tune_results`
+    @return whether or not this tree is an unresolved multifurcating tree
     """
-    topology_warm_start_files = []
-    for idx, (topology_res, worker) in enumerate(tune_results):
-        # Pick an arbitrary model param setting for warm start
-        warm_start = topology_res["tune_results"][best_pen_param_idx].model_params_dicts[0]
-        warm_start_file_name = args.out_model_file.replace(
-                ".pkl",
-                "_warm%d_all%d.pkl" % (idx, args.fit_all_topologies))
-        with open(warm_start_file_name, "wb") as f:
-            six.moves.cPickle.dump(warm_start, f, protocol=2)
-        topology_warm_start_files.append((
-            worker.topology_file,
-            warm_start_file_name))
-    return topology_warm_start_files
+    for node in tree.traverse():
+        if not node.is_resolved_multifurcation():
+            return True
+    return False
 
-def fit_models(
-        topology_warm_start_files: List[Tuple[str, str]],
+
+def fit_multifurc_tree(
+        tree: CellLineageTree,
+        bcode_meta: BarcodeMetadata,
         args,
-        pen_param: float):
+        param_dict: Dict,
+        oracle_dist_measurers: TreeDistanceMeasurerAgg = None):
     """
-    Fits the models for the list of files in `topology_warm_start_files`
-
-    @param topology_warm_start_files: list of topology file and warm start file pairs
-    @param pen_param: the dist-to-half penalty parameter to fit
-
-    @return a list of results in the form of List[(LikelihoodScorerResult, EstimatorWorker)]
+    @return LikelihoodScorerResult from fitting model on multifurcating tree
     """
-    worker_list = []
-    for file_idx, (top_file, warm_start_file) in enumerate(topology_warm_start_files):
-        worker = RunEstimatorWorker(
-            args.obs_file,
-            top_file,
-            args.out_model_file.replace(".pkl", "_refit%d_all%s.pkl" % (file_idx, args.fit_all_topologies)),
-            warm_start_file,
-            args.true_model_file,
-            args.seed + file_idx,
-            args.log_barr,
-            str(pen_param),
-            args.max_iters,
-            num_inits = args.num_inits,
-            lambda_known = args.lambda_known,
-            tot_time_known = args.tot_time_known,
-            do_refit = True,
-            tune_only = False,
-            max_sum_states = args.max_sum_states,
-            max_extra_steps = args.max_extra_steps,
-            num_tune_splits = 0, # No more tuning
-            scratch_dir = args.scratch_dir)
-        worker_list.append(worker)
+    transition_wrap_maker = TransitionWrapperMaker(
+            tree,
+            bcode_meta,
+            args.max_extra_steps,
+            args.max_sum_states)
+    result = LikelihoodScorer(
+        get_randint(),
+        tree,
+        bcode_meta,
+        args.max_iters,
+        args.num_inits,
+        transition_wrap_maker,
+        fit_param_list=[param_dict],
+        known_params=args.known_params,
+        dist_measurers=oracle_dist_measurers).run_worker(None)[0]
+    return result
 
-    for w in worker_list:
-        w.run_worker(None, debug=True)
 
-    if args.submit_srun:
-        logging.info("Submitting jobs")
-        job_manager = BatchSubmissionManager(
-                worker_list,
-                None,
-                len(worker_list),
-                args.scratch_dir,
-                threads=args.cpu_threads)
-        successful_workers = job_manager.run()
-    elif args.num_processes > 1:
-        logging.info("Submitting new processes")
-        job_manager = SubprocessManager(
-                worker_list,
-                None,
-                args.scratch_dir,
-                threads=args.num_processes)
-        successful_workers = job_manager.run()
-    else:
-        logging.info("Running locally")
-        successful_workers = [(w.run_worker(None), w) for w in worker_list]
+def do_refit_bifurc_tree(
+        raw_res: LikelihoodScorerResult,
+        bcode_meta: BarcodeMetadata,
+        args,
+        oracle_dist_measurers: TreeDistanceMeasurerAgg = None):
+    """
+    we need to refit using the bifurcating tree
+    """
+    # Copy over the latest model parameters for warm start
+    param_dict = raw_res.get_fit_params()
+    refit_bifurc_tree = raw_res.fitted_bifurc_tree.copy()
+    num_nodes = refit_bifurc_tree.get_num_nodes()
+    # Copy over the branch lengths
+    br_lens = np.ones(num_nodes) * 1e-10
+    for node in refit_bifurc_tree.traverse():
+        br_lens[node.node_id] = node.dist
+        node.resolved_multifurcation = True
+    param_dict["branch_len_inners"] = br_lens
+    param_dict["branch_len_offsets_proportion"] = np.ones(num_nodes) * 1e-10
 
-    return successful_workers
+    # Fit the bifurcating tree
+    transition_wrap_maker = TransitionWrapperMaker(
+            raw_res.fitted_bifurc_tree,
+            bcode_meta,
+            args.max_extra_steps,
+            args.max_sum_states)
+    bifurc_res = LikelihoodScorer(
+        get_randint(),
+        raw_res.fitted_bifurc_tree,
+        bcode_meta,
+        args.max_iters,
+        args.num_inits,
+        transition_wrap_maker,
+        fit_param_list=[param_dict],
+        known_params=args.known_params,
+        dist_measurers=oracle_dist_measurers).run_worker(None)[0]
+    return bifurc_res
+
 
 def main(args=sys.argv[1:]):
     args = parse_args()
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
 
-    with open(args.obs_file, "rb") as f:
-        obs_data_dict = six.moves.cPickle.load(f)
-        bcode_meta = obs_data_dict["bcode_meta"]
-        args.num_barcodes = bcode_meta.num_barcodes
+    # Load data
+    bcode_meta, tree, obs_data_dict = read_data(args)
+    true_model_dict, oracle_dist_measurers = read_true_model_files(args, bcode_meta.num_barcodes)
+    fit_params = read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict)
 
-    np.random.seed(args.seed)
-    random.seed(args.seed)
+    logging.info("STARTING!")
+    logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))
+    logging.info(tree.get_ascii(attributes=["node_id"]))
 
-    # Find all the relevant topology files from max parsimony
-    all_topology_files = glob.glob(args.topology_file_template.replace("parsimony_tree0", "parsimony_tree*[0-9]"))
-    random.shuffle(all_topology_files)
-    topology_files = all_topology_files[:args.max_topologies]
-    assert len(topology_files) > 0
-    logging.info("Processing the tree files: %s", topology_files)
+    # Begin tuning
+    tuning_history = []
+    for i in range(args.num_chad_tune_iters):
+        np.random.seed(args.seed + i)
+        random.seed(args.seed + i)
 
-    # Actually tune things -- tune penalty params and tune topology
-    tune_results, best_pen_param_idx, best_topology_idx = tune_hyperparams(topology_files, args)
-    topology_warm_start_files = create_topology_warm_start_files(
-            tune_results,
-            best_pen_param_idx,
-            args)
-    results = fit_models(
-            topology_warm_start_files,
-            args,
-            args.dist_to_half_pen_list[best_pen_param_idx])
+        penalty_tune_result = None
+        if i < args.num_penalty_tune_iters:
+            if len(args.dist_to_half_pen_params) == 1:
+                # If nothing to tune... do nothing
+                fit_params["log_barr_pen_param"] = args.log_barr_pen_param
+                fit_params["dist_to_half_pen_param"] = args.dist_to_half_pen_params[0]
+            else:
+                # Tune penalty params!
+                logging.info("Iter %d: Tuning penalty params", i)
+                penalty_tune_result = hyperparam_tuner.tune(tree, bcode_meta, args, fit_params)
+                fit_params, best_res = penalty_tune_result.get_best_result()
+            logging.info("Iter %d: Best pen param %f", i, fit_params["dist_to_half_pen_param"])
 
-    # Copy out the results from the worker that we chose according to our scoring criteria
-    best_worker = results[best_topology_idx][1]
-    with open(best_worker.out_model_file, "rb") as f:
-        results = six.moves.cPickle.load(f)
+        # Find hanging chads
+        # TODO: kind slow right now... reruns chad-finding code
+        # cause nodes are getting renumbered...
+        hanging_chads = hanging_chad_finder.get_chads(tree)
+        has_chads = len(hanging_chads) > 0
+        logging.info("total number of hanging chads %d", len(hanging_chads))
+        for c in hanging_chads:
+            logging.info("Chad %s", c)
+
+        # pick a chad at random
+        chad_tune_result = None
+        if has_chads and args.max_chad_tune_search > 1:
+            # Now tune the hanging chads!
+            random_chad = random.choice(hanging_chads)
+            logging.info("Iter %d: Tuning chad %s", i, random_chad)
+            chad_tune_result = hanging_chad_finder.tune(
+                random_chad,
+                tree,
+                bcode_meta,
+                args,
+                fit_params,
+                oracle_dist_measurers,
+            )
+            tree, fit_params, best_res = chad_tune_result.get_best_result()
+        else:
+            best_res = fit_multifurc_tree(
+                    tree,
+                    bcode_meta,
+                    args,
+                    fit_params,
+                    oracle_dist_measurers)
+        logging.info("Iter %d, begin dists %s", i, best_res.train_history[0]["tree_dists"])
+        logging.info("Iter %d, end dists %s (num iters %d)",
+                i,
+                best_res.train_history[-1]["tree_dists"],
+                len(best_res.train_history) - 1)
+
+        tuning_history.append({
+            "chad_tune_result": chad_tune_result,
+            "penalty_tune_result": penalty_tune_result,
+            "best_res": best_res,
+        })
+        if not has_chads:
+            break
+        save_data(tuning_history, args.out_model_file)
+
+    logging.info("Iter refit bifurc tree!")
+    # Tune the final bifurcating tree one more time?
+    bifurc_res = None
+    if not has_unresolved_multifurcs(tree):
+        bifurc_res = best_res
+    elif args.do_refit:
+        bifurc_res = do_refit_bifurc_tree(
+                best_res,
+                bcode_meta,
+                args,
+                oracle_dist_measurers)
+        logging.info("Final bifurc dists %s", bifurc_res.train_history[-1]["tree_dists"])
+
+    # Save results
     with open(args.out_model_file, "wb") as f:
-        six.moves.cPickle.dump(results, f, protocol = 2)
+        result = {
+            "tuning_history": tuning_history,
+            "bifurc_res": bifurc_res,
+        }
+        six.moves.cPickle.dump(result, f, protocol=2)
     logging.info("Complete!!!")
+
 
 if __name__ == "__main__":
     main()

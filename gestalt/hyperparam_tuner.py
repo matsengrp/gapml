@@ -1,110 +1,114 @@
 import numpy as np
 from typing import List, Dict
+import logging
 
-from allele_events import Event
-from optim_settings import KnownModelParams
 from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
 from transition_wrapper_maker import TransitionWrapperMaker
 from split_data import create_kfold_trees, create_kfold_barcode_trees, TreeDataSplit
-from tree_distance import TreeDistanceMeasurerAgg
 from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from parallel_worker import SubprocessManager
-import hanging_chad_finder
-from common import *
+from common import get_randint
 
-class TuneScorerResult:
-    def __init__(self,
-            log_barr_pen: float,
-            dist_to_half_pen: float,
-            model_params_dicts: List[Dict],
+
+class PenaltyScorerResult:
+    def __init__(
+            self,
             score: float,
-            tree: CellLineageTree = None,
-            tree_splits: List[TreeDataSplit] = []):
+            log_barr_pen_param: float,
+            dist_to_half_pen_param: float,
+            fit_results: List[LikelihoodScorerResult]):
         """
-        @param log_barr_pen: the log barrier penalty param used when fitting the model
-        @param dist_to_half_pen: the distance to 0.5 diagonal penalty param used when fitting the model
+        @param log_barr_pen_param: the log barrier penalty param used when fitting the model
+        @param dist_to_half_pen_param: the distance to 0.5 diagonal penalty param used when fitting the model
         @param model_params_dict: an example of the final fitted parameters when we did
                         train/validation split/kfold CV. (this is used mostly as a warm start)
         @param score: assumed to be higher the better
         """
-        self.log_barr_pen = log_barr_pen
-        self.dist_to_half_pen = dist_to_half_pen
-        self.model_params_dicts = model_params_dicts
         self.score = score
+        self.log_barr_pen_param = log_barr_pen_param
+        self.dist_to_half_pen_param = dist_to_half_pen_param
+        self.fit_results = fit_results
+
+
+class PenaltyTuneResult:
+    def __init__(
+            self,
+            tree: CellLineageTree,
+            tree_splits: List[TreeDataSplit],
+            results: List[PenaltyScorerResult]):
         self.tree = tree
         self.tree_splits = tree_splits
+        self.results = results
+
+    def get_best_result(self, warm_idx=0):
+        """
+        @param warm_idx: the index of the fitted model params to use for warm starts
+        @return Dict with model/optimization params
+        """
+        pen_param_scores = np.array([r.score for r in self.results])
+        logging.info("Tuning scores %s", pen_param_scores)
+        best_idx = np.argmax(pen_param_scores)
+        best_pen_result = self.results[best_idx]
+
+        chosen_best_res = best_pen_result.fit_results[warm_idx]
+
+        fit_params = chosen_best_res.get_fit_params()
+        fit_params.pop('branch_len_inners', None)
+        fit_params.pop('branch_len_offsets_proportion', None)
+        return fit_params, chosen_best_res
+
 
 def tune(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
-        args):
+        args,
+        fit_params: Dict):
     """
-    Tunes the `dist_to_half_pen` penalty parameter
+    Tunes the `dist_to_half_pen_param` penalty parameter
 
-    @return List[TuneScorerResult] -- corresponding to each penalty param
-                being considered
-            As well as the best model params to initialize with
+    @return PenaltyTuneResult
     """
-    if args.num_tune_splits <= 0:
-        # If no splits, then don't do any tuning
-        assert len(args.dist_to_half_pens) == 1
-        tune_results = [TuneScorerResult(
-            log_barr_pen = args.log_barr,
-            dist_to_half_pen = args.dist_to_half_pens[0],
-            model_params_dicts = [args.init_params],
-            score = 0,
-            tree = tree)]
-    elif bcode_meta.num_barcodes > 1:
+    assert len(args.dist_to_half_pen_params) > 1
+
+    if bcode_meta.num_barcodes > 1:
         # For many barcodes, we split by barcode
-        tune_results = _tune_hyperparams(
+        return _tune_hyperparams(
             tree,
             bcode_meta,
             args,
+            fit_params,
             create_kfold_barcode_trees,
             _get_many_bcode_stability_score)
     else:
         # For single barcode, we split into subtrees
-        tune_results = _tune_hyperparams(
+        return _tune_hyperparams(
             tree,
             bcode_meta,
             args,
+            fit_params,
             create_kfold_trees,
             _get_one_bcode_stability_score)
 
-        # Cannot use branch lengths as warm start parameters
-        # Therefore we remove them from the model param dict
-        for res in tune_results:
-            for param_dict in res.model_params_dicts:
-                param_dict.pop('branch_len_inners', None)
-                param_dict.pop('branch_len_offsets_proportion', None)
-
-    pen_param_scores = np.array([res.score for res in tune_results])
-    logging.info("Tuning scores %s", pen_param_scores)
-    best_idx = np.argmax(pen_param_scores)
-
-    init_model_params = tune_results[best_idx].model_params_dicts[0].copy()
-    init_model_params["log_barr_pen"] = args.log_barr
-    init_model_params["dist_to_half_pen"] = args.dist_to_half_pens[best_idx]
-    return tune_results, init_model_params
 
 def _tune_hyperparams(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
         args,
+        fit_params: Dict,
         kfold_fnc,
         stability_score_fnc):
     """
     @param max_num_chad_parents: max number of chad parents to consider
 
-    @return List[TuneScorerResult] -- corresponding to each hyperparam
+    @return List[PenaltyScorerResult] -- corresponding to each hyperparam
                 being tuned
     """
     # First split the barcode into kfold groups
     tree_splits = kfold_fnc(
             tree,
             bcode_meta,
-            args.num_tune_splits)
+            args.num_penalty_tune_splits)
 
     trans_wrap_makers = [TransitionWrapperMaker(
             tree_split.tree,
@@ -113,15 +117,15 @@ def _tune_hyperparams(
             args.max_sum_states) for tree_split in tree_splits]
 
     # First create the initialization/optimization settings
-    init_model_param_list = []
-    for idx, dist_to_half_pen in enumerate(args.dist_to_half_pens):
+    fit_param_list = []
+    for idx, dist_to_half_pen_param in enumerate(args.dist_to_half_pen_params):
         if idx == 0:
-            new_init_model_params = args.init_params.copy()
+            new_fit_params = fit_params.copy()
         else:
-            new_init_model_params = {}
-        new_init_model_params["log_barr_pen"] = args.log_barr
-        new_init_model_params["dist_to_half_pen"] = dist_to_half_pen
-        init_model_param_list.append(new_init_model_params)
+            new_fit_params = {}
+        new_fit_params["log_barr_pen_param"] = args.log_barr_pen_param
+        new_fit_params["dist_to_half_pen_param"] = dist_to_half_pen_param
+        fit_param_list.append(new_fit_params)
 
     # Actually fit the trees using the kfold barcodes
     # TODO: if one of the penalty params fails, then remove it from the subsequent
@@ -133,43 +137,44 @@ def _tune_hyperparams(
         args.max_iters,
         args.num_inits,
         transition_wrap_maker,
-        init_model_param_list = init_model_param_list,
-        known_params = args.known_params,
-        abundance_weight = args.abundance_weight)
+        fit_param_list=fit_param_list,
+        known_params=args.known_params)
         for tree_split, transition_wrap_maker in zip(tree_splits, trans_wrap_makers)]
-    job_manager = SubprocessManager(
-            worker_list,
-            None,
-            args.scratch_dir,
-            threads=args.num_processes)
-    train_results = [r for r, _ in job_manager.run()]
+
+    if args.num_processes > 1 and len(worker_list) > 1:
+        job_manager = SubprocessManager(
+                worker_list,
+                None,
+                args.scratch_dir,
+                args.num_processes)
+        train_results = [r for r, _ in job_manager.run()]
+    else:
+        train_results = [w.run_worker(None) for w in worker_list]
 
     # Now find the best penalty param by finding the most stable one
     # Stability is defined as the least variable target lambda estimates and branch length estimates
     tune_results = []
-    for idx, dist_to_half_pen in enumerate(args.dist_to_half_pens):
+    for idx, dist_to_half_pen_param in enumerate(args.dist_to_half_pen_params):
         res_folds = [train_res[idx] for train_res in train_results]
         stability_score = stability_score_fnc(res_folds, tree_splits, tree)
 
         # Create our summary of tuning
-        tune_result = TuneScorerResult(
-            args.log_barr,
-            dist_to_half_pen,
-            [res.model_params_dict for res in res_folds if res is not None],
+        tune_result = PenaltyScorerResult(
             stability_score,
-            tree = tree,
-            tree_splits = tree_splits)
-        for init_model_params in tune_result.model_params_dicts:
-            init_model_params["log_barr_pen"] = args.log_barr
-            init_model_params["dist_to_half_pen"] = args.dist_to_half_pens[idx]
-
+            args.log_barr_pen_param,
+            dist_to_half_pen_param,
+            res_folds)
         tune_results.append(tune_result)
         logging.info(
                 "Pen param %f stability score %s",
-                dist_to_half_pen,
+                dist_to_half_pen_param,
                 tune_result.score)
 
-    return tune_results
+    return PenaltyTuneResult(
+                tree,
+                tree_splits,
+                tune_results)
+
 
 def _get_many_bcode_stability_score(
         pen_param_results: List[LikelihoodScorerResult],
@@ -227,11 +232,11 @@ def _get_many_bcode_stability_score(
     else:
         return -np.inf
 
+
 def _get_one_bcode_stability_score(
         pen_param_results: List[LikelihoodScorerResult],
         tree_splits: List[TreeDataSplit],
-        orig_tree: CellLineageTree,
-        weight: float = 0):
+        orig_tree: CellLineageTree):
     """
     @param weight: weight on the tree stability score (0 to 1)
     @return stability score -- is the variance of the fitted target lambdas across folds
@@ -254,35 +259,6 @@ def _get_one_bcode_stability_score(
                 param_dict["target_lams"],
                 param_dict["double_cut_weight"],
                 param_dict["trim_long_factor"]]))
-
-            # Also retrieve branch length estimates
-            # Just the leaf branches...
-            #final_branch_lens = pen_param_res.train_history[-1]["branch_lens"]
-            #for new_id, orig_id in tree_split.node_to_orig_id.items():
-            #    tree_param_ests[orig_id].append(final_branch_lens[new_id])
-
-            ## now the internal branches...
-            #leaf_id_dict = {}
-            #for leaf in pen_param_res.fitted_bifurc_tree:
-            #    leaf_id_dict[tree_split.node_to_orig_id[leaf.node_id]] = leaf
-            #fitted_leaf_ids = set(list(leaf_id_dict.keys()))
-
-            #for node in orig_tree.traverse('postorder'):
-            #    if not node.is_leaf():
-            #        print(node.leaf_ids)
-            #        if set(node.leaf_ids).issubset(fitted_leaf_ids):
-            #            tree_key = tuple(node.leaf_ids)
-            #            leaf_nodes = [leaf_id_dict[leaf_id] for leaf_id in node.leaf_ids]
-            #            mrca = leaf_nodes[0].get_common_ancestor(*(leaf_nodes[1:]))
-            #            fitted_dist = pen_param_res.fitted_bifurc_tree.get_distance(mrca)
-            #            if tree_key in tree_param_ests:
-            #                tree_param_ests[tree_key].append(fitted_dist)
-            #            else:
-            #                tree_param_ests[tree_key] = [fitted_dist]
-
-            ## Also add the branch going to the root
-            #tree_param_ests[0].append(
-            #        pen_param_res.fitted_bifurc_tree.get_children()[0].dist)
         else:
             logging.info("had trouble training. very instable")
             is_stable = False
@@ -294,18 +270,10 @@ def _get_one_bcode_stability_score(
             np.power(np.linalg.norm(targ_param_est - mean_target_param_est), 2)
             for targ_param_est in target_param_ests])/np.power(np.linalg.norm(mean_target_param_est), 2)
 
-        #for leaf_id in tree_param_ests.keys():
-        #    tree_param_ests[leaf_id] = np.array(tree_param_ests[leaf_id])
-
-        #tree_stability_score = -np.mean([
-        #    np.mean(np.power(len_ests - np.mean(len_ests), 2))/np.power(np.mean(len_ests), 2)
-        #    for len_ests in tree_param_ests.values() if len(len_ests) > 1])
-        tree_stability_score = 0
-
-        stability_score = weight * tree_stability_score + (1 - weight) * targ_stability_score
+        stability_score = targ_stability_score
 
         logging.info("mean targ %s", mean_target_param_est)
-        logging.info("stability scores %s %s", targ_stability_score, tree_stability_score)
+        logging.info("stability scores %s", targ_stability_score)
         return stability_score
     else:
         return -np.inf
