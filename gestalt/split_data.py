@@ -13,6 +13,7 @@ from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
 import collapsed_tree
 
+
 class TreeDataSplit:
     """
     Stores the metadata and data for each "fold" from our variant of k-fold CV

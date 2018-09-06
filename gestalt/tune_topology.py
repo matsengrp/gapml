@@ -393,6 +393,7 @@ def main(args=sys.argv[1:]):
         tuning_history.append({
             "chad_tune_result": chad_tune_result,
             "penalty_tune_result": penalty_tune_result,
+            "best_res": best_res,
         })
         if not has_chads:
             break
