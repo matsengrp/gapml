@@ -4,6 +4,7 @@ import shutil
 import traceback
 import six
 import time
+import logging
 import custom_utils
 from custom_utils import CustomCommand, run_cmd, finish_process
 import numpy as np
