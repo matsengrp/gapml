@@ -181,7 +181,8 @@ def _prepare_nochad_fit_params(
         return
     prev_branch_inners = fit_params['branch_len_inners']
     prev_branch_offsets_proportion = fit_params['branch_len_offsets_proportion']
-    fit_params['branch_len_inners'] = np.ones(num_nochad_nodes)
+    fit_params['branch_len_inners'] = np.ones(num_nochad_nodes) * 1e-10
+    fit_params['branch_len_offsets_proportion'] = np.random.rand(num_nochad_nodes) * 0.5
     for node in nochad_tree.traverse():
         fit_params['branch_len_inners'][node.node_id] = prev_branch_inners[node.orig_node_id]
         fit_params['branch_len_offsets_proportion'][node.node_id] = prev_branch_offsets_proportion[node.orig_node_id]
@@ -238,7 +239,10 @@ def tune(
     possible_chad_parents = [
         hanging_chad.possible_parents[idx]
         for idx in random_order[:args.max_chad_tune_search]]
-    logging.info("chad parent idxs considered %s", random_order[:args.max_chad_tune_search])
+    logging.info(
+            "chad parent idxs considered %s (out of %d)",
+            random_order[:args.max_chad_tune_search],
+            num_total_parents)
     for chad_par in possible_chad_parents:
         # From the no chad tree, add back the hanging chad to the designated parent
         tree_copy = nochad_tree.copy()
