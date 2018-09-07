@@ -78,8 +78,8 @@ class HangingChadTuneResult:
         fit_params = best_fit_res.get_fit_params()
         # Popping branch length estimates right now because i dont know
         # how to warm start using these estimates...?
-        fit_params.pop('branch_len_inners', None)
-        fit_params.pop('branch_len_offsets_proportion', None)
+        # fit_params.pop('branch_len_inners', None)
+        # fit_params.pop('branch_len_offsets_proportion', None)
         return best_fit_res.orig_tree, fit_params, best_fit_res
 
 
@@ -173,6 +173,20 @@ def get_chads(tree: CellLineageTree):
     return hanging_chads
 
 
+def _prepare_nochad_fit_params(
+        nochad_tree: CellLineageTree,
+        fit_params: Dict,
+        num_nochad_nodes: int):
+    if 'branch_len_inners' not in fit_params:
+        return
+    prev_branch_inners = fit_params['branch_len_inners']
+    prev_branch_offsets_proportion = fit_params['branch_len_offsets_proportion']
+    fit_params['branch_len_inners'] = np.ones(num_nochad_nodes)
+    for node in nochad_tree.traverse():
+        fit_params['branch_len_inners'][node.node_id] = prev_branch_inners[node.orig_node_id]
+        fit_params['branch_len_offsets_proportion'][node.node_id] = prev_branch_offsets_proportion[node.orig_node_id]
+
+
 def tune(
         hanging_chad: HangingChad,
         tree: CellLineageTree,
@@ -192,8 +206,10 @@ def tune(
         node.add_feature("orig_node_id", node.node_id)
         if node.node_id == hanging_chad.node.node_id:
             node.detach()
-    nochad_tree.label_node_ids()
+    num_nochad_nodes = nochad_tree.label_node_ids()
     logging.info("no chad tree leaves %d", len(nochad_tree))
+
+    _prepare_nochad_fit_params(nochad_tree, fit_params, num_nochad_nodes)
 
     # Now fit the tree without the hanging chad
     trans_wrap_maker = TransitionWrapperMaker(
