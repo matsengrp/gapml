@@ -194,7 +194,8 @@ def tune(
         args.num_inits,
         trans_wrap_maker,
         fit_param_list=[fit_params],
-        known_params=args.known_params).run_worker(None)[0]
+        known_params=args.known_params,
+        assessor=assessor).run_worker(None)[0]
 
     warm_start_params = no_chad_res.get_fit_params()
     prev_branch_inners = warm_start_params["branch_len_inners"].copy()

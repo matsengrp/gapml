@@ -2,7 +2,7 @@ import re
 import scipy
 import pandas as pd
 from ete3 import TreeNode
-from typing import List
+from typing import List, Set
 
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
@@ -151,6 +151,25 @@ class CellLineageTree(TreeNode):
     def get_num_nodes(self):
         assert self.is_root()
         return len([_ for _ in self.traverse("preorder")])
+
+    @staticmethod
+    def prune_tree(clt, keep_leaf_ids: Set[int]):
+        """
+        prune the tree to only keep the leaves indicated
+        custom pruning (cause ete was doing weird things...)
+        @param clt: CellLineageTree
+        @return a copy of the clt but properly pruned
+        """
+        # Importing here because otherwise we have circular imports... oops
+        import collapsed_tree
+
+        assert clt.is_root()
+        clt_copy = clt.copy()
+        for node in clt_copy.iter_descendants():
+            if sum((node2.node_id in keep_leaf_ids) for node2 in node.traverse()) == 0:
+                node.detach()
+        collapsed_tree._remove_single_child_unobs_nodes(clt_copy)
+        return clt_copy
 
     @staticmethod
     def convert(node: TreeNode,

@@ -2,7 +2,7 @@
 Helper code for splitting trees into training and validation sets
 This is our version of k-fold CV for trees
 """
-from typing import Set, Dict
+from typing import Dict
 import numpy as np
 from numpy import ndarray
 import logging
@@ -11,7 +11,6 @@ from sklearn.model_selection import KFold
 
 from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
-import collapsed_tree
 
 
 class TreeDataSplit:
@@ -58,7 +57,7 @@ def create_kfold_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadata, n_spl
         for child_idx in fold_indices:
             train_leaf_ids.update([l.node_id for l in children[child_idx]])
 
-        train_tree = _prune_tree(tree.copy(), train_leaf_ids)
+        train_tree = CellLineageTree.prune_tree(tree, train_leaf_ids)
         logging.info("SAMPLED TREE")
         logging.info(train_tree.get_ascii(attributes=["node_id"], show_internal=True))
 
@@ -118,15 +117,4 @@ def _restrict_barcodes(clt: CellLineageTree, bcode_idxs: ndarray):
     for node in clt.traverse():
         node.allele_events_list = [node.allele_events_list[i] for i in bcode_idxs]
     clt.label_tree_with_strs()
-    return clt
-
-def _prune_tree(clt: CellLineageTree, keep_leaf_ids: Set[int]):
-    """
-    prune the tree to only keep the leaves indicated
-    custom pruning (cause ete was doing weird things...)
-    """
-    for node in clt.iter_descendants():
-        if sum((node2.node_id in keep_leaf_ids) for node2 in node.traverse()) == 0:
-            node.detach()
-    collapsed_tree._remove_single_child_unobs_nodes(clt)
     return clt
