@@ -53,7 +53,6 @@ class TreeDistanceMeasurerAgg:
     @staticmethod
     def create_single_abundance_measurer(
             raw_tree: CellLineageTree,
-            n_bcodes: int,
             measurer_classes: List,
             scratch_dir: str):
         """
@@ -69,9 +68,6 @@ class TreeDistanceMeasurerAgg:
         # TODO: better way to ID the tree leaves?
         existing_strs = {}
         for node in ref_tree:
-            node.set_allele_list(
-                    node.allele_list.create_truncated_version(n_bcodes))
-            node.sync_allele_events_list_str()
             if node.allele_events_list_str in existing_strs:
                 count = existing_strs[node.allele_events_list_str]
                 existing_strs[node.allele_events_list_str] += 1

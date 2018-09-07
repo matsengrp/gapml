@@ -8,7 +8,7 @@ from transition_wrapper_maker import TransitionWrapperMaker
 from parallel_worker import SubprocessManager
 from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from common import get_randint
-from tree_distance import TreeDistanceMeasurerAgg
+from model_assessor import ModelAssessor
 
 """
 Hanging chad is our affectionate name for the inter-target cuts that have ambiguous placement
@@ -164,7 +164,7 @@ def tune(
         bcode_meta: BarcodeMetadata,
         args,
         fit_params: Dict,
-        dist_measurers: TreeDistanceMeasurerAgg = None):
+        assessor: ModelAssessor = None):
     """
     Tune the given hanging chad
     @return HangingChadTuneResult
@@ -194,7 +194,8 @@ def tune(
         args.num_inits,
         trans_wrap_maker,
         fit_param_list=[fit_params],
-        known_params=args.known_params).run_worker(None)[0]
+        known_params=args.known_params,
+        assessor=assessor).run_worker(None)[0]
 
     warm_start_params = no_chad_res.get_fit_params()
     prev_branch_inners = warm_start_params["branch_len_inners"].copy()
@@ -275,7 +276,7 @@ def tune(
             trans_wrap_maker,
             fit_param_list=[warm_start_params],
             known_params=args.known_params,
-            dist_measurers=dist_measurers)
+            assessor=assessor)
         worker_list.append(worker)
 
     logging.info("CHAD TUNING")
@@ -295,8 +296,9 @@ def tune(
 
     for chad_res in chad_results:
         logging.info("Chad res: %s", str(chad_res))
-        if dist_measurers is not None:
-            logging.info("  chad truth: %s", chad_res.fit_res.train_history[-1]["tree_dists"])
+        if assessor is not None:
+            logging.info("  chad truth: %s", chad_res.fit_res.train_history[-1]["performance"])
+    logging.info("Median bhv: %f", np.median([c.fit_res.train_history[-1]["performance"]["bhv"] for c in chad_results]))
 
     return HangingChadTuneResult(no_chad_res, chad_results)
 

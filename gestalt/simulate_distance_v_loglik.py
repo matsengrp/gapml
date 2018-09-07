@@ -284,18 +284,18 @@ def main(args=sys.argv[1:]):
             logging.info("train hist %s", res[-1][-50:])
 
         # Do final tree distance measurements
-        tree_dist_measurers = TreeDistanceMeasurerAgg([
+        tree_assessor = TreeDistanceMeasurerAgg([
                 UnrootRFDistanceMeasurer,
                 RootRFDistanceMeasurer,
                 SPRDistanceMeasurer,
                 MRCADistanceMeasurer],
                 true_tree,
                 args.scratch_dir)
-        final_dist_dicts = tree_dist_measurers.get_tree_dists(final_trees)
+        final_dist_dicts = tree_assessor.assess(final_trees)
 
         # Correlation between dist and likelihood among nearby max parsimony trees
         pen_log_liks = np.array(pen_log_liks)
-        for dist_name in [measurer.name for measurer in tree_dist_measurers.measurers]:
+        for dist_name in [measurer.name for measurer in tree_assessor.measurers]:
             final_dists = np.array([d[dist_name] for d in final_dist_dicts])
             final_dists = final_dists[~np.isnan(final_dists)]
             final_pen_log_liks = pen_log_liks[~np.isnan(final_dists)]

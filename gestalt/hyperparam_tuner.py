@@ -9,6 +9,7 @@ from split_data import create_kfold_trees, create_kfold_barcode_trees, TreeDataS
 from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from parallel_worker import SubprocessManager
 from common import get_randint
+from model_assessor import ModelAssessor
 
 
 class PenaltyScorerResult:
@@ -63,7 +64,8 @@ def tune(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
         args,
-        fit_params: Dict):
+        fit_params: Dict,
+        assessor: ModelAssessor):
     """
     Tunes the `dist_to_half_pen_param` penalty parameter
 
@@ -79,7 +81,8 @@ def tune(
             args,
             fit_params,
             create_kfold_barcode_trees,
-            _get_many_bcode_stability_score)
+            _get_many_bcode_stability_score,
+            assessor)
     else:
         # For single barcode, we split into subtrees
         return _tune_hyperparams(
@@ -88,7 +91,8 @@ def tune(
             args,
             fit_params,
             create_kfold_trees,
-            _get_one_bcode_stability_score)
+            _get_one_bcode_stability_score,
+            assessor)
 
 
 def _tune_hyperparams(
@@ -97,7 +101,8 @@ def _tune_hyperparams(
         args,
         fit_params: Dict,
         kfold_fnc,
-        stability_score_fnc):
+        stability_score_fnc,
+        assessor: ModelAssessor = None):
     """
     @param max_num_chad_parents: max number of chad parents to consider
 
@@ -138,7 +143,8 @@ def _tune_hyperparams(
         args.num_inits,
         transition_wrap_maker,
         fit_param_list=fit_param_list,
-        known_params=args.known_params)
+        known_params=args.known_params,
+        assessor=assessor)
         for tree_split, transition_wrap_maker in zip(tree_splits, trans_wrap_makers)]
 
     if args.num_processes > 1 and len(worker_list) > 1:

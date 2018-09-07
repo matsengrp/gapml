@@ -1,7 +1,7 @@
 import six
 from typing import List
 
-from tree_distance import TreeDistanceMeasurerAgg
+from model_assessor import ModelAssessor
 
 
 def read_data(obs_file: str, topology_file: str):
@@ -36,11 +36,12 @@ def read_true_model(
     with open(true_model_file, "rb") as f:
         true_model = six.moves.cPickle.load(f)
 
-    oracle_dist_measurers = None
+    assessor = None
     if len(measurer_classes):
-        oracle_dist_measurers = TreeDistanceMeasurerAgg.create_single_abundance_measurer(
+        assessor = ModelAssessor(
+            true_model["true_model_params"],
             true_model["true_subtree"],
             n_bcodes,
             measurer_classes,
             scratch_dir)
-    return true_model["true_model_params"], oracle_dist_measurers
+    return true_model["true_model_params"], assessor

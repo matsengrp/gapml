@@ -12,7 +12,8 @@ from typing import Dict
 
 from cell_lineage_tree import CellLineageTree
 from optim_settings import KnownModelParams
-from tree_distance import TreeDistanceMeasurerAgg, BHVDistanceMeasurer
+from model_assessor import ModelAssessor
+from tree_distance import BHVDistanceMeasurer
 from transition_wrapper_maker import TransitionWrapperMaker
 from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from barcode_metadata import BarcodeMetadata
@@ -222,13 +223,13 @@ def read_true_model_files(args, num_barcodes):
     if args.true_model_file is None:
         return None, None
 
-    true_model_dict, oracle_dist_measurers = file_readers.read_true_model(
+    true_model_dict, assessor = file_readers.read_true_model(
             args.true_model_file,
             num_barcodes,
             measurer_classes=[BHVDistanceMeasurer],
             scratch_dir=args.scratch_dir)
 
-    return true_model_dict, oracle_dist_measurers
+    return true_model_dict, assessor
 
 
 def has_unresolved_multifurcs(tree: CellLineageTree):
@@ -246,7 +247,7 @@ def fit_multifurc_tree(
         bcode_meta: BarcodeMetadata,
         args,
         param_dict: Dict,
-        oracle_dist_measurers: TreeDistanceMeasurerAgg = None):
+        assessor: ModelAssessor = None):
     """
     @return LikelihoodScorerResult from fitting model on multifurcating tree
     """
@@ -264,7 +265,7 @@ def fit_multifurc_tree(
         transition_wrap_maker,
         fit_param_list=[param_dict],
         known_params=args.known_params,
-        dist_measurers=oracle_dist_measurers).run_worker(None)[0]
+        assessor=assessor).run_worker(None)[0]
     return result
 
 
@@ -272,7 +273,7 @@ def do_refit_bifurc_tree(
         raw_res: LikelihoodScorerResult,
         bcode_meta: BarcodeMetadata,
         args,
-        oracle_dist_measurers: TreeDistanceMeasurerAgg = None):
+        assessor: ModelAssessor = None):
     """
     we need to refit using the bifurcating tree
     """
@@ -303,7 +304,7 @@ def do_refit_bifurc_tree(
         transition_wrap_maker,
         fit_param_list=[param_dict],
         known_params=args.known_params,
-        dist_measurers=oracle_dist_measurers).run_worker(None)[0]
+        assessor=assessor).run_worker(None)[0]
     return bifurc_res
 
 
@@ -314,7 +315,7 @@ def main(args=sys.argv[1:]):
 
     # Load data
     bcode_meta, tree, obs_data_dict = read_data(args)
-    true_model_dict, oracle_dist_measurers = read_true_model_files(args, bcode_meta.num_barcodes)
+    true_model_dict, assessor = read_true_model_files(args, bcode_meta.num_barcodes)
     fit_params = read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict)
 
     logging.info("STARTING!")
@@ -336,7 +337,7 @@ def main(args=sys.argv[1:]):
             else:
                 # Tune penalty params!
                 logging.info("Iter %d: Tuning penalty params", i)
-                penalty_tune_result = hyperparam_tuner.tune(tree, bcode_meta, args, fit_params)
+                penalty_tune_result = hyperparam_tuner.tune(tree, bcode_meta, args, fit_params, assessor)
                 fit_params, best_res = penalty_tune_result.get_best_result()
             logging.info("Iter %d: Best pen param %f", i, fit_params["dist_to_half_pen_param"])
 
@@ -361,7 +362,7 @@ def main(args=sys.argv[1:]):
                 bcode_meta,
                 args,
                 fit_params,
-                oracle_dist_measurers,
+                assessor,
             )
             tree, fit_params, best_res = chad_tune_result.get_best_result()
         else:
@@ -370,12 +371,15 @@ def main(args=sys.argv[1:]):
                     bcode_meta,
                     args,
                     fit_params,
-                    oracle_dist_measurers)
-        logging.info("Iter %d, begin dists %s", i, best_res.train_history[0]["tree_dists"])
-        logging.info("Iter %d, end dists %s (num iters %d)",
-                i,
-                best_res.train_history[-1]["tree_dists"],
-                len(best_res.train_history) - 1)
+                    assessor)
+
+        if assessor is not None:
+            logging.info("Iter %d, begin dists %s", i, best_res.train_history[0]["performance"])
+            logging.info(
+                    "Iter %d, end dists %s (num iters %d)",
+                    i,
+                    best_res.train_history[-1]["performance"],
+                    len(best_res.train_history) - 1)
 
         tuning_history.append({
             "chad_tune_result": chad_tune_result,
@@ -396,7 +400,7 @@ def main(args=sys.argv[1:]):
                 best_res,
                 bcode_meta,
                 args,
-                oracle_dist_measurers)
+                assessor)
         logging.info("Final bifurc dists %s", bifurc_res.train_history[-1]["tree_dists"])
 
     # Save results
