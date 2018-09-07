@@ -298,6 +298,7 @@ def tune(
         logging.info("Chad res: %s", str(chad_res))
         if assessor is not None:
             logging.info("  chad truth: %s", chad_res.fit_res.train_history[-1]["performance"])
+    logging.info("Median bhv: %f", np.median([c.fit_res.train_history[-1]["performance"]["bhv"] for c in chad_results]))
 
     return HangingChadTuneResult(no_chad_res, chad_results)
 
