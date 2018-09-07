@@ -139,6 +139,10 @@ def parse_args():
         type=int,
         default=0,
         help='number of times we randomly rearrange tree at the beginning')
+    parser.add_argument(
+        '--scratch-dir',
+        type=str,
+        default=None)
 
     parser.set_defaults(tot_time_known=True)
     args = parser.parse_args()
@@ -149,10 +153,9 @@ def parse_args():
         reverse=True))
 
     create_directory(args.out_model_file)
-    args.topology_folder = os.path.dirname(args.topology_file)
-    args.scratch_dir = os.path.join(
-            args.topology_folder,
-            'scratch')
+    if args.scratch_dir is None:
+        topology_folder = os.path.dirname(args.topology_file)
+        args.scratch_dir = os.path.join(topology_folder, "scratch")
     if not os.path.exists(args.scratch_dir):
         os.mkdir(args.scratch_dir)
 
