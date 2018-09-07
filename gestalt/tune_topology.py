@@ -408,7 +408,7 @@ def main(args=sys.argv[1:]):
                 bcode_meta,
                 args,
                 assessor)
-        logging.info("Final bifurc dists %s", bifurc_res.train_history[-1]["tree_dists"])
+        logging.info("Final bifurc dists %s", bifurc_res.train_history[-1]["performance"])
 
     # Save results
     with open(args.out_model_file, "wb") as f:
