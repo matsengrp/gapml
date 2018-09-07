@@ -9,6 +9,8 @@ from parallel_worker import SubprocessManager
 from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from common import get_randint
 from model_assessor import ModelAssessor
+from tree_distance import BHVDistanceMeasurer
+
 
 """
 Hanging chad is our affectionate name for the inter-target cuts that have ambiguous placement
@@ -286,34 +288,73 @@ def tune(
                 None,
                 args.scratch_dir,
                 args.num_processes)
-        worker_results = job_manager.run()
+        worker_results = [w[0][0] for w in job_manager.run()]
     else:
-        worker_results = [(w.run_worker(None), w) for w in worker_list]
+        worker_results = [w.run_worker(None)[0] for w in worker_list]
 
-    chad_results = [
-        create_chad_result(worker_res[0][0], no_chad_res, hanging_chad, chad_par)
-        for worker_res, chad_par in zip(worker_results, possible_chad_parents)]
+    chad_tune_res = _create_chad_results(
+        worker_results,
+        possible_chad_parents,
+        no_chad_res,
+        hanging_chad,
+        args.scratch_dir)
 
-    for chad_res in chad_results:
+    for chad_res in chad_tune_res.new_chad_results:
         logging.info("Chad res: %s", str(chad_res))
         if assessor is not None:
             logging.info("  chad truth: %s", chad_res.fit_res.train_history[-1]["performance"])
-    logging.info("Median bhv: %f", np.median([c.fit_res.train_history[-1]["performance"]["bhv"] for c in chad_results]))
+    logging.info(
+        "Median bhv: %f",
+        np.median([c.fit_res.train_history[-1]["performance"]["bhv"] for c in chad_tune_res.new_chad_results]))
 
-    return HangingChadTuneResult(no_chad_res, chad_results)
+    return chad_tune_res
 
 
-def create_chad_result(
-        new_chad_res: LikelihoodScorerResult,
+def _create_chad_results(
+        fit_results: List[LikelihoodScorerResult],
+        chad_parent_candidates: List[CellLineageTree],
         no_chad_res: LikelihoodScorerResult,
         hanging_chad: HangingChad,
-        chad_par: CellLineageTree):
+        scratch_dir: str,
+        weight: float = 0.5):
+    """
+    @return HangingChadTuneResult
+    """
+    assert len(fit_results) == len(chad_parent_candidates)
+    no_chad_dist_meas = BHVDistanceMeasurer(no_chad_res.fitted_bifurc_tree, scratch_dir)
+    new_chad_results = [
+        _create_chad_result(fit_res, no_chad_res, no_chad_dist_meas, hanging_chad, chad_par, weight)
+        for fit_res, chad_par in zip(fit_results, chad_parent_candidates)]
+    return HangingChadTuneResult(no_chad_res, new_chad_results)
+
+
+def _create_chad_result(
+        new_chad_res: LikelihoodScorerResult,
+        no_chad_res: LikelihoodScorerResult,
+        no_chad_dist_meas: BHVDistanceMeasurer,
+        hanging_chad: HangingChad,
+        chad_par: CellLineageTree,
+        weight: float = 0.5):
     """
     @return HangingChadResult
     """
     new_chad_targs = new_chad_res.get_all_target_params()
     no_chad_targs = no_chad_res.get_all_target_params()
-    stability_score = -np.linalg.norm(new_chad_targs - no_chad_targs)
+    targ_stability_score = -np.linalg.norm(new_chad_targs - no_chad_targs)
+
+    tree_leaf_strs = set([l.allele_events_list_str for l in no_chad_res.fitted_bifurc_tree])
+    keep_leaf_ids = set()
+    for leaf in new_chad_res.fitted_bifurc_tree:
+        if leaf.allele_events_list_str in tree_leaf_strs:
+            keep_leaf_ids.add(leaf.node_id)
+    new_tree_pruned = CellLineageTree.prune_tree(new_chad_res.fitted_bifurc_tree, keep_leaf_ids)
+
+    tree_stability_score = -no_chad_dist_meas.get_dist(new_tree_pruned)
+
+    stability_score = weight * tree_stability_score + (1 - weight) * targ_stability_score
+
+    print("stabilities", tree_stability_score, targ_stability_score)
+
     return HangingChadResult(
         stability_score,
         hanging_chad.node,
