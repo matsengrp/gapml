@@ -22,20 +22,30 @@ node or a child of another allele with a 2-2 intra-target cut.
 class HangingChadResult:
     def __init__(
             self,
-            score: float,
+            targ_score: float,
+            tree_score: float,
             chad_node: CellLineageTree,
             parent_node: CellLineageTree,
-            fit_res: LikelihoodScorerResult):
-        self.score = score
+            fit_res: LikelihoodScorerResult,
+            weight: float):
+        self.targ_score = targ_score
+        self.tree_score = tree_score
         self.chad_node = chad_node
         self.parent_node = parent_node
         self.fit_res = fit_res
+        self.weight = weight
+
+    @property
+    def score(self):
+        return self.weight * self.targ_score + (1 - self.weight) * self.tree_score
 
     def __str__(self):
-        return "%s=>%s, score=%f" % (
+        return "%s=>%s, score=%f (%f, %f)" % (
                 self.parent_node.allele_events_list_str,
                 self.chad_node.allele_events_list_str,
-                self.score)
+                self.score,
+                self.targ_score,
+                self.tree_score)
 
 
 class HangingChadTuneResult:
@@ -64,7 +74,10 @@ class HangingChadTuneResult:
         logging.info("Best chad %s", best_chad)
         best_fit_res = best_chad.fit_res
 
+        # TODO: how do we warm start using previous branch length estimates?
         fit_params = best_fit_res.get_fit_params()
+        # Popping branch length estimates right now because i dont know
+        # how to warm start using these estimates...?
         fit_params.pop('branch_len_inners', None)
         fit_params.pop('branch_len_offsets_proportion', None)
         return best_fit_res.orig_tree, fit_params, best_fit_res
@@ -297,7 +310,8 @@ def tune(
         possible_chad_parents,
         no_chad_res,
         hanging_chad,
-        args.scratch_dir)
+        args.scratch_dir,
+        args.stability_weight)
 
     for chad_res in chad_tune_res.new_chad_results:
         logging.info("Chad res: %s", str(chad_res))
@@ -321,6 +335,7 @@ def _create_chad_results(
     @return HangingChadTuneResult
     """
     assert len(fit_results) == len(chad_parent_candidates)
+    assert weight >= 0 and weight <= 1
     no_chad_dist_meas = BHVDistanceMeasurer(no_chad_res.fitted_bifurc_tree, scratch_dir)
     new_chad_results = [
         _create_chad_result(fit_res, no_chad_res, no_chad_dist_meas, hanging_chad, chad_par, weight)
@@ -338,25 +353,25 @@ def _create_chad_result(
     """
     @return HangingChadResult
     """
+    # Get the target lambda stability score
     new_chad_targs = new_chad_res.get_all_target_params()
     no_chad_targs = no_chad_res.get_all_target_params()
     targ_stability_score = -np.linalg.norm(new_chad_targs - no_chad_targs)
 
+    # Get the tree stability score
+    # Shrink down the tree to compare
     tree_leaf_strs = set([l.allele_events_list_str for l in no_chad_res.fitted_bifurc_tree])
     keep_leaf_ids = set()
     for leaf in new_chad_res.fitted_bifurc_tree:
         if leaf.allele_events_list_str in tree_leaf_strs:
             keep_leaf_ids.add(leaf.node_id)
     new_tree_pruned = CellLineageTree.prune_tree(new_chad_res.fitted_bifurc_tree, keep_leaf_ids)
-
     tree_stability_score = -no_chad_dist_meas.get_dist(new_tree_pruned)
 
-    stability_score = weight * tree_stability_score + (1 - weight) * targ_stability_score
-
-    print("stabilities", tree_stability_score, targ_stability_score)
-
     return HangingChadResult(
-        stability_score,
+        tree_stability_score,
+        targ_stability_score,
         hanging_chad.node,
         chad_par,
-        new_chad_res)
+        new_chad_res,
+        weight)

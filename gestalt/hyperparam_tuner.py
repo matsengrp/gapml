@@ -54,7 +54,10 @@ class PenaltyTuneResult:
 
         chosen_best_res = best_pen_result.fit_results[warm_idx]
 
+        # TODO: how do we warm start using previous branch length estimates?
         fit_params = chosen_best_res.get_fit_params()
+        # Popping branch length estimates right now because i dont know
+        # how to warm start using these estimates...?
         fit_params.pop('branch_len_inners', None)
         fit_params.pop('branch_len_offsets_proportion', None)
         return fit_params, chosen_best_res

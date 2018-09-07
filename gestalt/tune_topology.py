@@ -124,6 +124,11 @@ def parse_args():
         action='store_true',
         help='refit the bifurc tree?')
     parser.add_argument(
+        '--stability-weight',
+        type=float,
+        default=1,
+        help='how much to weight the target rate')
+    parser.add_argument(
         '--num-processes',
         type=int,
         default=1,
@@ -148,6 +153,8 @@ def parse_args():
     args.known_params = KnownModelParams(
          target_lams=args.lambda_known,
          tot_time=args.tot_time_known)
+
+    assert args.stability_weight >= 0 and args.stability_weight <= 1
 
     assert args.num_penalty_tune_iters >= 1
     assert args.tot_time_known
