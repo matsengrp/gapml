@@ -100,9 +100,10 @@ class CLTPenalizedEstimator(CLTEstimator):
                 if k not in ["branch_len_offsets_proportion", "branch_len_inners", "boost_probs"]:
                     logging.info("%s: %s", k, v)
 
-            _, pen_log_lik, log_lik, dist_to_half_pen = self.model.sess.run(
+            _, gradient, pen_log_lik, log_lik, dist_to_half_pen = self.model.sess.run(
                     [
                         self.model.adam_train_op,
+                        self.model.smooth_log_lik_grad[0][0],
                         self.model.smooth_log_lik,
                         self.model.log_lik,
                         self.model.dist_to_half_pen],
@@ -116,8 +117,8 @@ class CLTPenalizedEstimator(CLTEstimator):
                     "target_rates": var_dict["target_lams"]}
             if i % print_iter == (print_iter - 1):
                 logging.info(
-                    "iter %d pen log lik %f log lik %f dist-to-half pen %f",
-                    i, pen_log_lik, log_lik, dist_to_half_pen)
+                    "iter %d pen log lik %f log lik %f dist-to-half pen %f grad norm %f",
+                    i, pen_log_lik, log_lik, dist_to_half_pen, np.linalg.norm(gradient))
 
             if np.isnan(pen_log_lik):
                 logging.info("ERROR: pen log like is nan. branch lengths are negative?")
@@ -133,7 +134,7 @@ class CLTPenalizedEstimator(CLTEstimator):
                     iter_info["performance"] = performance_dict
 
             train_history.append(iter_info)
-            if i > min_iters and np.abs((prev_pen_log_lik - pen_log_lik[0])/prev_pen_log_lik) < conv_thres:
+            if i > min_iters and np.linalg.norm(gradient) < conv_thres:
                 # Convergence reached
                 logging.info("Convergence reached")
                 break
