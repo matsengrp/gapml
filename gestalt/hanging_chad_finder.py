@@ -146,27 +146,35 @@ def get_chads(tree: CellLineageTree):
         # Get node's parsimony score
         parsimony_score = _get_parsimony_score(node, node.up)
         assert parsimony_score is not None
-        curr_par_event_str = node.up.allele_events_list_str
 
         # Determine if there is another place in the tree where we can preserve
         # parsimony score
         # TODO: this still does not find every possible location for the hanging chads
         # it is possible that there is a node omitted in the parsimony tree that
         # this node can be a child of
-        possible_parents = [node.up]
-        for potential_par_node in tree.get_descendants():
-            if potential_par_node.allele_events_list_str == curr_par_event_str:
+        # Note: we are using a dictionary and preorder traversal so we don't consider
+        # hanging the chad off of two nodes with the same allele_events_list_str.
+        # In particular, we want to hang off of the earliest occurance of the allele_events_list_str
+        # since that is the multifurc location. The other node with the same allele_events_list_str
+        # is going to also dangle off the same multifurc so it is pointless to consider
+        # hanging the chad off of this other node. Instead we handle that case by the continuous
+        # topology tuner
+        possible_parents = {}
+        for potential_par_node in tree.traverse("preorder"):
+            if potential_par_node.allele_events_list_str in possible_parents:
                 continue
+
             potential_score = _get_parsimony_score(node, potential_par_node)
             if potential_score is None or parsimony_score == 0:
                 continue
 
             if potential_score == parsimony_score:
-                possible_parents.append(potential_par_node)
+                possible_parents[potential_par_node.allele_events_list_str] = potential_par_node
+
         if len(possible_parents) > 1:
             hanging_chads.append(HangingChad(
                     node,
-                    possible_parents,
+                    list(possible_parents.values()),
                     parsimony_score))
 
     logging.info("Number of hanging chads found: %d", len(hanging_chads))

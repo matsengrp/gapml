@@ -21,6 +21,7 @@ import hyperparam_tuner
 import hanging_chad_finder
 from common import create_directory, get_randint, save_data
 import file_readers
+import collapsed_tree
 
 
 def parse_args():
@@ -133,6 +134,11 @@ def parse_args():
         type=int,
         default=1,
         help='number of subprocesses to invoke for running')
+    parser.add_argument(
+        '--num-init-random-rearrange',
+        type=int,
+        default=0,
+        help='number of times we randomly rearrange tree at the beginning')
 
     parser.set_defaults(tot_time_known=True)
     args = parser.parse_args()
@@ -315,6 +321,46 @@ def do_refit_bifurc_tree(
     return bifurc_res
 
 
+def _do_random_rearrange(tree):
+    """
+    Picks a random chad and randomly places it under a possible parent
+    """
+    orig_num_leaves = len(tree)
+    hanging_chads = hanging_chad_finder.get_chads(tree)
+
+    # Pick random chad
+    random_chad = random.choice(hanging_chads)
+
+    # Detach random chad
+    for node in tree.traverse():
+        if node.node_id == random_chad.node.node_id:
+            node.detach()
+            break
+
+    # Pick random parent
+    random_par = random.choice(random_chad.possible_parents)
+    logging.info("randomly chosen chad %s", random_chad)
+    logging.info("randomly chosen chad-parent %s", random_par.allele_events_list_str)
+
+    # Attach to random parent
+    for node in tree.traverse():
+        if node.node_id == random_par.node_id:
+            if node.is_leaf():
+                # If attaching to a leaf, mush make a copy of the leaf
+                # so we don't have unifurcations
+                new_child = node.copy()
+                node.add_child(new_child)
+            node.add_child(random_chad.node)
+            break
+
+    # Remove any unifurcations that may have been introduced when we
+    # detached the hanging chad
+    collapsed_tree._remove_single_child_unobs_nodes(tree)
+
+    tree.label_node_ids()
+    assert orig_num_leaves == len(tree)
+
+
 def main(args=sys.argv[1:]):
     args = parse_args()
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
@@ -325,7 +371,14 @@ def main(args=sys.argv[1:]):
     true_model_dict, assessor = read_true_model_files(args, bcode_meta.num_barcodes)
     fit_params = read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict)
 
-    logging.info("STARTING!")
+    logging.info("STARTING.... before random rearrange")
+    logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))
+    logging.info(tree.get_ascii(attributes=["node_id"]))
+
+    for i in range(args.num_init_random_rearrange):
+        _do_random_rearrange(tree)
+
+    logging.info("STARTING for reals!")
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))
     logging.info(tree.get_ascii(attributes=["node_id"]))
 
