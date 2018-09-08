@@ -387,6 +387,7 @@ def main(args=sys.argv[1:]):
 
     # Begin tuning
     tuning_history = []
+    recent_chads = set()
     for i in range(args.num_chad_tune_iters):
         np.random.seed(args.seed + i)
         random.seed(args.seed + i)
@@ -417,8 +418,21 @@ def main(args=sys.argv[1:]):
         chad_tune_result = None
         if has_chads and args.max_chad_tune_search > 1:
             # Now tune the hanging chads!
-            random_chad = random.choice(hanging_chads)
-            logging.info("Iter %d: Tuning chad %s", i, random_chad)
+            # Pick one that is new
+            random_chad = random.choice([
+                c for c in hanging_chads
+                if c.node.allele_events_list_str not in recent_chads])
+            # Track the chads we tuned recently
+            recent_chads.add(random_chad.node.allele_events_list_str)
+            # If we have seen all the chads, reset the chad tracker
+            if len(recent_chads) == len(hanging_chads):
+                recent_chads = set()
+
+            logging.info(
+                    "Iter %d: Tuning chad %s (%d leaves)",
+                    i,
+                    random_chad,
+                    len(random_chad.node))
             chad_tune_result = hanging_chad_finder.tune(
                 random_chad,
                 tree,
@@ -437,11 +451,18 @@ def main(args=sys.argv[1:]):
                     assessor)
 
         if assessor is not None:
-            logging.info("Iter %d, begin dists %s", i, best_res.train_history[0]["performance"])
             logging.info(
-                    "Iter %d, end dists %s (num iters %d)",
+                    "Iter %d, begin dists %s, log lik %f %f",
+                    i,
+                    best_res.train_history[0]["performance"],
+                    best_res.train_history[0]["pen_log_lik"],
+                    best_res.train_history[0]["log_lik"])
+            logging.info(
+                    "Iter %d, end dists %s, log lik %f %f (num iters %d)",
                     i,
                     best_res.train_history[-1]["performance"],
+                    best_res.pen_log_lik,
+                    best_res.log_lik,
                     len(best_res.train_history) - 1)
 
         tuning_history.append({

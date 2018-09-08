@@ -40,7 +40,7 @@ class HangingChadResult:
         return self.weight * self.targ_score + (1 - self.weight) * self.tree_score
 
     def __str__(self):
-        return "%s=>%s, score=%f (%f, %f)" % (
+        return "%s=>%s, score=%f (targ=%f, tree=%f)" % (
                 self.parent_node.allele_events_list_str,
                 self.chad_node.allele_events_list_str,
                 self.score,
@@ -71,7 +71,6 @@ class HangingChadTuneResult:
         best_chad_idx = np.argmax([
                 chad_res.score for chad_res in self.new_chad_results])
         best_chad = self.new_chad_results[best_chad_idx]
-        logging.info("Best chad %s", best_chad)
         best_fit_res = best_chad.fit_res
 
         # TODO: how do we warm start using previous branch length estimates?
@@ -210,11 +209,17 @@ def tune(
     assert len(hanging_chad.possible_parents) > 1
 
     # Remove my hanging chad from the orig tree
+    # Also track the parent we took it off from so that
+    # we always have an option of NOT moving the hanging chad
     nochad_tree = tree.copy()
-    for node in nochad_tree.traverse():
+    current_parent_id = None
+    for node in nochad_tree.traverse("preorder"):
         node.add_feature("orig_node_id", node.node_id)
         if node.node_id == hanging_chad.node.node_id:
+            current_parent_id = node.up.orig_node_id
+            logging.info("current parent of chad %s", node.up.allele_events_list_str)
             node.detach()
+    assert current_parent_id is not None
     num_nochad_nodes = nochad_tree.label_node_ids()
     logging.info("no chad tree leaves %d", len(nochad_tree))
 
@@ -242,20 +247,28 @@ def tune(
     prev_branch_proportions = warm_start_params["branch_len_offsets_proportion"].copy()
 
     worker_list = []
-    num_total_parents = len(hanging_chad.possible_parents)
-    random_order = np.random.choice(num_total_parents, num_total_parents, replace=False)
-    possible_chad_parents = [
-        hanging_chad.possible_parents[idx]
-        for idx in random_order[:args.max_chad_tune_search]]
+    other_chad_parents = [
+            p for p in hanging_chad.possible_parents
+            if p.node_id != current_parent_id]
+    num_other_parents = len(other_chad_parents)
+    random_order = np.random.choice(num_other_parents, num_other_parents, replace=False)
+    chosen_idxs = random_order[:args.max_chad_tune_search - 1]
+    possible_chad_parents = ([
+            p for p in hanging_chad.possible_parents
+            if p.node_id == current_parent_id] + [other_chad_parents[idx] for idx in chosen_idxs])
     logging.info(
-            "chad parent idxs considered %s (out of %d)",
-            random_order[:args.max_chad_tune_search],
-            num_total_parents)
+            "chad parent idxs considered %s (out of %d) (plus the orig one)",
+            chosen_idxs,
+            num_other_parents)
     for chad_par in possible_chad_parents:
         # From the no chad tree, add back the hanging chad to the designated parent
         tree_copy = nochad_tree.copy()
         for node in tree_copy.traverse():
             node.add_feature("nochad_id", node.node_id)
+            # Track which nodes were originally leaves in the nochad tree
+            # These nodes have nonsense values in the branch_len_inner param,
+            # so we will make sure to ignore those values.
+            node.add_feature("nochad_is_leaf", node.is_leaf())
 
         for node in tree_copy.traverse():
             if node.orig_node_id is not None and node.orig_node_id == chad_par.node_id:
@@ -283,24 +296,17 @@ def tune(
         assert len(tree_copy) == len(tree)
 
         # warm start the branch length estimates
-        # TODO: doesn't transfer over every single branch length estimate... is that ok?
-        # Is there a way to transfer over more branch length estimates?
         warm_start_params = no_chad_res.get_fit_params()
         warm_start_params["branch_len_inners"] = np.ones(num_nodes) * 1e-10
         warm_start_params["branch_len_offsets_proportion"] = np.ones(num_nodes) * 0.45 + np.random.rand(num_nodes) * 0.1
         for node in tree_copy.traverse():
-            if node.nochad_id is not None and node.orig_node_id != chad_par.node_id:
+            if node.nochad_id is not None:
                 # Copy over existing branch length estimates -- it it matches an existing branch in the no-chad tree
-                # However we DO NOT copy over the branch length estimate for the new parent of the hanging chad.
-                # This is because the new placement of the hanging chad may have changed this node from a leaf to an
-                # internal node. In that case, the branch len inner that was previously a nonsense param
-                # in the optimization is now meangingful. We make sure we don't use the nonsense
-                # param by omitting the branch length estimate
                 nochad_id = int(node.nochad_id)
                 node_id = int(node.node_id)
-                if not node.is_leaf():
-                    # Only copy branch_len_inners for non-leaf nodes because branch_len_inner values are meaningless for
-                    # leaf nodes
+                if not node.nochad_is_leaf:
+                    # Only copy branch_len_inners for non-leaf nodes (from the nochad tree) because branch_len_inner values
+                    # are meaningless for leaf nodes
                     warm_start_params["branch_len_inners"][node_id] = max(
                         prev_branch_inners[nochad_id] - 1e-9, 1e-10)
                 warm_start_params["branch_len_offsets_proportion"][node_id] = prev_branch_proportions[nochad_id]
@@ -345,9 +351,18 @@ def tune(
         logging.info("Chad res: %s", str(chad_res))
         if assessor is not None:
             logging.info("  chad truth: %s", chad_res.fit_res.train_history[-1]["performance"])
-    logging.info(
-        "Median bhv: %f",
-        np.median([c.fit_res.train_history[-1]["performance"]["bhv"] for c in chad_tune_res.new_chad_results]))
+    if assessor is not None:
+        median_bhv = np.median([c.fit_res.train_history[-1]["performance"]["bhv"] for c in chad_tune_res.new_chad_results])
+        selected_idx = np.argmax([c.score for c in chad_tune_res.new_chad_results])
+        selected_chad = chad_tune_res.new_chad_results[selected_idx]
+        selected_bhv = selected_chad.fit_res.train_history[-1]["performance"]["bhv"]
+        logging.info("Best chad %s", selected_chad)
+        logging.info(
+                "Median bhv: %f (selected better? %s, selected=%f)",
+                median_bhv,
+                median_bhv > selected_bhv,
+                selected_bhv)
+
 
     return chad_tune_res
 
@@ -397,8 +412,8 @@ def _create_chad_result(
     tree_stability_score = -no_chad_dist_meas.get_dist(new_tree_pruned)
 
     return HangingChadResult(
-        tree_stability_score,
         targ_stability_score,
+        tree_stability_score,
         hanging_chad.node,
         chad_par,
         new_chad_res,

@@ -78,6 +78,8 @@ def tune(
 
     if bcode_meta.num_barcodes > 1:
         # For many barcodes, we split by barcode
+        fit_params.pop('branch_len_inners', None)
+        fit_params.pop('branch_len_offsets_proportion', None)
         return _tune_hyperparams(
             tree,
             bcode_meta,
