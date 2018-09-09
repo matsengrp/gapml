@@ -449,7 +449,9 @@ def _create_chad_result(
         if leaf.allele_events_list_str in tree_leaf_strs:
             keep_leaf_ids.add(leaf.node_id)
     new_tree_pruned = CellLineageTree.prune_tree(new_chad_res.fitted_bifurc_tree, keep_leaf_ids)
-    tree_stability_score = -no_chad_dist_meas.get_dist(new_tree_pruned)
+    tree_stability_score = -no_chad_dist_meas.get_dist_multifurc_tree(
+        new_tree_pruned,
+        no_chad_res.orig_tree)
 
     return HangingChadResult(
         targ_stability_score,

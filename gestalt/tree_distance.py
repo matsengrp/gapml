@@ -532,14 +532,10 @@ class InternalCorrMeasurer(MRCADistanceMeasurer):
     def get_ref_node_distances(self, tree, tree_mrca_matrix):
         internal_nodes = [
                 node for node in tree.traverse("preorder") if not node.is_root() and not node.is_leaf()]
-        node_val = []
-        for node in internal_nodes:
-            leaf_idxs = np.array([self.leaf_dict[getattr(leaf, self.attr)] for leaf in node])
-            node_dist = np.max(tree_mrca_matrix[leaf_idxs, leaf_idxs])
-            node_val.append(node_dist)
-        return internal_nodes, np.array(node_val)
+        node_val = self._get_internal_node_dists(internal_nodes, tree_mrca_matrix)
+        return internal_nodes, node_val
 
-    def get_compare_node_distances(self, internal_nodes, tree_mrca_matrix):
+    def _get_internal_node_dists(self, internal_nodes, tree_mrca_matrix):
         node_val = []
         for node in internal_nodes:
             leaf_idxs = np.array([self.leaf_dict[getattr(leaf, self.attr)] for leaf in node])
@@ -549,27 +545,22 @@ class InternalCorrMeasurer(MRCADistanceMeasurer):
 
     def _get_node_val(self, tree):
         tree_mrca_matrix = self._get_mrca_matrix(tree)
-        return self.get_compare_node_distances(
-                self.ref_internal_nodes,
-                tree_mrca_matrix)
+        return self._get_internal_node_dists(self.ref_internal_nodes, tree_mrca_matrix)
 
     def get_dist(self, tree):
         tree_mrca_matrix = self._get_mrca_matrix(tree)
-        tree_node_val1 = self.get_compare_node_distances(
-                self.ref_internal_nodes,
-                tree_mrca_matrix)
+        tree_node_val1 = self._get_internal_node_dists(self.ref_internal_nodes, tree_mrca_matrix)
         corr1, _ = self.corr_func(self.ref_node_val, tree_node_val1)
 
-        tree_internal_nodes2, tree_node_val2 = self.get_ref_node_distances(
-                tree,
-                tree_mrca_matrix)
-        ref_node_val2 = self.get_compare_node_distances(
+        tree_internal_nodes2, tree_node_val2 = self.get_ref_node_distances(tree, tree_mrca_matrix)
+        ref_node_val2 = self._get_internal_node_dists(
                 tree_internal_nodes2,
                 self.ref_tree_mrca_matrix)
         corr2, _ = self.corr_func(ref_node_val2, tree_node_val2)
 
         logging.info("%f, %f", corr1, corr2)
         return 1 - (corr1 + corr2)/2
+
 
 class InternalHeightsMeasurer(InternalCorrMeasurer):
     name = "internal_heights"
@@ -592,3 +583,16 @@ class InternalHeightsMeasurer(InternalCorrMeasurer):
 
         logging.info("hiehg dist %s, %s", height_dist1, height_dist2)
         return (height_dist1 + height_dist2)/2
+
+    def get_dist_multifurc_tree(self, tree, multifurc_tree):
+        multifurc_tree_nodes = [
+                node for node in multifurc_tree.get_descendants("preorder")
+                if not node.is_leaf()]
+        ref_node_dists = self._get_internal_node_dists(multifurc_tree_nodes, self.ref_tree_mrca_matrix)
+
+        tree_mrca_matrix = self._get_mrca_matrix(tree)
+        tree_node_dists = self._get_internal_node_dists(multifurc_tree_nodes, tree_mrca_matrix)
+
+        print(ref_node_dists.size, tree_node_dists.size)
+
+        return np.linalg.norm(ref_node_dists - tree_node_dists)
