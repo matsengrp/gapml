@@ -357,7 +357,8 @@ def tune(
     else:
         worker_results = [w.run_worker(None)[0] for w in worker_list]
 
-    TREE_DIST_MEASURERS = [UnrootRFDistanceMeasurer, BHVDistanceMeasurer, SPRDistanceMeasurer, InternalHeightsMeasurer]
+    # TREE_DIST_MEASURERS = [UnrootRFDistanceMeasurer, BHVDistanceMeasurer, SPRDistanceMeasurer, InternalHeightsMeasurer]
+    TREE_DIST_MEASURERS = [InternalHeightsMeasurer]
     for tree_dist_measurer in TREE_DIST_MEASURERS:
         chad_tune_res = _create_chad_results(
             worker_results,

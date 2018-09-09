@@ -585,9 +585,17 @@ class InternalHeightsMeasurer(InternalCorrMeasurer):
         return (height_dist1 + height_dist2)/2
 
     def get_dist_multifurc_tree(self, tree, multifurc_tree):
-        multifurc_tree_nodes = [
-                node for node in multifurc_tree.get_descendants("preorder")
-                if not node.is_leaf()]
+        multifurc_leaf_sets = set()
+        multifurc_tree_nodes = []
+        for node in multifurc_tree.traverse("preorder"):
+            leaf_tuple = tuple(l.allele_events_list_str for l in node)
+            if leaf_tuple in multifurc_leaf_sets or len(leaf_tuple) <= 1:
+                continue
+            else:
+                multifurc_leaf_sets.add(leaf_tuple)
+                print(leaf_tuple)
+                multifurc_tree_nodes.append(node)
+
         ref_node_dists = self._get_internal_node_dists(multifurc_tree_nodes, self.ref_tree_mrca_matrix)
 
         tree_mrca_matrix = self._get_mrca_matrix(tree)
