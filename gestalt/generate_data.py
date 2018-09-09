@@ -242,7 +242,7 @@ def create_cell_lineage_tree(
             if len(true_subtree) < args.min_uniq_alleles:
                 birth_intercept += incr
             elif len(true_subtree) >= args.max_uniq_alleles:
-                birth_intercept -= incr
+                birth_intercept -= incr * 0.95
             else:
                 # We got a good number of leaves! Stop trying
                 print("done!")

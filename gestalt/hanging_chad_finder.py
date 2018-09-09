@@ -1,6 +1,7 @@
 import numpy as np
 from typing import List, Dict
 import logging
+import scipy.stats
 
 from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
@@ -9,7 +10,8 @@ from parallel_worker import SubprocessManager
 from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from common import get_randint
 from model_assessor import ModelAssessor
-from tree_distance import BHVDistanceMeasurer
+from tree_distance import * # BHVDistanceMeasurer, InternalCorrMeasurer, InternalHeightsMeasurer, TreeDistanceMeasurer
+from optim_settings import KnownModelParams
 
 
 """
@@ -179,20 +181,30 @@ def get_chads(tree: CellLineageTree):
     logging.info("Number of hanging chads found: %d", len(hanging_chads))
     return hanging_chads
 
+def get_init_target_lams(target_lams_old, mean_val=0):
+    random_perturb = np.random.uniform(size=target_lams_old.size) * 0.001
+    random_perturb = random_perturb - np.mean(random_perturb)
+    random_perturb[0] = 0
+    return np.exp(mean_val * np.ones(target_lams_old.size) + random_perturb)
 
 def _prepare_nochad_fit_params(
         nochad_tree: CellLineageTree,
         fit_params: Dict,
-        num_nochad_nodes: int):
+        num_nochad_nodes: int,
+        known_params: KnownModelParams):
     if 'branch_len_inners' not in fit_params:
         return
-    prev_branch_inners = fit_params['branch_len_inners']
-    prev_branch_offsets_proportion = fit_params['branch_len_offsets_proportion']
-    fit_params['branch_len_inners'] = np.ones(num_nochad_nodes) * 1e-10
-    fit_params['branch_len_offsets_proportion'] = np.random.rand(num_nochad_nodes) * 0.5
-    for node in nochad_tree.traverse():
-        fit_params['branch_len_inners'][node.node_id] = prev_branch_inners[node.orig_node_id]
-        fit_params['branch_len_offsets_proportion'][node.node_id] = prev_branch_offsets_proportion[node.orig_node_id]
+    if not known_params.target_lams:
+        fit_params['target_lams'] = get_init_target_lams(fit_params['target_lams'])
+    fit_params.pop('branch_len_inners', None)
+    fit_params.pop('branch_len_offsets_proportion', None)
+    #prev_branch_inners = fit_params['branch_len_inners']
+    #prev_branch_offsets_proportion = fit_params['branch_len_offsets_proportion']
+    #fit_params['branch_len_inners'] = np.ones(num_nochad_nodes) * 1e-10
+    #fit_params['branch_len_offsets_proportion'] = np.random.rand(num_nochad_nodes) * 0.5
+    #for node in nochad_tree.traverse():
+    #    fit_params['branch_len_inners'][node.node_id] = prev_branch_inners[node.orig_node_id]
+    #    fit_params['branch_len_offsets_proportion'][node.node_id] = prev_branch_offsets_proportion[node.orig_node_id]
 
 
 def tune(
@@ -223,7 +235,7 @@ def tune(
     num_nochad_nodes = nochad_tree.label_node_ids()
     logging.info("no chad tree leaves %d", len(nochad_tree))
 
-    _prepare_nochad_fit_params(nochad_tree, fit_params, num_nochad_nodes)
+    _prepare_nochad_fit_params(nochad_tree, fit_params, num_nochad_nodes, args.known_params)
 
     # Now fit the tree without the hanging chad
     trans_wrap_maker = TransitionWrapperMaker(
@@ -270,6 +282,8 @@ def tune(
             # so we will make sure to ignore those values.
             node.add_feature("nochad_is_leaf", node.is_leaf())
 
+            node.add_feature("nochad_resolved_multifurc", node.is_resolved_multifurcation())
+
         for node in tree_copy.traverse():
             if node.orig_node_id is not None and node.orig_node_id == chad_par.node_id:
                 if node.is_leaf():
@@ -301,7 +315,7 @@ def tune(
         warm_start_params["branch_len_offsets_proportion"] = np.ones(num_nodes) * 0.45 + np.random.rand(num_nodes) * 0.1
         for node in tree_copy.traverse():
             if node.nochad_id is not None:
-                # Copy over existing branch length estimates -- it it matches an existing branch in the no-chad tree
+                # Copy over existing branch length estimates -- if it matches an existing branch in the no-chad tree
                 nochad_id = int(node.nochad_id)
                 node_id = int(node.node_id)
                 if not node.nochad_is_leaf:
@@ -309,7 +323,11 @@ def tune(
                     # are meaningless for leaf nodes
                     warm_start_params["branch_len_inners"][node_id] = max(
                         prev_branch_inners[nochad_id] - 1e-9, 1e-10)
-                warm_start_params["branch_len_offsets_proportion"][node_id] = prev_branch_proportions[nochad_id]
+                if node.up is not None:
+                    if not node.up.nochad_resolved_multifurc:
+                        warm_start_params["branch_len_offsets_proportion"][node_id] = prev_branch_proportions[nochad_id]
+                    else:
+                        warm_start_params["branch_len_offsets_proportion"][node_id] = 1e-10
 
         trans_wrap_maker = TransitionWrapperMaker(
             tree_copy,
@@ -339,30 +357,16 @@ def tune(
     else:
         worker_results = [w.run_worker(None)[0] for w in worker_list]
 
-    chad_tune_res = _create_chad_results(
-        worker_results,
-        possible_chad_parents,
-        no_chad_res,
-        hanging_chad,
-        args.scratch_dir,
-        args.stability_weight)
-
-    for chad_res in chad_tune_res.new_chad_results:
-        logging.info("Chad res: %s", str(chad_res))
-        if assessor is not None:
-            logging.info("  chad truth: %s", chad_res.fit_res.train_history[-1]["performance"])
-    if assessor is not None:
-        median_bhv = np.median([c.fit_res.train_history[-1]["performance"]["bhv"] for c in chad_tune_res.new_chad_results])
-        selected_idx = np.argmax([c.score for c in chad_tune_res.new_chad_results])
-        selected_chad = chad_tune_res.new_chad_results[selected_idx]
-        selected_bhv = selected_chad.fit_res.train_history[-1]["performance"]["bhv"]
-        logging.info("Best chad %s", selected_chad)
-        logging.info(
-                "Median bhv: %f (selected better? %s, selected=%f)",
-                median_bhv,
-                median_bhv > selected_bhv,
-                selected_bhv)
-
+    TREE_DIST_MEASURERS = [UnrootRFDistanceMeasurer, BHVDistanceMeasurer, SPRDistanceMeasurer, InternalHeightsMeasurer]
+    for tree_dist_measurer in TREE_DIST_MEASURERS:
+        chad_tune_res = _create_chad_results(
+            worker_results,
+            possible_chad_parents,
+            no_chad_res,
+            hanging_chad,
+            tree_dist_measurer,
+            args.scratch_dir,
+            args.stability_weight)
 
     return chad_tune_res
 
@@ -372,6 +376,7 @@ def _create_chad_results(
         chad_parent_candidates: List[CellLineageTree],
         no_chad_res: LikelihoodScorerResult,
         hanging_chad: HangingChad,
+        tree_dist_measurer,
         scratch_dir: str,
         weight: float = 0.5):
     """
@@ -379,17 +384,52 @@ def _create_chad_results(
     """
     assert len(fit_results) == len(chad_parent_candidates)
     assert weight >= 0 and weight <= 1
-    no_chad_dist_meas = BHVDistanceMeasurer(no_chad_res.fitted_bifurc_tree, scratch_dir)
+    no_chad_dist_meas = tree_dist_measurer(no_chad_res.fitted_bifurc_tree, scratch_dir)
     new_chad_results = [
         _create_chad_result(fit_res, no_chad_res, no_chad_dist_meas, hanging_chad, chad_par, weight)
         for fit_res, chad_par in zip(fit_results, chad_parent_candidates)]
-    return HangingChadTuneResult(no_chad_res, new_chad_results)
+    chad_tune_res = HangingChadTuneResult(no_chad_res, new_chad_results)
+
+    for chad_res in new_chad_results:
+        logging.info("Chad res: %s", str(chad_res))
+        if "performance" in chad_res.fit_res.train_history[-1]:
+            logging.info("  chad truth: %s", chad_res.fit_res.train_history[-1]["performance"])
+
+    if "performance" in no_chad_res.train_history[-1]:
+        assess_metric = "bhv"
+        all_tree_dists = [c.fit_res.train_history[-1]["performance"][assess_metric] for c in new_chad_results]
+        targ_dists = [c.fit_res.train_history[-1]["performance"]["targ"] for c in new_chad_results]
+        median_tree_dist = np.median(all_tree_dists)
+        tree_scores = [c.tree_score for c in new_chad_results]
+        targ_scores = [c.targ_score for c in new_chad_results]
+        selected_idx = np.argmax([c.score for c in new_chad_results])
+        selected_chad = new_chad_results[selected_idx]
+        logging.info("Best chad %s (%s)", selected_chad, no_chad_dist_meas.name)
+        selected_tree_dist = all_tree_dists[selected_idx]
+        logging.info(
+                "Median %s: %f (%d options) (selected idx %d, better? %s, selected=%f) -- %s",
+                assess_metric,
+                median_tree_dist,
+                len(all_tree_dists),
+                selected_idx,
+                median_tree_dist > selected_tree_dist,
+                selected_tree_dist,
+                no_chad_dist_meas.name)
+        logging.info("all_%s= %s", assess_metric, all_tree_dists)
+        logging.info("targ_dists= %s", targ_dists)
+        logging.info("tree_%s = %s", no_chad_dist_meas.name, tree_scores)
+        logging.info("targ_scores = %s", targ_scores)
+        logging.info("tree_%s vs. %ss %s", no_chad_dist_meas.name, assess_metric, scipy.stats.spearmanr(tree_scores, all_tree_dists))
+        logging.info("targ vs. %ss %s", assess_metric, scipy.stats.spearmanr(targ_scores, all_tree_dists))
+        logging.info("tree_%s vs. targ dists %s",  no_chad_dist_meas.name, scipy.stats.spearmanr(tree_scores, targ_dists))
+        logging.info("targ vs. targ dists %s", scipy.stats.spearmanr(targ_scores, targ_dists))
+    return chad_tune_res
 
 
 def _create_chad_result(
         new_chad_res: LikelihoodScorerResult,
         no_chad_res: LikelihoodScorerResult,
-        no_chad_dist_meas: BHVDistanceMeasurer,
+        no_chad_dist_meas: TreeDistanceMeasurer,
         hanging_chad: HangingChad,
         chad_par: CellLineageTree,
         weight: float = 0.5):

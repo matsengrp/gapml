@@ -537,7 +537,7 @@ class InternalCorrMeasurer(MRCADistanceMeasurer):
             leaf_idxs = np.array([self.leaf_dict[getattr(leaf, self.attr)] for leaf in node])
             node_dist = np.max(tree_mrca_matrix[leaf_idxs, leaf_idxs])
             node_val.append(node_dist)
-        return internal_nodes, node_val
+        return internal_nodes, np.array(node_val)
 
     def get_compare_node_distances(self, internal_nodes, tree_mrca_matrix):
         node_val = []
@@ -545,7 +545,7 @@ class InternalCorrMeasurer(MRCADistanceMeasurer):
             leaf_idxs = np.array([self.leaf_dict[getattr(leaf, self.attr)] for leaf in node])
             node_dist = np.max(tree_mrca_matrix[leaf_idxs, leaf_idxs])
             node_val.append(node_dist)
-        return node_val
+        return np.array(node_val)
 
     def _get_node_val(self, tree):
         tree_mrca_matrix = self._get_mrca_matrix(tree)
@@ -568,4 +568,27 @@ class InternalCorrMeasurer(MRCADistanceMeasurer):
                 self.ref_tree_mrca_matrix)
         corr2, _ = self.corr_func(ref_node_val2, tree_node_val2)
 
-        return (corr1 + corr2)/2
+        logging.info("%f, %f", corr1, corr2)
+        return 1 - (corr1 + corr2)/2
+
+class InternalHeightsMeasurer(InternalCorrMeasurer):
+    name = "internal_heights"
+
+    def get_dist(self, tree):
+        # TODO: SUPER JENK CODE
+        tree_mrca_matrix = self._get_mrca_matrix(tree)
+        tree_node_val1 = self.get_compare_node_distances(
+                self.ref_internal_nodes,
+                tree_mrca_matrix)
+        height_dist1 = np.linalg.norm(self.ref_node_val - tree_node_val1)
+
+        tree_internal_nodes2, tree_node_val2 = self.get_ref_node_distances(
+                tree,
+                tree_mrca_matrix)
+        ref_node_val2 = self.get_compare_node_distances(
+                tree_internal_nodes2,
+                self.ref_tree_mrca_matrix)
+        height_dist2 = np.linalg.norm(ref_node_val2 - tree_node_val2)
+
+        logging.info("hiehg dist %s, %s", height_dist1, height_dist2)
+        return (height_dist1 + height_dist2)/2
