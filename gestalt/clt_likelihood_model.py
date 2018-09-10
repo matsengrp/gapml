@@ -1075,12 +1075,19 @@ class CLTLikelihoodModel:
                                         tf.gather(
                                             params=self.branch_lens,
                                             indices=child.spine_children)))
-                                self.dist_to_half_pen_list.append(tf.reduce_mean(tf.abs(
-                                    prob_stay - tf.constant(0.5, dtype=tf.float64))))
+                                dist_to_half_pen_br = tf.reduce_mean(tf.abs(
+                                    prob_stay - tf.constant(0.5, dtype=tf.float64)))
                         else:
                             prob_stay = tf.diag_part(pt_matrix[child.node_id])[:-1]
-                            self.dist_to_half_pen_list.append(tf.reduce_mean(tf.abs(
-                                    prob_stay - tf.constant(0.5, tf.float64))))
+                            dist_to_half_pen_br = tf.reduce_mean(tf.abs(
+                                    prob_stay - tf.constant(0.5, tf.float64)))
+
+                        scale_pen = tf.constant(1, dtype=tf.float64)
+                        if (hasattr(child, 'is_ghost') and child.is_ghost):
+                            scale_pen = tf.constant(1.0/child.is_ghost, dtype=tf.float64)
+                        if hasattr(child, 'is_my'):
+                            scale_pen = tf.constant(1.0/child.is_my, dtype=tf.float64)
+                        self.dist_to_half_pen_list.append(dist_to_half_pen_br * scale_pen)
 
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.

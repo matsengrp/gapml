@@ -368,6 +368,7 @@ def tune(
     @return HangingChadTuneResult
     """
     assert len(hanging_chad.possible_parents) > 1
+    print(hanging_chad)
 
     # Remove my hanging chad from the orig tree
     # Also track the parent we took it off from so that
@@ -431,14 +432,17 @@ def tune(
             # so we will make sure to ignore those values.
             node.add_feature("nochad_is_leaf", node.is_leaf())
 
-        _add_hanging_chad(tree_copy, chad_par, hanging_chad.node)
+        my_hanging_chad = _add_hanging_chad(tree_copy, chad_par, hanging_chad.node)
+        for my_node in my_hanging_chad.traverse():
+            my_node.add_feature("is_my", len(possible_chad_parents))
+
         for other_idx, other_chad_par in enumerate(possible_chad_parents):
             if idx == other_idx:
                 continue
             else:
                 ghost_hanging_chad = _add_hanging_chad(tree_copy, other_chad_par, hanging_chad.node)
                 for ghost_node in ghost_hanging_chad.traverse():
-                    ghost_node.add_feature("is_ghost", True)
+                    ghost_node.add_feature("is_ghost", len(possible_chad_parents))
                     ghost_node.allele_events_list_str = "%s-GHOST" % ghost_node.allele_events_list_str
         for node in tree_copy.traverse():
             if not hasattr(node, "is_ghost"):
@@ -505,16 +509,34 @@ def tune(
         if assessor is not None:
             logging.info("  chad truth: %s", chad_res.fit_res.train_history[-1]["performance"])
     if assessor is not None:
-        median_bhv = np.median([c.fit_res.train_history[-1]["performance"]["bhv"] for c in chad_tune_res.new_chad_results])
-        selected_idx = np.argmax([c.score for c in chad_tune_res.new_chad_results])
-        selected_chad = chad_tune_res.new_chad_results[selected_idx]
-        selected_bhv = selected_chad.fit_res.train_history[-1]["performance"]["bhv"]
-        logging.info("Best chad %s", selected_chad)
+        assess_metric = "bhv"
+        new_chad_results = chad_tune_res.new_chad_results
+        all_tree_dists = [c.fit_res.train_history[-1]["performance"][assess_metric] for c in new_chad_results]
+        targ_dists = [c.fit_res.train_history[-1]["performance"]["targ"] for c in new_chad_results]
+        median_tree_dist = np.median(all_tree_dists)
+        tree_scores = [c.tree_score for c in new_chad_results]
+        targ_scores = [c.targ_score for c in new_chad_results]
+        selected_idx = np.argmax([c.score for c in new_chad_results])
+        selected_chad = new_chad_results[selected_idx]
+        logging.info("Best chad %s (%s)", selected_chad, no_chad_dist_meas.name)
+        selected_tree_dist = all_tree_dists[selected_idx]
         logging.info(
-                "Median bhv: %f (selected better? %s, selected=%f)",
-                median_bhv,
-                median_bhv > selected_bhv,
-                selected_bhv)
+                "Median %s: %f (%d options) (selected idx %d, better? %s, selected=%f) -- %s",
+                assess_metric,
+                median_tree_dist,
+                len(all_tree_dists),
+                selected_idx,
+                median_tree_dist > selected_tree_dist,
+                selected_tree_dist,
+                no_chad_dist_meas.name)
+        logging.info("all_%s= %s", assess_metric, all_tree_dists)
+        logging.info("targ_dists= %s", targ_dists)
+        logging.info("tree_%s = %s", no_chad_dist_meas.name, tree_scores)
+        logging.info("targ_scores = %s", targ_scores)
+        logging.info("tree_%s vs. %ss %s", no_chad_dist_meas.name, assess_metric, scipy.stats.spearmanr(tree_scores, all_tree_dists))
+        logging.info("targ vs. %ss %s", assess_metric, scipy.stats.spearmanr(targ_scores, all_tree_dists))
+        logging.info("tree_%s vs. targ dists %s",  no_chad_dist_meas.name, scipy.stats.spearmanr(tree_scores, targ_dists))
+        logging.info("targ vs. targ dists %s", scipy.stats.spearmanr(targ_scores, targ_dists))
 
     return chad_tune_res
 

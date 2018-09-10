@@ -37,7 +37,7 @@ class ModelAssessor:
         Note: is able to compare the `other_tree` if `other_tree` contains a subset of the leaves
         in the reference tree
         """
-        print('assessing ....', len(other_tree), len(self.ref_tree_uniq_leaves))
+        #print('assessing ....', len(other_tree), len(self.ref_tree_uniq_leaves))
         # TODO: this is to handle ghost nodes.... remove this eventually. do this properly
         if len(other_tree) <= len(self.ref_tree_uniq_leaves):
             # TODO: this assumes that the other tree is a subset of the ref tree
