@@ -365,6 +365,8 @@ def _do_random_rearrange(tree):
 
 def main(args=sys.argv[1:]):
     args = parse_args()
+    np.random.seed(args.seed)
+    random.seed(args.seed)
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
 
@@ -388,8 +390,8 @@ def main(args=sys.argv[1:]):
     tuning_history = []
     recent_chads = set()
     for i in range(args.num_chad_tune_iters):
-        np.random.seed(args.seed + i)
-        random.seed(args.seed + i)
+        np.random.seed(args.seed + i + 1)
+        random.seed(args.seed + i + 1)
 
         penalty_tune_result = None
         if i < args.num_penalty_tune_iters:
