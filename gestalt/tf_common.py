@@ -51,7 +51,7 @@ def py_func(func, inp, Tout, stateful=True, name=None, grad=None):
     (Code was copied from the internet)
     """
     # Need to generate a unique name to avoid duplicates:
-    rnd_name = 'PyFuncGrad' + str(np.random.randint(0, 1E+8))
+    rnd_name = 'PyFuncGrad' + str(int(np.abs(np.random.randint(0, 1E+8) + int(time.time()) - 1000000000)))
 
     tf.RegisterGradient(rnd_name)(grad)
     g = tf.get_default_graph()

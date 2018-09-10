@@ -31,11 +31,12 @@ GROWTH_DICT = {
         "max_leaves": 200,
     },
     "dome": {
-        "sampling_rate": 0.35,
+        "sampling_rate": 0.2,
+        #"sampling_rate": 0.1,
         "start_birth": 14,
-        "birth_intercept": -0.8,
+        "birth_intercept": 0.05,
         "death_lambda": 0.2,
-        "birth_decay": -2.1,
+        "birth_decay": -1.8,
         "lambda_sequence": [.65, .6, .55, .5, .45, .4, .35],
         "double": 0.2,
         "min_leaves": 20,
@@ -45,13 +46,15 @@ GROWTH_DICT = {
 
 nest.add(
     'model_seed',
-    [7],
+    [0],
+    #[9],
     label_func=lambda c: 'model_seed%d' % c,
 )
 
 nest.add(
     'seed',
-    [7]
+    [0],
+    #[9],
 )
 
 nest.add(
@@ -163,7 +166,8 @@ def run_topology(env, outdir, c):
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
     if c['num_barcodes'] == 1:
-        penalty_params = "3200,1600,800,400"
+        #penalty_params = "6000,3200,1600"
+        penalty_params = "16000,8000,4000,2000"
     elif c['num_barcodes'] == 3:
         penalty_params = "192,48,12,3"
     elif c['num_barcodes'] == 9:
@@ -184,25 +188,27 @@ def run_MLE(env, outdir, c):
         '--dist-to-half-pen-params',
         penalty_params,
         '--num-penalty-tune-iters',
-        1,
-        '--num-penalty-tune-splits',
-        3,
-        '--num-chad-tune-iters',
         2,
+        '--num-penalty-tune-splits',
+        5,
+        '--num-chad-tune-iters',
+        10,
         '--max-chad-tune-search',
-        4,
+        30,
         '--max-sum-states 2000',
         '--max-extra-steps 2',
         '--max-iters 10000',
         '--num-inits 1',
         '--tot-time-known',
         '--do-refit',
-        '--num-processes 4',
+        '--num-processes 5',
+        '--num-init-random-rearrange 40',
+        '--stability-weight 0.5'
     ]
     return env.Command(
         [
-            join(outdir, 'tune_fitted.pkl'),
-            join(outdir, 'tune_fitted.txt')],
+            join(outdir, 'tune_fitted_warm.pkl'),
+            join(outdir, 'tune_fitted_warm.txt')],
         [
             c['restrict_observed_alleles'][0],
             c['run_topology'][0],

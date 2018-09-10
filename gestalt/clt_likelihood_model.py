@@ -935,9 +935,11 @@ class CLTLikelihoodModel:
         if create_gradient:
             logging.info("Computing gradients....")
             st_time = time.time()
-            self.smooth_log_lik_grad = self.adam_opt.compute_gradients(
-                self.smooth_log_lik,
-                var_list=[self.all_vars])
+            #self.smooth_log_lik_grad = self.adam_opt.compute_gradients(
+            #    self.smooth_log_lik,
+            #    var_list=[self.all_vars])
+            #logging.info("Finished making me gradient, time: %d", time.time() - st_time)
+            #print("time.time() - st_time", time.time() - st_time)
             self.adam_train_op = self.adam_opt.minimize(-self.smooth_log_lik, var_list=self.all_vars)
             logging.info("Finished making me an optimizer, time: %d", time.time() - st_time)
 
@@ -1327,15 +1329,17 @@ class CLTLikelihoodModel:
         collapsed_tree._remove_single_child_unobs_nodes(scratch_tree)
 
         # label node ids but dont override existing leaf node ids
-        leaf_ids = set([leaf.node_id for leaf in scratch_tree])
+        seen_ids = set([leaf.node_id for leaf in scratch_tree])
         node_id_counter = 0
         tot_nodes = 0
         for node in scratch_tree.traverse():
             tot_nodes += 1
             if not node.is_leaf():
-                while node_id_counter in leaf_ids:
+                while node_id_counter in seen_ids:
                     node_id_counter += 1
                 node.add_feature("node_id", node_id_counter)
+                seen_ids.add(node_id_counter)
+            while node_id_counter in seen_ids:
                 node_id_counter += 1
         assert node_id_counter == tot_nodes
 

@@ -1,4 +1,5 @@
 import numpy as np
+import itertools
 from typing import List, Dict
 import logging
 
@@ -10,6 +11,8 @@ from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from common import get_randint
 from model_assessor import ModelAssessor
 from tree_distance import BHVDistanceMeasurer
+from tree_distance import InternalHeightsMeasurer, TreeDistanceMeasurer, InternalMultifurcMeasurer
+from optim_settings import KnownModelParams
 
 
 """
@@ -100,21 +103,18 @@ class HangingChad:
         self.possible_parents = possible_parents
 
     def __str__(self):
-        return "%s<=%s" % (
+        return "%s<=%s (%d leaves)" % (
             self.node.allele_events_list_str,
-            [p.allele_events_list_str for p in self.possible_parents])
+            [p.allele_events_list_str for p in self.possible_parents],
+            len(self.node))
 
-
-def _get_parsimony_score(node: CellLineageTree, up_node: CellLineageTree):
+def _get_parsimony_score_list(node_evts, node_up_evts):
     """
     Gets the parsimony score on a single potential branch
     @param node: a potential child node
     @param up_node: a potential parent node
     @return parsimony score, returns None if this branch is impossible
     """
-    node_evts = [set(allele_evts.events) for allele_evts in node.allele_events_list]
-    node_up_evts = [set(allele_evts.events) for allele_evts in up_node.allele_events_list]
-
     # Check if all events in the parent node are hidden or are in the child node
     hides_all_remain = all([
         any([node_evt.hides(remain_node_up_evt) for node_evt in n_evts])
@@ -130,6 +130,18 @@ def _get_parsimony_score(node: CellLineageTree, up_node: CellLineageTree):
     return num_evts
 
 
+def _get_parsimony_score(node: CellLineageTree, up_node: CellLineageTree):
+    """
+    Gets the parsimony score on a single potential branch
+    @param node: a potential child node
+    @param up_node: a potential parent node
+    @return parsimony score, returns None if this branch is impossible
+    """
+    node_evts = [set(allele_evts.events) for allele_evts in node.allele_events_list]
+    node_up_evts = [set(allele_evts.events) for allele_evts in up_node.allele_events_list]
+    return _get_parsimony_score_list(node_evts, node_up_evts)
+
+
 def get_chads(tree: CellLineageTree):
     """
     Find the hanging chads in the tree without increasing the parsimony score
@@ -137,9 +149,25 @@ def get_chads(tree: CellLineageTree):
     @param tree: the tree that we are supposed to find hanging chads in
     @return List[HangingChad]
     """
+    old_len = len(tree)
+    for node in tree.get_descendants("preorder"):
+        if node.node_id is not None:
+            pars_score = _get_parsimony_score(node, node.up)
+            if pars_score > 1:
+                unifurc_parent = CellLineageTree(
+                        node.allele_list,
+                        node.allele_events_list)
+                unifurc_parent.allele_events_list_str = None
+                unifurc_parent.add_feature("node_id", None)
+                node.up.add_child(unifurc_parent)
+                node.detach()
+                unifurc_parent.add_child(node)
+    print(len(tree), old_len)
+    assert len(tree) == old_len
+
     hanging_chads = []
     for node in tree.traverse("preorder"):
-        if node.is_root():
+        if node.is_root() or node.node_id is None:
             continue
 
         # Get node's parsimony score
@@ -158,17 +186,63 @@ def get_chads(tree: CellLineageTree):
         # is going to also dangle off the same multifurc so it is pointless to consider
         # hanging the chad off of this other node. Instead we handle that case by the continuous
         # topology tuner
+        # TODO: spaggheti code
         possible_parents = {}
         for potential_par_node in tree.traverse("preorder"):
-            if potential_par_node.allele_events_list_str in possible_parents:
-                continue
+            if potential_par_node.node_id is None:
+                child_node = potential_par_node.get_children()[0]
+                if child_node.allele_events_list_str in possible_parents:
+                    continue
 
-            potential_score = _get_parsimony_score(node, potential_par_node)
-            if potential_score is None or parsimony_score == 0:
-                continue
+                potential_score = _get_parsimony_score(node, child_node)
+                if potential_score == 0 or parsimony_score == 0:
+                    continue
 
-            if potential_score == parsimony_score:
-                possible_parents[potential_par_node.allele_events_list_str] = potential_par_node
+                if potential_score is not None and potential_score == parsimony_score:
+                    possible_parents[child_node.allele_events_list_str] = potential_par_node
+                    # Found a parent. dont need unifurc parent
+                    continue
+
+                num_subevents = [range(len(evts.events)) for evts in potential_par_node.allele_events_list]
+                num_all_events = sum([len(evts.events) for evts in potential_par_node.allele_events_list])
+                for subevent_tup in itertools.product(*num_subevents):
+                    event_combos = []
+                    for event_count, all_evts in zip(subevent_tup, potential_par_node.allele_events_list):
+                        event_combos.append([
+                            list(s) for s in itertools.combinations(all_evts.events, event_count)])
+
+                    possible_unifurc_states = itertools.product(*event_combos)
+                    for unifurc_state in possible_unifurc_states:
+                        unifurc_state = [set(s) for s in unifurc_state]
+                        tot_unifurc_events = sum([
+                            len(events) for events in unifurc_state])
+                        if tot_unifurc_events == num_all_events:
+                            continue
+                        node_evts = [set(allele_evts.events) for allele_evts in node.allele_events_list]
+                        grand_evts = [set(allele_evts.events) for allele_evts in potential_par_node.up.allele_events_list]
+                        pars_state_grand = _get_parsimony_score_list(
+                                unifurc_state,
+                                grand_evts)
+                        if pars_state_grand is None or pars_state_grand == 0:
+                            continue
+                        pars_state = _get_parsimony_score_list(node_evts, unifurc_state)
+                        if pars_state is None:
+                            continue
+                        if pars_state == parsimony_score:
+                            unifurc_key = str([str(s) for s in unifurc_state])
+                            possible_parents[unifurc_key] = potential_par_node
+                            print("found one....", parsimony_score, potential_score, child_node.allele_events_list_str)
+                            print("found one....", parsimony_score, unifurc_state, node.allele_events_list_str)
+            else:
+                if potential_par_node.allele_events_list_str in possible_parents:
+                    continue
+
+                potential_score = _get_parsimony_score(node, potential_par_node)
+                if potential_score is None or parsimony_score == 0:
+                    continue
+
+                if potential_score == parsimony_score:
+                    possible_parents[potential_par_node.allele_events_list_str] = potential_par_node
 
         if len(possible_parents) > 1:
             hanging_chads.append(HangingChad(
@@ -176,7 +250,10 @@ def get_chads(tree: CellLineageTree):
                     list(possible_parents.values()),
                     parsimony_score))
 
-    logging.info("Number of hanging chads found: %d", len(hanging_chads))
+    logging.info("total number of hanging chads %d", len(hanging_chads))
+    for c in hanging_chads:
+        logging.info("Chad %s", c)
+    1/0
     return hanging_chads
 
 

@@ -23,7 +23,6 @@ from common import create_directory, get_randint, save_data
 import file_readers
 import collapsed_tree
 
-
 def parse_args():
     parser = argparse.ArgumentParser(
             description='tune over topologies and fit model parameters')
@@ -410,9 +409,6 @@ def main(args=sys.argv[1:]):
         # cause nodes are getting renumbered...
         hanging_chads = hanging_chad_finder.get_chads(tree)
         has_chads = len(hanging_chads) > 0
-        logging.info("total number of hanging chads %d", len(hanging_chads))
-        for c in hanging_chads:
-            logging.info("Chad %s", c)
 
         # pick a chad at random
         chad_tune_result = None
@@ -421,7 +417,7 @@ def main(args=sys.argv[1:]):
             # Pick one that is new
             random_chad = random.choice([
                 c for c in hanging_chads
-                if c.node.allele_events_list_str not in recent_chads])
+                if (c.node.allele_events_list_str not in recent_chads)])
             # Track the chads we tuned recently
             recent_chads.add(random_chad.node.allele_events_list_str)
             # If we have seen all the chads, reset the chad tracker
@@ -429,10 +425,9 @@ def main(args=sys.argv[1:]):
                 recent_chads = set()
 
             logging.info(
-                    "Iter %d: Tuning chad %s (%d leaves)",
+                    "Iter %d: Tuning chad %s",
                     i,
-                    random_chad,
-                    len(random_chad.node))
+                    random_chad)
             chad_tune_result = hanging_chad_finder.tune(
                 random_chad,
                 tree,
