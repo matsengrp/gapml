@@ -1085,34 +1085,39 @@ class CLTLikelihoodModel:
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.
                     # These down probs are ordered according to the child node's numbering of the TTs states
-                    with tf.name_scope("recurse%d" % node.node_id):
-                        ch_ordered_down_probs = tf.matmul(
-                                tf.multiply(pt_matrix[child.node_id], trim_probs[child.node_id]),
-                                Lprob[child.node_id])
+                    if hasattr(node, "is_ghost") and node.is_ghost:
+                        node_wrapper = transition_wrappers[node.node_id][bcode_idx]
+                        log_Lprob_node = np.zeros((node_wrapper.num_possible_states + 1, 1))
+                    else:
+                        # Not a ghost node. do the same old
+                        with tf.name_scope("recurse%d" % node.node_id):
+                            ch_ordered_down_probs = tf.matmul(
+                                    tf.multiply(pt_matrix[child.node_id], trim_probs[child.node_id]),
+                                    Lprob[child.node_id])
 
-                    with tf.name_scope("rearrange%d" % node.node_id):
-                        if not node.is_root():
-                            # Reorder summands according to node's numbering of tract_repr states
-                            node_wrapper = transition_wrappers[node.node_id][bcode_idx]
+                        with tf.name_scope("rearrange%d" % node.node_id):
+                            if not node.is_root():
+                                # Reorder summands according to node's numbering of tract_repr states
+                                node_wrapper = transition_wrappers[node.node_id][bcode_idx]
 
-                            down_probs = CLTLikelihoodModel._reorder_likelihoods(
-                                    ch_ordered_down_probs,
-                                    node_wrapper,
-                                    child_wrapper)
-                        else:
-                            # For the root node, we just want the probability where the root node is unmodified
-                            # No need to reorder
-                            ch_id = child_wrapper.key_dict[TargetStatus()]
-                            down_probs = ch_ordered_down_probs[ch_id]
+                                down_probs = CLTLikelihoodModel._reorder_likelihoods(
+                                        ch_ordered_down_probs,
+                                        node_wrapper,
+                                        child_wrapper)
+                            else:
+                                # For the root node, we just want the probability where the root node is unmodified
+                                # No need to reorder
+                                ch_id = child_wrapper.key_dict[TargetStatus()]
+                                down_probs = ch_ordered_down_probs[ch_id]
 
-                        down_probs_dict[child.node_id] = down_probs
-                        if child.is_leaf():
-                            leaf_abundance_weight = tf.constant(
-                                1 + (child.abundance - 1) * self.abundance_weight,
-                                dtype=tf.float64)
-                        else:
-                            leaf_abundance_weight = tf.constant(1, dtype=tf.float64)
-                        log_Lprob_node = log_Lprob_node + tf.log(down_probs) * leaf_abundance_weight
+                            down_probs_dict[child.node_id] = down_probs
+                            if child.is_leaf():
+                                leaf_abundance_weight = tf.constant(
+                                    1 + (child.abundance - 1) * self.abundance_weight,
+                                    dtype=tf.float64)
+                            else:
+                                leaf_abundance_weight = tf.constant(1, dtype=tf.float64)
+                            log_Lprob_node = log_Lprob_node + tf.log(down_probs) * leaf_abundance_weight
 
                 # Handle numerical underflow
                 log_scaling_term = tf.reduce_max(log_Lprob_node)
