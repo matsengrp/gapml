@@ -11,8 +11,6 @@ from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from common import get_randint
 from model_assessor import ModelAssessor
 from tree_distance import BHVDistanceMeasurer
-from tree_distance import InternalHeightsMeasurer, TreeDistanceMeasurer, InternalMultifurcMeasurer
-from optim_settings import KnownModelParams
 
 
 """
@@ -141,10 +139,10 @@ def _get_parsimony_score(node: CellLineageTree, up_node: CellLineageTree):
     node_up_evts = [set(allele_evts.events) for allele_evts in up_node.allele_events_list]
     return _get_parsimony_score_list(node_evts, node_up_evts)
 
-
-def get_chads(tree: CellLineageTree):
+def get_all_chads(tree: CellLineageTree):
     """
     Find the hanging chads in the tree without increasing the parsimony score
+    this finds them ALL -- but introduces ghost nodes... need to rewrite probably
 
     @param tree: the tree that we are supposed to find hanging chads in
     @return List[HangingChad]
@@ -176,7 +174,6 @@ def get_chads(tree: CellLineageTree):
 
         # Determine if there is another place in the tree where we can preserve
         # parsimony score
-        # TODO: this still does not find every possible location for the hanging chads
         # it is possible that there is a node omitted in the parsimony tree that
         # this node can be a child of
         # Note: we are using a dictionary and preorder traversal so we don't consider
@@ -253,7 +250,59 @@ def get_chads(tree: CellLineageTree):
     logging.info("total number of hanging chads %d", len(hanging_chads))
     for c in hanging_chads:
         logging.info("Chad %s", c)
-    1/0
+    return hanging_chads
+
+
+def get_chads(tree: CellLineageTree):
+    """
+    Find the hanging chads in the tree without increasing the parsimony score
+
+    @param tree: the tree that we are supposed to find hanging chads in
+    @return List[HangingChad]
+    """
+    hanging_chads = []
+    for node in tree.traverse("preorder"):
+        if node.is_root() or node.node_id is None:
+            continue
+
+        # Get node's parsimony score
+        parsimony_score = _get_parsimony_score(node, node.up)
+        assert parsimony_score is not None
+
+        # Determine if there is another place in the tree where we can preserve
+        # parsimony score
+        # TODO: this still does not find every possible location for the hanging chads
+        # it is possible that there is a node omitted in the parsimony tree that
+        # this node can be a child of
+        # Note: we are using a dictionary and preorder traversal so we don't consider
+        # hanging the chad off of two nodes with the same allele_events_list_str.
+        # In particular, we want to hang off of the earliest occurance of the allele_events_list_str
+        # since that is the multifurc location. The other node with the same allele_events_list_str
+        # is going to also dangle off the same multifurc so it is pointless to consider
+        # hanging the chad off of this other node. Instead we handle that case by the continuous
+        # topology tuner
+        # TODO: spaggheti code
+        possible_parents = {}
+        for potential_par_node in tree.traverse("preorder"):
+            if potential_par_node.allele_events_list_str in possible_parents:
+                continue
+
+            potential_score = _get_parsimony_score(node, potential_par_node)
+            if potential_score is None or parsimony_score == 0:
+                continue
+
+            if potential_score == parsimony_score:
+                possible_parents[potential_par_node.allele_events_list_str] = potential_par_node
+
+        if len(possible_parents) > 1:
+            hanging_chads.append(HangingChad(
+                    node,
+                    list(possible_parents.values()),
+                    parsimony_score))
+
+    logging.info("total number of hanging chads %d", len(hanging_chads))
+    for c in hanging_chads:
+        logging.info("Chad %s", c)
     return hanging_chads
 
 
@@ -439,7 +488,6 @@ def tune(
                 median_bhv,
                 median_bhv > selected_bhv,
                 selected_bhv)
-
 
     return chad_tune_res
 
