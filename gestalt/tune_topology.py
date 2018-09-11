@@ -23,7 +23,7 @@ from common import create_directory, get_randint, save_data
 import file_readers
 import collapsed_tree
 
-def parse_args():
+def parse_args(args):
     parser = argparse.ArgumentParser(
             description='tune over topologies and fit model parameters')
     parser.add_argument(
@@ -144,7 +144,9 @@ def parse_args():
         default=None)
 
     parser.set_defaults(tot_time_known=True)
-    args = parser.parse_args()
+    print("args1", args)
+    args = parser.parse_args(args)
+    print("args2", args)
 
     assert args.log_barr_pen_param >= 0
     args.dist_to_half_pen_params = list(sorted(
@@ -366,7 +368,8 @@ def _do_random_rearrange(tree):
 
 
 def main(args=sys.argv[1:]):
-    args = parse_args()
+    print("main args", args)
+    args = parse_args(args)
     np.random.seed(args.seed)
     random.seed(args.seed)
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
