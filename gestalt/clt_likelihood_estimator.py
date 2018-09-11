@@ -53,8 +53,8 @@ class CLTPenalizedEstimator(CLTEstimator):
             print_iter: int = 1,
             save_iter: int = 20,
             assessor: ModelAssessor = None,
-            conv_thres: float = 1e-8,
-            min_iters: int = 10):
+            conv_thres: float = 1e-7,
+            min_iters: int = 20):
         """
         Finds the best model parameters
         @param log_barr: penalty parameter for the log barrier function
@@ -73,8 +73,10 @@ class CLTPenalizedEstimator(CLTEstimator):
         # Check tree is ultrametric
         self.model.get_fitted_bifurcating_tree()
 
-        pen_log_lik, log_lik = self.model.sess.run(
-            [self.model.smooth_log_lik, self.model.log_lik],
+        pen_log_lik, log_lik, dist_to_roots = self.model.sess.run(
+            [self.model.smooth_log_lik,
+                self.model.log_lik,
+                self.model.dist_to_root],
             feed_dict=feed_dict)
         var_dict = self.model.get_vars_as_dict()
 
@@ -100,12 +102,13 @@ class CLTPenalizedEstimator(CLTEstimator):
                 if k not in ["branch_len_offsets_proportion", "branch_len_inners", "boost_probs"]:
                     logging.info("%s: %s", k, v)
 
-            _, pen_log_lik, log_lik, dist_to_half_pen = self.model.sess.run(
+            _, pen_log_lik, log_lik, dist_to_half_pen, dist_to_roots = self.model.sess.run(
                     [
                         self.model.adam_train_op,
                         self.model.smooth_log_lik,
                         self.model.log_lik,
-                        self.model.dist_to_half_pen],
+                        self.model.dist_to_half_pen,
+                        self.model.dist_to_root],
                     feed_dict=feed_dict)
 
             iter_info = {
@@ -113,7 +116,8 @@ class CLTPenalizedEstimator(CLTEstimator):
                     "dist_to_half_pen": dist_to_half_pen,
                     "log_lik": log_lik,
                     "pen_log_lik": pen_log_lik,
-                    "target_rates": var_dict["target_lams"]}
+                    "target_rates": var_dict["target_lams"],
+            }
             if i % print_iter == (print_iter - 1):
                 logging.info(
                     "iter %d pen log lik %f log lik %f dist-to-half pen %f",
@@ -125,6 +129,7 @@ class CLTPenalizedEstimator(CLTEstimator):
 
             if i % save_iter == (save_iter - 1):
                 iter_info["var_dict"] = var_dict
+                iter_info["dist_to_roots"] = dist_to_roots
                 logging.info("iter %d, train time %f", i, time.time() - st_time)
                 if assessor is not None:
                     bifurc_tree = self.model.get_fitted_bifurcating_tree()
@@ -139,6 +144,8 @@ class CLTPenalizedEstimator(CLTEstimator):
                 break
             prev_pen_log_lik = pen_log_lik[0]
 
+        train_history[-1]["var_dict"] = var_dict
+        train_history[-1]["dist_to_roots"] = dist_to_roots
         if assessor is not None:
             bifurc_tree = self.model.get_fitted_bifurcating_tree()
             performance_dict = assessor.assess(var_dict, bifurc_tree)

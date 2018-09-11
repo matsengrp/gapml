@@ -411,20 +411,23 @@ def main(args=sys.argv[1:]):
         # cause nodes are getting renumbered...
         hanging_chads = hanging_chad_finder.get_chads(tree)
         has_chads = len(hanging_chads) > 0
+        num_old_leaves = len(tree)
 
         # pick a chad at random
         chad_tune_result = None
         if has_chads and args.max_chad_tune_search > 1:
             # Now tune the hanging chads!
             # Pick one that is new
-            random_chad = random.choice([
+            chad_choices = [
                 c for c in hanging_chads
-                if (c.node.allele_events_list_str not in recent_chads)])
+                if c.node.allele_events_list_str not in recent_chads]
+            if len(chad_choices) == 0:
+                # If we have seen all the chads, reset the chad tracker
+                chad_choices = hanging_chads
+                recent_chads = set()
+            random_chad = random.choice(chad_choices)
             # Track the chads we tuned recently
             recent_chads.add(random_chad.node.allele_events_list_str)
-            # If we have seen all the chads, reset the chad tracker
-            if len(recent_chads) == len(hanging_chads):
-                recent_chads = set()
 
             logging.info(
                     "Iter %d: Tuning chad %s",
@@ -439,6 +442,8 @@ def main(args=sys.argv[1:]):
                 assessor,
             )
             tree, fit_params, best_res = chad_tune_result.get_best_result()
+            print("leaf check!", len(tree), num_old_leaves)
+            assert len(tree) == num_old_leaves
         else:
             best_res = fit_multifurc_tree(
                     tree,

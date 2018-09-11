@@ -122,6 +122,30 @@ class CLTLikelihoodModel:
                 branch_len_inners,
                 branch_len_offsets_proportion,
                 tot_time_extra)
+
+        # Process branch len offsets and inners
+        if self.known_params.branch_lens:
+            self.branch_len_inners = tf.scatter_nd(
+                [[a] for a in self.known_params.branch_len_inners_idxs],
+                self.branch_len_inners_known,
+                (self.num_nodes,)) + tf.scatter_nd(
+                [[a] for a in self.known_params.branch_len_inners_unknown_idxs],
+                self.branch_len_inners_unknown,
+                (self.num_nodes,))
+            self.branch_len_offsets_proportion = tf.scatter_nd(
+                [[a] for a in self.known_params.branch_len_offsets_proportion_idxs],
+                self.branch_len_offsets_proportion_known,
+                (self.num_nodes,)) + tf.scatter_nd(
+                [[a] for a in self.known_params.branch_len_offsets_proportion_unknown_idxs],
+                self.branch_len_offsets_proportion_unknown,
+                (self.num_nodes,))
+            assert len(self.known_params.branch_len_offsets_proportion_unknown_idxs) > 0
+            assert len(self.known_params.branch_len_inners_unknown_idxs) > 0
+        else:
+            self.branch_len_inners = self.branch_len_inners_unknown
+            self.branch_len_offsets_proportion = self.branch_len_offsets_proportion_unknown
+
+
         self._create_poisson_distributions()
         if self.topology:
             assert not self.topology.is_leaf()
@@ -171,8 +195,8 @@ class CLTLikelihoodModel:
                     boost_softmax_weights if self.known_params.indel_params else [],
                     trim_zero_probs if self.known_params.indel_params else [],
                     insert_zero_prob if self.known_params.indel_params else [],
-                    branch_len_inners if self.known_params.branch_lens else [],
-                    branch_len_offsets_proportion if self.known_params.branch_lens else []])
+                    branch_len_inners[self.known_params.branch_len_inners] if self.known_params.branch_lens else [],
+                    branch_len_offsets_proportion[self.known_params.branch_len_offsets_proportion] if self.known_params.branch_lens else []])
         self.known_vars = tf.Variable(known_model_params, dtype=tf.float64)
         self.known_vars_ph = tf.placeholder(tf.float64, shape=self.known_vars.shape)
         self.assign_known_op = self.known_vars.assign(self.known_vars_ph)
@@ -217,13 +241,13 @@ class CLTLikelihoodModel:
             prev_size = up_to_size
             up_to_size += 1
             self.insert_zero_prob = self.known_vars[prev_size: up_to_size]
-        prev_size = up_to_size
         if self.known_params.branch_lens:
-            up_to_size += branch_len_inners.size
-            self.branch_len_inners = self.known_vars[prev_size: up_to_size]
             prev_size = up_to_size
-            up_to_size += branch_len_offsets_proportion.size
-            self.branch_len_offsets_proportion = self.known_vars[prev_size: up_to_size]
+            up_to_size += np.sum(self.known_params.branch_len_inners)
+            self.branch_len_inners_known = self.known_vars[prev_size: up_to_size]
+            prev_size = up_to_size
+            up_to_size += np.sum(self.known_params.branch_len_offsets_proportion)
+            self.branch_len_offsets_proportion_known = self.known_vars[prev_size: up_to_size]
 
     def _create_poisson_distributions(self):
         # Create my poisson distributions
@@ -266,8 +290,8 @@ class CLTLikelihoodModel:
                     [] if self.known_params.indel_params else boost_softmax_weights,
                     [] if self.known_params.indel_params else inv_sigmoid(trim_zero_probs),
                     [] if self.known_params.indel_params else inv_sigmoid(insert_zero_prob),
-                    [] if self.known_params.branch_lens else np.log(branch_len_inners),
-                    [] if self.known_params.branch_lens else inv_sigmoid(branch_len_offsets_proportion)])
+                    np.log(branch_len_inners[self.known_params.branch_len_inners_unknown] if self.known_params.branch_lens else branch_len_inners),
+                    inv_sigmoid(branch_len_offsets_proportion[self.known_params.branch_len_offsets_proportion_unknown] if self.known_params.branch_lens else branch_len_offsets_proportion)])
         self.all_vars = tf.Variable(model_params, dtype=tf.float64)
         self.all_vars_ph = tf.placeholder(tf.float64, shape=self.all_vars.shape)
         self.assign_op = self.all_vars.assign(self.all_vars_ph)
@@ -313,23 +337,22 @@ class CLTLikelihoodModel:
             up_to_size += 1
             self.insert_zero_prob = tf.sigmoid(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
-        if not self.known_params.branch_lens:
-            up_to_size += branch_len_inners.size
-            self.branch_len_inners = tf.exp(self.all_vars[prev_size: up_to_size])
-            prev_size = up_to_size
-            up_to_size += branch_len_offsets_proportion.size
-            self.branch_len_offsets_proportion = tf.sigmoid(self.all_vars[prev_size: up_to_size])
+        up_to_size += np.sum(self.known_params.branch_len_inners_unknown) if self.known_params.branch_lens else branch_len_inners.size
+        self.branch_len_inners_unknown = tf.exp(self.all_vars[prev_size: up_to_size])
+        prev_size = up_to_size
+        up_to_size += np.sum(self.known_params.branch_len_offsets_proportion_unknown) if self.known_params.branch_lens else branch_len_offsets_proportion.size
+        self.branch_len_offsets_proportion_unknown = tf.sigmoid(self.all_vars[prev_size: up_to_size])
 
     def _create_distance_to_root_dict(self):
         # Create distance to root tensors for all internal nodes
-        self.dist_to_root = {self.root_node_id: 0}
+        self.dist_to_root = {self.root_node_id: tf.constant(0, dtype=tf.float64)}
         for node in self.topology.get_descendants("preorder"):
             if node.is_leaf():
-                continue
+                self.dist_to_root[node.node_id] = self.tot_time
+            else:
+                self.dist_to_root[node.node_id] = self.dist_to_root[node.up.node_id] + self.branch_len_inners[node.node_id]
 
-            self.dist_to_root[node.node_id] = self.dist_to_root[node.up.node_id] + self.branch_len_inners[node.node_id]
-
-        branch_offsets = {self.root_node_id: 0}
+        branch_offsets = {self.root_node_id: tf.constant(0, dtype=tf.float64)}
         for node in self.topology.get_descendants("preorder"):
             if not node.up.is_resolved_multifurcation() and node.is_leaf():
                 # A leaf node, use its offset to determine branch length
@@ -441,8 +464,8 @@ class CLTLikelihoodModel:
             [] if not self.known_params.indel_params else boost_softmax_weights,
             [] if not self.known_params.indel_params else trim_zero_probs,
             [] if not self.known_params.indel_params else insert_zero_prob,
-            [] if not self.known_params.branch_lens else branch_len_inners,
-            [] if not self.known_params.branch_lens else branch_len_offsets_proportion])
+            branch_len_inners[self.known_params.branch_len_inners] if self.known_params.branch_lens else [],
+            branch_len_offsets_proportion[self.known_params.branch_len_offsets_proportion] if self.known_params.branch_lens else []])
         init_val = np.concatenate([
             [] if self.known_params.tot_time else np.log([tot_time_extra]),
             [] if self.known_params.target_lams else np.log(target_lams),
@@ -454,8 +477,8 @@ class CLTLikelihoodModel:
             [] if self.known_params.indel_params else boost_softmax_weights,
             [] if self.known_params.indel_params else inv_sigmoid(trim_zero_probs),
             [] if self.known_params.indel_params else inv_sigmoid(insert_zero_prob),
-            [] if self.known_params.branch_lens else np.log(branch_len_inners),
-            [] if self.known_params.branch_lens else inv_sigmoid(branch_len_offsets_proportion)])
+            np.log(branch_len_inners[self.known_params.branch_len_inners_unknown] if self.known_params.branch_lens else branch_len_inners),
+            inv_sigmoid(branch_len_offsets_proportion[self.known_params.branch_len_offsets_proportion_unknown] if self.known_params.branch_lens else branch_len_offsets_proportion)])
 
         self.sess.run(
             [self.assign_known_op, self.assign_op],
