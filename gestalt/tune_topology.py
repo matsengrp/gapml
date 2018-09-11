@@ -299,7 +299,8 @@ def do_refit_bifurc_tree(
     # Copy over the branch lengths
     br_lens = np.ones(num_nodes) * 1e-10
     for node in refit_bifurc_tree.traverse():
-        br_lens[node.node_id] = node.dist
+        assert node.dist >= 0
+        br_lens[node.node_id] = max(node.dist, 1e-10)
         node.resolved_multifurcation = True
     param_dict["branch_len_inners"] = br_lens
     param_dict["branch_len_offsets_proportion"] = np.ones(num_nodes) * 1e-10
@@ -319,7 +320,8 @@ def do_refit_bifurc_tree(
         transition_wrap_maker,
         fit_param_list=[param_dict],
         known_params=args.known_params,
-        assessor=assessor).run_worker(None)[0]
+        assessor=assessor,
+        name="bifurc_refit").run_worker(None)[0]
     return bifurc_res
 
 
@@ -420,7 +422,9 @@ def main(args=sys.argv[1:]):
             # Pick one that is new
             chad_choices = [
                 c for c in hanging_chads
-                if c.node.allele_events_list_str not in recent_chads]
+                if (c.node.allele_events_list_str not in recent_chads)]
+                    #and len(c.node) > 1
+                    #and any([p.is_leaf() for p in c.possible_parents]))]
             if len(chad_choices) == 0:
                 # If we have seen all the chads, reset the chad tracker
                 chad_choices = hanging_chads

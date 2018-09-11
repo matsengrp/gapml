@@ -120,7 +120,7 @@ class ParallelWorkerManager:
 
             for j, r in enumerate(res):
                 if r is None:
-                    print("WARNING: batch submission manager, worker failed %s" % self.batched_workers[i][j])
+                    print("WARNING: batch submission manager, worker failed %s" % self.batched_workers[i][j].name)
                     worker_results.append(None)
                 else:
                     worker_results.append(r)
@@ -217,7 +217,7 @@ class SubprocessManager(ParallelWorkerManager):
                 time.sleep(sleep)
 
         res = self.read_batch_worker_results()
-        self.clean_outputs()
+        #self.clean_outputs()
         if successful_only:
             return self._get_successful_jobs(res, self.worker_list)
         else:

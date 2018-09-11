@@ -64,7 +64,8 @@ class LikelihoodScorer(ParallelWorker):
             fit_param_list: List[Dict],
             known_params: KnownModelParams,
             assessor: ModelAssessor = None,
-            max_try_per_init: int = 2):
+            max_try_per_init: int = 2,
+            name: str = "likelihoodscorer"):
         """
         @param seed: required to set the seed of each parallel worker
         @param tree: the cell lineage tree topology to fit the likelihood for
@@ -93,6 +94,7 @@ class LikelihoodScorer(ParallelWorker):
         self.known_params = known_params
         self.assessor = assessor
         self.max_tries = max_try_per_init * num_inits
+        self.name = name
 
     def run_worker(self, shared_obj):
         """
