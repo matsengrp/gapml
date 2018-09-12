@@ -179,11 +179,10 @@ class SubprocessManager(ParallelWorkerManager):
         @return list of tuples (result, worker)
         """
         cmdfos = self.batch_worker_cmds
-        batch_system = "subprocess"
-
         procs = []
         n_tries = []
         up_to_idx = 0
+
         def get_num_unused_num_processes(procs):
             return self.num_processes - (len(procs) - procs.count(None))
 

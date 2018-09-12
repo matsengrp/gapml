@@ -221,6 +221,7 @@ def get_parsimony_trees(
     return parsimony_trees
 
 def main(args=sys.argv[1:]):
+    # TODO: we may want to consider multiple runs and check that the parsimony score is stable
     args = parse_args()
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))

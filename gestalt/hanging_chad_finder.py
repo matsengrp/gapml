@@ -10,7 +10,7 @@ from barcode_metadata import BarcodeMetadata
 from transition_wrapper_maker import TransitionWrapperMaker
 from parallel_worker import SubprocessManager
 from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
-from common import get_randint
+from common import get_randint, get_init_target_lams
 from model_assessor import ModelAssessor
 from optim_settings import KnownModelParams
 import collapsed_tree
@@ -32,6 +32,11 @@ class HangingChadResult:
             full_chad_tree: CellLineageTree,
             fit_res: List[LikelihoodScorerResult]):
         """
+        @param score: higher score means "better" place for hanging chad
+        @param chad_node: the hanging chad we need to find a parent for
+        @param parent_node: the candidate parent node for our hanging chad
+        @param full_chad_tree: the entire tree with the hanging chad placed under that parent node
+        @param fit_res: a list of fitting results when we placed the hanging chad under that candidate parent
         """
         assert len(fit_res) == 1
         self.score = score
@@ -314,12 +319,6 @@ def get_chads(tree: CellLineageTree):
     for c in hanging_chads:
         logging.info("Chad %s", c)
     return hanging_chads
-
-def get_init_target_lams(size, mean_val=0):
-    random_perturb = np.random.uniform(size=size) * 0.001
-    random_perturb = random_perturb - np.mean(random_perturb)
-    random_perturb[0] = 0
-    return np.exp(mean_val * np.ones(size) + random_perturb)
 
 def _prepare_nochad_fit_params(
         fit_params: Dict):

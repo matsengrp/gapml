@@ -29,11 +29,18 @@ class KnownModelParams:
 
         self.branch_lens = branch_lens
         if self.branch_lens:
+            assert np.sum(branch_len_offsets_proportion) > 0
+            assert np.sum(branch_len_inners) > 0
+
+            def _make_list(elems):
+                return [[a] for a in elems]
+
             self.branch_len_inners = branch_len_inners
-            self.branch_len_inners_idxs = np.where(branch_len_inners)[0]
+            self.branch_len_inners_idxs = _make_list(np.where(branch_len_inners)[0])
             self.branch_len_inners_unknown = np.logical_not(branch_len_inners)
-            self.branch_len_inners_unknown_idxs = np.where(self.branch_len_inners_unknown)[0]
+            self.branch_len_inners_unknown_idxs = _make_list(np.where(self.branch_len_inners_unknown)[0])
+
             self.branch_len_offsets_proportion = branch_len_offsets_proportion
-            self.branch_len_offsets_proportion_idxs = np.where(branch_len_offsets_proportion)[0]
+            self.branch_len_offsets_proportion_idxs = _make_list(np.where(branch_len_offsets_proportion)[0])
             self.branch_len_offsets_proportion_unknown = np.logical_not(branch_len_offsets_proportion)
-            self.branch_len_offsets_proportion_unknown_idxs = np.where(self.branch_len_offsets_proportion_unknown)[0]
+            self.branch_len_offsets_proportion_unknown_idxs = _make_list(np.where(self.branch_len_offsets_proportion_unknown)[0])

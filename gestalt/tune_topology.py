@@ -19,7 +19,7 @@ from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from barcode_metadata import BarcodeMetadata
 import hyperparam_tuner
 import hanging_chad_finder
-from common import create_directory, get_randint, save_data
+from common import create_directory, get_randint, save_data, get_init_target_lams
 import file_readers
 import collapsed_tree
 
@@ -124,11 +124,6 @@ def parse_args(args):
         action='store_true',
         help='refit the bifurc tree?')
     parser.add_argument(
-        '--stability-weight',
-        type=float,
-        default=1,
-        help='how much to weight the target rate')
-    parser.add_argument(
         '--num-processes',
         type=int,
         default=1,
@@ -144,9 +139,7 @@ def parse_args(args):
         default=None)
 
     parser.set_defaults(tot_time_known=True)
-    print("args1", args)
     args = parser.parse_args(args)
-    print("args2", args)
 
     assert args.log_barr_pen_param >= 0
     args.dist_to_half_pen_params = list(sorted(
@@ -164,24 +157,15 @@ def parse_args(args):
          target_lams=args.lambda_known,
          tot_time=args.tot_time_known)
 
-    assert args.stability_weight >= 0 and args.stability_weight <= 1
-
     assert args.num_penalty_tune_iters >= 1
     assert args.tot_time_known
     assert args.num_chad_tune_iters >= args.num_penalty_tune_iters
     return args
 
 
-def get_init_target_lams(bcode_meta, mean_val):
-    random_perturb = np.random.uniform(size=bcode_meta.n_targets) * 0.001
-    random_perturb = random_perturb - np.mean(random_perturb)
-    random_perturb[0] = 0
-    return np.exp(mean_val * np.ones(bcode_meta.n_targets) + random_perturb)
-
-
 def read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
     fit_params = {
-            "target_lams": get_init_target_lams(bcode_meta, 0),
+            "target_lams": get_init_target_lams(bcode_meta.n_targets, 0),
             "boost_softmax_weights": np.array([1, 2, 2]),
             "trim_long_factor": 0.05 * np.ones(2),
             "trim_zero_probs": 0.5 * np.ones(2),
@@ -368,7 +352,6 @@ def _do_random_rearrange(tree):
 
 
 def main(args=sys.argv[1:]):
-    print("main args", args)
     args = parse_args(args)
     np.random.seed(args.seed)
     random.seed(args.seed)
@@ -426,8 +409,6 @@ def main(args=sys.argv[1:]):
             chad_choices = [
                 c for c in hanging_chads
                 if (c.node.allele_events_list_str not in recent_chads)]
-                    #and len(c.node) > 1
-                    #and any([p.is_leaf() for p in c.possible_parents]))]
             if len(chad_choices) == 0:
                 # If we have seen all the chads, reset the chad tracker
                 chad_choices = hanging_chads

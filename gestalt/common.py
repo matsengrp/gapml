@@ -44,6 +44,16 @@ def create_directory(file_name):
     except FileExistsError:
         print("directory already exists")
 
+
+"""
+Random initialization code
+"""
+def get_init_target_lams(size, mean_val=0):
+    random_perturb = np.random.uniform(size=size) * 0.001
+    random_perturb = random_perturb - np.mean(random_perturb)
+    random_perturb[0] = 0
+    return np.exp(mean_val * np.ones(size) + random_perturb)
+
 def assign_rand_tree_lengths(rand_tree, tot_height):
     """
     Assign random branch lengths to the fixed rand_tree topology.

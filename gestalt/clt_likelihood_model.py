@@ -123,38 +123,34 @@ class CLTLikelihoodModel:
                 branch_len_offsets_proportion,
                 tot_time_extra)
 
-        # Process branch len offsets and inners
-        if self.known_params.branch_lens:
-            self.branch_len_inners = tf.scatter_nd(
-                [[a] for a in self.known_params.branch_len_inners_idxs],
-                self.branch_len_inners_known,
-                (self.num_nodes,)) + tf.scatter_nd(
-                [[a] for a in self.known_params.branch_len_inners_unknown_idxs],
-                self.branch_len_inners_unknown,
-                (self.num_nodes,))
-            self.branch_len_offsets_proportion = tf.scatter_nd(
-                [[a] for a in self.known_params.branch_len_offsets_proportion_idxs],
-                self.branch_len_offsets_proportion_known,
-                (self.num_nodes,)) + tf.scatter_nd(
-                [[a] for a in self.known_params.branch_len_offsets_proportion_unknown_idxs],
-                self.branch_len_offsets_proportion_unknown,
-                (self.num_nodes,))
-            assert len(self.known_params.branch_len_offsets_proportion_unknown_idxs) > 0
-            assert len(self.known_params.branch_len_inners_unknown_idxs) > 0
-        else:
-            self.branch_len_inners = self.branch_len_inners_unknown
-            self.branch_len_offsets_proportion = self.branch_len_offsets_proportion_unknown
-
-
         self._create_poisson_distributions()
+        self.tot_time = tf.constant(tot_time, dtype=tf.float64)
         if self.topology:
             assert not self.topology.is_leaf()
-            self.tot_time = tf.constant(tot_time, dtype=tf.float64)
+
+            # Process branch len offsets and inners
+            if self.known_params.branch_lens:
+                self.branch_len_inners = tf.scatter_nd(
+                    self.known_params.branch_len_inners_idxs,
+                    self.branch_len_inners_known,
+                    (self.num_nodes,)) + tf.scatter_nd(
+                    self.known_params.branch_len_inners_unknown_idxs,
+                    self.branch_len_inners_unknown,
+                    (self.num_nodes,))
+                self.branch_len_offsets_proportion = tf.scatter_nd(
+                    self.known_params.branch_len_offsets_proportion_idxs,
+                    self.branch_len_offsets_proportion_known,
+                    (self.num_nodes,)) + tf.scatter_nd(
+                    self.known_params.branch_len_offsets_proportion_unknown_idxs,
+                    self.branch_len_offsets_proportion_unknown,
+                    (self.num_nodes,))
+            else:
+                self.branch_len_inners = self.branch_len_inners_unknown
+                self.branch_len_offsets_proportion = self.branch_len_offsets_proportion_unknown
+
             self._create_distance_to_root_dict()
             #self.tot_time = self._create_total_time(tot_time)
             self.branch_lens = self._create_branch_lens()
-        else:
-            self.tot_time = tf.constant(tot_time, dtype=tf.float64)
 
         # Calculcate the hazards for all the target tracts beforehand. Speeds up computation in the future.
         self.target_tract_hazards, self.target_tract_dict = self._create_all_target_tract_hazards()
@@ -241,8 +237,8 @@ class CLTLikelihoodModel:
             prev_size = up_to_size
             up_to_size += 1
             self.insert_zero_prob = self.known_vars[prev_size: up_to_size]
+        prev_size = up_to_size
         if self.known_params.branch_lens:
-            prev_size = up_to_size
             up_to_size += np.sum(self.known_params.branch_len_inners)
             self.branch_len_inners_known = self.known_vars[prev_size: up_to_size]
             prev_size = up_to_size
