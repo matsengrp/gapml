@@ -13,7 +13,7 @@ from typing import Dict
 from cell_lineage_tree import CellLineageTree
 from optim_settings import KnownModelParams
 from model_assessor import ModelAssessor
-from tree_distance import BHVDistanceMeasurer
+from tree_distance import BHVDistanceMeasurer, InternalCorrMeasurer
 from transition_wrapper_maker import TransitionWrapperMaker
 from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from barcode_metadata import BarcodeMetadata
@@ -243,7 +243,7 @@ def read_true_model_files(args, num_barcodes):
     true_model_dict, assessor = file_readers.read_true_model(
             args.true_model_file,
             num_barcodes,
-            measurer_classes=[BHVDistanceMeasurer],
+            measurer_classes=[BHVDistanceMeasurer, InternalCorrMeasurer],
             scratch_dir=args.scratch_dir)
 
     return true_model_dict, assessor

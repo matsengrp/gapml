@@ -87,6 +87,10 @@ def parse_args():
             Right now, 'best' is measured by distance to the collapsed oracle tree.
             So we find the closest bifurcating trees and then collapse them.
             """)
+    parser.add_argument('--max-trees',
+        type=int,
+        default=5000,
+        help="maximum number of trees to read from MIX")
 
     args = parser.parse_args()
     assert args.seed % 2 == 1
@@ -208,7 +212,8 @@ def get_parsimony_trees(
     parsimony_trees = parsimony_estimator.estimate(
             obs_leaves,
             mix_seed=args.seed,
-            num_jumbles=args.num_jumbles)
+            num_jumbles=args.num_jumbles,
+            max_trees=args.max_trees)
     logging.info("Total parsimony trees %d", len(parsimony_trees))
 
     parsimony_score = parsimony_trees[0].get_parsimony_score()

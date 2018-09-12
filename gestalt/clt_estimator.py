@@ -141,7 +141,8 @@ class CLTParsimonyEstimator(CLTEstimator):
             encode_hidden: bool = True,
             use_cell_state: bool = False,
             mix_seed: int = 1,
-            num_jumbles: int = 5):
+            num_jumbles: int = 5,
+            max_trees: int = 4000):
         """
         @param observations: the observations to run MIX on
         @param encode_hidden: indicate hidden states to MIX
@@ -175,7 +176,7 @@ class CLTParsimonyEstimator(CLTEstimator):
         processed_abund = {k: v[0] for k, v in processed_seqs.items()}
         # Now convert these trees to CLTs
         clts = []
-        for t in bifurcating_trees:
+        for t in bifurcating_trees[:max_trees]:
             clt_new = self.convert_tree_to_clt(t, event_list, processed_abund)
             clt_new.label_tree_with_strs()
             clts.append(clt_new)
