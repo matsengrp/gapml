@@ -44,15 +44,26 @@ def create_directory(file_name):
     except FileExistsError:
         print("directory already exists")
 
+
+"""
+Random initialization code
+"""
+def get_init_target_lams(size, mean_val=0):
+    random_perturb = np.random.uniform(size=size) * 0.001
+    random_perturb = random_perturb - np.mean(random_perturb)
+    random_perturb[0] = 0
+    return np.exp(mean_val * np.ones(size) + random_perturb)
+
 def assign_rand_tree_lengths(rand_tree, tot_height):
     """
     Assign random branch lengths to the fixed rand_tree topology.
     Branch lengths assigned by using tau-space parameterization
     """
-    rand_tree_nodes = [node for node in rand_tree.traverse("preorder") if not node.is_leaf() and not node.is_root()]
+    rand_tree_nodes = [node for node in rand_tree.get_descendants("preorder") if not node.is_leaf()]
     num_internal_nodes = len(rand_tree_nodes)
 
     internal_node_dists = np.sort(np.random.rand(num_internal_nodes)) * tot_height
+    rand_tree.dist = 0
     rand_tree.add_feature("dist_to_root", 0)
     for i, node in enumerate(rand_tree_nodes):
         node.add_feature("dist_to_root", internal_node_dists[i])
@@ -61,5 +72,5 @@ def assign_rand_tree_lengths(rand_tree, tot_height):
     for leaf in rand_tree:
         leaf.dist = tot_height - leaf.up.dist_to_root
 
-    for node in rand_tree.traverse():
+    for node in rand_tree.get_descendants():
         assert node.dist >= 0

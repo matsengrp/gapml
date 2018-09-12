@@ -13,17 +13,17 @@ from typing import Dict
 from cell_lineage_tree import CellLineageTree
 from optim_settings import KnownModelParams
 from model_assessor import ModelAssessor
-from tree_distance import BHVDistanceMeasurer
+from tree_distance import BHVDistanceMeasurer, InternalCorrMeasurer
 from transition_wrapper_maker import TransitionWrapperMaker
 from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from barcode_metadata import BarcodeMetadata
 import hyperparam_tuner
 import hanging_chad_finder
-from common import create_directory, get_randint, save_data
+from common import create_directory, get_randint, save_data, get_init_target_lams
 import file_readers
 import collapsed_tree
 
-def parse_args():
+def parse_args(args):
     parser = argparse.ArgumentParser(
             description='tune over topologies and fit model parameters')
     parser.add_argument(
@@ -124,11 +124,6 @@ def parse_args():
         action='store_true',
         help='refit the bifurc tree?')
     parser.add_argument(
-        '--stability-weight',
-        type=float,
-        default=1,
-        help='how much to weight the target rate')
-    parser.add_argument(
         '--num-processes',
         type=int,
         default=1,
@@ -144,7 +139,7 @@ def parse_args():
         default=None)
 
     parser.set_defaults(tot_time_known=True)
-    args = parser.parse_args()
+    args = parser.parse_args(args)
 
     assert args.log_barr_pen_param >= 0
     args.dist_to_half_pen_params = list(sorted(
@@ -162,24 +157,15 @@ def parse_args():
          target_lams=args.lambda_known,
          tot_time=args.tot_time_known)
 
-    assert args.stability_weight >= 0 and args.stability_weight <= 1
-
     assert args.num_penalty_tune_iters >= 1
     assert args.tot_time_known
     assert args.num_chad_tune_iters >= args.num_penalty_tune_iters
     return args
 
 
-def get_init_target_lams(bcode_meta, mean_val):
-    random_perturb = np.random.uniform(size=bcode_meta.n_targets) * 0.001
-    random_perturb = random_perturb - np.mean(random_perturb)
-    random_perturb[0] = 0
-    return np.exp(mean_val * np.ones(bcode_meta.n_targets) + random_perturb)
-
-
 def read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
     fit_params = {
-            "target_lams": get_init_target_lams(bcode_meta, 0),
+            "target_lams": get_init_target_lams(bcode_meta.n_targets, 0),
             "boost_softmax_weights": np.array([1, 2, 2]),
             "trim_long_factor": 0.05 * np.ones(2),
             "trim_zero_probs": 0.5 * np.ones(2),
@@ -241,7 +227,7 @@ def read_true_model_files(args, num_barcodes):
     true_model_dict, assessor = file_readers.read_true_model(
             args.true_model_file,
             num_barcodes,
-            measurer_classes=[BHVDistanceMeasurer],
+            measurer_classes=[BHVDistanceMeasurer, InternalCorrMeasurer],
             scratch_dir=args.scratch_dir)
 
     return true_model_dict, assessor
@@ -299,7 +285,8 @@ def do_refit_bifurc_tree(
     # Copy over the branch lengths
     br_lens = np.ones(num_nodes) * 1e-10
     for node in refit_bifurc_tree.traverse():
-        br_lens[node.node_id] = node.dist
+        assert node.dist >= 0
+        br_lens[node.node_id] = max(node.dist, 1e-10)
         node.resolved_multifurcation = True
     param_dict["branch_len_inners"] = br_lens
     param_dict["branch_len_offsets_proportion"] = np.ones(num_nodes) * 1e-10
@@ -319,7 +306,8 @@ def do_refit_bifurc_tree(
         transition_wrap_maker,
         fit_param_list=[param_dict],
         known_params=args.known_params,
-        assessor=assessor).run_worker(None)[0]
+        assessor=assessor,
+        name="bifurc_refit").run_worker(None)[0]
     return bifurc_res
 
 
@@ -364,7 +352,9 @@ def _do_random_rearrange(tree):
 
 
 def main(args=sys.argv[1:]):
-    args = parse_args()
+    args = parse_args(args)
+    np.random.seed(args.seed)
+    random.seed(args.seed)
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
 
@@ -388,8 +378,8 @@ def main(args=sys.argv[1:]):
     tuning_history = []
     recent_chads = set()
     for i in range(args.num_chad_tune_iters):
-        np.random.seed(args.seed + i)
-        random.seed(args.seed + i)
+        np.random.seed(args.seed + i + 1)
+        random.seed(args.seed + i + 1)
 
         penalty_tune_result = None
         if i < args.num_penalty_tune_iters:
@@ -409,20 +399,23 @@ def main(args=sys.argv[1:]):
         # cause nodes are getting renumbered...
         hanging_chads = hanging_chad_finder.get_chads(tree)
         has_chads = len(hanging_chads) > 0
+        num_old_leaves = len(tree)
 
         # pick a chad at random
         chad_tune_result = None
         if has_chads and args.max_chad_tune_search > 1:
             # Now tune the hanging chads!
             # Pick one that is new
-            random_chad = random.choice([
+            chad_choices = [
                 c for c in hanging_chads
-                if (c.node.allele_events_list_str not in recent_chads)])
+                if (c.node.allele_events_list_str not in recent_chads)]
+            if len(chad_choices) == 0:
+                # If we have seen all the chads, reset the chad tracker
+                chad_choices = hanging_chads
+                recent_chads = set()
+            random_chad = random.choice(chad_choices)
             # Track the chads we tuned recently
             recent_chads.add(random_chad.node.allele_events_list_str)
-            # If we have seen all the chads, reset the chad tracker
-            if len(recent_chads) == len(hanging_chads):
-                recent_chads = set()
 
             logging.info(
                     "Iter %d: Tuning chad %s",
@@ -437,6 +430,8 @@ def main(args=sys.argv[1:]):
                 assessor,
             )
             tree, fit_params, best_res = chad_tune_result.get_best_result()
+            print("leaf check!", len(tree), num_old_leaves)
+            assert len(tree) == num_old_leaves
         else:
             best_res = fit_multifurc_tree(
                     tree,

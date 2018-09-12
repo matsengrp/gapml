@@ -568,4 +568,4 @@ class InternalCorrMeasurer(MRCADistanceMeasurer):
                 self.ref_tree_mrca_matrix)
         corr2, _ = self.corr_func(ref_node_val2, tree_node_val2)
 
-        return (corr1 + corr2)/2
+        return 1 - (corr1 + corr2)/2
