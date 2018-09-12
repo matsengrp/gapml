@@ -53,7 +53,7 @@ class CLTPenalizedEstimator(CLTEstimator):
             print_iter: int = 1,
             save_iter: int = 20,
             assessor: ModelAssessor = None,
-            conv_thres: float = 1e-7,
+            conv_thres: float = 1e-6,
             min_iters: int = 20):
         """
         Finds the best model parameters
