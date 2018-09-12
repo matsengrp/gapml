@@ -359,32 +359,6 @@ class CLTLikelihoodModel:
         branch_offsets = [branch_offsets[j] for j in range(self.num_nodes)]
         self.branch_len_offsets = tf.stack(branch_offsets)
 
-   # def _create_total_time(self, tot_time: float):
-   #     """
-   #     If total time is unknown, we need to create our own total time node
-   #     by adding the `tot_time_extra` to the distance of the farthest-away internal node
-   #     """
-   #     if self.known_params.tot_time:
-   #         return tf.constant(tot_time, dtype=tf.float64)
-   #     else:
-   #         internal_dist_to_roots = []
-   #         for leaf in self.topology:
-   #             if leaf.is_root():
-   #                 continue
-
-   #             if not leaf.up.is_resolved_multifurcation():
-   #                 int_dist = self.dist_to_root[leaf.up.node_id] + self.branch_len_offsets[leaf.node_id]
-   #             else:
-   #                 int_dist = self.dist_to_root[leaf.up.node_id]
-   #             internal_dist_to_roots.append(int_dist)
-
-   #         if len(internal_dist_to_roots) >= 2:
-   #             self.dist_to_root_tensor = tf.reduce_max(tf.stack(internal_dist_to_roots))
-   #             return self.tot_time_extra + self.dist_to_root_tensor
-   #         else:
-   #             self.dist_to_root_tensor = tf.constant(0, dtype=tf.float64)
-   #             return self.tot_time_extra
-
     def _create_branch_lens(self):
         """
         Create the branch length variable

@@ -81,10 +81,13 @@ class HangingChadTuneResult:
 
         # TODO: how do we warm start using previous branch length estimates?
         fit_params = best_fit_res.get_fit_params()
+        no_chad_fit_params = self.no_chad_res.get_fit_params()
         # Popping branch length estimates right now because i dont know
         # how to warm start using these estimates...?
         fit_params.pop('branch_len_inners', None)
         fit_params.pop('branch_len_offsets_proportion', None)
+        fit_params['dist_to_half_pen_param'] = no_chad_fit_params['dist_to_half_pen_param']
+        fit_params['log_barr_pen_param'] = no_chad_fit_params['log_barr_pen_param']
 
         orig_tree = best_chad.full_chad_tree.copy()
         collapsed_tree._remove_single_child_unobs_nodes(orig_tree)
