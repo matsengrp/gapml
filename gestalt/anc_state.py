@@ -13,6 +13,9 @@ class AncState:
     See AncState defined in the manuscript
     """
     def __init__(self, indel_set_list: List[IndelSet] = []):
+        """
+        @param indel_set_list: Each indel set must be a Wildcard or SingletonWC
+        """
         self.indel_set_list = indel_set_list
 
     def __str__(self):

@@ -131,7 +131,7 @@ def parse_args(args):
     parser.add_argument(
         '--num-init-random-rearrange',
         type=int,
-        default=0,
+        default=1,
         help='number of times we randomly rearrange tree at the beginning')
     parser.add_argument(
         '--scratch-dir',
@@ -311,44 +311,26 @@ def do_refit_bifurc_tree(
     return bifurc_res
 
 
-def _do_random_rearrange(tree):
+def _do_random_rearrange(tree, bcode_meta, scratch_dir):
     """
     Picks a random chad and randomly places it under a possible parent
     """
     orig_num_leaves = len(tree)
-    hanging_chads = hanging_chad_finder.get_chads(tree)
+    hanging_chads = hanging_chad_finder.get_all_chads(tree, bcode_meta, scratch_dir)
 
     # Pick random chad
     random_chad = random.choice(hanging_chads)
 
-    # Detach random chad
-    for node in tree.traverse():
-        if node.node_id == random_chad.node.node_id:
-            node.detach()
-            break
-
-    # Pick random parent
-    random_par = random.choice(random_chad.possible_parents)
-    logging.info("randomly chosen chad %s", random_chad)
-    logging.info("randomly chosen chad-parent %s", random_par.allele_events_list_str)
-
-    # Attach to random parent
-    for node in tree.traverse():
-        if node.node_id == random_par.node_id:
-            if node.is_leaf():
-                # If attaching to a leaf, mush make a copy of the leaf
-                # so we don't have unifurcations
-                new_child = node.copy()
-                node.add_child(new_child)
-            node.add_child(random_chad.node)
-            break
+    # Pick random equal parsimony tree
+    new_tree = random_chad.get_full_tree(random.choice(range(random_chad.num_possible_trees)))
 
     # Remove any unifurcations that may have been introduced when we
     # detached the hanging chad
-    collapsed_tree._remove_single_child_unobs_nodes(tree)
+    collapsed_tree._remove_single_child_unobs_nodes(new_tree)
 
-    tree.label_node_ids()
-    assert orig_num_leaves == len(tree)
+    new_tree.label_node_ids()
+    assert orig_num_leaves == len(new_tree)
+    return new_tree
 
 
 def main(args=sys.argv[1:]):
@@ -368,7 +350,7 @@ def main(args=sys.argv[1:]):
     logging.info(tree.get_ascii(attributes=["node_id"]))
 
     for i in range(args.num_init_random_rearrange):
-        _do_random_rearrange(tree)
+        tree = _do_random_rearrange(tree, bcode_meta, args.scratch_dir)
 
     logging.info("STARTING for reals!")
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))
@@ -397,7 +379,7 @@ def main(args=sys.argv[1:]):
         # Find hanging chads
         # TODO: kind slow right now... reruns chad-finding code
         # cause nodes are getting renumbered...
-        hanging_chads = hanging_chad_finder.get_chads(tree)
+        hanging_chads = hanging_chad_finder.get_all_chads(tree, bcode_meta, args.scratch_dir)
         has_chads = len(hanging_chads) > 0
         num_old_leaves = len(tree)
 
@@ -408,7 +390,7 @@ def main(args=sys.argv[1:]):
             # Pick one that is new
             chad_choices = [
                 c for c in hanging_chads
-                if (c.node.allele_events_list_str not in recent_chads)]
+                if c.node.allele_events_list_str not in recent_chads]
             if len(chad_choices) == 0:
                 # If we have seen all the chads, reset the chad tracker
                 chad_choices = hanging_chads

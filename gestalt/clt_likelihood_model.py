@@ -149,7 +149,6 @@ class CLTLikelihoodModel:
                 self.branch_len_offsets_proportion = self.branch_len_offsets_proportion_unknown
 
             self._create_distance_to_root_dict()
-            #self.tot_time = self._create_total_time(tot_time)
             self.branch_lens = self._create_branch_lens()
 
         # Calculcate the hazards for all the target tracts beforehand. Speeds up computation in the future.
@@ -342,20 +341,42 @@ class CLTLikelihoodModel:
     def _create_distance_to_root_dict(self):
         # Create distance to root tensors for all internal nodes
         self.dist_to_root = {self.root_node_id: tf.constant(0, dtype=tf.float64)}
+        special_node = None
         for node in self.topology.get_descendants("preorder"):
-            if node.is_leaf():
+            if self.known_params.branch_lens and self.known_params.branch_len_inners[node.node_id] and not self.known_params.branch_len_offsets_proportion[node.node_id]:
+                # We have an implicit node
+                assert len(node.up.get_children()) == 2
+                proportion = self.branch_len_offsets_proportion[node.node_id]
+                node_inner = self.branch_len_inners[node.node_id]
+                # TODO: I think this is broken cause this can get overwritten? maybe ok
+                self.dist_to_root[node.up.node_id] = self.dist_to_root[node.up.up.node_id] + node_inner * proportion
+                special_node = node.get_sisters()[0]
+                self.dist_to_root[node.node_id] = self.dist_to_root[node.up.node_id] + node_inner * (tf.constant(1, dtype=tf.float64) - proportion)
+            elif node.is_leaf():
                 self.dist_to_root[node.node_id] = self.tot_time
             else:
                 self.dist_to_root[node.node_id] = self.dist_to_root[node.up.node_id] + self.branch_len_inners[node.node_id]
 
+        if special_node is not None:
+            # TODO: I think this fixes  the funkiness.... but ugly
+            fix_nodes = [special_node] + special_node.get_descendants("preorder")
+            for node in fix_nodes:
+                if node.is_leaf():
+                    self.dist_to_root[node.node_id] = self.tot_time
+                else:
+                    self.dist_to_root[node.node_id] = self.dist_to_root[node.up.node_id] + self.branch_len_inners[node.node_id]
+
         branch_offsets = {self.root_node_id: tf.constant(0, dtype=tf.float64)}
         for node in self.topology.get_descendants("preorder"):
-            if not node.up.is_resolved_multifurcation() and node.is_leaf():
-                # A leaf node, use its offset to determine branch length
-                br_len_inner = self.tot_time - self.dist_to_root[node.up.node_id]
-                branch_offsets[node.node_id] = self.branch_len_offsets_proportion[node.node_id] * br_len_inner
+            if not node.up.is_resolved_multifurcation():
+                if node.is_leaf():
+                    # A leaf node, use its offset to determine branch length
+                    br_len_inner = self.tot_time - self.dist_to_root[node.up.node_id]
+                    branch_offsets[node.node_id] = self.branch_len_offsets_proportion[node.node_id] * br_len_inner
+                else:
+                    branch_offsets[node.node_id] = self.branch_len_inners[node.node_id] * self.branch_len_offsets_proportion[node.node_id]
             else:
-                branch_offsets[node.node_id] = self.branch_len_inners[node.node_id] * self.branch_len_offsets_proportion[node.node_id]
+                branch_offsets[node.node_id] = tf.constant(0, dtype=tf.float64)
         branch_offsets = [branch_offsets[j] for j in range(self.num_nodes)]
         self.branch_len_offsets = tf.stack(branch_offsets)
 
@@ -377,10 +398,10 @@ class CLTLikelihoodModel:
                     # But use the offset + branch length to determine distance from root
                     br_len = self.branch_len_inners[node.node_id] - self.branch_len_offsets[node.node_id]
             else:
-                if not node.is_leaf():
-                    br_len = self.branch_len_inners[node.node_id]
-                else:
+                if node.is_leaf():
                     br_len = self.tot_time - self.dist_to_root[node.up.node_id]
+                else:
+                    br_len = self.dist_to_root[node.node_id] - self.dist_to_root[node.up.node_id]
 
             branch_lens_dict.append([[node.node_id], br_len])
 
