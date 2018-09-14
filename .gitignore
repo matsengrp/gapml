@@ -1,6 +1,9 @@
 # ignore mac finder system file
 .DS_Store
 
+_output
 .sconsign.dblite
 *.pyc
 .Rproj.user
+venv
+data
