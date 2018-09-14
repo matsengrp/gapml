@@ -14,7 +14,6 @@ from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from common import get_randint, get_init_target_lams
 from model_assessor import ModelAssessor
 from optim_settings import KnownModelParams
-from tree_distance import UnrootRFDistanceMeasurer, BHVDistanceMeasurer
 import collapsed_tree
 import ancestral_events_finder
 
@@ -176,26 +175,12 @@ class HangingChad:
             self.num_possible_trees,
             chad_parent_strs)
 
-def _collapse_zero_lens(raw_tree: CellLineageTree, new_node: CellLineageTree):
-    """
-    only allowed to remove the new node. not allowed to remove other nodes when collapsing
-    """
-    tree = raw_tree.copy()
-
-    for node in tree.traverse(strategy='postorder'):
-        if node.dist == 0 and not node.is_root() and not node.is_leaf():
-            new_node.delete(prevent_nondicotomic=False)
-            break
-
-    return tree
-
 
 def _get_chad_possibilities(
         chad_id: int,
         tree: CellLineageTree,
         parsimony_score: int,
         bcode_meta: BarcodeMetadata,
-        distance_cls,
         scratch_dir):
     """
     @return List[CellLineageTree] that are equally parsimonious trees after putting chad on various
@@ -220,26 +205,12 @@ def _get_chad_possibilities(
     # santiy check that original tree is equally parsimonious
     ancestral_events_finder.annotate_ancestral_states(orig_tree, bcode_meta)
     new_pars_score = ancestral_events_finder.get_parsimony_score(orig_tree)
-    orig_tree = collapsed_tree.collapse_zero_lens(orig_tree)
-    # print("orig.", new_pars_score)
-    # print("chad", chad.node_id, chad.allele_events_list_str)
-    # print(orig_tree.get_ascii(attributes=["allele_events_list_str"]))
-    # print(orig_tree.get_ascii(attributes=["dist"]))
-    #
-    # print("new_pars_score, ", new_pars_score, parsimony_score, new_pars_score == parsimony_score)
     assert new_pars_score == parsimony_score
 
     # Only consider nodes that are not descendnats of the chad
     all_nodes = [node for node in tree.traverse() if node.node_id < num_nochad_nodes]
 
-    tree_measurers = [distance_cls(orig_tree, scratch_dir)]
-    possible_trees = [orig_tree]
-
-    # print('BEGIN')
-    # print("chad", chad.node_id, chad.allele_events_list_str)
-    # print(tree.get_ascii(attributes=["allele_events_list_str"]))
-    # print(tree.get_ascii(attributes=["node_id"]))
-
+    possible_trees = []
     # Now consider adding chad to each node
     for node in all_nodes:
         if node.is_leaf() or node.node_id == chad_orig_parent.node_id:
@@ -251,24 +222,9 @@ def _get_chad_possibilities(
         ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
         new_pars_score = ancestral_events_finder.get_parsimony_score(tree)
         assert new_pars_score >= parsimony_score
-        if new_pars_score != parsimony_score:
-            continue
-
-        has_match = False
-        all_dists = []
-        for measurer in tree_measurers:
-            try:
-                dist = measurer.get_dist(tree)
-            except subprocess.CalledProcessError:
-                dist = 1
-            all_dists.append(dist)
-            has_match = dist < 1e-6
-            if has_match:
-                break
-
-        if not has_match:
-            tree_measurers.append(distance_cls(tree, scratch_dir))
-            possible_trees.append(tree)
+        if new_pars_score == parsimony_score:
+            tree_copy = tree.copy()
+            possible_trees.append(tree_copy)
 
     # Consider adding chad to an edge
     for node in all_nodes:
@@ -291,58 +247,35 @@ def _get_chad_possibilities(
 
         ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
         new_pars_score = ancestral_events_finder.get_parsimony_score(tree)
-
-        # print(tree.get_ascii(attributes=["anc_state_list_str"]))
-        # print(tree.get_ascii(attributes=["allele_events_list_str"]))
-        # print(tree.get_ascii(attributes=["dist"]))
-
         assert new_pars_score >= parsimony_score
-        if new_pars_score == parsimony_score:
-            coll_tree = _collapse_zero_lens(tree, new_node)
 
-            has_match = False
-            all_dists = []
-            for measurer in tree_measurers:
-                try:
-                    dist = measurer.get_dist(coll_tree)
-                except subprocess.CalledProcessError:
-                    dist = 1
-                all_dists.append(dist)
-                has_match = dist < 1e-10
-                if has_match:
-                    break
+        # Then this can be further collapsed and we might as well add the node to
+        # a multif/bifurcation. Should have been accomplished previously.
+        can_collapse_tree = (node.dist == 0 and not node.is_leaf()) or new_node.dist == 0
+        if not can_collapse_tree and new_pars_score == parsimony_score:
+            all_node_ids = set([node.node_id for node in tree.traverse() if node.node_id is not None])
+            assert all_node_ids == set(list(range(num_labelled_nodes)))
+            num_new_nodes = len([node for node in tree.traverse() if node.node_id is None])
+            assert num_new_nodes == 1
 
-            if not has_match:
-                all_node_ids = set([node.node_id for node in coll_tree.traverse() if node.node_id is not None])
-                # print(all_node_ids, num_labelled_nodes)
-                # print(tree.get_ascii(attributes=["allele_events_list_str"]))
-                # print(tree.get_ascii(attributes=["anc_state_list_str"]))
-                # print(tree.get_ascii(attributes=["node_id"]))
-                # print(tree.get_ascii(attributes=["dist"]))
-                # print(coll_tree.get_ascii(attributes=["node_id"]))
-                assert all_node_ids == set(list(range(num_labelled_nodes)))
-                num_new_nodes = len([node for node in coll_tree.traverse() if node.node_id is None])
-                assert num_new_nodes == 1
-
-                tree_measurers.append(distance_cls(coll_tree, scratch_dir))
-                possible_trees.append(coll_tree)
+            possible_trees.append(tree.copy())
 
         # Now undo all the things we just did to the tree
         new_node.delete()
 
-    remaining_trees = possible_trees[1:]
-    random.shuffle(remaining_trees)
-
-    print("num possible pars trees", len(possible_trees))
+    print("num possible pars trees", len(possible_trees) + 1)
+    print("chad", chad.node_id, chad.allele_events_list_str)
     if len(possible_trees) > 1:
-        for tree in possible_trees:
+        print(orig_tree.get_ascii(attributes=['allele_events_list_str']))
+        for t_idx, p_tree in enumerate(possible_trees):
             print("chad", chad.node_id, chad.allele_events_list_str)
-            print(tree.get_ascii(attributes=['allele_events_list_str']))
-            # print(tree.get_ascii(attributes=['node_id']))
+            print(p_tree.get_ascii(attributes=['allele_events_list_str']))
+
+    random.shuffle(possible_trees)
     return HangingChad(
         chad_copy,
         nochad_tree,
-        [orig_tree] + remaining_trees)
+        [orig_tree] + possible_trees)
 
 
 def get_all_chads(tree: CellLineageTree, bcode_meta: BarcodeMetadata, scratch_dir: str):
@@ -351,17 +284,19 @@ def get_all_chads(tree: CellLineageTree, bcode_meta: BarcodeMetadata, scratch_di
     parsimony_score = ancestral_events_finder.get_parsimony_score(tree)
     tree = collapsed_tree.collapse_zero_lens(tree)
     for node in tree.get_descendants():
+        has_intertarg_cuts = any([sg.min_target != sg.max_target for anc_state in node.anc_state_list for sg in anc_state.get_singletons()])
+        if not has_intertarg_cuts:
+            continue
+
         tree_copy = tree.copy()
         hanging_chad = _get_chad_possibilities(
                 node.node_id,
                 tree_copy,
                 parsimony_score,
                 bcode_meta,
-                BHVDistanceMeasurer,
                 scratch_dir)
         if hanging_chad.num_possible_trees > 1:
             hanging_chads.append(hanging_chad)
-    1/0
     return hanging_chads
 
 
