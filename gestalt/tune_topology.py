@@ -317,12 +317,13 @@ def _do_random_rearrange(tree, bcode_meta, scratch_dir):
     """
     orig_num_leaves = len(tree)
     hanging_chads = hanging_chad_finder.get_all_chads(tree, bcode_meta, scratch_dir)
+    logging.info("number of hanging chads found %d", len(hanging_chads))
 
     # Pick random chad
     random_chad = random.choice(hanging_chads)
 
     # Pick random equal parsimony tree
-    new_tree = random_chad.get_full_tree(random.choice(range(random_chad.num_possible_trees)))
+    new_tree = random.choice(random_chad.possible_full_trees)
 
     # Remove any unifurcations that may have been introduced when we
     # detached the hanging chad
@@ -350,6 +351,7 @@ def main(args=sys.argv[1:]):
     logging.info(tree.get_ascii(attributes=["node_id"]))
 
     for i in range(args.num_init_random_rearrange):
+        print("doing random rearrange", i)
         tree = _do_random_rearrange(tree, bcode_meta, args.scratch_dir)
 
     logging.info("STARTING for reals!")

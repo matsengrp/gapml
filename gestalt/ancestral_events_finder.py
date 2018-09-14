@@ -47,7 +47,10 @@ def get_possible_anc_states(tree: CellLineageTree):
 def get_parsimony_score(tree: CellLineageTree):
     """
     Call this after calling `annotate_ancestral_states`
+    @return parsimony score
     """
+    # The parsimony score is the sum of the number of times a new singleton is introduced
+    # in the ancestral state list for each node
     pars_score = 0
     for node in tree.get_descendants("preorder"):
         branch_pars_score = 0

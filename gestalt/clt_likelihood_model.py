@@ -150,6 +150,9 @@ class CLTLikelihoodModel:
 
             self._create_distance_to_root_dict()
             self.branch_lens = self._create_branch_lens()
+        else:
+            self.branch_len_inners = []
+            self.branch_len_offsets_proportion = []
 
         # Calculcate the hazards for all the target tracts beforehand. Speeds up computation in the future.
         self.target_tract_hazards, self.target_tract_dict = self._create_all_target_tract_hazards()
@@ -339,33 +342,51 @@ class CLTLikelihoodModel:
         self.branch_len_offsets_proportion_unknown = tf.sigmoid(self.all_vars[prev_size: up_to_size])
 
     def _create_distance_to_root_dict(self):
-        # Create distance to root tensors for all internal nodes
+        """
+        Create distance to root tensors for all internal nodes
+        as well as branch length offsets
+        """
+        # Preprocess the special case where the branch length inner is know but the proportion is not for a child node of a bifurcating node.
+        # This is a weird flag because for bifurcating nodes, the proportion typically doesn't mean anything; so variables should be both known or both unknown.
+        # In this special weird case, it means that the proportion indicates the location of the parent node.
+        # This parent node is "implicitly" defined by the proportion -- its own inner and proportion variables are not relevant and are completely ignored.
+        # The reason we have these implicit nodes is to deal with branch length constraints -- we know the node's offset from that grandparent but don't know
+        # where to place the parent node in between.
         self.dist_to_root = {self.root_node_id: tf.constant(0, dtype=tf.float64)}
-        special_node = None
+        if self.known_params.branch_lens:
+            for node in self.topology.get_descendants("preorder"):
+                if self.known_params.branch_len_inners[node.node_id] and not self.known_params.branch_len_offsets_proportion[node.node_id]:
+                    assert len(node.up.get_children()) <= 2
+                    # Make sure the implicit node has all associated branch length variables marked as known
+                    assert self.known_params.branch_len_inners[node.up.node_id] and self.known_params.branch_len_offsets_proportion[node.up.node_id]
+
+                    nodes_on_path_to_root = [node.up.up]
+                    while nodes_on_path_to_root[0].up is not None:
+                        nodes_on_path_to_root = [nodes_on_path_to_root[0].up] + nodes_on_path_to_root
+                    for path_node in nodes_on_path_to_root:
+                        if path_node.node_id not in self.dist_to_root:
+                            self.dist_to_root[path_node.node_id] = self.dist_to_root[path_node.up.node_id] + self.branch_len_inners[path_node.node_id]
+
+                    proportion = self.branch_len_offsets_proportion[node.node_id]
+                    if node.is_leaf():
+                        node_inner = self.tot_time - self.dist_to_root[node.up.up.node_id]
+                    else:
+                        node_inner = self.branch_len_inners[node.node_id]
+                    assert node.up.node_id not in self.dist_to_root
+                    self.dist_to_root[node.up.node_id] = self.dist_to_root[node.up.up.node_id] + node_inner * proportion
+                    self.dist_to_root[node.node_id] = self.dist_to_root[node.up.node_id] + node_inner * (tf.constant(1, dtype=tf.float64) - proportion)
+
+        # Now that we've handled the special implicit nodes, we are ready to calculate the rest of the dist_to_root distances
         for node in self.topology.get_descendants("preorder"):
-            if self.known_params.branch_lens and self.known_params.branch_len_inners[node.node_id] and not self.known_params.branch_len_offsets_proportion[node.node_id]:
-                # We have an implicit node
-                assert len(node.up.get_children()) == 2
-                proportion = self.branch_len_offsets_proportion[node.node_id]
-                node_inner = self.branch_len_inners[node.node_id]
-                # TODO: I think this is broken cause this can get overwritten? maybe ok
-                self.dist_to_root[node.up.node_id] = self.dist_to_root[node.up.up.node_id] + node_inner * proportion
-                special_node = node.get_sisters()[0]
-                self.dist_to_root[node.node_id] = self.dist_to_root[node.up.node_id] + node_inner * (tf.constant(1, dtype=tf.float64) - proportion)
-            elif node.is_leaf():
+            if node.node_id in self.dist_to_root:
+                continue
+
+            if node.is_leaf():
                 self.dist_to_root[node.node_id] = self.tot_time
             else:
                 self.dist_to_root[node.node_id] = self.dist_to_root[node.up.node_id] + self.branch_len_inners[node.node_id]
 
-        if special_node is not None:
-            # TODO: I think this fixes  the funkiness.... but ugly
-            fix_nodes = [special_node] + special_node.get_descendants("preorder")
-            for node in fix_nodes:
-                if node.is_leaf():
-                    self.dist_to_root[node.node_id] = self.tot_time
-                else:
-                    self.dist_to_root[node.node_id] = self.dist_to_root[node.up.node_id] + self.branch_len_inners[node.node_id]
-
+        # This calculates the offset on the spines for nodes that are children of multifurcating nodes
         branch_offsets = {self.root_node_id: tf.constant(0, dtype=tf.float64)}
         for node in self.topology.get_descendants("preorder"):
             if not node.up.is_resolved_multifurcation():
