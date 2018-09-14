@@ -1,9 +1,6 @@
 import logging
-from typing import List, Tuple
-import numpy as np
 
 from cell_lineage_tree import CellLineageTree
-from allele_events import Event, AlleleEvents
 from anc_state import AncState
 
 from barcode_metadata import BarcodeMetadata
@@ -12,6 +9,8 @@ from barcode_metadata import BarcodeMetadata
 Our in-built engine for finding all possible
 events in the internal nodes.
 """
+
+
 def annotate_ancestral_states(tree: CellLineageTree, bcode_meta: BarcodeMetadata):
     """
     Find all possible events in the internal nodes.
@@ -28,9 +27,10 @@ def annotate_ancestral_states(tree: CellLineageTree, bcode_meta: BarcodeMetadata
             node.add_feature("anc_state_list", node_anc_state)
         node.add_feature(
                 "anc_state_list_str",
-                "%d:%s" % (node.node_id, [str(k) for k in node.anc_state_list]))
+                "%s:%s" % (str(node.node_id), [str(k) for k in node.anc_state_list]))
     #logging.info("Ancestral state")
     #logging.info(node.get_ascii(attributes=["anc_state_list_str"], show_internal=True))
+
 
 def get_possible_anc_states(tree: CellLineageTree):
     children = tree.get_children()
@@ -42,3 +42,22 @@ def get_possible_anc_states(tree: CellLineageTree):
                 c.anc_state_list[bcode_idx])
         parent_anc_state_list.append(par_anc_state)
     return parent_anc_state_list
+
+
+def get_parsimony_score(tree: CellLineageTree):
+    """
+    Call this after calling `annotate_ancestral_states`
+    @return parsimony score
+    """
+    # The parsimony score is the sum of the number of times a new singleton is introduced
+    # in the ancestral state list for each node
+    pars_score = 0
+    for node in tree.get_descendants("preorder"):
+        branch_pars_score = 0
+        for up_anc_state, node_anc_state in zip(node.up.anc_state_list, node.anc_state_list):
+            up_sgs = set(up_anc_state.get_singletons())
+            node_sgs = set(node_anc_state.get_singletons())
+            branch_pars_score += len(node_sgs - up_sgs)
+        node.dist = branch_pars_score
+        pars_score += branch_pars_score
+    return pars_score
