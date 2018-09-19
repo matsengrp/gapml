@@ -651,7 +651,7 @@ class CLTLikelihoodModel:
         @return tensorflow tensor with the hazards for transitioning away from each of the target statuses
         """
         active_masks = tf.constant(
-                [(1 - targ_stat._get_binary_status(self.num_targets)).tolist() for targ_stat in target_statuses],
+                [(1 - targ_stat.get_binary_status(self.num_targets)).tolist() for targ_stat in target_statuses],
                 dtype=tf.float64)
         #active_masks = tf_common.equal_float(active_masks, 1)
 
