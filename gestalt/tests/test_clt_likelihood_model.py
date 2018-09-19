@@ -144,8 +144,6 @@ class CLTTransitionProbTestCase(unittest.TestCase):
                 + (1 + self.trim_long_factor[0]) * (1 + self.trim_long_factor[1]) * np.sum(self.target_lams[4:9])
                 + (1 + self.trim_long_factor[0]) * self.target_lams[9]
                 + self.double_cut_weight * ((1 + self.trim_long_factor[0]) * np.sum(self.target_lams[4:9]) + 10 * self.target_lams[9]))
-        print(hazard)
-        print(q_mat[2,2])
         self.assertTrue(np.isclose(-hazard, q_mat[2, 2]))
         self.assertTrue(np.isclose(0, q_mat[2, 0]))
         self.assertTrue(np.isclose(0, q_mat[2, 1]))
