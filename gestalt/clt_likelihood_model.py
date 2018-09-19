@@ -621,12 +621,14 @@ class CLTLikelihoodModel:
         """
         # Compute the hazard
         # Adding a weight for double cuts for now
-        log_lambda_part = (
-                tf.log(tf.gather(self.target_lams, min_target))
-                + tf.log(tf.gather(self.target_lams, max_target) * self.double_cut_weight) * tf_common.not_equal_float(min_target, max_target))
-        left_trim_prob = tf_common.ifelse(long_left_statuses, self.trim_long_factor[0], 1)
-        right_trim_prob = tf_common.ifelse(long_right_statuses, self.trim_long_factor[1], 1)
-        hazard = tf.exp(log_lambda_part + tf.log(left_trim_prob) + tf.log(right_trim_prob), name="hazard")
+        equal_float = tf_common.equal_float(min_target, max_target)
+        left_trim_factor = tf_common.ifelse(long_left_statuses, self.trim_long_factor[0], 1)
+        right_trim_factor = tf_common.ifelse(long_right_statuses, self.trim_long_factor[1], 1)
+        log_focal_lambda_part = tf.log(left_trim_factor) + tf.log(right_trim_factor) + tf.log(tf.gather(self.target_lams, min_target))
+        log_double_lambda_part = tf.log(
+                left_trim_factor * tf.gather(self.target_lams, min_target)
+                + right_trim_factor * tf.gather(self.target_lams, max_target)) + tf.log(self.double_cut_weight)
+        hazard = tf.exp(equal_float * log_focal_lambda_part + (1 - equal_float) * log_double_lambda_part, name="hazard")
         return hazard
 
     def _create_hazard_away_dict(self):
@@ -660,7 +662,11 @@ class CLTLikelihoodModel:
         left_hazards = self._create_hazard_list(True, False, left_trimmables, right_trimmables)[:, :self.num_targets - 1]
         right_hazards = self._create_hazard_list(False, True, left_trimmables, right_trimmables)[:, 1:]
         left_cum_hazards = tf.cumsum(left_hazards, axis=1)
-        inter_target_hazards = tf.multiply(left_cum_hazards, right_hazards) * self.double_cut_weight
+        left_cum_num = tf.cumsum(tf.constant(left_trimmables, dtype=tf.float64)[:, :self.num_targets - 1], axis=1)
+        right_num = tf.constant(right_trimmables, dtype=tf.float64)[:, 1:]
+        no_left = tf_common.not_equal_float(left_cum_hazards, 0)
+        no_right = tf_common.not_equal_float(right_hazards, 0)
+        inter_target_hazards = (right_num * left_cum_hazards + left_cum_num * right_hazards) * self.double_cut_weight * no_left * no_right
         hazard_away_nodes = tf.add(
                 tf.reduce_sum(focal_hazards, axis=1),
                 tf.reduce_sum(inter_target_hazards, axis=1),

@@ -2,17 +2,15 @@ import time
 import tensorflow as tf
 import numpy as np
 import scipy.linalg
-
-import numpy as np
-
 """
 Tensorflow helper functions
 """
 
+
 def scatter_nd(
         index_vals,
         output_shape,
-        default_value = 0,
+        default_value=0,
         name=None):
     """
     A custom version of scatter_nd
