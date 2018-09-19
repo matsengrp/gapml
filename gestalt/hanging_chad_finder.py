@@ -167,7 +167,7 @@ class HangingChad:
             chad_in_tree = full_tree.search_nodes(node_id=self.node.node_id)[0]
             chad_parent_strs.append(chad_in_tree.up.anc_state_list_str)
         return "%s: %d leaves, %d possibilities: %s" % (
-            self.node.allele_events_list_str,
+            self.node.anc_state_list_str,
             len(self.node),
             self.num_possible_trees,
             chad_parent_strs)
@@ -220,7 +220,7 @@ def _get_chad_possibilities(
         ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
         new_pars_score = ancestral_events_finder.get_parsimony_score(tree)
         assert new_pars_score >= parsimony_score
-        if new_pars_score == parsimony_score:
+        if new_pars_score == parsimony_score and node.dist != 0:
             tree_copy = tree.copy()
             possible_trees.append(tree_copy)
 
@@ -261,13 +261,15 @@ def _get_chad_possibilities(
         # Now undo all the things we just did to the tree
         new_node.delete()
 
-    #print("num possible pars trees", len(possible_trees) + 1)
-    #print("chad", chad.node_id, chad.allele_events_list_str)
-    #if len(possible_trees) > 1:
-    #    print(orig_tree.get_ascii(attributes=['allele_events_list_str']))
+    #logging.info("num possible pars trees %d", len(possible_trees) + 1)
+    #logging.info("chad %d %s", chad.node_id, chad.allele_events_list_str)
+    #if len(possible_trees) + 1 > 1:
+    #    logging.info(orig_tree.get_ascii(attributes=['allele_events_list_str']))
+    #    logging.info(orig_tree.get_ascii(attributes=['dist']))
     #    for t_idx, p_tree in enumerate(possible_trees):
-    #        print("chad", chad.node_id, chad.allele_events_list_str)
-    #        print(p_tree.get_ascii(attributes=['allele_events_list_str']))
+    #        logging.info("chad %d %s", chad.node_id, chad.allele_events_list_str)
+    #        logging.info(p_tree.get_ascii(attributes=['anc_state_list_str']))
+    #        logging.info(p_tree.get_ascii(attributes=['dist']))
 
     random.shuffle(possible_trees)
     return HangingChad(

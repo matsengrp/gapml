@@ -317,7 +317,10 @@ def _do_random_rearrange(tree, bcode_meta, scratch_dir):
     """
     orig_num_leaves = len(tree)
     hanging_chads = hanging_chad_finder.get_all_chads(tree, bcode_meta, scratch_dir)
+    logging.info(tree.get_ascii(attributes=["anc_state_list_str"]))
     logging.info("number of hanging chads found %d", len(hanging_chads))
+    for chad in hanging_chads:
+        logging.info(str(chad))
 
     # Pick random chad
     random_chad = random.choice(hanging_chads)
