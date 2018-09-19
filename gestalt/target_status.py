@@ -91,7 +91,7 @@ class TargetStatus(tuple):
             return self
 
         max_targets = max(other_targ_stat[-1].max_deact_target + 1, self[-1].max_deact_target + 1)
-        binary_status = self._get_binary_status(max_targets)
+        binary_status = self.get_binary_status(max_targets)
         for deact_tract in other_targ_stat:
             #assert binary_status[deact_tract.min_deact_target] == 0
             #assert binary_status[deact_tract.max_deact_target] == 0
@@ -112,7 +112,7 @@ class TargetStatus(tuple):
             return TargetStatus(deact_tract)
 
         max_targets = max(target_tract.max_deact_target + 1, self[-1].max_deact_target + 1)
-        binary_status = self._get_binary_status(max_targets)
+        binary_status = self.get_binary_status(max_targets)
         #assert binary_status[target_tract.min_target] == 0
         #assert binary_status[target_tract.max_target] == 0
         binary_status[target_tract.min_deact_target: target_tract.max_deact_target + 1] = 1
@@ -131,7 +131,7 @@ class TargetStatus(tuple):
         else:
             return set()
 
-    def _get_binary_status(self, n_targets: int):
+    def get_binary_status(self, n_targets: int):
         """
         @return numpy array with 1 where the target is no longer active
         """
@@ -144,7 +144,7 @@ class TargetStatus(tuple):
         """
         @return List[int] of active targets
         """
-        inactive_status = self._get_binary_status(bcode_meta.n_targets)
+        inactive_status = self.get_binary_status(bcode_meta.n_targets)
         return np.where(inactive_status == 0)[0].tolist()
 
     def get_possible_target_tracts(self, bcode_meta: BarcodeMetadata):

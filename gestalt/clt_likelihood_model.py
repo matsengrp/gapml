@@ -622,12 +622,12 @@ class CLTLikelihoodModel:
         # Compute the hazard
         # Adding a weight for double cuts for now
         equal_float = tf_common.equal_float(min_target, max_target)
-        left_trim_factor = tf_common.ifelse(long_left_statuses, self.trim_long_factor[0], 1)
-        right_trim_factor = tf_common.ifelse(long_right_statuses, self.trim_long_factor[1], 1)
-        log_focal_lambda_part = tf.log(left_trim_factor) + tf.log(right_trim_factor) + tf.log(tf.gather(self.target_lams, min_target))
-        log_double_lambda_part = tf.log(
-                left_trim_factor * tf.gather(self.target_lams, min_target)
-                + right_trim_factor * tf.gather(self.target_lams, max_target)) + tf.log(self.double_cut_weight)
+        left_trim_factor = tf.log(tf_common.ifelse(long_left_statuses, self.trim_long_factor[0], 1))
+        right_trim_factor = tf.log(tf_common.ifelse(long_right_statuses, self.trim_long_factor[1], 1))
+        log_focal_lambda_part = left_trim_factor + right_trim_factor + tf.log(tf.gather(self.target_lams, min_target))
+        log_double_lambda_part = left_trim_factor + tf.log(
+                tf.gather(self.target_lams, min_target)
+                + tf.gather(self.target_lams, max_target)) + right_trim_factor + tf.log(self.double_cut_weight)
         hazard = tf.exp(equal_float * log_focal_lambda_part + (1 - equal_float) * log_double_lambda_part, name="hazard")
         return hazard
 
@@ -650,81 +650,40 @@ class CLTLikelihoodModel:
 
         @return tensorflow tensor with the hazards for transitioning away from each of the target statuses
         """
-        left_trimmables = []
-        right_trimmables = []
-        for targ_stat in target_statuses:
-            left_m, right_m = self._get_hazard_masks_target_status(targ_stat)
-            left_trimmables.append(left_m)
-            right_trimmables.append(right_m)
+        active_masks = tf.constant(
+                [(1 - targ_stat.get_binary_status(self.num_targets)).tolist() for targ_stat in target_statuses],
+                dtype=tf.float64)
+        #active_masks = tf_common.equal_float(active_masks, 1)
 
         # Compute the hazard away
-        focal_hazards = self._create_hazard_list(True, True, left_trimmables, right_trimmables)
-        left_hazards = self._create_hazard_list(True, False, left_trimmables, right_trimmables)[:, :self.num_targets - 1]
-        right_hazards = self._create_hazard_list(False, True, left_trimmables, right_trimmables)[:, 1:]
-        left_cum_hazards = tf.cumsum(left_hazards, axis=1)
-        left_cum_num = tf.cumsum(tf.constant(left_trimmables, dtype=tf.float64)[:, :self.num_targets - 1], axis=1)
-        right_num = tf.constant(right_trimmables, dtype=tf.float64)[:, 1:]
-        no_left = tf_common.not_equal_float(left_cum_hazards, 0)
-        no_right = tf_common.not_equal_float(right_hazards, 0)
-        inter_target_hazards = (right_num * left_cum_hazards + left_cum_num * right_hazards) * self.double_cut_weight * no_left * no_right
-        hazard_away_nodes = tf.add(
-                tf.reduce_sum(focal_hazards, axis=1),
-                tf.reduce_sum(inter_target_hazards, axis=1),
-                name="hazard_away")
+        active_targ_hazards = self.target_lams * active_masks
+
+        focal_hazards = (
+                (1 + self.trim_long_factor[1]) * active_targ_hazards[:, 0]
+                + (1 + self.trim_long_factor[0]) * (1 + self.trim_long_factor[1]) * tf.reduce_sum(active_targ_hazards[:, 1:-1], axis=1)
+                + (1 + self.trim_long_factor[0]) * active_targ_hazards[:, -1])
+
+        middle_hazards = tf.reduce_sum(active_targ_hazards[:, 1:-1], axis=1)
+        num_in_middle = tf.reduce_sum(active_masks[:, 1:-1], axis=1)
+        middle_double_cut_tot_haz = (1 + self.trim_long_factor[0]) * (1 + self.trim_long_factor[1]) * (num_in_middle - 1) * middle_hazards
+
+        num_after_start = tf.reduce_sum(active_masks[:, 1:-1], axis=1)
+        start_to_other_hazard = active_masks[:,0] * (1 + self.trim_long_factor[1]) * (
+                num_after_start * active_targ_hazards[:, 0] + tf.reduce_sum(active_targ_hazards[:, 1:-1], axis=1))
+
+        num_before_end = tf.reduce_sum(active_masks[:, 1:-1], axis=1)
+        end_to_other_hazard = active_masks[:,-1] * (1 + self.trim_long_factor[0]) * (
+                num_before_end * active_targ_hazards[:, -1] + tf.reduce_sum(active_targ_hazards[:, 1:-1], axis=1))
+
+        start_to_end_hazard = active_masks[:,0] * active_masks[:,-1] * (
+                active_targ_hazards[:, 0] + active_targ_hazards[:, -1])
+
+        hazard_away_nodes = focal_hazards + self.double_cut_weight * (
+                middle_double_cut_tot_haz
+                + start_to_other_hazard
+                + end_to_other_hazard
+                + start_to_end_hazard)
         return hazard_away_nodes
-
-    def _get_hazard_masks_target_status(self, target_status: TargetStatus):
-        """
-        @return two lists, one for left trims and one for right trims.
-                each list is composed of values [0,1,2] matching each target.
-                0 = no trim at that target (in that direction) can be performed
-                1 = only short trim at that target (in that dir) is allowed
-                2 = short and long trims are allowed at that target
-
-                We assume no long left trims are allowed at target 0 and any target T
-                where T - 1 is deactivated. No long right trims are allowed at the last
-                target and any target T where T + 1 is deactivated.
-        """
-        left_trim_allows = np.ones(self.num_targets, dtype=int) * 2
-        left_trim_allows[0] = 1
-        for deact_tract in target_status:
-            left_trim_allows[deact_tract.min_deact_target:deact_tract.max_deact_target + 1] = 0
-
-        right_trim_allows = np.ones(self.num_targets, dtype=int) * 2
-        right_trim_allows[-1] = 1
-        for deact_tract in target_status:
-            right_trim_allows[deact_tract.min_deact_target:deact_tract.max_deact_target + 1] = 0
-        return left_trim_allows.tolist(), right_trim_allows.tolist()
-
-    def _create_hazard_list(
-            self,
-            trim_left: bool,
-            trim_right: bool,
-            left_trimmables: List[List[int]],
-            right_trimmables: List[List[int]]):
-        """
-        Helper function for creating hazard list nodes -- useful for calculating hazard away
-
-        @param trim_left: boolean to output the hazard involving left trims
-        @param trim_right: boolean to output the hazard involving right trims
-        @param left_trimmables: the mask output from `_get_hazard_masks_target_status` for the left trims
-                                indicates whether we can do no trim, short trims only, or long and short trims
-        @param right_trimmables: the mask output from `_get_hazard_masks_target_status` for the right trims
-                                indicates whether we can do no trim, short trims only, or long and short trims
-
-        @return tensorflow tensor with the hazard of a long and/or short trim to the left and/or right at each of the targets
-        """
-        left_factor = tf_common.equal_float(left_trimmables, 1) + tf_common.equal_float(left_trimmables, 2) * (1 + self.trim_long_factor[0])
-        right_factor = tf_common.equal_float(right_trimmables, 1) + tf_common.equal_float(right_trimmables, 2) * (1 + self.trim_long_factor[1])
-
-        if trim_left and not trim_right:
-            return self.target_lams * left_factor
-        elif trim_right and not trim_left:
-            return self.target_lams * right_factor
-        elif trim_right and trim_left:
-            return self.target_lams * left_factor * right_factor
-        else:
-            raise ValueError("not allowed to not trim left and right")
 
     """
     SECTION: methods for helping to calculate Pr(indel | target target)

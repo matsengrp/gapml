@@ -46,27 +46,20 @@ class CLTTransitionProbTestCase(unittest.TestCase):
         haz_away_node = self.mdl._create_hazard_away_target_statuses(
                 [TargetStatus(TargetDeactTract(0,1), TargetDeactTract(3,9))])
         haz_away = haz_away_node.eval()
-        self.assertTrue(np.isclose(haz_away,
-            self.trim_long_short_both * self.target_lams[2]))
+        my_haz = self.trim_long_short_both * self.target_lams[2]
+        self.assertTrue(np.isclose(haz_away, my_haz))
 
         haz_away_node = self.mdl._create_hazard_away_target_statuses(
                 [TargetStatus(TargetDeactTract(0,1), TargetDeactTract(4,9))])
         haz_away = haz_away_node.eval()
         my_haz = (self.trim_long_short_both * np.sum(self.target_lams[2:4])
-                + 2 * (
-                    (1 + self.trim_long_factor[0]) * self.target_lams[2]
-                    + (1 + self.trim_long_factor[1]) * self.target_lams[3]
-                    ) * self.double_cut_weight)
+                + self.trim_long_short_both * self.target_lams[2:4].sum() * self.double_cut_weight)
         self.assertTrue(np.isclose(haz_away, my_haz))
 
         haz_away_node = self.mdl._create_hazard_away_target_statuses(
             [TargetStatus(TargetDeactTract(0,1), TargetDeactTract(3,5), TargetDeactTract(7,9))])
         haz_away = haz_away_node.eval()
-        my_haz = (self.trim_long_short_both * (self.target_lams[2] + self.target_lams[6]) +
-                    2 * (
-                        (1 + self.trim_long_factor[0]) * self.target_lams[2]
-                        + (1 + self.trim_long_factor[1]) * self.target_lams[6]
-                        ) * self.double_cut_weight)
+        my_haz = self.trim_long_short_both * (self.target_lams[2] + self.target_lams[6]) * (1 + self.double_cut_weight)
         self.assertTrue(np.isclose(haz_away, my_haz))
 
         haz_away_node = self.mdl._create_hazard_away_target_statuses(
@@ -74,10 +67,7 @@ class CLTTransitionProbTestCase(unittest.TestCase):
         haz_away = haz_away_node.eval()
         my_haz_away = (
             self.trim_long_short_both * (np.sum(self.target_lams[2:4]) + np.sum(self.target_lams[5:7]))
-            + self.double_cut_weight * (
-                4 * ((1 + self.trim_long_factor[0]) * np.sum(self.target_lams[2:4]) + (1 + self.trim_long_factor[1]) * np.sum(self.target_lams[5:7]))
-                + 2 * ((1 + self.trim_long_factor[0]) * self.target_lams[2] + (1 + self.trim_long_factor[1]) * self.target_lams[3])
-                + 2 * ((1 + self.trim_long_factor[0]) * self.target_lams[5] + (1 + self.trim_long_factor[1]) * self.target_lams[6])))
+            + self.double_cut_weight * 3 * self.trim_long_short_both * (self.target_lams[2:4].sum() + self.target_lams[5:7].sum()))
         self.assertTrue(np.isclose(haz_away, my_haz_away))
 
         haz_away_node = self.mdl._create_hazard_away_target_statuses(
@@ -85,7 +75,7 @@ class CLTTransitionProbTestCase(unittest.TestCase):
         haz_away = haz_away_node.eval()
         my_haz_away = (
             self.trim_long_short_both * self.target_lams[2] + self.trim_long_shorts[1] * self.target_lams[0]
-            + self.double_cut_weight * (2 * self.target_lams[0] + (1 + self.trim_long_factor[1]) * self.target_lams[2]))
+            + (1 + self.trim_long_factor[1]) * self.double_cut_weight * (self.target_lams[0] + self.target_lams[2]))
         self.assertTrue(np.isclose(haz_away, my_haz_away))
 
     def test_get_hazard(self):
@@ -122,13 +112,13 @@ class CLTTransitionProbTestCase(unittest.TestCase):
 
         hazard = self.double_cut_weight * (
                 self.target_lams[0] + self.target_lams[3]
-                + self.target_lams[0] + self.target_lams[2] * self.trim_long_factor[1]
-                + self.target_lams[1] * self.trim_long_factor[0] + self.target_lams[3]
-                + self.trim_long_factor[0] * self.target_lams[1] + self.target_lams[2] * self.trim_long_factor[1])
+                + (self.target_lams[0] + self.target_lams[2]) * self.trim_long_factor[1]
+                + (self.target_lams[1] + self.target_lams[3]) * self.trim_long_factor[0]
+                + self.trim_long_factor[0] * (self.target_lams[1] + self.target_lams[2]) * self.trim_long_factor[1])
         self.assertTrue(np.isclose(hazard, q_mat[0, 2]))
 
         hazard = (
-                self.double_cut_weight * (self.target_lams[2]  * (1 + self.trim_long_factor[0]) + self.target_lams[3] * 2)
+                self.double_cut_weight * (self.target_lams[2] + self.target_lams[3]) * (1 + self.trim_long_factor[0])
                 + self.target_lams[3] * self.trim_long_factor[0]
                 + self.target_lams[2] * self.trim_long_factor[1] * (1 + self.trim_long_factor[0]))
         self.assertTrue(np.isclose(hazard, q_mat[1, 2]))
@@ -136,14 +126,10 @@ class CLTTransitionProbTestCase(unittest.TestCase):
         self.assertTrue(np.isclose(0, q_mat[1, 0]))
 
         hazard = (
-                 self.double_cut_weight * (
-                    self.trim_long_shorts[0] * self.target_lams[4] * 8 + 2 * np.sum(self.target_lams[5:9]) * self.trim_long_shorts[1]
-                    + self.trim_long_shorts[0] * self.target_lams[5] * 6 + 2 * np.sum(self.target_lams[6:9]) * self.trim_long_shorts[1]
-                    + self.trim_long_shorts[0] * self.target_lams[6] * 4 + 2 * np.sum(self.target_lams[7:9]) * self.trim_long_shorts[1]
-                    + self.trim_long_shorts[0] * self.target_lams[7] * 2 + 2 * self.target_lams[8] * self.trim_long_shorts[1])
+                 self.double_cut_weight * self.trim_long_short_both * self.target_lams[4:9].sum() * 4
                 + (1 + self.trim_long_factor[0]) * (1 + self.trim_long_factor[1]) * np.sum(self.target_lams[4:9])
                 + (1 + self.trim_long_factor[0]) * self.target_lams[9]
-                + self.double_cut_weight * ((1 + self.trim_long_factor[0]) * np.sum(self.target_lams[4:9]) + 10 * self.target_lams[9]))
+                + self.double_cut_weight * (1 + self.trim_long_factor[0]) * (self.target_lams[4:9].sum() + 5 * self.target_lams[9]))
         self.assertTrue(np.isclose(-hazard, q_mat[2, 2]))
         self.assertTrue(np.isclose(0, q_mat[2, 0]))
         self.assertTrue(np.isclose(0, q_mat[2, 1]))
@@ -179,7 +165,7 @@ class CLTTransitionProbTestCase(unittest.TestCase):
         self.assertTrue(np.isclose(
             - self.target_lams[9] * (1 + self.trim_long_factor[0])
             - self.target_lams[8] * (1 + self.trim_long_factor[0]) * (1 + self.trim_long_factor[1])
-            - (self.target_lams[8] * (1 + self.trim_long_factor[0]) + 2 * self.target_lams[9]) * self.double_cut_weight,
+            - (self.target_lams[8] + self.target_lams[9]) * self.double_cut_weight * (1 + self.trim_long_factor[0]),
             q_mat[1, 1]))
 
     def test_create_transition_matrix_with_singletonwc(self):
@@ -197,20 +183,15 @@ class CLTTransitionProbTestCase(unittest.TestCase):
             self.double_cut_weight * (self.target_lams[0] + self.target_lams[9]),
             q_mat[0, 1]))
 
-        hazard_away = 0
-        for i in range(1,8):
-            hazard_away += self.double_cut_weight * (
-                self.trim_long_shorts[0] * self.target_lams[i] * (8 - i) * 2 + 2 * np.sum(self.target_lams[(i + 1):9]) * self.trim_long_shorts[1]
-            )
-        hazard_away += (
+        hazard_away = (
                 self.trim_long_short_both * np.sum(self.target_lams[1:9])
                 + (1 + self.trim_long_factor[1]) * self.target_lams[0]
-                + self.double_cut_weight * (
-                    self.target_lams[0] * 16 + (1 + self.trim_long_factor[1]) * np.sum(self.target_lams[1:9]))
                 + (1 + self.trim_long_factor[0]) * self.target_lams[9]
                 + self.double_cut_weight * (
-                    self.target_lams[9] * 16 + (1 + self.trim_long_factor[0]) * np.sum(self.target_lams[1:9]))
-                + self.double_cut_weight * (self.target_lams[0] + self.target_lams[9]))
+                    7 * self.target_lams[1:9].sum() * self.trim_long_short_both
+                    + (1 + self.trim_long_factor[1]) * (self.target_lams[0] * 8 + np.sum(self.target_lams[1:9]))
+                    + (1 + self.trim_long_factor[0]) * (self.target_lams[9] * 8 + np.sum(self.target_lams[1:9]))
+                    + (self.target_lams[0] + self.target_lams[9])))
         self.assertTrue(np.isclose(-hazard_away, q_mat[0, 0]))
 
         self.assertEqual(q_mat[1,1], 0)
