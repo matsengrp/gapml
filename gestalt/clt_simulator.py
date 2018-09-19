@@ -1,6 +1,7 @@
 import copy
 from scipy.stats import expon
 import numpy as np
+import logging
 
 from cell_lineage_tree import CellLineageTree
 from cell_state import CellTypeTree, CellState
@@ -70,17 +71,23 @@ class BirthDeathTreeSimulator:
     Class for creating cell lineage trees without allele or cell types
     """
     def __init__(self,
-        start_birth_rate: float,
-        birth_decay: float,
-        birth_intercept: float,
-        death_rate: float):
+            birth_sync_rounds: int,
+            birth_sync_time: float,
+            birth_decay: float,
+            death_rate: float):
         """
-        @param birth_rate: the CTMC rate param for cell division
+        @param birth_sync_rounds: number of synchronous cell divisions (before async begins)
+        @param birth_sync_time: time between synchronous cell divisions
+        @param start_birth_rate: the starting CTMC rate param for cell division
+        @param birth_decay: the exponential decay rate for cell division
         @param death_rate: the CTMC rate param for cell death
         """
-        self.start_birth_rate = start_birth_rate
+        self.birth_sync_rounds = birth_sync_rounds
+        self.birth_sync_time = birth_sync_time
+        # First round is not counted
+        self.birth_async_start_time = birth_sync_time * birth_sync_rounds + 1e-10
+        self.start_birth_rate = 1.0/birth_sync_time
         self.birth_decay = birth_decay
-        self.birth_intercept = birth_intercept
         self.death_scale = 1.0 / death_rate
 
     def simulate(self, root_allele_list: AlleleList, time: float, max_nodes: int = 10):
@@ -135,9 +142,13 @@ class BirthDeathTreeSimulator:
             return
 
         # Determine branch length and event at end of branch
-        division_happens, branch_length = self._run_race(
-            1.0/(self.start_birth_rate * np.exp(self.birth_decay * (self.tot_time - remain_time)) + self.birth_intercept),
-            self.death_scale)
+        if self.tot_time - remain_time < self.birth_async_start_time:
+            division_happens = True
+            branch_length = self.birth_sync_time
+        else:
+            time_since_decay_begin = (self.tot_time - remain_time) - self.birth_async_start_time
+            curr_birth_scale = 1.0/(self.start_birth_rate * np.exp(self.birth_decay * time_since_decay_begin))
+            division_happens, branch_length = self._run_race(curr_birth_scale, self.death_scale)
         obs_branch_length = min(branch_length, remain_time)
         remain_time = remain_time - obs_branch_length
 
@@ -227,21 +238,21 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
     """
 
     def __init__(self,
-        start_birth_rate: float,
-        birth_decay: float,
-        birth_intercept: float,
-        death_rate: float,
-        cell_state_simulator: CellStateSimulator,
-        allele_simulator: AlleleSimulator):
+            birth_sync_rounds: int,
+            birth_sync_time: float,
+            birth_decay: float,
+            death_rate: float,
+            cell_state_simulator: CellStateSimulator,
+            allele_simulator: AlleleSimulator):
         """
         @param birth_rate: the CTMC rate param for cell division
         @param death_rate: the CTMC rate param for cell death
         @param cell_type_tree: the tree that specifies how cells differentiate
         @param allele_simulator: a simulator for how alleles get modified
         """
-        self.start_birth_rate = start_birth_rate
+        self.birth_sync_rounds = birth_sync_rounds
+        self.birth_sync_time = birth_sync_time
         self.birth_decay = birth_decay
-        self.birth_intercept = birth_intercept
         self.death_rate = death_rate
         self.cell_state_simulator = cell_state_simulator
         self.allele_simulator = allele_simulator
@@ -268,9 +279,9 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
         root_cell_state = self.cell_state_simulator.get_root()
         # Run the simulation to just create the tree topology
         bd_tree_simulator = BirthDeathTreeSimulator(
-                self.start_birth_rate,
+                self.birth_sync_rounds,
+                self.birth_sync_time,
                 self.birth_decay,
-                self.birth_intercept,
                 self.death_rate)
         tree = bd_tree_simulator.simulate(
                 root_allele,

@@ -105,11 +105,11 @@ def parse_args():
         default=1,
         help='poisson parameter for distribution of insertion in cut site(s)')
     parser.add_argument(
+        '--birth-sync-rounds', type=float, default=2, help='number of syncronous birth rounds before async begins')
+    parser.add_argument(
+        '--birth-sync-time', type=float, default=0.1, help='amount of time between syncronous birth rounds')
+    parser.add_argument(
         '--birth-decay', type=float, default=-0.3, help='birth rate decay')
-    parser.add_argument(
-        '--start-birth-lambda', type=float, default=3, help='start birth rate')
-    parser.add_argument(
-        '--birth-intercept', type=float, default=1, help='birth rate intercept')
     parser.add_argument(
         '--death-lambda', type=float, default=0.001, help='death rate')
     parser.add_argument(
@@ -163,6 +163,9 @@ def parse_args():
 
     args.target_lambdas = [float(x) for x in args.target_lambdas.split(",")]
     args.num_targets = len(args.target_lambdas)
+
+    assert args.time > args.birth_sync_rounds * args.birth_sync_time
+
     return args
 
 def create_cell_type_tree(args):
@@ -194,9 +197,9 @@ def create_simulators(args, clt_model):
                 allele_simulator)
     else:
         clt_simulator = CLTSimulatorBifurcating(
-            args.start_birth_lambda,
+            args.birth_sync_rounds,
+            args.birth_sync_time,
             args.birth_decay,
-            args.birth_intercept,
             args.death_lambda,
             cell_type_simulator,
             allele_simulator)
@@ -207,7 +210,7 @@ def create_cell_lineage_tree(
         args,
         clt_model: CLTLikelihoodModel,
         max_tries: int = 20,
-        incr: float = 0.02,
+        incr: float = 0.01,
         time_min: float = 1e-3):
     """
     @return original clt, the set of observed leaves, and the true topology for the observed leaves
@@ -215,10 +218,10 @@ def create_cell_lineage_tree(
     clt_simulator, observer = create_simulators(args, clt_model)
 
     # Keep trying to make CLT until enough leaves in observed tree by modifying the max time of the tree
-    birth_intercept = args.birth_intercept
+    birth_sync_time = args.birth_sync_time
     for i in range(max_tries):
         try:
-            clt_simulator.birth_intercept = birth_intercept
+            clt_simulator.birth_sync_time = birth_sync_time
             clt = clt_simulator.simulate(
                 tree_seed = args.model_seed,
                 data_seed = args.data_seed,
@@ -233,16 +236,16 @@ def create_cell_lineage_tree(
                     seed=args.model_seed)
 
             logging.info(
-                "birth lambda %f, num uniq alleles %d, num sampled leaves %d, num tot_leaves %d",
-                birth_intercept,
+                "birth time %f, num uniq alleles %d, num sampled leaves %d, num tot_leaves %d",
+                birth_sync_time,
                 len(obs_leaves),
                 len(true_subtree),
                 len(clt))
-            print("le....", len(true_subtree), birth_intercept)
+            print("le....", len(true_subtree), birth_sync_time)
             if len(true_subtree) < args.min_uniq_alleles:
-                birth_intercept += incr
+                birth_sync_time -= incr
             elif len(true_subtree) >= args.max_uniq_alleles:
-                birth_intercept -= incr
+                birth_sync_time += incr
             else:
                 # We got a good number of leaves! Stop trying
                 print("done!")
@@ -263,25 +266,6 @@ def create_cell_lineage_tree(
     logging.info(true_subtree.get_ascii(attributes=["dist"], show_internal=True))
 
     return obs_leaves, true_subtree, obs_idx_to_leaves
-
-#def initialize_lambda_rates(args, boost: float = 0.00001):
-#    birth_intercept = args.birth_intercept
-#    death_lambda = args.death_lambda
-#
-#    # initialize the target lambdas with some perturbation to ensure we don't have eigenvalues that are exactly equal
-#    if args.perturb_target_lambdas_variance > 0:
-#        perturbations = np.random.uniform(size=args.num_targets) - 0.5
-#        perturbations = perturbations / np.sqrt(np.var(perturbations)) * np.sqrt(args.perturb_target_lambdas_variance)
-#        target_lambdas = np.array(args.target_lambdas) + perturbations
-#    else:
-#        target_lambdas = np.array(args.target_lambdas)
-#    min_lambda = np.min(target_lambdas)
-#    if min_lambda < 0:
-#        # Make sure all target lambdas are positive
-#        target_lambdas = target_lambdas - min_lambda + boost
-#        birth_intercept += -min_lambda + boost
-#        death_lambda += -min_lambda + boost
-#    return target_lambdas, birth_intercept, death_lambda
 
 def main(args=sys.argv[1:]):
     args = parse_args()
