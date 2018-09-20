@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.stats
-from typing import List, Dict
+from typing import List, Dict, Set
 import logging
 import random
 
@@ -126,17 +126,13 @@ class HangingChad:
         @return List[CellLineageTree] -- takes a random leaf of the hanging chad and only keeps that
                     in each of the possible trees, drops all other leaves of the hanging chad
         """
-        random_leaf_id = random.choice([leaf.node_id for leaf in self.node])
+        chad_leaf_ids = [leaf.node_id for leaf in self.node]
+        random_leaf_id = random.choice(chad_leaf_ids)
+        num_chad_leaves = len(chad_leaf_ids)
         single_leaf_rand_trees = []
-        for full_tree in self.possible_full_trees:
+        for idx, full_tree in enumerate(self.possible_full_trees):
             single_leaf_tree = full_tree.copy()
             chad_in_tree = single_leaf_tree.search_nodes(node_id=self.node.node_id)[0]
-            num_chad_leaves = len(chad_in_tree)
-
-            # Prune the tree
-            for child in chad_in_tree.get_children():
-                if sum([leaf.node_id == random_leaf_id for leaf in child]) == 0:
-                    child.detach()
 
             # Handle the case where the chad was added to an edge
             if chad_in_tree.up.node_id is None:
@@ -157,10 +153,14 @@ class HangingChad:
                     node.add_feature("nochad_id", None)
 
             if num_chad_leaves > 1:
-                # There is a unifurcation since we pruned away the other leaves
-                # delete the intervening unifurcation
-                chad_in_tree.delete()
+                # Prune the tree
+                old_parent = chad_in_tree.up
+                chad_in_tree.detach()
+                rand_leaf_in_tree = single_leaf_tree.search_nodes(node_id=random_leaf_id)[0]
+                old_parent.add_child(rand_leaf_in_tree)
+
             single_leaf_tree.label_node_ids()
+            assert sum([leaf.nochad_id is None for leaf in single_leaf_tree]) == 1
 
             single_leaf_rand_trees.append({
                 "full": full_tree,
@@ -185,8 +185,7 @@ def _get_chad_possibilities(
         chad_id: int,
         tree: CellLineageTree,
         parsimony_score: int,
-        bcode_meta: BarcodeMetadata,
-        scratch_dir):
+        bcode_meta: BarcodeMetadata):
     """
     @return List[CellLineageTree] that are equally parsimonious trees after putting chad on various
             branches and nodes
@@ -212,6 +211,10 @@ def _get_chad_possibilities(
     # sanity check that original tree is equally parsimonious
     ancestral_events_finder.annotate_ancestral_states(orig_tree, bcode_meta)
     new_pars_score = ancestral_events_finder.get_parsimony_score(orig_tree)
+    if new_pars_score < parsimony_score:
+        logging.info("orig has prob %d< %d", new_pars_score, parsimony_score)
+        logging.info(tree.get_ascii(attributes=['anc_state_list_str']))
+        logging.info(tree.get_ascii(attributes=['dist']))
     assert new_pars_score == parsimony_score
 
     # Now find all the possible trees we can make by hanging the chad elsewhere
@@ -228,7 +231,11 @@ def _get_chad_possibilities(
 
         ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
         new_pars_score = ancestral_events_finder.get_parsimony_score(tree)
-        assert new_pars_score >= parsimony_score
+        if new_pars_score < parsimony_score:
+            logging.info("We beat MIX (attach to multifurc): %d< %d", new_pars_score, parsimony_score)
+            logging.info(tree.get_ascii(attributes=['anc_state_list_str']))
+            logging.info(tree.get_ascii(attributes=['dist']))
+        #assert new_pars_score >= parsimony_score
         can_collapse_tree = any([other_node.dist == 0 for other_node in tree.get_descendants() if not other_node.is_leaf()])
         if new_pars_score == parsimony_score and not can_collapse_tree:
             tree_copy = tree.copy()
@@ -255,7 +262,12 @@ def _get_chad_possibilities(
 
         ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
         new_pars_score = ancestral_events_finder.get_parsimony_score(tree)
-        assert new_pars_score >= parsimony_score
+        if new_pars_score < parsimony_score:
+            logging.info("we beat MIX (attach in middle): %d< %d", new_pars_score, parsimony_score)
+            logging.info(tree.get_ascii(attributes=['anc_state_list_str']))
+            logging.info(tree.get_ascii(attributes=['dist']))
+
+        #assert new_pars_score >= parsimony_score
 
         # Then this can be further collapsed and we might as well add the node to
         # a multif/bifurcation. Should have been accomplished previously.
@@ -287,17 +299,72 @@ def _get_chad_possibilities(
         nochad_tree,
         [orig_tree] + possible_trees)
 
-
-def get_all_chads(tree: CellLineageTree, bcode_meta: BarcodeMetadata, scratch_dir: str):
-    hanging_chads = []
-    collapsed_tree._remove_single_child_unobs_nodes(tree)
+def _preprocess_tree_for_chad_finding(tree: CellLineageTree, bcode_meta: BarcodeMetadata):
     ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
     parsimony_score = ancestral_events_finder.get_parsimony_score(tree)
+    tree = collapsed_tree.collapse_zero_lens(tree)
     can_collapse_tree = any([other_node.dist == 0 for other_node in tree.get_descendants() if not other_node.is_leaf()])
     logging.info(tree.get_ascii(attributes=['anc_state_list_str']))
     logging.info(tree.get_ascii(attributes=['dist']))
     assert not can_collapse_tree
 
+    return tree, parsimony_score
+
+
+def get_random_chad(tree: CellLineageTree, bcode_meta: BarcodeMetadata, exclude_chads: Set = set()):
+    """
+    @return a randomly chosen HangingChad, also a set of the recently seen chads (indexed by psuedo id)
+    """
+    tree, parsimony_score = _preprocess_tree_for_chad_finding(tree, bcode_meta)
+
+    descendants = tree.get_descendants()
+    random.shuffle(descendants)
+    for node in descendants:
+        if node.anc_state_list_str in exclude_chads:
+            continue
+
+        has_masking_cuts = any([sg.min_target + 1 < sg.max_target for anc_state in node.anc_state_list for sg in anc_state.get_singletons()])
+        if not has_masking_cuts:
+            continue
+
+        tree_copy = tree.copy()
+        hanging_chad = _get_chad_possibilities(
+                node.node_id,
+                tree_copy,
+                parsimony_score,
+                bcode_meta)
+        if hanging_chad.num_possible_trees > 1:
+            exclude_chads.add(hanging_chad.psuedo_id)
+            return hanging_chad, exclude_chads
+
+    if len(exclude_chads):
+        # Did we exclude all of them?
+        for node in descendants:
+            if node.anc_state_list_str not in exclude_chads:
+                continue
+
+            has_masking_cuts = any([sg.min_target + 1 < sg.max_target for anc_state in node.anc_state_list for sg in anc_state.get_singletons()])
+            if not has_masking_cuts:
+                continue
+
+            tree_copy = tree.copy()
+            hanging_chad = _get_chad_possibilities(
+                    node.node_id,
+                    tree_copy,
+                    parsimony_score,
+                    bcode_meta)
+            if hanging_chad.num_possible_trees > 1:
+                return hanging_chad, set()
+    return None, None
+
+
+def get_all_chads(tree: CellLineageTree, bcode_meta: BarcodeMetadata):
+    """
+    @return List[HangingChad] all hanging chads in the tree
+    """
+    tree, parsimony_score = _preprocess_tree_for_chad_finding(tree, bcode_meta)
+
+    hanging_chads = []
     for node in tree.get_descendants():
         has_masking_cuts = any([sg.min_target + 1 < sg.max_target for anc_state in node.anc_state_list for sg in anc_state.get_singletons()])
         if not has_masking_cuts:
@@ -308,8 +375,7 @@ def get_all_chads(tree: CellLineageTree, bcode_meta: BarcodeMetadata, scratch_di
                 node.node_id,
                 tree_copy,
                 parsimony_score,
-                bcode_meta,
-                scratch_dir)
+                bcode_meta)
         if hanging_chad.num_possible_trees > 1:
             hanging_chads.append(hanging_chad)
     return hanging_chads
@@ -458,6 +524,7 @@ def tune(
     @return HangingChadTuneResult
     """
     assert hanging_chad.num_possible_trees > 1
+    new_chad_tree_dicts = hanging_chad.make_single_leaf_rand_trees()[:args.max_chad_tune_search]
 
     # Fit the nochad tree
     no_chad_res = _fit_nochad_result(
