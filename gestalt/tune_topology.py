@@ -360,6 +360,7 @@ def main(args=sys.argv[1:]):
     logging.info("STARTING for reals!")
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))
     logging.info(tree.get_ascii(attributes=["node_id"]))
+    logging.info(tree.get_ascii(attributes=["abundance"]))
 
     # Begin tuning
     tuning_history = []
@@ -395,14 +396,15 @@ def main(args=sys.argv[1:]):
             # Pick one that is new
             chad_choices = [
                 c for c in hanging_chads
-                if c.node.allele_events_list_str not in recent_chads]
+                if (c.psuedo_id not in recent_chads)]
+                    #and len(c.node) > 1)]
             if len(chad_choices) == 0:
                 # If we have seen all the chads, reset the chad tracker
                 chad_choices = hanging_chads
                 recent_chads = set()
             random_chad = random.choice(chad_choices)
             # Track the chads we tuned recently
-            recent_chads.add(random_chad.node.allele_events_list_str)
+            recent_chads.add(random_chad.psuedo_id)
 
             logging.info(
                     "Iter %d: Tuning chad %s",

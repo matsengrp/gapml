@@ -110,6 +110,8 @@ class HangingChad:
         self.nochad_tree = nochad_tree
         self.possible_full_trees = possible_full_trees
         self.num_possible_trees = len(possible_full_trees)
+        # Kind of an id for this hanging chad
+        self.psuedo_id = node.anc_state_list_str
 
         self.chad_ids = set([node.node_id for node in self.node.traverse()])
 
@@ -129,6 +131,7 @@ class HangingChad:
         for full_tree in self.possible_full_trees:
             single_leaf_tree = full_tree.copy()
             chad_in_tree = single_leaf_tree.search_nodes(node_id=self.node.node_id)[0]
+            num_chad_leaves = len(chad_in_tree)
 
             # Prune the tree
             for child in chad_in_tree.get_children():
@@ -153,7 +156,10 @@ class HangingChad:
                 else:
                     node.add_feature("nochad_id", None)
 
-            # TODO: Do i want to get rid of unifurcs? probably doesn tmatter for now
+            if num_chad_leaves > 1:
+                # There is a unifurcation since we pruned away the other leaves
+                # delete the intervening unifurcation
+                chad_in_tree.delete()
             single_leaf_tree.label_node_ids()
 
             single_leaf_rand_trees.append({
@@ -165,7 +171,9 @@ class HangingChad:
         chad_parent_strs = []
         for full_tree in self.possible_full_trees:
             chad_in_tree = full_tree.search_nodes(node_id=self.node.node_id)[0]
-            chad_parent_strs.append(chad_in_tree.up.anc_state_list_str)
+            chad_parent_strs.append("%d,%s" % (
+                chad_in_tree.up.node_id if chad_in_tree.up.is_root() else chad_in_tree.up.up.node_id,
+                chad_in_tree.up.anc_state_list_str))
         return "%s: %d leaves, %d possibilities: %s" % (
             self.node.anc_state_list_str,
             len(self.node),
@@ -189,6 +197,7 @@ def _get_chad_possibilities(
     # Create no chad tree -- by detaching chad
     chad_orig_parent = chad.up
     chad.detach()
+    chad_orig_parent_unifurc = len(chad_orig_parent.get_children()) == 1
     num_nochad_nodes = tree.label_node_ids()
     for idx, node in enumerate(chad.traverse()):
         node.node_id = num_nochad_nodes + idx
@@ -220,13 +229,14 @@ def _get_chad_possibilities(
         ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
         new_pars_score = ancestral_events_finder.get_parsimony_score(tree)
         assert new_pars_score >= parsimony_score
-        if new_pars_score == parsimony_score and node.dist != 0:
+        can_collapse_tree = any([other_node.dist == 0 for other_node in tree.get_descendants() if not other_node.is_leaf()])
+        if new_pars_score == parsimony_score and not can_collapse_tree:
             tree_copy = tree.copy()
             possible_trees.append(tree_copy)
 
     # Consider adding chad to the middle of the existing edges
     for node in all_nodes:
-        if node.is_root() or node.node_id == chad_orig_parent.node_id:
+        if node.is_root() or (chad_orig_parent_unifurc and node.node_id == chad_orig_parent.node_id):
             continue
 
         chad.detach()
@@ -249,7 +259,7 @@ def _get_chad_possibilities(
 
         # Then this can be further collapsed and we might as well add the node to
         # a multif/bifurcation. Should have been accomplished previously.
-        can_collapse_tree = (node.dist == 0 and not node.is_leaf()) or new_node.dist == 0
+        can_collapse_tree = any([other_node.dist == 0 for other_node in tree.get_descendants() if not other_node.is_leaf()])
         if not can_collapse_tree and new_pars_score == parsimony_score:
             all_node_ids = set([node.node_id for node in tree.traverse() if node.node_id is not None])
             assert all_node_ids == set(list(range(num_labelled_nodes)))
@@ -280,8 +290,14 @@ def _get_chad_possibilities(
 
 def get_all_chads(tree: CellLineageTree, bcode_meta: BarcodeMetadata, scratch_dir: str):
     hanging_chads = []
+    collapsed_tree._remove_single_child_unobs_nodes(tree)
     ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
     parsimony_score = ancestral_events_finder.get_parsimony_score(tree)
+    can_collapse_tree = any([other_node.dist == 0 for other_node in tree.get_descendants() if not other_node.is_leaf()])
+    logging.info(tree.get_ascii(attributes=['anc_state_list_str']))
+    logging.info(tree.get_ascii(attributes=['dist']))
+    assert not can_collapse_tree
+
     for node in tree.get_descendants():
         has_masking_cuts = any([sg.min_target + 1 < sg.max_target for anc_state in node.anc_state_list for sg in anc_state.get_singletons()])
         if not has_masking_cuts:
@@ -358,24 +374,25 @@ def _create_warm_start_fit_params(
     fit_params["branch_len_offsets_proportion"] = np.ones(num_nodes) * 0.45 + np.random.rand(num_nodes) * 0.1
     for node in new_chad_tree.traverse():
         if node.nochad_id is None:
+            # This is completely new node. No copying to do
             continue
 
+        if not hanging_chad.nochad_unresolved_multifurc[node.nochad_id]:
+                # If this wasnt a multifurc and has suddenly become one,
+                # we will just force it to be a true resolved multifurcation.
+            node.resolved_multifurcation = True
+
         if node.is_root() or node.up.nochad_id is not None:
+            # Parent node and this node are both in the no chad tre
+            # therefore the branch length is completely specified
+            # Copy over existing branch length estimates -- it matches an existing branch in the no-chad tree
             branch_len_inners_mask[node.node_id] = True
             branch_len_offsets_proportion_mask[node.node_id] = True
 
-            # Copy over existing branch length estimates -- it matches an existing branch in the no-chad tree
-            if not hanging_chad.nochad_leaf[node.nochad_id]:
-                # Only copy branch_len_inners for non-leaf nodes (from the nochad tree) because branch_len_inner values
-                # are meaningless for leaf nodes
-                fit_params["branch_len_inners"][node.node_id] = prev_branch_inners[node.nochad_id]
+            assert hanging_chad.nochad_leaf[node.nochad_id] == node.is_leaf()
+            fit_params["branch_len_inners"][node.node_id] = prev_branch_inners[node.nochad_id]
 
-            if not node.is_root() and hanging_chad.nochad_unresolved_multifurc[node.up.nochad_id]:
-                fit_params["branch_len_offsets_proportion"][node.node_id] = prev_branch_proportions[node.nochad_id]
-            else:
-                # If this wasnt a multifurc and has suddenly become one,
-                # we will just force it to be a true resolved multifurcation.
-                fit_params["branch_len_offsets_proportion"][node.node_id] = 1e-10
+            fit_params["branch_len_offsets_proportion"][node.node_id] = prev_branch_proportions[node.nochad_id]
         elif node.up.nochad_id is None:
             # This is an implicit node -- we know how much the distance is between grandparent
             # and current node, but don't know where to place the parent node. This happens when we insert the hanging
@@ -415,7 +432,6 @@ def _create_warm_start_fit_params(
                 # from the original nochad tree.
                 fit_params["branch_len_inners"][node.node_id] = node_branch_inner * (1 - PERTURB_ZERO)
                 fit_params["branch_len_inners"][node.up.up.node_id] = PERTURB_ZERO
-                fit_params["branch_len_offsets_proportion"][node.up.up.node_id] = PERTURB_ZERO
 
     assert np.sum(np.logical_not(branch_len_inners_mask)) > 0 and np.sum(np.logical_not(branch_len_offsets_proportion_mask)) > 0
     known_params = KnownModelParams(
