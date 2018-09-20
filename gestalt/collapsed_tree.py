@@ -127,7 +127,7 @@ def collapse_zero_lens(raw_tree: TreeNode):
 
     for node in tree.traverse(strategy='postorder'):
         if node.dist == 0 and not node.is_root() and not node.is_leaf():
-            node.delete(prevent_nondicotomic=False)
+            node.delete() #prevent_nondicotomic=False)
 
     _remove_single_child_unobs_nodes(tree)
 
