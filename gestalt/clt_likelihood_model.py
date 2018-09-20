@@ -622,12 +622,13 @@ class CLTLikelihoodModel:
         # Compute the hazard
         # Adding a weight for double cuts for now
         equal_float = tf_common.equal_float(min_target, max_target)
-        left_trim_factor = tf.log(tf_common.ifelse(long_left_statuses, self.trim_long_factor[0], 1))
-        right_trim_factor = tf.log(tf_common.ifelse(long_right_statuses, self.trim_long_factor[1], 1))
-        log_focal_lambda_part = left_trim_factor + right_trim_factor + tf.log(tf.gather(self.target_lams, min_target))
-        log_double_lambda_part = left_trim_factor + tf.log(
-                tf.gather(self.target_lams, min_target)
-                + tf.gather(self.target_lams, max_target)) + right_trim_factor + tf.log(self.double_cut_weight)
+        log_left_trim_factor = tf.log(tf_common.ifelse(long_left_statuses, self.trim_long_factor[0], 1))
+        log_right_trim_factor = tf.log(tf_common.ifelse(long_right_statuses, self.trim_long_factor[1], 1))
+        log_focal_lambda_part = log_left_trim_factor + log_right_trim_factor + tf.log(tf.gather(self.target_lams, min_target))
+        log_double_lambda_part = (log_left_trim_factor
+                + tf.log(tf.gather(self.target_lams, min_target) + tf.gather(self.target_lams, max_target))
+                + log_right_trim_factor
+                + tf.log(self.double_cut_weight))
         hazard = tf.exp(equal_float * log_focal_lambda_part + (1 - equal_float) * log_double_lambda_part, name="hazard")
         return hazard
 
@@ -653,15 +654,15 @@ class CLTLikelihoodModel:
         active_masks = tf.constant(
                 [(1 - targ_stat.get_binary_status(self.num_targets)).tolist() for targ_stat in target_statuses],
                 dtype=tf.float64)
-        #active_masks = tf_common.equal_float(active_masks, 1)
-
-        # Compute the hazard away
         active_targ_hazards = self.target_lams * active_masks
 
-        focal_hazards = (
-                (1 + self.trim_long_factor[1]) * active_targ_hazards[:, 0]
-                + (1 + self.trim_long_factor[0]) * (1 + self.trim_long_factor[1]) * tf.reduce_sum(active_targ_hazards[:, 1:-1], axis=1)
-                + (1 + self.trim_long_factor[0]) * active_targ_hazards[:, -1])
+        if self.num_targets == 1:
+            return active_targ_hazards[:, 0]
+
+        # If more than one target, we need to calculate a lot more things
+        focal_hazards = ((1 + self.trim_long_factor[1]) * active_targ_hazards[:, 0]
+            + (1 + self.trim_long_factor[0]) * (1 + self.trim_long_factor[1]) * tf.reduce_sum(active_targ_hazards[:, 1:-1], axis=1)
+            + (1 + self.trim_long_factor[0]) * active_targ_hazards[:, -1])
 
         middle_hazards = tf.reduce_sum(active_targ_hazards[:, 1:-1], axis=1)
         num_in_middle = tf.reduce_sum(active_masks[:, 1:-1], axis=1)
@@ -1134,6 +1135,7 @@ class CLTLikelihoodModel:
         self.Lprob = Lprob
         self.down_probs_dict = down_probs_dict
         self.pt_matrix = pt_matrix
+        self.trans_mats = trans_mats
         return log_lik_alleles, Ddiags, dist_to_half_pen_list
 
     @profile

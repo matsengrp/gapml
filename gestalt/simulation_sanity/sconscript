@@ -48,8 +48,9 @@ def generate(env, outdir, c):
         '--out-obs-file ${TARGETS[0]}',
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
-        '--target-lambda 0.001,0.001',
-        '--double 850000',
+        '--target-lambda 0.4',
+        #'--target-lambda 0.3,0.1',
+        #'--double 0.3',
         '--trim-long-factor 0.001 0.001',
         '--time 1',
         '--num-barcodes',
@@ -80,17 +81,14 @@ def restrict_observed_alleles(env, outdir, c):
     cmd = [
         'python restrict_observed_barcodes.py',
         '--obs-file ${SOURCES[0]}',
-        '--model-file ${SOURCES[1]}',
         '--num-barcodes',
         c['num_barcodes'],
         '--out-obs-file ${TARGETS[0]}',
-        '--out-collapsed-tree-file ${TARGETS[1]}',
-        '--log-file ${TARGETS[2]}',
+        '--log-file ${TARGETS[1]}',
     ]
     return env.Command(
         [
             join(outdir, 'obs_data.pkl'),
-            join(outdir, 'collapsed_tree.pkl'),
             join(outdir, 'log_restrict.txt')],
         c['generate'],
         ' '.join(map(str, cmd)))
@@ -108,34 +106,37 @@ def run_parsimony(env, outdir, c):
             join(outdir, 'oracle_tree0.pkl')],
         [
             c['restrict_observed_alleles'][0],
-            c['restrict_observed_alleles'][1]],
+            c['generate'][1]],
         ' '.join(map(str, cmd)))
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
     cmd = [
-        'python run_estimator.py',
+        'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
         '--topology-file ${SOURCES[1]}',
         '--true-model-file ${SOURCES[2]}',
-        '--true-collapsed-tree-file ${SOURCES[3]}',
+        '--out-model-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
         '--seed',
-	c['seed'] + 100,
-        '--log-barr 0.001',
-        '--dist-to-half-pens 1e-20',
+	c['seed'] + 1,
+        '--log-barr 1e-20',
+        '--dist-to-half-pen 1e-20',
         '--max-sum-states 2000',
         '--max-extra-steps 2',
         '--max-iters 10000',
-        '--lambda-known',
+        '--num-penalty-tune-iters 1',
+        '--num-chad-tune-iters 1',
+        '--max-chad-tune-search 0',
+        '--tot-time-known',
     ]
     return env.Command(
         [
-            join(outdir, 'oracle_tree0_fitted.pkl'),
-            join(outdir, 'oracle_tree0_fit_log.pkl'),
+            join(outdir, 'fitted.pkl'),
+            join(outdir, 'fit_log.txt'),
         ],
         [
             c['restrict_observed_alleles'][0],
             c['run_parsimony'][0],
-            c['generate'][1],
-            c['restrict_observed_alleles'][1]],
+            c['generate'][1]],
         ' '.join(map(str, cmd)))
