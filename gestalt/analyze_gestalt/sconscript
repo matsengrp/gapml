@@ -17,6 +17,15 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
+FISH_DATA = {
+    "ADR1": "/fh/fast/matsen_e/gestalt/fish_7B_UMI_collapsed_reads/fish_7B_UMI_collapsed_reads.txt",
+}
+
+nest.add(
+    'data',
+    ["ADR1"],
+)
+
 nest.add(
     'abundance_thres',
     [5],
@@ -27,6 +36,8 @@ nest.add(
 def read_gestalt(env, outdir, c):
     cmd = [
         'python read_gestalt_data.py',
+        '--reads-file',
+        FISH_DATA[c['data']],
         '--out-obs-data ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
         '--abundance-thres',
@@ -68,8 +79,10 @@ def run_parsimony(env, outdir, c):
 	1,
         '--max-random',
         0,
+        '--max-trees',
+        1,
         '--max-random-multifurc',
-        10,
+        1,
     ]
     return env.Command(
         [
@@ -93,31 +106,39 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = "12"
+    penalty_params = "1000,100,10"
     cmd = [
         'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
-        '--topology-file-template ${SOURCES[1]}',
+        '--topology-file ${SOURCES[1]}',
         '--out-model-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
         '--seed 100',
         '--log-barr 0.0001',
-        '--dist-to-half-pens',
+        '--dist-to-half-pen-params',
         penalty_params,
+        '--num-penalty-tune-iters',
+        2,
+        '--num-penalty-tune-splits',
+        5,
+        '--num-chad-tune-iters',
+        100,
+        '--max-chad-tune-search',
+        20,
         '--max-sum-states',
         c['sum_states'],
         '--max-extra-steps',
         c['extra_steps'],
-        '--max-iters 10000',
+        '--max-iters 50000',
         '--num-inits 1',
-        '--total-tune-splits 3',
-        '--max-topologies 10',
         '--tot-time-known',
+        '--num-processes 5',
+        '--num-init-random-rearrange 10',
     ]
     return env.Command(
         [
-            join(outdir, 'tune_topology_pretuned.pkl'),
-            join(outdir, 'tune_topology_pretuned_log.txt'),
+            join(outdir, 'tune_topology.pkl'),
+            join(outdir, 'tune_topology_log.txt'),
 	],
         [
             c['restrict_observed_alleles'][0],
