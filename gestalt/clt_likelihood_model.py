@@ -622,12 +622,13 @@ class CLTLikelihoodModel:
         # Compute the hazard
         # Adding a weight for double cuts for now
         equal_float = tf_common.equal_float(min_target, max_target)
-        left_trim_factor = tf.log(tf_common.ifelse(long_left_statuses, self.trim_long_factor[0], 1))
-        right_trim_factor = tf.log(tf_common.ifelse(long_right_statuses, self.trim_long_factor[1], 1))
-        log_focal_lambda_part = left_trim_factor + right_trim_factor + tf.log(tf.gather(self.target_lams, min_target))
-        log_double_lambda_part = left_trim_factor + tf.log(
-                tf.gather(self.target_lams, min_target)
-                + tf.gather(self.target_lams, max_target)) + right_trim_factor + tf.log(self.double_cut_weight)
+        log_left_trim_factor = tf.log(tf_common.ifelse(long_left_statuses, self.trim_long_factor[0], 1))
+        log_right_trim_factor = tf.log(tf_common.ifelse(long_right_statuses, self.trim_long_factor[1], 1))
+        log_focal_lambda_part = log_left_trim_factor + log_right_trim_factor + tf.log(tf.gather(self.target_lams, min_target))
+        log_double_lambda_part = (log_left_trim_factor
+                + tf.log(tf.gather(self.target_lams, min_target) + tf.gather(self.target_lams, max_target))
+                + log_right_trim_factor
+                + tf.log(self.double_cut_weight))
         hazard = tf.exp(equal_float * log_focal_lambda_part + (1 - equal_float) * log_double_lambda_part, name="hazard")
         return hazard
 
@@ -653,15 +654,15 @@ class CLTLikelihoodModel:
         active_masks = tf.constant(
                 [(1 - targ_stat.get_binary_status(self.num_targets)).tolist() for targ_stat in target_statuses],
                 dtype=tf.float64)
-        #active_masks = tf_common.equal_float(active_masks, 1)
-
-        # Compute the hazard away
         active_targ_hazards = self.target_lams * active_masks
 
-        focal_hazards = (
-                (1 + self.trim_long_factor[1]) * active_targ_hazards[:, 0]
-                + (1 + self.trim_long_factor[0]) * (1 + self.trim_long_factor[1]) * tf.reduce_sum(active_targ_hazards[:, 1:-1], axis=1)
-                + (1 + self.trim_long_factor[0]) * active_targ_hazards[:, -1])
+        if self.num_targets == 1:
+            return active_targ_hazards[:, 0]
+
+        # If more than one target, we need to calculate a lot more things
+        focal_hazards = ((1 + self.trim_long_factor[1]) * active_targ_hazards[:, 0]
+            + (1 + self.trim_long_factor[0]) * (1 + self.trim_long_factor[1]) * tf.reduce_sum(active_targ_hazards[:, 1:-1], axis=1)
+            + (1 + self.trim_long_factor[0]) * active_targ_hazards[:, -1])
 
         middle_hazards = tf.reduce_sum(active_targ_hazards[:, 1:-1], axis=1)
         num_in_middle = tf.reduce_sum(active_masks[:, 1:-1], axis=1)
@@ -963,8 +964,10 @@ class CLTLikelihoodModel:
         # Actually create the nodes for calculating the log likelihoods of the alleles
         self.log_lik_alleles_list = []
         self.Ddiags_list = []
+        self.dist_to_half_pen_list = []
         for bcode_idx in range(self.bcode_meta.num_barcodes):
-            log_lik_alleles, Ddiags = self._create_topology_log_lik_barcode(transition_wrappers, bcode_idx)
+            log_lik_alleles, Ddiags, dist_to_half_pens = self._create_topology_log_lik_barcode(transition_wrappers, bcode_idx)
+            self.dist_to_half_pen_list += dist_to_half_pens
             self.log_lik_alleles_list.append(log_lik_alleles)
             self.Ddiags_list.append(Ddiags)
         self.log_lik_alleles = tf.add_n(self.log_lik_alleles_list)
@@ -1027,7 +1030,7 @@ class CLTLikelihoodModel:
         down_probs_dict = dict()
         # Store all the scaling terms addressing numerical underflow
         log_scaling_terms = dict()
-        self.dist_to_half_pen_list = []
+        dist_to_half_pen_list = []
         # Tree traversal order should be postorder
         for node in self.topology.traverse("postorder"):
             if node.is_leaf():
@@ -1044,7 +1047,7 @@ class CLTLikelihoodModel:
                 # For a multifurcating tree, this is where we penalize spine length
                 # (constant penalty if no spine)
                 if haz_to_pen is not None:
-                    self.dist_to_half_pen_list.append(
+                    dist_to_half_pen_list.append(
                             tf.reduce_mean(tf.abs(tf.exp(haz_to_pen) - tf.constant(0.5, tf.float64))))
 
                 for child in node.children:
@@ -1075,11 +1078,11 @@ class CLTLikelihoodModel:
                                         tf.gather(
                                             params=self.branch_lens,
                                             indices=child.spine_children)))
-                                self.dist_to_half_pen_list.append(tf.reduce_mean(tf.abs(
+                                dist_to_half_pen_list.append(tf.reduce_mean(tf.abs(
                                     prob_stay - tf.constant(0.5, dtype=tf.float64))))
                         else:
                             prob_stay = tf.diag_part(pt_matrix[child.node_id])[:-1]
-                            self.dist_to_half_pen_list.append(tf.reduce_mean(tf.abs(
+                            dist_to_half_pen_list.append(tf.reduce_mean(tf.abs(
                                     prob_stay - tf.constant(0.5, tf.float64))))
 
                     # Get the probability for the data descended from the child node, assuming that the node
@@ -1132,7 +1135,8 @@ class CLTLikelihoodModel:
         self.Lprob = Lprob
         self.down_probs_dict = down_probs_dict
         self.pt_matrix = pt_matrix
-        return log_lik_alleles, Ddiags
+        self.trans_mats = trans_mats
+        return log_lik_alleles, Ddiags, dist_to_half_pen_list
 
     @profile
     def _create_transition_matrix(self, transition_wrapper: TransitionWrapper):

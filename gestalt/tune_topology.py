@@ -131,7 +131,7 @@ def parse_args(args):
     parser.add_argument(
         '--num-init-random-rearrange',
         type=int,
-        default=1,
+        default=0,
         help='number of times we randomly rearrange tree at the beginning')
     parser.add_argument(
         '--scratch-dir',
@@ -316,14 +316,14 @@ def _do_random_rearrange(tree, bcode_meta, scratch_dir):
     Picks a random chad and randomly places it under a possible parent
     """
     orig_num_leaves = len(tree)
-    hanging_chads = hanging_chad_finder.get_all_chads(tree, bcode_meta, scratch_dir)
-    logging.info(tree.get_ascii(attributes=["anc_state_list_str"]))
-    logging.info("number of hanging chads found %d", len(hanging_chads))
-    for chad in hanging_chads:
-        logging.info(str(chad))
+    random_chad, _ = hanging_chad_finder.get_random_chad(tree, bcode_meta)
+    if random_chad is None:
+        logging.info("No hanging chad to be found")
+        return tree
 
-    # Pick random chad
-    random_chad = random.choice(hanging_chads)
+    logging.info(tree.get_ascii(attributes=["anc_state_list_str"]))
+    #logging.info("number of hanging chads found %d", len(hanging_chads))
+    logging.info(str(random_chad))
 
     # Pick random equal parsimony tree
     new_tree = random.choice(random_chad.possible_full_trees)
@@ -353,6 +353,11 @@ def main(args=sys.argv[1:]):
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))
     logging.info(tree.get_ascii(attributes=["node_id"]))
 
+    all_chad_sketches = hanging_chad_finder.get_all_chads(
+            tree,
+            bcode_meta,
+            max_possible_trees=2)
+    logging.info("Total of %d chads found", len(all_chad_sketches))
     for i in range(args.num_init_random_rearrange):
         print("doing random rearrange", i)
         tree = _do_random_rearrange(tree, bcode_meta, args.scratch_dir)
@@ -360,6 +365,7 @@ def main(args=sys.argv[1:]):
     logging.info("STARTING for reals!")
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))
     logging.info(tree.get_ascii(attributes=["node_id"]))
+    logging.info(tree.get_ascii(attributes=["abundance"]))
 
     # Begin tuning
     tuning_history = []
@@ -384,26 +390,17 @@ def main(args=sys.argv[1:]):
         # Find hanging chads
         # TODO: kind slow right now... reruns chad-finding code
         # cause nodes are getting renumbered...
-        hanging_chads = hanging_chad_finder.get_all_chads(tree, bcode_meta, args.scratch_dir)
-        has_chads = len(hanging_chads) > 0
+        random_chad, recent_chads = hanging_chad_finder.get_random_chad(
+                tree,
+                bcode_meta,
+                exclude_chads=recent_chads)
+        has_chads = random_chad is not None
         num_old_leaves = len(tree)
 
         # pick a chad at random
         chad_tune_result = None
         if has_chads and args.max_chad_tune_search > 1:
             # Now tune the hanging chads!
-            # Pick one that is new
-            chad_choices = [
-                c for c in hanging_chads
-                if c.node.allele_events_list_str not in recent_chads]
-            if len(chad_choices) == 0:
-                # If we have seen all the chads, reset the chad tracker
-                chad_choices = hanging_chads
-                recent_chads = set()
-            random_chad = random.choice(chad_choices)
-            # Track the chads we tuned recently
-            recent_chads.add(random_chad.node.allele_events_list_str)
-
             logging.info(
                     "Iter %d: Tuning chad %s",
                     i,
