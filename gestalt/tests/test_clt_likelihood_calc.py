@@ -1,16 +1,14 @@
 import unittest
 
 import numpy as np
-import scipy.linalg
 import tensorflow as tf
 
 import tf_common
 from allele_events import AlleleEvents, Event
-from indel_sets import TargetTract, Singleton
+from indel_sets import Singleton
 from clt_likelihood_model import CLTLikelihoodModel
 from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
-from collapsed_tree import collapse_zero_lens
 from transition_wrapper_maker import TransitionWrapperMaker
 from target_status import TargetStatus, TargetDeactTract
 from optim_settings import KnownModelParams
@@ -478,7 +476,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
         hazard_to_cut1 = target_lams[1]
         # Note that the hazard to cut02 cannot include the hazard for cutting
         # a long TT[0,1,1,2] because we are calculating the hazard to a singleton
-        hazard_to_cut02 = double_cut_weight * target_lams[0] * target_lams[2]
+        hazard_to_cut02 = double_cut_weight * (target_lams[0] + target_lams[2])
 
         q_mat = np.matrix([
             [-hazard_away, hazard_to_cut1, hazard_to_cut02, hazard_away - hazard_to_cut1 - hazard_to_cut02],
@@ -545,7 +543,7 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
             hazard_away_dict[TargetStatus()],
             hazard_away_dict[TargetStatus(TargetDeactTract(1,1))]])
         hazard_to_cut1 = target_lams[1]
-        hazard_to_cut02 = double_cut_weight * target_lams[0] * target_lams[2]
+        hazard_to_cut02 = double_cut_weight * (target_lams[0] + target_lams[2])
 
         q_mat = np.matrix([
             [-hazard_away, hazard_to_cut1, hazard_to_cut02, hazard_away - hazard_to_cut1 - hazard_to_cut02],
