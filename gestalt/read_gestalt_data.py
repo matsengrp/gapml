@@ -27,8 +27,14 @@ def parse_args():
     parser.add_argument(
         '--reads-file',
         type=str,
-        default="/fh/fast/matsen_e/gestalt/fish_7B_UMI_collapsed_reads/fish_7B_UMI_collapsed_reads.txt",
+        #default="/fh/fast/matsen_e/gestalt/fish_7B_UMI_collapsed_reads/fish_7B_UMI_collapsed_reads.txt",
+        default="/fh/fast/matsen_e/gestalt/GSE81713_embryos_1_7/GSE81713_embryos_1_7.annotations.txt",
         help='Collapsed reads file: format 7B')
+    parser.add_argument(
+        '--reads-format',
+        type=int,
+        default=1,
+        help='Format for reading this file')
     parser.add_argument(
         '--log-file',
         type=str,
@@ -64,7 +70,8 @@ def process_observed_seq_format7B(
         target_str_list: List[str],
         cell_state: CellState,
         bcode_meta: BarcodeMetadata,
-        min_pos: int):
+        min_pos: int,
+        abundance: int = 1):
     """
     Converts new format allele to python repr allele
 
@@ -154,12 +161,54 @@ def process_observed_seq_format7B(
         else:
             non_clashing_events.append(evt)
 
+    print("allelle", non_clashing_events)
     obs = ObservedAlignedSeq(
             None,
             [AlleleEvents(non_clashing_events)],
             cell_state,
-            abundance=1)
+            abundance=abundance)
     return obs
+
+def parse_reads_file_format_GSE(file_name,
+                              bcode_meta: BarcodeMetadata,
+                              bcode_min_pos: int,
+                              max_read: int = None):
+    """
+    @param max_read: maximum number of alleles to read (for debugging purposes)
+
+    Right now, Aaron's file outputs all the events associated with a target.
+    This means for inter-target events, it will appear multiple times on that row.
+    e.g. target1 33D+234, target2 33E+234
+    """
+    cell_state = CellState(categorical=CellTypeTree(0, rate=None))
+    cell_states_dict = {"single_state": cell_state}
+    all_alleles = []
+    observed_alleles = dict()
+    with open(file_name, "r") as f:
+        reader = csv.reader(f, delimiter='\t')
+        header = next(reader)
+        for i, row in enumerate(reader):
+            abundance = int(row[2])
+            obs_aligned_seq = process_observed_seq_format7B(
+                row[-1].split("_"),
+                cell_state,
+                bcode_meta,
+                bcode_min_pos,
+                abundance=abundance)
+            obs_key = str(obs_aligned_seq)
+            if obs_key not in observed_alleles:
+                observed_alleles[obs_key] = obs_aligned_seq
+            else:
+                obs = observed_alleles[obs_key]
+                obs.abundance += abundance
+            if max_read is not None and len(all_alleles) == max_read:
+                break
+
+    obs_alleles_list = list(observed_alleles.values())
+    organ_dict = {}
+    for organ_str, cell_type in cell_states_dict.items():
+        organ_dict[str(cell_type)] = organ_str
+    return obs_alleles_list, organ_dict
 
 def parse_reads_file_format7B(file_name,
                               bcode_meta: BarcodeMetadata,
@@ -257,7 +306,13 @@ def main():
             # TODO: is this correct?
             crucial_pos_len=[6,6])
 
-    obs_leaves_cell_state, organ_dict = parse_reads_file_format7B(
+    if args.reads_format == 0:
+        obs_leaves_cell_state, organ_dict = parse_reads_file_format7B(
+            args.reads_file,
+            bcode_meta,
+            args.bcode_min_pos - args.bcode_pad_length)
+    else:
+        obs_leaves_cell_state, organ_dict = parse_reads_file_format_GSE(
             args.reads_file,
             bcode_meta,
             args.bcode_min_pos - args.bcode_pad_length)

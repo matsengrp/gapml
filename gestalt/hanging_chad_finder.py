@@ -155,8 +155,8 @@ class HangingChad:
             if num_chad_leaves > 1:
                 # Prune the tree
                 old_parent = chad_in_tree.up
-                chad_in_tree.detach()
                 rand_leaf_in_tree = single_leaf_tree.search_nodes(node_id=random_leaf_id)[0]
+                chad_in_tree.detach()
                 old_parent.add_child(rand_leaf_in_tree)
 
             single_leaf_tree.label_node_ids()
@@ -185,7 +185,8 @@ def _get_chad_possibilities(
         chad_id: int,
         tree: CellLineageTree,
         parsimony_score: int,
-        bcode_meta: BarcodeMetadata):
+        bcode_meta: BarcodeMetadata,
+        max_possible_trees: int = None):
     """
     @return List[CellLineageTree] that are equally parsimonious trees after putting chad on various
             branches and nodes
@@ -223,6 +224,8 @@ def _get_chad_possibilities(
     all_nodes = [node for node in tree.traverse() if node.node_id < num_nochad_nodes]
     # First consider adding chad to existing nodes
     for node in all_nodes:
+        if max_possible_trees is not None and len(possible_trees) >= max_possible_trees - 1:
+            break
         if node.is_leaf() or node.node_id == chad_orig_parent.node_id:
             continue
 
@@ -243,6 +246,8 @@ def _get_chad_possibilities(
 
     # Consider adding chad to the middle of the existing edges
     for node in all_nodes:
+        if max_possible_trees is not None and len(possible_trees) >= max_possible_trees - 1:
+            break
         if node.is_root() or (chad_orig_parent_unifurc and node.node_id == chad_orig_parent.node_id):
             continue
 
@@ -358,8 +363,12 @@ def get_random_chad(tree: CellLineageTree, bcode_meta: BarcodeMetadata, exclude_
     return None, None
 
 
-def get_all_chads(tree: CellLineageTree, bcode_meta: BarcodeMetadata):
+def get_all_chads(
+        tree: CellLineageTree,
+        bcode_meta: BarcodeMetadata,
+        max_possible_trees: int = None):
     """
+    @param max_possible_trees: stop once you find at least `max_possible_trees` in a chad
     @return List[HangingChad] all hanging chads in the tree
     """
     tree, parsimony_score = _preprocess_tree_for_chad_finding(tree, bcode_meta)
@@ -375,7 +384,8 @@ def get_all_chads(tree: CellLineageTree, bcode_meta: BarcodeMetadata):
                 node.node_id,
                 tree_copy,
                 parsimony_score,
-                bcode_meta)
+                bcode_meta,
+                max_possible_trees=max_possible_trees)
         if hanging_chad.num_possible_trees > 1:
             hanging_chads.append(hanging_chad)
     return hanging_chads
@@ -605,6 +615,7 @@ def tune(
                 selected_idx,
                 median_tree_dist > selected_tree_dist,
                 selected_tree_dist)
+        logging.info("bhv range = %f to %f", np.min(all_tree_dists), np.max(all_tree_dists))
         logging.info("all_%s= %s", print_assess_metric, all_tree_dists)
         logging.info("scores = %s", scores)
         logging.info("scores vs. %ss %s", print_assess_metric, scipy.stats.spearmanr(scores, all_tree_dists))

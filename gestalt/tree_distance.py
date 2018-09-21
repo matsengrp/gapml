@@ -33,7 +33,11 @@ class TreeDistanceMeasurerAgg:
                                 for each multi-abundance leaf
         """
         self.ref_tree = ref_tree
-        self.measurers = [meas_cls(ref_tree, scratch_dir) for meas_cls in measurer_classes]
+        if len(ref_tree) > 1:
+            # must have more than one leaf
+            self.measurers = [meas_cls(ref_tree, scratch_dir) for meas_cls in measurer_classes]
+        else:
+            self.measurers = []
         self.do_expand_abundance = do_expand_abundance
 
     def get_tree_dists(self, trees: List[CellLineageTree]):

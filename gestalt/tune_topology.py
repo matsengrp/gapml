@@ -131,7 +131,7 @@ def parse_args(args):
     parser.add_argument(
         '--num-init-random-rearrange',
         type=int,
-        default=1,
+        default=0,
         help='number of times we randomly rearrange tree at the beginning')
     parser.add_argument(
         '--scratch-dir',
@@ -318,6 +318,7 @@ def _do_random_rearrange(tree, bcode_meta, scratch_dir):
     orig_num_leaves = len(tree)
     random_chad, _ = hanging_chad_finder.get_random_chad(tree, bcode_meta)
     if random_chad is None:
+        logging.info("No hanging chad to be found")
         return tree
 
     logging.info(tree.get_ascii(attributes=["anc_state_list_str"]))
@@ -352,6 +353,11 @@ def main(args=sys.argv[1:]):
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))
     logging.info(tree.get_ascii(attributes=["node_id"]))
 
+    all_chad_sketches = hanging_chad_finder.get_all_chads(
+            tree,
+            bcode_meta,
+            max_possible_trees=2)
+    logging.info("Total of %d chads found", len(all_chad_sketches))
     for i in range(args.num_init_random_rearrange):
         print("doing random rearrange", i)
         tree = _do_random_rearrange(tree, bcode_meta, args.scratch_dir)
