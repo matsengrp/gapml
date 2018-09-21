@@ -405,7 +405,8 @@ def _fit_nochad_result(
     """
     logging.info("no chad tree leaves %d", len(nochad_tree))
 
-    fit_params['target_lams'] = get_init_target_lams(fit_params['target_lams'].size)
+    if not args.known_params.target_lams:
+        fit_params['target_lams'] = get_init_target_lams(fit_params['target_lams'].size)
     fit_params.pop('branch_len_inners', None)
     fit_params.pop('branch_len_offsets_proportion', None)
 
