@@ -3,6 +3,7 @@ import scipy.stats
 from typing import List, Dict, Set
 import logging
 import random
+import copy
 
 from allele_events import AlleleEvents
 from cell_lineage_tree import CellLineageTree
@@ -10,7 +11,7 @@ from barcode_metadata import BarcodeMetadata
 from transition_wrapper_maker import TransitionWrapperMaker
 from parallel_worker import SubprocessManager
 from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
-from common import get_randint, get_init_target_lams
+from common import get_randint, get_init_target_lams, assign_rand_tree_lengths
 from model_assessor import ModelAssessor
 from optim_settings import KnownModelParams
 import collapsed_tree
@@ -440,8 +441,8 @@ def _fit_nochad_result(
 
     if not args.known_params.target_lams:
         fit_params['target_lams'] = get_init_target_lams(fit_params['target_lams'].size)
-    fit_params.pop('branch_len_inners', None)
-    fit_params.pop('branch_len_offsets_proportion', None)
+    #fit_params.pop('branch_len_inners', None)
+    #fit_params.pop('branch_len_offsets_proportion', None)
 
     # Now fit the tree without the hanging chad
     trans_wrap_maker = TransitionWrapperMaker(
@@ -464,7 +465,8 @@ def _fit_nochad_result(
 
 def _create_warm_start_fit_params(
         hanging_chad: HangingChad,
-        no_chad_res: LikelihoodScorerResult,
+        fit_params: Dict,
+        no_chad_dist_to_roots: Dict,
         new_chad_tree: CellLineageTree):
     """
     Assemble the `fit_param` and `KnownModelParam` for fitting the tree with the hanging chad
@@ -473,11 +475,10 @@ def _create_warm_start_fit_params(
     """
     num_nodes = new_chad_tree.get_num_nodes()
 
-    fit_params = no_chad_res.get_fit_params()
     prev_branch_inners = fit_params["branch_len_inners"].copy()
     prev_branch_proportions = fit_params["branch_len_offsets_proportion"].copy()
 
-    fit_params['dist_to_half_pen_param'] = 0
+    #fit_params['dist_to_half_pen_param'] = 0
     branch_len_inners_mask = np.zeros(num_nodes, dtype=bool)
     branch_len_offsets_proportion_mask = np.zeros(num_nodes, dtype=bool)
     fit_params["branch_len_inners"] = np.ones(num_nodes)
@@ -488,22 +489,23 @@ def _create_warm_start_fit_params(
             continue
 
         if not hanging_chad.nochad_unresolved_multifurc[node.nochad_id]:
-                # If this wasnt a multifurc and has suddenly become one,
-                # we will just force it to be a true resolved multifurcation.
+            # If this wasnt a multifurc and has suddenly become one,
+            # we will just force it to be a true resolved multifurcation.
             node.resolved_multifurcation = True
 
         if node.is_root() or node.up.nochad_id is not None:
             # Parent node and this node are both in the no chad tre
             # therefore the branch length is completely specified
             # Copy over existing branch length estimates -- it matches an existing branch in the no-chad tree
-            branch_len_inners_mask[node.node_id] = True
-            branch_len_offsets_proportion_mask[node.node_id] = True
+            #branch_len_inners_mask[node.node_id] = True
+            #branch_len_offsets_proportion_mask[node.node_id] = True
 
             assert hanging_chad.nochad_leaf[node.nochad_id] == node.is_leaf()
             fit_params["branch_len_inners"][node.node_id] = prev_branch_inners[node.nochad_id]
 
             fit_params["branch_len_offsets_proportion"][node.node_id] = prev_branch_proportions[node.nochad_id]
         elif node.up.nochad_id is None:
+            raise ValueError("asdjfkla")
             # This is an implicit node -- we know how much the distance is between grandparent
             # and current node, but don't know where to place the parent node. This happens when we insert the hanging
             # chad along a branch instead of at an existing node
@@ -524,8 +526,8 @@ def _create_warm_start_fit_params(
             # Get the branch length inner of the node -- we do this convoluted thing in case the node in
             # question is actually a leaf. (then its branch_len_inner value is bogus)
             par_in_nochad_tree = node.up.up.up.nochad_id
-            node_up_dist_to_root = no_chad_res.train_history[-1]['dist_to_roots'][par_in_nochad_tree]
-            node_dist_to_root = no_chad_res.train_history[-1]['dist_to_roots'][node.nochad_id]
+            node_up_dist_to_root = no_chad_dist_to_roots[par_in_nochad_tree]
+            node_dist_to_root = no_chad_dist_to_roots[node.nochad_id]
             node_branch_inner = node_dist_to_root - node_up_dist_to_root
 
             if hanging_chad.nochad_unresolved_multifurc[par_in_nochad_tree]:
@@ -543,16 +545,16 @@ def _create_warm_start_fit_params(
                 fit_params["branch_len_inners"][node.node_id] = node_branch_inner * (1 - PERTURB_ZERO)
                 fit_params["branch_len_inners"][node.up.up.node_id] = PERTURB_ZERO
 
-    assert np.sum(np.logical_not(branch_len_inners_mask)) > 0 and np.sum(np.logical_not(branch_len_offsets_proportion_mask)) > 0
-    known_params = KnownModelParams(
-        target_lams=True,
-        branch_lens=True,
-        branch_len_inners=branch_len_inners_mask,
-        branch_len_offsets_proportion=branch_len_offsets_proportion_mask,
-        tot_time=True,
-        indel_params=True)
+    #assert np.sum(np.logical_not(branch_len_inners_mask)) > 0 and np.sum(np.logical_not(branch_len_offsets_proportion_mask)) > 0
+    #known_params = KnownModelParams(
+    #    target_lams=True,
+    #    branch_lens=True,
+    #    branch_len_inners=branch_len_inners_mask,
+    #    branch_len_offsets_proportion=branch_len_offsets_proportion_mask,
+    #    tot_time=True,
+    #    indel_params=True)
 
-    return fit_params, known_params
+    return fit_params#, known_params
 
 
 def tune(
@@ -571,13 +573,28 @@ def tune(
     new_chad_tree_dicts = hanging_chad.make_single_leaf_rand_trees()[:args.max_chad_tune_search]
 
     # Fit the nochad tree
-    #no_chad_res = _fit_nochad_result(
-    #    hanging_chad.nochad_tree,
-    #    bcode_meta,
-    #    args,
-    #    fit_params,
-    #    assessor=assessor)
     no_chad_res = None
+    nochad_num_nodes = hanging_chad.nochad_tree.get_num_nodes()
+    # Assign the no chad tree branch lengths
+    assign_rand_tree_lengths(hanging_chad.nochad_tree, fit_params['tot_time'])
+    branch_len_inners = np.zeros(nochad_num_nodes)
+    for node in hanging_chad.nochad_tree.traverse():
+        branch_len_inners[node.node_id] = node.dist
+    fit_params["branch_len_inners"] = branch_len_inners
+
+    nochad_dist_to_roots = {0: 0}
+    for node in hanging_chad.nochad_tree.traverse('preorder'):
+        if not node.is_root():
+            nochad_dist_to_roots[node.node_id] = node.dist + nochad_dist_to_roots[node.up.node_id]
+
+    # Initialize branch length offsets
+    fit_params["branch_len_offsets_proportion"] = np.random.rand(nochad_num_nodes) * 0.5
+    no_chad_res = _fit_nochad_result(
+        hanging_chad.nochad_tree,
+        bcode_meta,
+        args,
+        fit_params,
+        assessor=assessor)
 
     worker_list = []
     new_chad_tree_dicts = hanging_chad.make_single_leaf_rand_trees()[:args.max_chad_tune_search]
@@ -587,12 +604,13 @@ def tune(
         # Pick a random leaf from the hanging chad -- do not use the entire hanging chad
         # This is because the entire hanging chad might have multiple leaves and their
         # branch length assignment is ambigious.
-        warm_start_fit_params = fit_params
+        #warm_start_fit_params = fit_params
         warm_start_known_params = args.known_params
-        #warm_start_fit_params, warm_start_known_params = _create_warm_start_fit_params(
-        #    hanging_chad,
-        #    no_chad_res,
-        #    new_chad_tree)
+        warm_start_fit_params = _create_warm_start_fit_params(
+            hanging_chad,
+            copy.deepcopy(fit_params),
+            nochad_dist_to_roots,
+            new_chad_tree)
 
         trans_wrap_maker = TransitionWrapperMaker(
             new_chad_tree,
