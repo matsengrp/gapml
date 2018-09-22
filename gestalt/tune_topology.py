@@ -311,30 +311,37 @@ def do_refit_bifurc_tree(
     return bifurc_res
 
 
-def _do_random_rearrange(tree, bcode_meta, scratch_dir):
+def _do_random_rearrange(tree, bcode_meta, num_random_rearrange):
     """
     Picks a random chad and randomly places it under a possible parent
     """
     orig_num_leaves = len(tree)
-    random_chad, _ = hanging_chad_finder.get_random_chad(tree, bcode_meta)
-    if random_chad is None:
-        logging.info("No hanging chad to be found")
-        return tree
+    recent_chads = set()
+    for i in range(num_random_rearrange):
+        print("doing random rearrange", i)
+        random_chad, recent_chads = hanging_chad_finder.get_random_chad(
+                tree,
+                bcode_meta,
+                exclude_chads=recent_chads)
+        if random_chad is None:
+            logging.info("No hanging chad to be found")
+            return tree
 
-    logging.info(tree.get_ascii(attributes=["anc_state_list_str"]))
-    #logging.info("number of hanging chads found %d", len(hanging_chads))
-    logging.info(str(random_chad))
+        logging.info(tree.get_ascii(attributes=["anc_state_list_str"]))
+        logging.info(str(random_chad))
 
-    # Pick random equal parsimony tree
-    new_tree = random.choice(random_chad.possible_full_trees)
+        # Pick random equal parsimony tree
+        new_tree = random.choice(random_chad.possible_full_trees)
 
-    # Remove any unifurcations that may have been introduced when we
-    # detached the hanging chad
-    collapsed_tree._remove_single_child_unobs_nodes(new_tree)
+        # Remove any unifurcations that may have been introduced when we
+        # detached the hanging chad
+        collapsed_tree._remove_single_child_unobs_nodes(new_tree)
 
-    new_tree.label_node_ids()
-    assert orig_num_leaves == len(new_tree)
-    return new_tree
+        new_tree.label_node_ids()
+        assert orig_num_leaves == len(new_tree)
+        tree = new_tree
+
+    return tree
 
 
 def main(args=sys.argv[1:]):
@@ -358,9 +365,7 @@ def main(args=sys.argv[1:]):
             bcode_meta,
             max_possible_trees=2)
     logging.info("Total of %d chads found", len(all_chad_sketches))
-    for i in range(args.num_init_random_rearrange):
-        print("doing random rearrange", i)
-        tree = _do_random_rearrange(tree, bcode_meta, args.scratch_dir)
+    tree = _do_random_rearrange(tree, bcode_meta, args.num_init_random_rearrange)
 
     logging.info("STARTING for reals!")
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))

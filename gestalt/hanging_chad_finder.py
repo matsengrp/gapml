@@ -466,7 +466,7 @@ def _create_warm_start_fit_params(
 
     fit_params['conv_thres'] = 5 * 1e-7
     fit_params["branch_len_inners"] = np.ones(num_nodes)
-    fit_params["branch_len_offsets_proportion"] = np.ones(num_nodes) * 0.1 #0.45 + np.random.rand(num_nodes) * 0.1
+    fit_params["branch_len_offsets_proportion"] = np.ones(num_nodes) * 0.45 + np.random.rand(num_nodes) * 0.1
     for node in new_chad_tree.traverse():
         if node.nochad_id is None:
             # This is completely new node. No copying to do

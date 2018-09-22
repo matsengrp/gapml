@@ -135,6 +135,7 @@ def _tune_hyperparams(
             new_fit_params = {}
         new_fit_params["log_barr_pen_param"] = args.log_barr_pen_param
         new_fit_params["dist_to_half_pen_param"] = dist_to_half_pen_param
+        new_fit_params["conv_thres"] = 1e-5
         fit_param_list.append(new_fit_params)
 
     # Actually fit the trees using the kfold barcodes

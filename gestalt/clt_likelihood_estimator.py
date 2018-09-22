@@ -51,7 +51,7 @@ class CLTPenalizedEstimator(CLTEstimator):
             log_barr_pen_param: float,
             dist_to_half_pen_param: float = 0,
             print_iter: int = 1,
-            save_iter: int = 20,
+            save_iter: int = 40,
             assessor: ModelAssessor = None,
             conv_thres: float = 1e-4,
             min_iters: int = 20):

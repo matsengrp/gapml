@@ -97,8 +97,6 @@ def process_observed_seq_format7B(
     # Assign the target to the one matching the cut site
     # Pad bad alignments with insertions and deletions
     cleaned_events = sorted(events, key=lambda ev: ev.start_pos)
-    print("bcde", bcode_meta.abs_cut_sites)
-    print("raw eve", cleaned_events)
     for i, evt in enumerate(cleaned_events):
         new_start_targ = evt.min_target
         new_end_targ = evt.max_target
