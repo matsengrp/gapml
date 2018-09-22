@@ -443,7 +443,7 @@ def _fit_nochad_result(
         fit_params['target_lams'] = get_init_target_lams(fit_params['target_lams'].size)
     fit_params.pop('branch_len_inners', None)
     fit_params.pop('branch_len_offsets_proportion', None)
-    fit_params['conv_thres'] = 1e-4
+    fit_params['conv_thres'] = 5 * 1e-4
 
     # Now fit the tree without the hanging chad
     trans_wrap_maker = TransitionWrapperMaker(
@@ -476,7 +476,7 @@ def _create_warm_start_fit_params(
     num_nodes = new_chad_tree.get_num_nodes()
 
     fit_params = nochad_res.get_fit_params()
-    fit_params['conv_thres'] = 1e-6
+    fit_params['conv_thres'] = 5 * 1e-7
 
     prev_branch_inners = fit_params["branch_len_inners"].copy()
     prev_branch_proportions = fit_params["branch_len_offsets_proportion"].copy()
