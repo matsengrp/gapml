@@ -3,7 +3,6 @@ import scipy.stats
 from typing import List, Dict, Set
 import logging
 import random
-import copy
 
 from allele_events import AlleleEvents
 from cell_lineage_tree import CellLineageTree
@@ -11,9 +10,8 @@ from barcode_metadata import BarcodeMetadata
 from transition_wrapper_maker import TransitionWrapperMaker
 from parallel_worker import SubprocessManager
 from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
-from common import get_randint, get_init_target_lams, assign_rand_tree_lengths
+from common import get_randint, get_init_target_lams
 from model_assessor import ModelAssessor
-from optim_settings import KnownModelParams
 import collapsed_tree
 import ancestral_events_finder
 from constants import PERTURB_ZERO
@@ -135,24 +133,12 @@ class HangingChad:
         for idx, full_tree in enumerate(self.possible_full_trees):
             single_leaf_tree = full_tree.copy()
             chad_in_tree = single_leaf_tree.search_nodes(node_id=self.node.node_id)[0]
+            implicit_nodes = single_leaf_tree.search_nodes(node_id=None)
 
-            # Handle the case where the chad was added to an edge
-            if chad_in_tree.up.node_id is None:
-                grandpa = chad_in_tree.up.up
-                implicit_node = CellLineageTree(
-                        allele_events_list=[
-                            AlleleEvents([], allele_evts.num_targets)
-                            for allele_evts in self.node.allele_events_list])
-                implicit_node.add_features(node_id=None)
-                chad_in_tree.up.detach()
-                grandpa.add_child(implicit_node)
-                implicit_node.add_child(chad_in_tree.up)
-
-            for node in single_leaf_tree.traverse():
-                if node.node_id not in self.chad_ids:
-                    node.add_feature("nochad_id", node.node_id)
-                else:
-                    node.add_feature("nochad_id", None)
+            for node in single_leaf_tree.traverse('postorder'):
+                node.add_feature(
+                    'nochad_id',
+                    node.node_id if node.node_id not in self.chad_ids else None)
 
             if num_chad_leaves > 1:
                 # Prune the tree
@@ -160,12 +146,26 @@ class HangingChad:
                 rand_leaf_in_tree = single_leaf_tree.search_nodes(node_id=random_leaf_id)[0]
                 chad_in_tree.detach()
                 old_parent.add_child(rand_leaf_in_tree)
-                rand_leaf_in_tree.add_feature("no_penalty", True)
+                rand_leaf_in_tree.add_feature("ignore_penalty", True)
             else:
-                chad_in_tree.add_feature("no_penalty", True)
+                chad_in_tree.add_feature("ignore_penalty", True)
 
             single_leaf_tree.label_node_ids()
             assert sum([leaf.nochad_id is None for leaf in single_leaf_tree]) == 1
+
+            if len(implicit_nodes) >= 1:
+                assert len(implicit_nodes) == 1
+                implicit_node = implicit_nodes[0]
+                assert implicit_node.nochad_id is None
+                assert len(implicit_node.get_children()) == 2
+                for child in implicit_node.get_children():
+                    if child.nochad_id is not None:
+                        child.add_feature('spine_children', [])
+                        implicit_node.add_features(
+                            implicit_child=child,
+                            spine_children=[implicit_node.node_id, child.node_id])
+                        break
+                assert implicit_node.implicit_child is not None
 
             single_leaf_rand_trees.append({
                 "full": full_tree,
@@ -192,7 +192,6 @@ def _get_chad_possibilities(
         parsimony_score: int,
         bcode_meta: BarcodeMetadata,
         max_possible_trees: int = None,
-        only_root_parents: bool = False,
         branch_len_attaches: bool = True):
     """
     @return List[CellLineageTree] that are equally parsimonious trees after putting chad on various
@@ -227,16 +226,12 @@ def _get_chad_possibilities(
 
     # Now find all the possible trees we can make by hanging the chad elsewhere
     possible_trees = []
-    any_root_parents = chad_orig_parent.is_root()
     # Only consider nodes that are not descendnats of the chad
     all_nodes = [node for node in tree.traverse() if node.node_id < num_nochad_nodes]
     # First consider adding chad to existing nodes
     for node in all_nodes:
         if max_possible_trees is not None and len(possible_trees) >= max_possible_trees - 1:
             break
-        # TODO: remove me. checking my prototype
-        if len(node.get_children()) <= 2:
-            continue
         if node.is_leaf() or node.node_id == chad_orig_parent.node_id:
             continue
 
@@ -254,14 +249,6 @@ def _get_chad_possibilities(
         if new_pars_score == parsimony_score and not can_collapse_tree:
             tree_copy = tree.copy()
             possible_trees.append(tree_copy)
-            any_root_parents |= node.is_root()
-
-    if only_root_parents and not any_root_parents:
-        print("no root parents")
-        return HangingChad(
-            chad_copy,
-            nochad_tree,
-            [])
 
     if branch_len_attaches:
         logging.info('find branch length attachements')
@@ -331,7 +318,6 @@ def get_random_chad(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
         exclude_chads: Set = set(),
-        only_root_parents: bool = False,
         branch_len_attaches: bool = True):
     """
     @return a randomly chosen HangingChad, also a set of the recently seen chads (indexed by psuedo id)
@@ -355,7 +341,6 @@ def get_random_chad(
                 tree_copy,
                 parsimony_score,
                 bcode_meta,
-                only_root_parents=only_root_parents,
                 branch_len_attaches=branch_len_attaches)
         if hanging_chad.num_possible_trees > 1:
             exclude_chads.add(hanging_chad.psuedo_id)
@@ -390,7 +375,6 @@ def get_random_chad(
                     tree_copy,
                     parsimony_score,
                     bcode_meta,
-                    only_root_parents=only_root_parents,
                     branch_len_attaches=branch_len_attaches)
             if hanging_chad.num_possible_trees > 1:
                 return hanging_chad, set()
@@ -476,16 +460,13 @@ def _create_warm_start_fit_params(
     num_nodes = new_chad_tree.get_num_nodes()
 
     fit_params = nochad_res.get_fit_params()
-    fit_params['conv_thres'] = 5 * 1e-7
 
     prev_branch_inners = fit_params["branch_len_inners"].copy()
     prev_branch_proportions = fit_params["branch_len_offsets_proportion"].copy()
 
-    #fit_params['dist_to_half_pen_param'] = 0
-    branch_len_inners_mask = np.zeros(num_nodes, dtype=bool)
-    branch_len_offsets_proportion_mask = np.zeros(num_nodes, dtype=bool)
+    fit_params['conv_thres'] = 5 * 1e-7
     fit_params["branch_len_inners"] = np.ones(num_nodes)
-    fit_params["branch_len_offsets_proportion"] = np.ones(num_nodes) * 0.45 + np.random.rand(num_nodes) * 0.1
+    fit_params["branch_len_offsets_proportion"] = np.ones(num_nodes) * 0.1 #0.45 + np.random.rand(num_nodes) * 0.1
     for node in new_chad_tree.traverse():
         if node.nochad_id is None:
             # This is completely new node. No copying to do
@@ -496,68 +477,12 @@ def _create_warm_start_fit_params(
             # we will just force it to be a true resolved multifurcation.
             node.resolved_multifurcation = True
 
-        if node.is_root() or node.up.nochad_id is not None:
-            # Parent node and this node are both in the no chad tre
-            # therefore the branch length is completely specified
-            # Copy over existing branch length estimates -- it matches an existing branch in the no-chad tree
-            #branch_len_inners_mask[node.node_id] = True
-            #branch_len_offsets_proportion_mask[node.node_id] = True
+        # Make sure no nodes in the tree used to be a leaf and are no longer a leaf
+        assert hanging_chad.nochad_leaf[node.nochad_id] == node.is_leaf()
+        fit_params["branch_len_inners"][node.node_id] = prev_branch_inners[node.nochad_id]
+        fit_params["branch_len_offsets_proportion"][node.node_id] = prev_branch_proportions[node.nochad_id]
 
-            assert hanging_chad.nochad_leaf[node.nochad_id] == node.is_leaf()
-            fit_params["branch_len_inners"][node.node_id] = prev_branch_inners[node.nochad_id]
-
-            fit_params["branch_len_offsets_proportion"][node.node_id] = prev_branch_proportions[node.nochad_id]
-        elif node.up.nochad_id is None:
-            raise ValueError("asdjfkla")
-            # This is an implicit node -- we know how much the distance is between grandparent
-            # and current node, but don't know where to place the parent node. This happens when we insert the hanging
-            # chad along a branch instead of at an existing node
-            assert node.up.up.nochad_id is None
-            # Only mark the node's inner var as known. We don't know it's proportion. The proportin will specify the location
-            # of the implicit parent node.
-            branch_len_inners_mask[node.node_id] = True
-            # mark the implicit nodes having known variables since they are defined via other params.
-            # these parameters are completely ignored
-            branch_len_inners_mask[node.up.node_id] = True
-            branch_len_offsets_proportion_mask[node.up.node_id] = True
-            # also mark the grandparent having known branch length params (grandparent nodes are newly introduced
-            # to deal with fixing the offset along the spine) -- we need to calculate the offset values for the
-            # grandparent
-            branch_len_inners_mask[node.up.up.node_id] = True
-            branch_len_offsets_proportion_mask[node.up.up.node_id] = True
-
-            # Get the branch length inner of the node -- we do this convoluted thing in case the node in
-            # question is actually a leaf. (then its branch_len_inner value is bogus)
-            par_in_nochad_tree = node.up.up.up.nochad_id
-            node_up_dist_to_root = nochad_res.train_history[-1]['dist_to_roots'][par_in_nochad_tree]
-            node_dist_to_root = nochad_res.train_history[-1]['dist_to_roots'][node.nochad_id]
-            node_branch_inner = node_dist_to_root - node_up_dist_to_root
-
-            if hanging_chad.nochad_unresolved_multifurc[par_in_nochad_tree]:
-                # If our node is a child of a multifurcation in the nochad tree, then we need to fix the node's offset
-                # from the multifurcation and fix up the inner var value for this node.
-                proportion = prev_branch_proportions[node.nochad_id]
-                # Fixing the offset from the grandparent located on the spine
-                fit_params["branch_len_inners"][node.node_id] = node_branch_inner * (1 - proportion)
-                # Fixing the grandparent's offset from the multifurc
-                fit_params["branch_len_inners"][node.up.up.node_id] = node_branch_inner * proportion
-                fit_params["branch_len_offsets_proportion"][node.up.up.node_id] = 1 - PERTURB_ZERO
-            else:
-                # The curr node is a child of a bifurcation. The grandparent node is placed zero dist from the parent of this node
-                # from the original nochad tree.
-                fit_params["branch_len_inners"][node.node_id] = node_branch_inner * (1 - PERTURB_ZERO)
-                fit_params["branch_len_inners"][node.up.up.node_id] = PERTURB_ZERO
-
-    #assert np.sum(np.logical_not(branch_len_inners_mask)) > 0 and np.sum(np.logical_not(branch_len_offsets_proportion_mask)) > 0
-    #known_params = KnownModelParams(
-    #    target_lams=True,
-    #    branch_lens=True,
-    #    branch_len_inners=branch_len_inners_mask,
-    #    branch_len_offsets_proportion=branch_len_offsets_proportion_mask,
-    #    tot_time=True,
-    #    indel_params=True)
-
-    return fit_params#, known_params
+    return fit_params
 
 
 def tune(

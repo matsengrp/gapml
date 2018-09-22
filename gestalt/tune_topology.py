@@ -394,8 +394,7 @@ def main(args=sys.argv[1:]):
         random_chad, recent_chads = hanging_chad_finder.get_random_chad(
                 tree,
                 bcode_meta,
-                exclude_chads=recent_chads,
-                branch_len_attaches=False)
+                exclude_chads=recent_chads)
         has_chads = random_chad is not None
         num_old_leaves = len(tree)
 

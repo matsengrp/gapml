@@ -67,20 +67,23 @@ class CLTPenalizedEstimator(CLTEstimator):
             self.model.log_barr_pen_param_ph: log_barr_pen_param,
             self.model.dist_to_half_pen_param_ph: dist_to_half_pen_param,
         }
+        # Check tree is ultrametric
+        bifurc_tree = self.model.get_fitted_bifurcating_tree()
+        logging.info("init DISTANCE")
+        logging.info(bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
 
         # Check branch lengths positive
         assert self.model._are_all_branch_lens_positive()
-        # Check tree is ultrametric
-        self.model.get_fitted_bifurcating_tree()
 
-        pen_log_lik, log_lik, dist_to_roots = self.model.sess.run(
+        pen_log_lik, log_lik, dist_to_half_pen, dist_to_roots = self.model.sess.run(
             [self.model.smooth_log_lik,
                 self.model.log_lik,
+                self.model.dist_to_half_pen,
                 self.model.dist_to_root],
             feed_dict=feed_dict)
         var_dict = self.model.get_vars_as_dict()
 
-        logging.info("initial penalized log lik %f, unpen log lik %f", pen_log_lik, log_lik)
+        logging.info("initial penalized log lik %f, unpen log lik %f, dist to half pen %f", pen_log_lik, log_lik, dist_to_half_pen)
         assert not np.isnan(pen_log_lik)
         train_history = [{
                     "iter": -1,
