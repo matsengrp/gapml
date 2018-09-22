@@ -465,8 +465,7 @@ def _fit_nochad_result(
 
 def _create_warm_start_fit_params(
         hanging_chad: HangingChad,
-        fit_params: Dict,
-        no_chad_dist_to_roots: Dict,
+        nochad_res: LikelihoodScorerResult,
         new_chad_tree: CellLineageTree):
     """
     Assemble the `fit_param` and `KnownModelParam` for fitting the tree with the hanging chad
@@ -475,6 +474,7 @@ def _create_warm_start_fit_params(
     """
     num_nodes = new_chad_tree.get_num_nodes()
 
+    fit_params = nochad_res.get_fit_params()
     prev_branch_inners = fit_params["branch_len_inners"].copy()
     prev_branch_proportions = fit_params["branch_len_offsets_proportion"].copy()
 
@@ -526,8 +526,8 @@ def _create_warm_start_fit_params(
             # Get the branch length inner of the node -- we do this convoluted thing in case the node in
             # question is actually a leaf. (then its branch_len_inner value is bogus)
             par_in_nochad_tree = node.up.up.up.nochad_id
-            node_up_dist_to_root = no_chad_dist_to_roots[par_in_nochad_tree]
-            node_dist_to_root = no_chad_dist_to_roots[node.nochad_id]
+            node_up_dist_to_root = nochad_res.train_history[-1]['dist_to_roots'][par_in_nochad_tree]
+            node_dist_to_root = nochad_res.train_history[-1]['dist_to_roots'][node.nochad_id]
             node_branch_inner = node_dist_to_root - node_up_dist_to_root
 
             if hanging_chad.nochad_unresolved_multifurc[par_in_nochad_tree]:
@@ -573,7 +573,6 @@ def tune(
     new_chad_tree_dicts = hanging_chad.make_single_leaf_rand_trees()[:args.max_chad_tune_search]
 
     # Fit the nochad tree
-    no_chad_res = None
     nochad_num_nodes = hanging_chad.nochad_tree.get_num_nodes()
     # Assign the no chad tree branch lengths
     assign_rand_tree_lengths(hanging_chad.nochad_tree, fit_params['tot_time'])
@@ -608,8 +607,7 @@ def tune(
         warm_start_known_params = args.known_params
         warm_start_fit_params = _create_warm_start_fit_params(
             hanging_chad,
-            copy.deepcopy(fit_params),
-            nochad_dist_to_roots,
+            no_chad_res,
             new_chad_tree)
 
         trans_wrap_maker = TransitionWrapperMaker(
