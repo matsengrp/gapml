@@ -160,7 +160,7 @@ class CLTLikelihoodModel:
             self._create_distance_to_root_dict()
             self.branch_lens = self._create_branch_lens()
 
-            self._create_all_target_deact_hazards()
+            #self._create_all_target_deact_hazards()
         else:
             self.branch_len_inners = []
             self.branch_len_offsets_proportion = []
@@ -947,8 +947,9 @@ class CLTLikelihoodModel:
             self.branch_log_barr = tf.constant(0, dtype=tf.float64)
 
         #self.dist_to_half_pen = tf.reduce_mean(tf.stack(self.dist_to_half_pen_list))
-        br_lens_to_pen = tf.stack([[b] for b in self.branch_lens_to_pen_list])
-        all_transition_probs = tf.exp(br_lens_to_pen * self.all_target_deact_hazards)
+        #br_lens_to_pen = tf.stack([[b] for b in self.branch_lens_to_pen_list])
+        br_lens_to_pen = tf.stack(self.branch_lens_to_pen_list)
+        all_transition_probs = tf.exp(-br_lens_to_pen * self.hazard_away_dict[TargetStatus()])
         self.dist_to_half_pen = tf.reduce_mean(tf.pow(all_transition_probs - tf.constant(0.5, dtype=tf.float64), 2))
         self.smooth_log_lik = (
                 self.log_lik/self.bcode_meta.num_barcodes
