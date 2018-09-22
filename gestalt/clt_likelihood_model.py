@@ -1080,7 +1080,7 @@ class CLTLikelihoodModel:
                                             indices=child.spine_children)))
                                 dist_to_half_pen_list.append(tf.reduce_mean(tf.abs(
                                     prob_stay - tf.constant(0.5, dtype=tf.float64))))
-                        else:
+                        elif not hasattr(child, "no_penalty"):
                             prob_stay = tf.diag_part(pt_matrix[child.node_id])[:-1]
                             dist_to_half_pen_list.append(tf.reduce_mean(tf.abs(
                                     prob_stay - tf.constant(0.5, tf.float64))))

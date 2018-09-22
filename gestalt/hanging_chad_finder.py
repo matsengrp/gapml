@@ -159,6 +159,9 @@ class HangingChad:
                 rand_leaf_in_tree = single_leaf_tree.search_nodes(node_id=random_leaf_id)[0]
                 chad_in_tree.detach()
                 old_parent.add_child(rand_leaf_in_tree)
+                rand_leaf_in_tree.add_feature("no_penalty", True)
+            else:
+                chad_in_tree.add_feature("no_penalty", True)
 
             single_leaf_tree.label_node_ids()
             assert sum([leaf.nochad_id is None for leaf in single_leaf_tree]) == 1
