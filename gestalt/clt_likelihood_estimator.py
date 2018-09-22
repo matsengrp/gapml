@@ -53,7 +53,7 @@ class CLTPenalizedEstimator(CLTEstimator):
             print_iter: int = 1,
             save_iter: int = 20,
             assessor: ModelAssessor = None,
-            conv_thres: float = 1e-6,
+            conv_thres: float = 1e-4,
             min_iters: int = 20):
         """
         Finds the best model parameters
@@ -140,7 +140,7 @@ class CLTPenalizedEstimator(CLTEstimator):
             train_history.append(iter_info)
             if i > min_iters and (pen_log_lik[0] - prev_pen_log_lik)/np.abs(prev_pen_log_lik) < conv_thres:
                 # Convergence reached
-                logging.info("Convergence reached")
+                logging.info("Convergence reached %f", conv_thres)
                 break
             prev_pen_log_lik = pen_log_lik[0]
 

@@ -113,7 +113,7 @@ class HangingChad:
         self.possible_full_trees = possible_full_trees
         self.num_possible_trees = len(possible_full_trees)
         # Kind of an id for this hanging chad
-        self.psuedo_id = node.anc_state_list_str
+        self.psuedo_id = str([str(a) for a in node.anc_state_list])
 
         self.chad_ids = set([node.node_id for node in self.node.traverse()])
 
@@ -441,8 +441,9 @@ def _fit_nochad_result(
 
     if not args.known_params.target_lams:
         fit_params['target_lams'] = get_init_target_lams(fit_params['target_lams'].size)
-    #fit_params.pop('branch_len_inners', None)
-    #fit_params.pop('branch_len_offsets_proportion', None)
+    fit_params.pop('branch_len_inners', None)
+    fit_params.pop('branch_len_offsets_proportion', None)
+    fit_params['conv_thres'] = 1e-4
 
     # Now fit the tree without the hanging chad
     trans_wrap_maker = TransitionWrapperMaker(
@@ -475,6 +476,8 @@ def _create_warm_start_fit_params(
     num_nodes = new_chad_tree.get_num_nodes()
 
     fit_params = nochad_res.get_fit_params()
+    fit_params['conv_thres'] = 1e-6
+
     prev_branch_inners = fit_params["branch_len_inners"].copy()
     prev_branch_proportions = fit_params["branch_len_offsets_proportion"].copy()
 
@@ -570,24 +573,6 @@ def tune(
     @return HangingChadTuneResult
     """
     assert hanging_chad.num_possible_trees > 1
-    new_chad_tree_dicts = hanging_chad.make_single_leaf_rand_trees()[:args.max_chad_tune_search]
-
-    # Fit the nochad tree
-    nochad_num_nodes = hanging_chad.nochad_tree.get_num_nodes()
-    # Assign the no chad tree branch lengths
-    assign_rand_tree_lengths(hanging_chad.nochad_tree, fit_params['tot_time'])
-    branch_len_inners = np.zeros(nochad_num_nodes)
-    for node in hanging_chad.nochad_tree.traverse():
-        branch_len_inners[node.node_id] = node.dist
-    fit_params["branch_len_inners"] = branch_len_inners
-
-    nochad_dist_to_roots = {0: 0}
-    for node in hanging_chad.nochad_tree.traverse('preorder'):
-        if not node.is_root():
-            nochad_dist_to_roots[node.node_id] = node.dist + nochad_dist_to_roots[node.up.node_id]
-
-    # Initialize branch length offsets
-    fit_params["branch_len_offsets_proportion"] = np.random.rand(nochad_num_nodes) * 0.5
     no_chad_res = _fit_nochad_result(
         hanging_chad.nochad_tree,
         bcode_meta,

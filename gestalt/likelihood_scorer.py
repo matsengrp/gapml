@@ -109,7 +109,8 @@ class LikelihoodScorer(ParallelWorker):
             self,
             estimator: CLTPenalizedEstimator,
             res_model: CLTLikelihoodModel,
-            fit_params: Dict):
+            fit_params: Dict,
+            conv_thres_default: float = 1e-6):
         """
         Fit single initialization
         """
@@ -135,6 +136,7 @@ class LikelihoodScorer(ParallelWorker):
         train_history = estimator.fit(
                 log_barr_pen_param=fit_params["log_barr_pen_param"],
                 dist_to_half_pen_param=fit_params["dist_to_half_pen_param"],
+                conv_thres=fit_params["conv_thres"] if "conv_thres" in fit_params else conv_thres_default,
                 assessor=self.assessor)
         result = LikelihoodScorerResult(
             fit_params["log_barr_pen_param"],
