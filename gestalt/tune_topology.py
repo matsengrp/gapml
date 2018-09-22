@@ -165,7 +165,7 @@ def parse_args(args):
 
 def read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
     fit_params = {
-            "target_lams": get_init_target_lams(bcode_meta.n_targets, 0),
+            "target_lams": get_init_target_lams(bcode_meta.n_targets, -0.5),
             "boost_softmax_weights": np.array([1, 2, 2]),
             "trim_long_factor": 0.05 * np.ones(2),
             "trim_zero_probs": 0.5 * np.ones(2),
@@ -173,7 +173,7 @@ def read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
             "trim_long_poissons": 2.5 * np.ones(2),
             "insert_zero_prob": np.array([0.5]),
             "insert_poisson": np.array([0.5]),
-            "double_cut_weight": np.array([0.5]),
+            "double_cut_weight": np.array([0.1]),
             "tot_time": 1,
             "tot_time_extra": 1.3}
     # Use warm-start info if available
@@ -390,10 +390,12 @@ def main(args=sys.argv[1:]):
         # Find hanging chads
         # TODO: kind slow right now... reruns chad-finding code
         # cause nodes are getting renumbered...
+        logging.info("chad finding time")
         random_chad, recent_chads = hanging_chad_finder.get_random_chad(
                 tree,
                 bcode_meta,
-                exclude_chads=recent_chads)
+                exclude_chads=recent_chads,
+                branch_len_attaches=False)
         has_chads = random_chad is not None
         num_old_leaves = len(tree)
 

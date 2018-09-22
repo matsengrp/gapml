@@ -82,13 +82,14 @@ class HangingChadTuneResult:
 
         # TODO: how do we warm start using previous branch length estimates?
         fit_params = best_fit_res.get_fit_params()
-        no_chad_fit_params = self.no_chad_res.get_fit_params()
         # Popping branch length estimates right now because i dont know
         # how to warm start using these estimates...?
         fit_params.pop('branch_len_inners', None)
         fit_params.pop('branch_len_offsets_proportion', None)
-        fit_params['dist_to_half_pen_param'] = no_chad_fit_params['dist_to_half_pen_param']
-        fit_params['log_barr_pen_param'] = no_chad_fit_params['log_barr_pen_param']
+        if self.no_chad_res is not None:
+            no_chad_fit_params = self.no_chad_res.get_fit_params()
+            fit_params['dist_to_half_pen_param'] = no_chad_fit_params['dist_to_half_pen_param']
+            fit_params['log_barr_pen_param'] = no_chad_fit_params['log_barr_pen_param']
 
         orig_tree = best_chad.full_chad_tree.copy()
         collapsed_tree._remove_single_child_unobs_nodes(orig_tree)
@@ -186,7 +187,9 @@ def _get_chad_possibilities(
         tree: CellLineageTree,
         parsimony_score: int,
         bcode_meta: BarcodeMetadata,
-        max_possible_trees: int = None):
+        max_possible_trees: int = None,
+        only_root_parents: bool = False,
+        branch_len_attaches: bool = True):
     """
     @return List[CellLineageTree] that are equally parsimonious trees after putting chad on various
             branches and nodes
@@ -220,12 +223,16 @@ def _get_chad_possibilities(
 
     # Now find all the possible trees we can make by hanging the chad elsewhere
     possible_trees = []
+    any_root_parents = chad_orig_parent.is_root()
     # Only consider nodes that are not descendnats of the chad
     all_nodes = [node for node in tree.traverse() if node.node_id < num_nochad_nodes]
     # First consider adding chad to existing nodes
     for node in all_nodes:
         if max_possible_trees is not None and len(possible_trees) >= max_possible_trees - 1:
             break
+        # TODO: remove me. checking my prototype
+        if len(node.get_children()) <= 2:
+            continue
         if node.is_leaf() or node.node_id == chad_orig_parent.node_id:
             continue
 
@@ -243,60 +250,60 @@ def _get_chad_possibilities(
         if new_pars_score == parsimony_score and not can_collapse_tree:
             tree_copy = tree.copy()
             possible_trees.append(tree_copy)
+            any_root_parents |= node.is_root()
 
-    # Consider adding chad to the middle of the existing edges
-    for node in all_nodes:
-        if max_possible_trees is not None and len(possible_trees) >= max_possible_trees - 1:
-            break
-        if node.is_root() or (chad_orig_parent_unifurc and node.node_id == chad_orig_parent.node_id):
-            continue
+    if only_root_parents and not any_root_parents:
+        print("no root parents")
+        return HangingChad(
+            chad_copy,
+            nochad_tree,
+            [])
 
-        chad.detach()
+    if branch_len_attaches:
+        logging.info('find branch length attachements')
+        # Consider adding chad to the middle of the existing edges
+        for node in all_nodes:
+            if max_possible_trees is not None and len(possible_trees) >= max_possible_trees - 1:
+                break
+            if node.is_root() or (chad_orig_parent_unifurc and node.node_id == chad_orig_parent.node_id):
+                continue
 
-        # Consider adding chad to an edge, so parent -- new_node -- node, chad
-        new_node = CellLineageTree(
-                allele_events_list=[
-                    AlleleEvents([], allele_evts.num_targets)
-                    for allele_evts in node.allele_events_list])
-        # new node will have the biggest node id
-        new_node.add_features(node_id=None)
-        node.up.add_child(new_node)
-        node.detach()
-        new_node.add_child(node)
-        new_node.add_child(chad)
+            chad.detach()
 
-        ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
-        new_pars_score = ancestral_events_finder.get_parsimony_score(tree)
-        if new_pars_score < parsimony_score:
-            logging.info("we beat MIX (attach in middle): %d< %d", new_pars_score, parsimony_score)
-            logging.info(tree.get_ascii(attributes=['anc_state_list_str']))
-            logging.info(tree.get_ascii(attributes=['dist']))
+            # Consider adding chad to an edge, so parent -- new_node -- node, chad
+            new_node = CellLineageTree(
+                    allele_events_list=[
+                        AlleleEvents([], allele_evts.num_targets)
+                        for allele_evts in node.allele_events_list])
+            # new node will have the biggest node id
+            new_node.add_features(node_id=None)
+            node.up.add_child(new_node)
+            node.detach()
+            new_node.add_child(node)
+            new_node.add_child(chad)
 
-        #assert new_pars_score >= parsimony_score
+            ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
+            new_pars_score = ancestral_events_finder.get_parsimony_score(tree)
+            if new_pars_score < parsimony_score:
+                logging.info("we beat MIX (attach in middle): %d< %d", new_pars_score, parsimony_score)
+                logging.info(tree.get_ascii(attributes=['anc_state_list_str']))
+                logging.info(tree.get_ascii(attributes=['dist']))
 
-        # Then this can be further collapsed and we might as well add the node to
-        # a multif/bifurcation. Should have been accomplished previously.
-        can_collapse_tree = any([other_node.dist == 0 for other_node in tree.get_descendants() if not other_node.is_leaf()])
-        if not can_collapse_tree and new_pars_score == parsimony_score:
-            all_node_ids = set([node.node_id for node in tree.traverse() if node.node_id is not None])
-            assert all_node_ids == set(list(range(num_labelled_nodes)))
-            num_new_nodes = len([node for node in tree.traverse() if node.node_id is None])
-            assert num_new_nodes == 1
+            #assert new_pars_score >= parsimony_score
 
-            possible_trees.append(tree.copy())
+            # Then this can be further collapsed and we might as well add the node to
+            # a multif/bifurcation. Should have been accomplished previously.
+            can_collapse_tree = any([other_node.dist == 0 for other_node in tree.get_descendants() if not other_node.is_leaf()])
+            if not can_collapse_tree and new_pars_score == parsimony_score:
+                all_node_ids = set([node.node_id for node in tree.traverse() if node.node_id is not None])
+                assert all_node_ids == set(list(range(num_labelled_nodes)))
+                num_new_nodes = len([node for node in tree.traverse() if node.node_id is None])
+                assert num_new_nodes == 1
 
-        # Now undo all the things we just did to the tree
-        new_node.delete()
+                possible_trees.append(tree.copy())
 
-    #logging.info("num possible pars trees %d", len(possible_trees) + 1)
-    #logging.info("chad %d %s", chad.node_id, chad.allele_events_list_str)
-    #if len(possible_trees) + 1 > 1:
-    #    logging.info(orig_tree.get_ascii(attributes=['allele_events_list_str']))
-    #    logging.info(orig_tree.get_ascii(attributes=['dist']))
-    #    for t_idx, p_tree in enumerate(possible_trees):
-    #        logging.info("chad %d %s", chad.node_id, chad.allele_events_list_str)
-    #        logging.info(p_tree.get_ascii(attributes=['anc_state_list_str']))
-    #        logging.info(p_tree.get_ascii(attributes=['dist']))
+            # Now undo all the things we just did to the tree
+            new_node.delete()
 
     random.shuffle(possible_trees)
     return HangingChad(
@@ -316,10 +323,16 @@ def _preprocess_tree_for_chad_finding(tree: CellLineageTree, bcode_meta: Barcode
     return tree, parsimony_score
 
 
-def get_random_chad(tree: CellLineageTree, bcode_meta: BarcodeMetadata, exclude_chads: Set = set()):
+def get_random_chad(
+        tree: CellLineageTree,
+        bcode_meta: BarcodeMetadata,
+        exclude_chads: Set = set(),
+        only_root_parents: bool = False,
+        branch_len_attaches: bool = True):
     """
     @return a randomly chosen HangingChad, also a set of the recently seen chads (indexed by psuedo id)
     """
+    logging.info("branch len %d", branch_len_attaches)
     tree, parsimony_score = _preprocess_tree_for_chad_finding(tree, bcode_meta)
 
     descendants = tree.get_descendants()
@@ -337,12 +350,27 @@ def get_random_chad(tree: CellLineageTree, bcode_meta: BarcodeMetadata, exclude_
                 node.node_id,
                 tree_copy,
                 parsimony_score,
-                bcode_meta)
+                bcode_meta,
+                only_root_parents=only_root_parents,
+                branch_len_attaches=branch_len_attaches)
         if hanging_chad.num_possible_trees > 1:
             exclude_chads.add(hanging_chad.psuedo_id)
+            logging.info("ran %s", str(hanging_chad))
+
+            possible_trees = hanging_chad.possible_full_trees
+            chad = hanging_chad.node
+            logging.info("num possible pars trees %d", len(possible_trees) + 1)
+            logging.info("chad %d %s", chad.node_id, chad.allele_events_list_str)
+            for t_idx, p_tree in enumerate(possible_trees):
+                logging.info("chad %d %s", chad.node_id, chad.allele_events_list_str)
+                logging.info(p_tree.get_ascii(attributes=['anc_state_list_str']))
+                logging.info(p_tree.get_ascii(attributes=['dist']))
+
             return hanging_chad, exclude_chads
 
     if len(exclude_chads):
+        # We still haven't found our chad friend apparently...
+        logging.info("need to start over chad set")
         # Did we exclude all of them?
         for node in descendants:
             if node.anc_state_list_str not in exclude_chads:
@@ -357,7 +385,9 @@ def get_random_chad(tree: CellLineageTree, bcode_meta: BarcodeMetadata, exclude_
                     node.node_id,
                     tree_copy,
                     parsimony_score,
-                    bcode_meta)
+                    bcode_meta,
+                    only_root_parents=only_root_parents,
+                    branch_len_attaches=branch_len_attaches)
             if hanging_chad.num_possible_trees > 1:
                 return hanging_chad, set()
     return None, None
@@ -538,12 +568,13 @@ def tune(
     new_chad_tree_dicts = hanging_chad.make_single_leaf_rand_trees()[:args.max_chad_tune_search]
 
     # Fit the nochad tree
-    no_chad_res = _fit_nochad_result(
-        hanging_chad.nochad_tree,
-        bcode_meta,
-        args,
-        fit_params,
-        assessor=assessor)
+    #no_chad_res = _fit_nochad_result(
+    #    hanging_chad.nochad_tree,
+    #    bcode_meta,
+    #    args,
+    #    fit_params,
+    #    assessor=assessor)
+    no_chad_res = None
 
     worker_list = []
     new_chad_tree_dicts = hanging_chad.make_single_leaf_rand_trees()[:args.max_chad_tune_search]
@@ -553,10 +584,12 @@ def tune(
         # Pick a random leaf from the hanging chad -- do not use the entire hanging chad
         # This is because the entire hanging chad might have multiple leaves and their
         # branch length assignment is ambigious.
-        warm_start_fit_params, warm_start_known_params = _create_warm_start_fit_params(
-            hanging_chad,
-            no_chad_res,
-            new_chad_tree)
+        warm_start_fit_params = fit_params
+        warm_start_known_params = args.known_params
+        #warm_start_fit_params, warm_start_known_params = _create_warm_start_fit_params(
+        #    hanging_chad,
+        #    no_chad_res,
+        #    new_chad_tree)
 
         trans_wrap_maker = TransitionWrapperMaker(
             new_chad_tree,
@@ -639,7 +672,7 @@ def _create_chad_results(
 
     new_chad_results = [
         HangingChadResult(
-            fit_res.log_lik[0],
+            fit_res.pen_log_lik[0],
             hanging_chad.node.node_id,
             chad_tree_dict["full"],
             fit_res)
