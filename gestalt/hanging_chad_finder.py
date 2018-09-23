@@ -259,7 +259,6 @@ def _get_chad_possibilities(
             possible_trees.append(tree_copy)
 
     if branch_len_attaches:
-        logging.info('find branch length attachements')
         # Consider adding chad to the middle of the existing edges
         for node in all_nodes:
             if max_possible_trees is not None and len(possible_trees) >= max_possible_trees - 1:

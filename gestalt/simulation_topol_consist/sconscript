@@ -207,18 +207,18 @@ def run_MLE(env, outdir, c):
         20,
         '--max-sum-states 2000',
         '--max-extra-steps 2',
-        '--max-iters 0', #50000',
+        '--max-iters 50000',
         '--num-inits 1',
         '--tot-time-known',
         #'--do-refit',
         #'--lambda-known',
         '--num-processes 5',
-        '--num-init-random-rearrange 18',
+        '--num-init-random-rearrange 15',
     ]
     return env.Command(
         [
-            join(outdir, 'tune_fitted_pars.pkl'),
-            join(outdir, 'tune_fitted_pars.txt')],
+            join(outdir, 'tune_fitted.pkl'),
+            join(outdir, 'tune_fitted.txt')],
         [
             c['restrict_observed_alleles'][0],
             c['run_topology'][0],
