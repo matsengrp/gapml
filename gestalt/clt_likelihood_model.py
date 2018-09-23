@@ -1071,7 +1071,6 @@ class CLTLikelihoodModel:
                 # For a multifurcating tree, this is where we penalize spine length
                 # (constant penalty if no spine)
                 if spine_haz is not None:
-                    #branch_lens_to_pen.append(spine_len)
                     if not node.is_root():
                         targ_stat_to_pen = node.up.anc_state_list[bcode_idx].to_sg_max_target_status()
                         targ_stat_idx = transition_wrapper.key_dict[targ_stat_to_pen]
@@ -1111,27 +1110,14 @@ class CLTLikelihoodModel:
                                             indices=child.spine_children))
                                 targ_stat_to_pen = child.up.anc_state_list[bcode_idx].to_sg_max_target_status()
                                 targ_stat_idx = child_wrapper.key_dict[targ_stat_to_pen]
-                                #branch_lens_to_pen.append(self.branch_lens[child.node_id])
                                 haz_to_pen = trans_mats[child.node_id][targ_stat_idx, targ_stat_idx]
                                 branch_lens_to_pen.append(tf.abs(
-                                    tf.exp(-haz_to_pen * spine_len) - tf.constant(0.5, tf.float64)))
-                                #prob_stay = tf.exp(tf.diag_part(tr_mat)[:-1] * tf.reduce_sum(
-                                #        tf.gather(
-                                #            params=self.branch_lens,
-                                #            indices=child.spine_children)))
-                                #dist_to_half_pen_list.append(tf.reduce_mean(tf.abs(
-                                #    prob_stay - tf.constant(0.5, dtype=tf.float64))))
-                                branch_lens_to_pen.append(spine_len)
+                                    tf.exp(haz_to_pen * spine_len) - tf.constant(0.5, tf.float64)))
                         elif not hasattr(child, "ignore_penalty") or not child.ignore_penalty:
-                            targ_stat_to_pen = child.anc_state_list[bcode_idx].to_sg_max_target_status()
+                            targ_stat_to_pen = child.up.anc_state_list[bcode_idx].to_sg_max_target_status()
                             targ_stat_idx = child_wrapper.key_dict[targ_stat_to_pen]
-                            #branch_lens_to_pen.append(self.branch_lens[child.node_id])
                             branch_lens_to_pen.append(tf.abs(
                                 pt_matrix[child.node_id][targ_stat_idx, targ_stat_idx] - tf.constant(0.5, tf.float64)))
-
-                            #prob_stay = tf.diag_part(pt_matrix[child.node_id])[:-1]
-                            #dist_to_half_pen_list.append(tf.reduce_mean(tf.abs(
-                            #        prob_stay - tf.constant(0.5, tf.float64))))
 
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.
