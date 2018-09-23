@@ -949,8 +949,9 @@ class CLTLikelihoodModel:
         #self.dist_to_half_pen = tf.reduce_mean(tf.stack(self.dist_to_half_pen_list))
         #br_lens_to_pen = tf.stack([[b] for b in self.branch_lens_to_pen_list])
         br_lens_to_pen = tf.stack(self.branch_lens_to_pen_list)
-        all_transition_probs = tf.exp(-br_lens_to_pen * self.hazard_away_dict[TargetStatus()])
-        self.dist_to_half_pen = tf.reduce_mean(tf.pow(all_transition_probs - tf.constant(0.5, dtype=tf.float64), 2))
+        #all_transition_probs = tf.exp(-br_lens_to_pen * self.hazard_away_dict[TargetStatus()])
+        #self.dist_to_half_pen = tf.reduce_mean(tf.pow(all_transition_probs - tf.constant(0.5, dtype=tf.float64), 2))
+        self.dist_to_half_pen = tf.reduce_mean(br_lens_to_pen)
         self.smooth_log_lik = (
                 self.log_lik/self.bcode_meta.num_barcodes
                 + self.log_barr_pen_param_ph * self.branch_log_barr
@@ -999,9 +1000,8 @@ class CLTLikelihoodModel:
 
     def _initialize_lower_log_prob(
             self,
-            transition_wrappers: Dict[int, List[TransitionWrapper]],
-            node: CellLineageTree,
-            bcode_idx: int):
+            transition_wrapper: TransitionWrapper,
+            node: CellLineageTree):
         """
         Initialize the Lprob element with the first part of the product
             For unresolved multifurcs, this is the probability of staying in this same ancestral state (the spine's probability)
@@ -1016,7 +1016,6 @@ class CLTLikelihoodModel:
                 for child in node.children]))
             if not node.is_root():
                 # When making this probability, order the elements per the transition matrix of this node
-                transition_wrapper = transition_wrappers[node.node_id][bcode_idx]
                 index_vals = [[
                         [transition_wrapper.key_dict[state], 0],
                         self.hazard_away_dict[state]]
@@ -1026,11 +1025,11 @@ class CLTLikelihoodModel:
                         output_shape=[transition_wrapper.num_possible_states + 1, 1],
                         name="haz_away.multifurc")
                 haz_stay_scaled = -haz_aways * time_stays_constant
-                return haz_stay_scaled, time_stays_constant #haz_stay_scaled[:-1]
+                return haz_stay_scaled, haz_stay_scaled[:,0]
             else:
                 root_haz_away = self.hazard_away_dict[TargetStatus()]
                 haz_stay_scaled = -root_haz_away * time_stays_constant
-                return haz_stay_scaled, time_stays_constant #haz_stay_scaled
+                return haz_stay_scaled, [haz_stay_scaled]
         else:
             return tf.constant(0, dtype=tf.float64), None
 
@@ -1065,14 +1064,22 @@ class CLTLikelihoodModel:
                 prob_array[observed_key] = 1
                 Lprob[node.node_id] = tf.constant(prob_array, dtype=tf.float64)
             else:
-                log_Lprob_node, spine_len = self._initialize_lower_log_prob(
-                        transition_wrappers,
-                        node,
-                        bcode_idx)
+                transition_wrapper = transition_wrappers[node.node_id][bcode_idx]
+                log_Lprob_node, spine_haz = self._initialize_lower_log_prob(
+                        transition_wrapper,
+                        node)
                 # For a multifurcating tree, this is where we penalize spine length
                 # (constant penalty if no spine)
-                if spine_len is not None:
-                    branch_lens_to_pen.append(spine_len)
+                if spine_haz is not None:
+                    #branch_lens_to_pen.append(spine_len)
+                    if not node.is_root():
+                        targ_stat_to_pen = node.up.anc_state_list[bcode_idx].to_sg_max_target_status()
+                        targ_stat_idx = transition_wrapper.key_dict[targ_stat_to_pen]
+                    else:
+                        targ_stat_idx = 0
+                    haz_to_pen = spine_haz[targ_stat_idx]
+                    branch_lens_to_pen.append(tf.abs(
+                            tf.exp(haz_to_pen) - tf.constant(0.5, dtype=tf.float64)))
 
                 for child in node.children:
                     child_wrapper = transition_wrappers[child.node_id][bcode_idx]
@@ -1102,6 +1109,12 @@ class CLTLikelihoodModel:
                                         tf.gather(
                                             params=self.branch_lens,
                                             indices=child.spine_children))
+                                targ_stat_to_pen = child.up.anc_state_list[bcode_idx].to_sg_max_target_status()
+                                targ_stat_idx = child_wrapper.key_dict[targ_stat_to_pen]
+                                #branch_lens_to_pen.append(self.branch_lens[child.node_id])
+                                haz_to_pen = trans_mats[child.node_id][targ_stat_idx, targ_stat_idx]
+                                branch_lens_to_pen.append(tf.abs(
+                                    tf.exp(-haz_to_pen * spine_len) - tf.constant(0.5, tf.float64)))
                                 #prob_stay = tf.exp(tf.diag_part(tr_mat)[:-1] * tf.reduce_sum(
                                 #        tf.gather(
                                 #            params=self.branch_lens,
@@ -1110,7 +1123,12 @@ class CLTLikelihoodModel:
                                 #    prob_stay - tf.constant(0.5, dtype=tf.float64))))
                                 branch_lens_to_pen.append(spine_len)
                         elif not hasattr(child, "ignore_penalty") or not child.ignore_penalty:
-                            branch_lens_to_pen.append(self.branch_lens[child.node_id])
+                            targ_stat_to_pen = child.anc_state_list[bcode_idx].to_sg_max_target_status()
+                            targ_stat_idx = child_wrapper.key_dict[targ_stat_to_pen]
+                            #branch_lens_to_pen.append(self.branch_lens[child.node_id])
+                            branch_lens_to_pen.append(tf.abs(
+                                pt_matrix[child.node_id][targ_stat_idx, targ_stat_idx] - tf.constant(0.5, tf.float64)))
+
                             #prob_stay = tf.diag_part(pt_matrix[child.node_id])[:-1]
                             #dist_to_half_pen_list.append(tf.reduce_mean(tf.abs(
                             #        prob_stay - tf.constant(0.5, tf.float64))))

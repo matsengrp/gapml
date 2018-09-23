@@ -177,7 +177,7 @@ def run_topology(env, outdir, c):
 def run_MLE(env, outdir, c):
     if c['num_barcodes'] == 1:
         #penalty_params = "6000,3200,1600"
-        penalty_params = "4000,2000,1000"
+        penalty_params = '900,300,100'
     elif c['num_barcodes'] == 3:
         penalty_params = "192,48,12,3"
     elif c['num_barcodes'] == 9:
@@ -194,7 +194,7 @@ def run_MLE(env, outdir, c):
         '--log-file ${TARGETS[1]}',
         '--seed',
         c['seed'] + 20,
-        '--log-barr 0.0001',
+        '--log-barr 0.000000001',
         '--dist-to-half-pen-params',
         penalty_params,
         '--num-penalty-tune-iters',
@@ -212,13 +212,13 @@ def run_MLE(env, outdir, c):
         '--tot-time-known',
         #'--do-refit',
         #'--lambda-known',
-        '--num-processes 4',
+        '--num-processes 3',
         '--num-init-random-rearrange 20',
     ]
     return env.Command(
         [
-            join(outdir, 'tune_fitted.pkl'),
-            join(outdir, 'tune_fitted.txt')],
+            join(outdir, 'tune_fitted_pars.pkl'),
+            join(outdir, 'tune_fitted_pars.txt')],
         [
             c['restrict_observed_alleles'][0],
             c['run_topology'][0],
