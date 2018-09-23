@@ -22,6 +22,8 @@ import hanging_chad_finder
 from common import create_directory, get_randint, save_data, get_init_target_lams
 import file_readers
 import collapsed_tree
+from clt_likelihood_penalization import mark_target_status_to_penalize
+
 
 def parse_args(args):
     parser = argparse.ArgumentParser(
@@ -257,6 +259,8 @@ def fit_multifurc_tree(
             bcode_meta,
             args.max_extra_steps,
             args.max_sum_states)
+    mark_target_status_to_penalize(tree)
+
     result = LikelihoodScorer(
         get_randint(),
         tree,
@@ -322,7 +326,8 @@ def _do_random_rearrange(tree, bcode_meta, num_random_rearrange):
         random_chad, recent_chads = hanging_chad_finder.get_random_chad(
                 tree,
                 bcode_meta,
-                exclude_chads=recent_chads)
+                exclude_chads=recent_chads,
+                exclude_chad_func=lambda node: tuple([str(a) for a in node.anc_state_list]))
         if random_chad is None:
             logging.info("No hanging chad to be found")
             return tree
@@ -399,7 +404,8 @@ def main(args=sys.argv[1:]):
         random_chad, recent_chads = hanging_chad_finder.get_random_chad(
                 tree,
                 bcode_meta,
-                exclude_chads=recent_chads)
+                exclude_chads=recent_chads,
+                exclude_chad_func=lambda node: tuple([str(a) for a in node.anc_state_list]))
         has_chads = random_chad is not None
         num_old_leaves = len(tree)
 

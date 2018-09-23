@@ -10,6 +10,7 @@ from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from parallel_worker import SubprocessManager
 from common import get_randint
 from model_assessor import ModelAssessor
+from clt_likelihood_penalization import mark_target_status_to_penalize
 
 
 class PenaltyScorerResult:
@@ -125,6 +126,9 @@ def _tune_hyperparams(
             tree_split.bcode_meta,
             args.max_extra_steps,
             args.max_sum_states) for tree_split in tree_splits]
+    # Mark the target status to penalize for each node in the tree
+    for tree_split in tree_splits:
+        mark_target_status_to_penalize(tree_split.tree)
 
     # First create the initialization/optimization settings
     fit_param_list = []

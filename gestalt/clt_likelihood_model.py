@@ -946,12 +946,8 @@ class CLTLikelihoodModel:
         else:
             self.branch_log_barr = tf.constant(0, dtype=tf.float64)
 
-        #self.dist_to_half_pen = tf.reduce_mean(tf.stack(self.dist_to_half_pen_list))
-        #br_lens_to_pen = tf.stack([[b] for b in self.branch_lens_to_pen_list])
-        br_lens_to_pen = tf.stack(self.branch_lens_to_pen_list)
-        #all_transition_probs = tf.exp(-br_lens_to_pen * self.hazard_away_dict[TargetStatus()])
-        #self.dist_to_half_pen = tf.reduce_mean(tf.pow(all_transition_probs - tf.constant(0.5, dtype=tf.float64), 2))
-        self.dist_to_half_pen = tf.reduce_mean(br_lens_to_pen)
+        self.dist_to_half_pen = tf.reduce_mean(
+            tf.pow(tf.stack(self.branch_probs_to_pen_list) - tf.constant(0.5, dtype=tf.float64), 2))
         self.smooth_log_lik = (
                 self.log_lik/self.bcode_meta.num_barcodes
                 + self.log_barr_pen_param_ph * self.branch_log_barr
@@ -989,11 +985,10 @@ class CLTLikelihoodModel:
         self.log_lik_alleles_list = []
         self.Ddiags_list = []
         self.dist_to_half_pen_list = []
-        self.branch_lens_to_pen_list = []
+        self.branch_probs_to_pen_list = []
         for bcode_idx in range(self.bcode_meta.num_barcodes):
-            log_lik_alleles, Ddiags, branch_lens_to_pen = self._create_topology_log_lik_barcode(transition_wrappers, bcode_idx)
-            #self.dist_to_half_pen_list += dist_to_half_pens
-            self.branch_lens_to_pen_list = branch_lens_to_pen
+            log_lik_alleles, Ddiags, branch_probs_to_pen = self._create_topology_log_lik_barcode(transition_wrappers, bcode_idx)
+            self.branch_probs_to_pen_list += branch_probs_to_pen
             self.log_lik_alleles_list.append(log_lik_alleles)
             self.Ddiags_list.append(Ddiags)
         self.log_lik_alleles = tf.add_n(self.log_lik_alleles_list)
@@ -1054,7 +1049,7 @@ class CLTLikelihoodModel:
         down_probs_dict = dict()
         # Store all the scaling terms addressing numerical underflow
         log_scaling_terms = dict()
-        branch_lens_to_pen = []
+        branch_probs_to_pen = []
         # Tree traversal order should be postorder
         for node in self.topology.traverse("postorder"):
             if node.is_leaf():
@@ -1072,13 +1067,12 @@ class CLTLikelihoodModel:
                 # (constant penalty if no spine)
                 if spine_haz is not None:
                     if not node.is_root():
-                        targ_stat_to_pen = node.up.anc_state_list[bcode_idx].to_sg_max_target_status()
+                        targ_stat_to_pen = node.pen_targ_stat[bcode_idx]
                         targ_stat_idx = transition_wrapper.key_dict[targ_stat_to_pen]
                     else:
                         targ_stat_idx = 0
                     haz_to_pen = spine_haz[targ_stat_idx]
-                    branch_lens_to_pen.append(tf.abs(
-                            tf.exp(haz_to_pen) - tf.constant(0.5, dtype=tf.float64)))
+                    branch_probs_to_pen.append(tf.exp(haz_to_pen))
 
                 for child in node.children:
                     child_wrapper = transition_wrappers[child.node_id][bcode_idx]
@@ -1108,16 +1102,14 @@ class CLTLikelihoodModel:
                                         tf.gather(
                                             params=self.branch_lens,
                                             indices=child.spine_children))
-                                targ_stat_to_pen = child.up.anc_state_list[bcode_idx].to_sg_max_target_status()
+                                targ_stat_to_pen = child.pen_targ_stat[bcode_idx]
                                 targ_stat_idx = child_wrapper.key_dict[targ_stat_to_pen]
                                 haz_to_pen = trans_mats[child.node_id][targ_stat_idx, targ_stat_idx]
-                                branch_lens_to_pen.append(tf.abs(
-                                    tf.exp(haz_to_pen * spine_len) - tf.constant(0.5, tf.float64)))
+                                branch_probs_to_pen.append(tf.exp(haz_to_pen * spine_len))
                         elif not hasattr(child, "ignore_penalty") or not child.ignore_penalty:
-                            targ_stat_to_pen = child.up.anc_state_list[bcode_idx].to_sg_max_target_status()
+                            targ_stat_to_pen = child.pen_targ_stat[bcode_idx]
                             targ_stat_idx = child_wrapper.key_dict[targ_stat_to_pen]
-                            branch_lens_to_pen.append(tf.abs(
-                                pt_matrix[child.node_id][targ_stat_idx, targ_stat_idx] - tf.constant(0.5, tf.float64)))
+                            branch_probs_to_pen.append(pt_matrix[child.node_id][targ_stat_idx, targ_stat_idx])
 
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.
@@ -1170,7 +1162,7 @@ class CLTLikelihoodModel:
         self.down_probs_dict = down_probs_dict
         self.pt_matrix = pt_matrix
         self.trans_mats = trans_mats
-        return log_lik_alleles, Ddiags, branch_lens_to_pen #dist_to_half_pen_list
+        return log_lik_alleles, Ddiags, branch_probs_to_pen
 
     def _create_all_target_deact_hazards(self):
         start_state = TargetStatus()
