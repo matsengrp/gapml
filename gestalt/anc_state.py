@@ -35,6 +35,18 @@ class AncState:
             targ_stat = TargetStatus._binary_status_to_target_status(binary_status.tolist())
             return targ_stat
 
+    def to_sg_max_target_status(self):
+        if len(self.indel_set_list) == 0:
+            return TargetStatus()
+        else:
+            max_target = self.indel_set_list[-1].max_deact_target
+            binary_status = np.zeros(max_target + 1)
+            for indel_set in self.indel_set_list:
+                if indel_set.__class__ == SingletonWC:
+                    binary_status[indel_set.min_deact_target:indel_set.max_deact_target + 1] = 1
+            targ_stat = TargetStatus._binary_status_to_target_status(binary_status.tolist())
+            return targ_stat
+
     @staticmethod
     def create_for_observed_allele(allele: AlleleEvents, bcode_meta: BarcodeMetadata):
         """

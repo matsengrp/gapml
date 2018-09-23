@@ -124,7 +124,7 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = "10000,3000,1000"
+    penalty_params = "3000,1000,300"
     cmd = [
         'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',

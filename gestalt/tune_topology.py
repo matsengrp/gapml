@@ -22,6 +22,8 @@ import hanging_chad_finder
 from common import create_directory, get_randint, save_data, get_init_target_lams
 import file_readers
 import collapsed_tree
+from clt_likelihood_penalization import mark_target_status_to_penalize
+
 
 def parse_args(args):
     parser = argparse.ArgumentParser(
@@ -165,7 +167,7 @@ def parse_args(args):
 
 def read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
     fit_params = {
-            "target_lams": get_init_target_lams(bcode_meta.n_targets, 0),
+            "target_lams": get_init_target_lams(bcode_meta.n_targets, -0.5),
             "boost_softmax_weights": np.array([1, 2, 2]),
             "trim_long_factor": 0.05 * np.ones(2),
             "trim_zero_probs": 0.5 * np.ones(2),
@@ -173,7 +175,7 @@ def read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
             "trim_long_poissons": 2.5 * np.ones(2),
             "insert_zero_prob": np.array([0.5]),
             "insert_poisson": np.array([0.5]),
-            "double_cut_weight": np.array([0.5]),
+            "double_cut_weight": np.array([0.1]),
             "tot_time": 1,
             "tot_time_extra": 1.3}
     # Use warm-start info if available
@@ -257,6 +259,8 @@ def fit_multifurc_tree(
             bcode_meta,
             args.max_extra_steps,
             args.max_sum_states)
+    mark_target_status_to_penalize(tree)
+
     result = LikelihoodScorer(
         get_randint(),
         tree,
@@ -311,31 +315,47 @@ def do_refit_bifurc_tree(
     return bifurc_res
 
 
-def _do_random_rearrange(tree, bcode_meta, scratch_dir):
+def _do_random_rearrange(tree, bcode_meta, num_random_rearrange):
     """
+    @param num_random_rearrange: number of times to take a random chad and randomly regraft
     Picks a random chad and randomly places it under a possible parent
     """
     orig_num_leaves = len(tree)
-    random_chad, _ = hanging_chad_finder.get_random_chad(tree, bcode_meta)
-    if random_chad is None:
-        logging.info("No hanging chad to be found")
-        return tree
+    recent_chads = set()
+    for i in range(num_random_rearrange):
+        print("doing random rearrange", i)
+        random_chad = hanging_chad_finder.get_random_chad(
+                tree,
+                bcode_meta,
+                exclude_chad_func=lambda node: make_chad_psuedo_id(node) in recent_chads)
+        if random_chad is None:
+            logging.info("No hanging chad to be found")
+            return tree
 
-    logging.info(tree.get_ascii(attributes=["anc_state_list_str"]))
-    #logging.info("number of hanging chads found %d", len(hanging_chads))
-    logging.info(str(random_chad))
+        rand_chad_id = make_chad_psuedo_id(random_chad.node)
+        if rand_chad_id in recent_chads:
+            # Reset the recent chad list since the random chad finder failed
+            recent_chads = set()
+        recent_chads.add(rand_chad_id)
 
-    # Pick random equal parsimony tree
-    new_tree = random.choice(random_chad.possible_full_trees)
+        logging.info(tree.get_ascii(attributes=["anc_state_list_str"]))
+        logging.info(str(random_chad))
 
-    # Remove any unifurcations that may have been introduced when we
-    # detached the hanging chad
-    collapsed_tree._remove_single_child_unobs_nodes(new_tree)
+        # Pick random equal parsimony tree
+        new_tree = random.choice(random_chad.possible_full_trees)
 
-    new_tree.label_node_ids()
-    assert orig_num_leaves == len(new_tree)
-    return new_tree
+        # Remove any unifurcations that may have been introduced when we
+        # detached the hanging chad
+        collapsed_tree._remove_single_child_unobs_nodes(new_tree)
 
+        new_tree.label_node_ids()
+        assert orig_num_leaves == len(new_tree)
+        tree = new_tree
+
+    return tree
+
+def make_chad_psuedo_id(node: CellLineageTree):
+    return tuple([str(a) for a in node.anc_state_list])
 
 def main(args=sys.argv[1:]):
     args = parse_args(args)
@@ -358,9 +378,7 @@ def main(args=sys.argv[1:]):
             bcode_meta,
             max_possible_trees=2)
     logging.info("Total of %d chads found", len(all_chad_sketches))
-    for i in range(args.num_init_random_rearrange):
-        print("doing random rearrange", i)
-        tree = _do_random_rearrange(tree, bcode_meta, args.scratch_dir)
+    tree = _do_random_rearrange(tree, bcode_meta, args.num_init_random_rearrange)
 
     logging.info("STARTING for reals!")
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))
@@ -390,11 +408,18 @@ def main(args=sys.argv[1:]):
         # Find hanging chads
         # TODO: kind slow right now... reruns chad-finding code
         # cause nodes are getting renumbered...
-        random_chad, recent_chads = hanging_chad_finder.get_random_chad(
+        logging.info("chad finding time")
+        random_chad = hanging_chad_finder.get_random_chad(
                 tree,
                 bcode_meta,
-                exclude_chads=recent_chads)
+                exclude_chad_func=lambda node: make_chad_psuedo_id(node) in recent_chads)
         has_chads = random_chad is not None
+        if has_chads:
+            rand_chad_id = make_chad_psuedo_id(random_chad.node)
+            # Reset the recent chad list since the random chad finder failed
+            if rand_chad_id in recent_chads:
+                recent_chads = set()
+            recent_chads.add(rand_chad_id)
         num_old_leaves = len(tree)
 
         # pick a chad at random

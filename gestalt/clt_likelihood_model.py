@@ -125,6 +125,15 @@ class CLTLikelihoodModel:
 
         self._create_poisson_distributions()
         self.tot_time = tf.constant(tot_time, dtype=tf.float64)
+
+        # Calculcate the hazards for all the target tracts beforehand. Speeds up computation in the future.
+        self.target_tract_hazards, self.target_tract_dict = self._create_all_target_tract_hazards()
+        # Dictionary for storing hazards between target statuses -- assuming all moves are possible
+        self.targ_stat_transition_hazards_dict = {
+            start_target_status: {} for start_target_status in self.targ_stat_transitions_dict.keys()}
+        # Calculate hazard for transitioning away from all target statuses beforehand. Speeds up future computation.
+        self.hazard_away_dict = self._create_hazard_away_dict()
+
         if self.topology:
             assert not self.topology.is_leaf()
 
@@ -153,14 +162,6 @@ class CLTLikelihoodModel:
         else:
             self.branch_len_inners = []
             self.branch_len_offsets_proportion = []
-
-        # Calculcate the hazards for all the target tracts beforehand. Speeds up computation in the future.
-        self.target_tract_hazards, self.target_tract_dict = self._create_all_target_tract_hazards()
-        # Dictionary for storing hazards between target statuses -- assuming all moves are possible
-        self.targ_stat_transition_hazards_dict = {
-            start_target_status: {} for start_target_status in self.targ_stat_transitions_dict.keys()}
-        # Calculate hazard for transitioning away from all target statuses beforehand. Speeds up future computation.
-        self.hazard_away_dict = self._create_hazard_away_dict()
 
         self.step_size = step_size
         self.adam_opt = tf.train.AdamOptimizer(learning_rate=self.step_size)
@@ -353,28 +354,43 @@ class CLTLikelihoodModel:
         # The reason we have these implicit nodes is to deal with branch length constraints -- we know the node's offset from that grandparent but don't know
         # where to place the parent node in between.
         self.dist_to_root = {self.root_node_id: tf.constant(0, dtype=tf.float64)}
-        if self.known_params.branch_lens:
-            for node in self.topology.get_descendants("preorder"):
-                if self.known_params.branch_len_inners[node.node_id] and not self.known_params.branch_len_offsets_proportion[node.node_id]:
-                    assert len(node.up.get_children()) <= 2
-                    # Make sure the implicit node has all associated branch length variables marked as known
-                    assert self.known_params.branch_len_inners[node.up.node_id] and self.known_params.branch_len_offsets_proportion[node.up.node_id]
+        branch_offsets = {self.root_node_id: tf.constant(0, dtype=tf.float64)}
+        # Using preorder is important so we don't override dist_to_root incorrectly
+        for node in self.topology.get_descendants("preorder"):
+            if hasattr(node, 'implicit_child') and node.implicit_child is not None:
+                # This node's specifications are implicitly defined by its child -- its branch length is proportion[node] * branch_length[`node.implicit_child`]
+                # `node.implicit_child` should be one of the children of `node`
+                assert len(node.get_children()) <= 2
 
-                    nodes_on_path_to_root = [node.up.up]
-                    while nodes_on_path_to_root[0].up is not None:
-                        nodes_on_path_to_root = [nodes_on_path_to_root[0].up] + nodes_on_path_to_root
-                    for path_node in nodes_on_path_to_root:
-                        if path_node.node_id not in self.dist_to_root:
-                            self.dist_to_root[path_node.node_id] = self.dist_to_root[path_node.up.node_id] + self.branch_len_inners[path_node.node_id]
+                # First we get the distance to root for all the nodes on the path up to the root.
+                nodes_on_path_to_root = [node.up]
+                while nodes_on_path_to_root[0].up is not None:
+                    nodes_on_path_to_root = [nodes_on_path_to_root[0].up] + nodes_on_path_to_root
+                for path_node in nodes_on_path_to_root:
+                    if path_node.node_id not in self.dist_to_root:
+                        self.dist_to_root[path_node.node_id] = self.dist_to_root[path_node.up.node_id] + self.branch_len_inners[path_node.node_id]
 
-                    proportion = self.branch_len_offsets_proportion[node.node_id]
-                    if node.is_leaf():
-                        node_inner = self.tot_time - self.dist_to_root[node.up.up.node_id]
-                    else:
-                        node_inner = self.branch_len_inners[node.node_id]
-                    assert node.up.node_id not in self.dist_to_root
-                    self.dist_to_root[node.up.node_id] = self.dist_to_root[node.up.up.node_id] + node_inner * proportion
-                    self.dist_to_root[node.node_id] = self.dist_to_root[node.up.node_id] + node_inner * (tf.constant(1, dtype=tf.float64) - proportion)
+                # dist_to_root of `node.implicit_child` is defined by itself and the parent of the `node`
+                # we ignore the implicit node
+                if node.implicit_child.is_leaf():
+                    self.dist_to_root[node.implicit_child.node_id] = self.tot_time
+                else:
+                    self.dist_to_root[node.implicit_child.node_id] = self.dist_to_root[node.up.node_id] + self.branch_len_inners[node.implicit_child.node_id]
+
+                # The proportion in the implicit node is used to decide the branch length of the implicit node
+                # To get the branch length of the implicit node, multiply its proportion with the branch length of the `implicit_child`.
+                br_len_inner_child_orig = self.dist_to_root[node.implicit_child.node_id] - self.dist_to_root[node.up.node_id]
+                if not node.up.is_resolved_multifurcation():
+                    br_offset_child_orig = self.branch_len_offsets_proportion[node.implicit_child.node_id]
+                    branch_offsets[node.node_id] = br_len_inner_child_orig * br_offset_child_orig
+                    br_len_child_orig = br_len_inner_child_orig * (1 - br_offset_child_orig)
+                    br_len = br_len_child_orig * self.branch_len_offsets_proportion[node.node_id]
+                else:
+                    branch_offsets[node.node_id] = tf.constant(0, dtype=tf.float64)
+                    br_len = br_len_inner_child_orig * self.branch_len_offsets_proportion[node.node_id]
+                branch_offsets[node.implicit_child.node_id] = tf.constant(0, dtype=tf.float64)
+
+                self.dist_to_root[node.node_id] = self.dist_to_root[node.up.node_id] + branch_offsets[node.node_id] + br_len
 
         # Now that we've handled the special implicit nodes, we are ready to calculate the rest of the dist_to_root distances
         for node in self.topology.get_descendants("preorder"):
@@ -386,9 +402,11 @@ class CLTLikelihoodModel:
             else:
                 self.dist_to_root[node.node_id] = self.dist_to_root[node.up.node_id] + self.branch_len_inners[node.node_id]
 
-        # This calculates the offset on the spines for nodes that are children of multifurcating nodes
-        branch_offsets = {self.root_node_id: tf.constant(0, dtype=tf.float64)}
+        # This also calculates the offset on the spines for nodes that are children of multifurcating nodes
         for node in self.topology.get_descendants("preorder"):
+            if node.node_id in branch_offsets:
+                continue
+
             if not node.up.is_resolved_multifurcation():
                 if node.is_leaf():
                     # A leaf node, use its offset to determine branch length
@@ -398,8 +416,7 @@ class CLTLikelihoodModel:
                     branch_offsets[node.node_id] = self.branch_len_inners[node.node_id] * self.branch_len_offsets_proportion[node.node_id]
             else:
                 branch_offsets[node.node_id] = tf.constant(0, dtype=tf.float64)
-        branch_offsets = [branch_offsets[j] for j in range(self.num_nodes)]
-        self.branch_len_offsets = tf.stack(branch_offsets)
+        self.branch_len_offsets = tf.stack([branch_offsets[j] for j in range(self.num_nodes)])
 
     def _create_branch_lens(self):
         """
@@ -417,7 +434,7 @@ class CLTLikelihoodModel:
                 else:
                     # Internal node -- use the branch length minus offset to specify the branch length (in the bifurcating tree)
                     # But use the offset + branch length to determine distance from root
-                    br_len = self.branch_len_inners[node.node_id] - self.branch_len_offsets[node.node_id]
+                    br_len = self.dist_to_root[node.node_id] - self.dist_to_root[node.up.node_id] - self.branch_len_offsets[node.node_id]
             else:
                 if node.is_leaf():
                     br_len = self.tot_time - self.dist_to_root[node.up.node_id]
@@ -572,12 +589,12 @@ class CLTLikelihoodModel:
         model_vars["branch_len_offsets_proportion"] = np.random.rand(self.num_nodes) * 0.5
         self.set_params_from_dict(model_vars)
 
-        assert self._are_all_branch_lens_positive()
-
         # This line is just to check that the tree is initialized to be ultrametric
         bifurc_tree = self.get_fitted_bifurcating_tree()
         logging.info("init DISTANCE")
         logging.info(bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
+
+        assert self._are_all_branch_lens_positive()
 
     def get_all_target_tract_hazards(self):
         return self.sess.run(self.target_tract_hazards)
@@ -926,8 +943,8 @@ class CLTLikelihoodModel:
         else:
             self.branch_log_barr = tf.constant(0, dtype=tf.float64)
 
-        self.dist_to_half_pen = tf.reduce_mean(tf.stack(self.dist_to_half_pen_list))
-
+        self.dist_to_half_pen = tf.reduce_mean(
+            tf.pow(tf.stack(self.branch_probs_to_pen_list) - tf.constant(0.5, dtype=tf.float64), 2))
         self.smooth_log_lik = (
                 self.log_lik/self.bcode_meta.num_barcodes
                 + self.log_barr_pen_param_ph * self.branch_log_barr
@@ -965,18 +982,18 @@ class CLTLikelihoodModel:
         self.log_lik_alleles_list = []
         self.Ddiags_list = []
         self.dist_to_half_pen_list = []
+        self.branch_probs_to_pen_list = []
         for bcode_idx in range(self.bcode_meta.num_barcodes):
-            log_lik_alleles, Ddiags, dist_to_half_pens = self._create_topology_log_lik_barcode(transition_wrappers, bcode_idx)
-            self.dist_to_half_pen_list += dist_to_half_pens
+            log_lik_alleles, Ddiags, branch_probs_to_pen = self._create_topology_log_lik_barcode(transition_wrappers, bcode_idx)
+            self.branch_probs_to_pen_list += branch_probs_to_pen
             self.log_lik_alleles_list.append(log_lik_alleles)
             self.Ddiags_list.append(Ddiags)
         self.log_lik_alleles = tf.add_n(self.log_lik_alleles_list)
 
     def _initialize_lower_log_prob(
             self,
-            transition_wrappers: Dict[int, List[TransitionWrapper]],
-            node: CellLineageTree,
-            bcode_idx: int):
+            transition_wrapper: TransitionWrapper,
+            node: CellLineageTree):
         """
         Initialize the Lprob element with the first part of the product
             For unresolved multifurcs, this is the probability of staying in this same ancestral state (the spine's probability)
@@ -991,7 +1008,6 @@ class CLTLikelihoodModel:
                 for child in node.children]))
             if not node.is_root():
                 # When making this probability, order the elements per the transition matrix of this node
-                transition_wrapper = transition_wrappers[node.node_id][bcode_idx]
                 index_vals = [[
                         [transition_wrapper.key_dict[state], 0],
                         self.hazard_away_dict[state]]
@@ -1001,11 +1017,11 @@ class CLTLikelihoodModel:
                         output_shape=[transition_wrapper.num_possible_states + 1, 1],
                         name="haz_away.multifurc")
                 haz_stay_scaled = -haz_aways * time_stays_constant
-                return haz_stay_scaled, haz_stay_scaled[:-1]
+                return haz_stay_scaled, time_stays_constant
             else:
                 root_haz_away = self.hazard_away_dict[TargetStatus()]
                 haz_stay_scaled = -root_haz_away * time_stays_constant
-                return haz_stay_scaled, haz_stay_scaled
+                return haz_stay_scaled, time_stays_constant
         else:
             return tf.constant(0, dtype=tf.float64), None
 
@@ -1030,7 +1046,7 @@ class CLTLikelihoodModel:
         down_probs_dict = dict()
         # Store all the scaling terms addressing numerical underflow
         log_scaling_terms = dict()
-        dist_to_half_pen_list = []
+        branch_probs_to_pen = []
         # Tree traversal order should be postorder
         for node in self.topology.traverse("postorder"):
             if node.is_leaf():
@@ -1040,15 +1056,18 @@ class CLTLikelihoodModel:
                 prob_array[observed_key] = 1
                 Lprob[node.node_id] = tf.constant(prob_array, dtype=tf.float64)
             else:
-                log_Lprob_node, haz_to_pen = self._initialize_lower_log_prob(
-                        transition_wrappers,
-                        node,
-                        bcode_idx)
+                transition_wrapper = transition_wrappers[node.node_id][bcode_idx]
+                log_Lprob_node, spine_len = self._initialize_lower_log_prob(
+                        transition_wrapper,
+                        node)
                 # For a multifurcating tree, this is where we penalize spine length
                 # (constant penalty if no spine)
-                if haz_to_pen is not None:
-                    dist_to_half_pen_list.append(
-                            tf.reduce_mean(tf.abs(tf.exp(haz_to_pen) - tf.constant(0.5, tf.float64))))
+                if spine_len is not None:
+                    if not node.is_root():
+                        haz_to_pen = self.hazard_away_dict[node.pen_targ_stat[bcode_idx]]
+                    else:
+                        haz_to_pen = self.hazard_away_dict[TargetStatus()]
+                    branch_probs_to_pen.append(tf.exp(-haz_to_pen * spine_len))
 
                 for child in node.children:
                     child_wrapper = transition_wrappers[child.node_id][bcode_idx]
@@ -1068,22 +1087,25 @@ class CLTLikelihoodModel:
                                 tr_mat,
                                 self.branch_lens[child.node_id])
 
-                        # Penalize branch length
-                        if hasattr(child, "spine_children"):
+                    # Penalize branch length/target rates
+                    self.spine_len = tf.constant(0)
+                    if hasattr(child, "spine_children"):
+                        # Only penalize things if there are elements in `spine_children`
+                        # Otherwise we should basically ignore this branch lenght penalty
+                        if len(child.spine_children):
+                            haz_to_pen = self.hazard_away_dict[child.pen_targ_stat[bcode_idx]]
                             # For a bifurcating tree, this is where we penalize branches and also groups of branches that were originally
                             # a single spine -- we use the instantaneous transition matrix from the top node and multiply by the entire
                             # spine length
-                            if len(child.spine_children):
-                                prob_stay = tf.exp(tf.diag_part(tr_mat)[:-1] * tf.reduce_sum(
-                                        tf.gather(
-                                            params=self.branch_lens,
-                                            indices=child.spine_children)))
-                                dist_to_half_pen_list.append(tf.reduce_mean(tf.abs(
-                                    prob_stay - tf.constant(0.5, dtype=tf.float64))))
-                        else:
-                            prob_stay = tf.diag_part(pt_matrix[child.node_id])[:-1]
-                            dist_to_half_pen_list.append(tf.reduce_mean(tf.abs(
-                                    prob_stay - tf.constant(0.5, tf.float64))))
+                            spine_len = tf.reduce_sum(
+                                    tf.gather(
+                                        params=self.branch_lens,
+                                        indices=child.spine_children))
+                            self.spine_len = spine_len
+                            branch_probs_to_pen.append(tf.exp(-haz_to_pen * spine_len))
+                    elif not hasattr(child, "ignore_penalty") or not child.ignore_penalty:
+                        haz_to_pen = self.hazard_away_dict[child.pen_targ_stat[bcode_idx]]
+                        branch_probs_to_pen.append(tf.exp(-haz_to_pen * self.branch_lens[child.node_id]))
 
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.
@@ -1136,7 +1158,7 @@ class CLTLikelihoodModel:
         self.down_probs_dict = down_probs_dict
         self.pt_matrix = pt_matrix
         self.trans_mats = trans_mats
-        return log_lik_alleles, Ddiags, dist_to_half_pen_list
+        return log_lik_alleles, Ddiags, branch_probs_to_pen
 
     @profile
     def _create_transition_matrix(self, transition_wrapper: TransitionWrapper):

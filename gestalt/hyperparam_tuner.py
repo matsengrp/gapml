@@ -10,6 +10,7 @@ from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from parallel_worker import SubprocessManager
 from common import get_randint
 from model_assessor import ModelAssessor
+from clt_likelihood_penalization import mark_target_status_to_penalize
 
 
 class PenaltyScorerResult:
@@ -107,9 +108,13 @@ def _tune_hyperparams(
         fit_params: Dict,
         kfold_fnc,
         stability_score_fnc,
-        assessor: ModelAssessor = None):
+        assessor: ModelAssessor = None,
+        conv_thres: float = 5 * 1e-7):
     """
     @param max_num_chad_parents: max number of chad parents to consider
+    @param conv_thres: the convergence threshold for training the model
+                        (should probably pick something similar to the one being used
+                        for the hanging chads)
 
     @return List[PenaltyScorerResult] -- corresponding to each hyperparam
                 being tuned
@@ -125,6 +130,9 @@ def _tune_hyperparams(
             tree_split.bcode_meta,
             args.max_extra_steps,
             args.max_sum_states) for tree_split in tree_splits]
+    # Mark the target status to penalize for each node in the tree
+    for tree_split in tree_splits:
+        mark_target_status_to_penalize(tree_split.tree)
 
     # First create the initialization/optimization settings
     fit_param_list = []
@@ -135,6 +143,7 @@ def _tune_hyperparams(
             new_fit_params = {}
         new_fit_params["log_barr_pen_param"] = args.log_barr_pen_param
         new_fit_params["dist_to_half_pen_param"] = dist_to_half_pen_param
+        new_fit_params["conv_thres"] = conv_thres
         fit_param_list.append(new_fit_params)
 
     # Actually fit the trees using the kfold barcodes
