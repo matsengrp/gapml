@@ -85,10 +85,6 @@ class HangingChadTuneResult:
         # how to warm start using these estimates...?
         fit_params.pop('branch_len_inners', None)
         fit_params.pop('branch_len_offsets_proportion', None)
-        if self.no_chad_res is not None:
-            no_chad_fit_params = self.no_chad_res.get_fit_params()
-            fit_params['dist_to_half_pen_param'] = no_chad_fit_params['dist_to_half_pen_param']
-            fit_params['log_barr_pen_param'] = no_chad_fit_params['log_barr_pen_param']
 
         orig_tree = best_chad.full_chad_tree.copy()
         collapsed_tree._remove_single_child_unobs_nodes(orig_tree)
@@ -110,8 +106,6 @@ class HangingChad:
         self.nochad_tree = nochad_tree
         self.possible_full_trees = possible_full_trees
         self.num_possible_trees = len(possible_full_trees)
-        # Kind of an id for this hanging chad
-        self.psuedo_id = str([str(a) for a in node.anc_state_list])
 
         self.chad_ids = set([node.node_id for node in self.node.traverse()])
 
@@ -123,8 +117,13 @@ class HangingChad:
 
     def make_single_leaf_rand_trees(self):
         """
-        @return List[CellLineageTree] -- takes a random leaf of the hanging chad and only keeps that
-                    in each of the possible trees, drops all other leaves of the hanging chad
+        @return List[Dict[str, CellLineageTree]] -- For each possible tree, only keeps a random leaf of the hanging chad.
+                    (same random leaf across all trees). Also returns the original tree.
+                    This marks the tree appropriately for the estimation method -- it will mark the
+                    hanging chad with `ignore_penalty` so we know that its penalty should be excluded.
+                    It will also mark which node is implicit by adding an `implicit_child` and which
+                    node should have its penalty be based on a sum of branch lengths, as specified by
+                    the `spine_children` attr.
         """
         chad_leaf_ids = [leaf.node_id for leaf in self.node]
         random_leaf_id = random.choice(chad_leaf_ids)
@@ -160,6 +159,11 @@ class HangingChad:
                 assert len(implicit_node.get_children()) == 2
                 for child in implicit_node.get_children():
                     if child.nochad_id is not None:
+                        # The implicit node gets the spine children and its child doesnt.
+                        # Now when we penalize the probability along the branch, its actually
+                        # the aggregate of the implicit node and its child.
+                        # The choice of giving the implicit node the spine children is arbitrary...
+                        # I think we can put all the spine children in the child and non in the implicit node.
                         child.add_feature('spine_children', [])
                         implicit_node.add_features(
                             implicit_child=child,
@@ -194,7 +198,11 @@ def _get_chad_possibilities(
         max_possible_trees: int = None,
         branch_len_attaches: bool = True):
     """
-    @return List[CellLineageTree] that are equally parsimonious trees after putting chad on various
+    @param parsimony_score: the original parsimony score of the tree
+    @param max_possible_trees: maximum number of trees to list out when we are finding hanging chad positions
+    @param branch_len_attaches: whether or not to consider hanging chads that can be regrafted on the middle of a branch
+
+    @return List[CellLineageTree] that are equally parsimonious trees after regrafting chad on various
             branches and nodes
     """
     chad = tree.search_nodes(node_id=chad_id)[0]
@@ -244,7 +252,7 @@ def _get_chad_possibilities(
             logging.info("We beat MIX (attach to multifurc): %d< %d", new_pars_score, parsimony_score)
             logging.info(tree.get_ascii(attributes=['anc_state_list_str']))
             logging.info(tree.get_ascii(attributes=['dist']))
-        #assert new_pars_score >= parsimony_score
+
         can_collapse_tree = any([other_node.dist == 0 for other_node in tree.get_descendants() if not other_node.is_leaf()])
         if new_pars_score == parsimony_score and not can_collapse_tree:
             tree_copy = tree.copy()
@@ -279,8 +287,6 @@ def _get_chad_possibilities(
                 logging.info("we beat MIX (attach in middle): %d< %d", new_pars_score, parsimony_score)
                 logging.info(tree.get_ascii(attributes=['anc_state_list_str']))
                 logging.info(tree.get_ascii(attributes=['dist']))
-
-            #assert new_pars_score >= parsimony_score
 
             # Then this can be further collapsed and we might as well add the node to
             # a multif/bifurcation. Should have been accomplished previously.
@@ -317,10 +323,10 @@ def _preprocess_tree_for_chad_finding(tree: CellLineageTree, bcode_meta: Barcode
 def get_random_chad(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
-        exclude_chads: Set = set(),
-        exclude_chad_func = None,
+        exclude_chad_func=None,
         branch_len_attaches: bool = True):
     """
+    @param exclude_chad_func: the function to use to check if chad should be considered
     @return a randomly chosen HangingChad, also a set of the recently seen chads (indexed by psuedo id)
     """
     tree, parsimony_score = _preprocess_tree_for_chad_finding(tree, bcode_meta)
@@ -328,7 +334,7 @@ def get_random_chad(
     descendants = tree.get_descendants()
     random.shuffle(descendants)
     for node in descendants:
-        if exclude_chad_func is not None and exclude_chad_func(node) in exclude_chads:
+        if exclude_chad_func is not None and exclude_chad_func(node):
             continue
 
         has_masking_cuts = any([sg.min_target + 1 < sg.max_target for anc_state in node.anc_state_list for sg in anc_state.get_singletons()])
@@ -343,45 +349,29 @@ def get_random_chad(
                 bcode_meta,
                 branch_len_attaches=branch_len_attaches)
         if hanging_chad.num_possible_trees > 1:
-            if exclude_chad_func is not None:
-                exclude_chads.add(exclude_chad_func(hanging_chad.node))
-            logging.info("ran %s", str(hanging_chad))
+            logging.info("random chad %s", str(hanging_chad))
 
-            possible_trees = hanging_chad.possible_full_trees
-            chad = hanging_chad.node
-            logging.info("num possible pars trees %d", len(possible_trees) + 1)
-            logging.info("chad %d %s", chad.node_id, chad.allele_events_list_str)
-            for t_idx, p_tree in enumerate(possible_trees):
-                logging.info("chad %d %s", chad.node_id, chad.allele_events_list_str)
-                logging.info(p_tree.get_ascii(attributes=['anc_state_list_str']))
-                logging.info(p_tree.get_ascii(attributes=['dist']))
+            #possible_trees = hanging_chad.possible_full_trees
+            #chad = hanging_chad.node
+            #logging.info("num possible pars trees %d", len(possible_trees) + 1)
+            #logging.info("chad %d %s", chad.node_id, chad.allele_events_list_str)
+            #for t_idx, p_tree in enumerate(possible_trees):
+            #    logging.info("chad %d %s", chad.node_id, chad.allele_events_list_str)
+            #    logging.info(p_tree.get_ascii(attributes=['anc_state_list_str']))
+            #    logging.info(p_tree.get_ascii(attributes=['dist']))
 
-            return hanging_chad, exclude_chads
+            return hanging_chad
 
-    if len(exclude_chads):
-        # We still haven't found our chad friend apparently...
-        logging.info("need to start over chad set")
-        # Did we exclude all of them?
-        for node in descendants:
-            if node.anc_state_list_str not in exclude_chads:
-                continue
-
-            has_masking_cuts = any([sg.min_target + 1 < sg.max_target for anc_state in node.anc_state_list for sg in anc_state.get_singletons()])
-            if not has_masking_cuts:
-                continue
-
-            tree_copy = tree.copy()
-            hanging_chad = _get_chad_possibilities(
-                    node.node_id,
-                    tree_copy,
-                    parsimony_score,
-                    bcode_meta,
-                    branch_len_attaches=branch_len_attaches)
-            if hanging_chad.num_possible_trees > 1:
-                if exclude_chad_func is not None:
-                    exclude_chads = set([exclude_chad_func(hanging_chad.node)])
-                return hanging_chad, exclude_chads
-    return None, None
+    # We still haven't found our chad friend apparently...
+    if exclude_chad_func is None:
+        # There is no hanging chad at all
+        return None
+    else:
+        return get_random_chad(
+            tree,
+            bcode_meta,
+            exclude_chad_func=None,
+            branch_len_attaches=branch_len_attaches)
 
 
 def get_all_chads(
@@ -417,10 +407,14 @@ def _fit_nochad_result(
         bcode_meta: BarcodeMetadata,
         args,
         fit_params: Dict,
-        assessor: ModelAssessor = None):
+        assessor: ModelAssessor = None,
+        conv_thres: float = 5 * 1e-4):
     """
     @param hanging_chad: the hanging chad to remove from the tree
     @param tree: the original tree
+    @param conv_thres: the convergence threshold for maximizing the penalized log like of the nochad tree
+                    (we typically use a higher threshold since
+                    this is just used for warm starting)
 
     @return LikelihoodScorerResult, the node_id of the current parent node of the hanging chad
     """
@@ -431,7 +425,7 @@ def _fit_nochad_result(
         fit_params['target_lams'] = get_init_target_lams(fit_params['target_lams'].size)
     fit_params.pop('branch_len_inners', None)
     fit_params.pop('branch_len_offsets_proportion', None)
-    fit_params['conv_thres'] = 5 * 1e-4
+    fit_params['conv_thres'] = conv_thres
 
     # Now fit the tree without the hanging chad
     trans_wrap_maker = TransitionWrapperMaker(
@@ -439,10 +433,10 @@ def _fit_nochad_result(
         bcode_meta,
         args.max_extra_steps,
         args.max_sum_states)
-    hanging_chad.pen_anc_state = dict()
     mark_target_status_to_penalize(nochad_tree)
+    pen_anc_state = dict()
     for node in nochad_tree.get_descendants():
-        hanging_chad.pen_anc_state[node.node_id] = node.pen_targ_stat
+        pen_anc_state[node.node_id] = node.pen_targ_stat
 
     no_chad_res = LikelihoodScorer(
         get_randint(),
@@ -454,14 +448,19 @@ def _fit_nochad_result(
         fit_param_list=[fit_params],
         known_params=args.known_params,
         assessor=assessor).run_worker(None)[0]
-    return no_chad_res
+    return no_chad_res, pen_anc_state
 
 
 def _create_warm_start_fit_params(
         hanging_chad: HangingChad,
         nochad_res: LikelihoodScorerResult,
-        new_chad_tree: CellLineageTree):
+        new_chad_tree: CellLineageTree,
+        conv_thres: float = 5 * 1e-7):
     """
+    @param conv_thres: the convergence threshold for maximizing the partially-penalized log lik
+            (this is usually smaller than the one for the nochad
+            tree since this is the real fit)
+
     Assemble the `fit_param` and `KnownModelParam` for fitting the tree with the hanging chad
     This does a warm start -- it copies over all model parameters and branch lengths
     @return Dict, KnownModelParam
@@ -473,7 +472,7 @@ def _create_warm_start_fit_params(
     prev_branch_inners = fit_params["branch_len_inners"].copy()
     prev_branch_proportions = fit_params["branch_len_offsets_proportion"].copy()
 
-    fit_params['conv_thres'] = 5 * 1e-7
+    fit_params['conv_thres'] = conv_thres
     fit_params["branch_len_inners"] = np.ones(num_nodes)
     fit_params["branch_len_offsets_proportion"] = np.ones(num_nodes) * 0.45 + np.random.rand(num_nodes) * 0.1
     for node in new_chad_tree.traverse():
@@ -507,7 +506,7 @@ def tune(
     @return HangingChadTuneResult
     """
     assert hanging_chad.num_possible_trees > 1
-    no_chad_res = _fit_nochad_result(
+    no_chad_res, pen_anc_state = _fit_nochad_result(
         hanging_chad,
         bcode_meta,
         args,
@@ -532,13 +531,13 @@ def tune(
             # Recall that we do not penalize the hanging chad
             if node.nochad_id is not None:
                 node.add_feature('pen_targ_stat',
-                    hanging_chad.pen_anc_state[node.nochad_id])
+                    pen_anc_state[node.nochad_id])
                 if node.up.nochad_id is None:
                     # If the parent node is the implicit node,
                     # we should have the implicit node get penalized.
                     # The child of the implicit node will not be.
                     node.up.add_feature('pen_targ_stat',
-                        hanging_chad.pen_anc_state[node.nochad_id])
+                        pen_anc_state[node.nochad_id])
 
         trans_wrap_maker = TransitionWrapperMaker(
             new_chad_tree,

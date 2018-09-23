@@ -317,20 +317,26 @@ def do_refit_bifurc_tree(
 
 def _do_random_rearrange(tree, bcode_meta, num_random_rearrange):
     """
+    @param num_random_rearrange: number of times to take a random chad and randomly regraft
     Picks a random chad and randomly places it under a possible parent
     """
     orig_num_leaves = len(tree)
     recent_chads = set()
     for i in range(num_random_rearrange):
         print("doing random rearrange", i)
-        random_chad, recent_chads = hanging_chad_finder.get_random_chad(
+        random_chad = hanging_chad_finder.get_random_chad(
                 tree,
                 bcode_meta,
-                exclude_chads=recent_chads,
-                exclude_chad_func=lambda node: tuple([str(a) for a in node.anc_state_list]))
+                exclude_chad_func=lambda node: make_chad_psuedo_id(node) in recent_chads)
         if random_chad is None:
             logging.info("No hanging chad to be found")
             return tree
+
+        rand_chad_id = make_chad_psuedo_id(random_chad.node)
+        if rand_chad_id in recent_chads:
+            # Reset the recent chad list since the random chad finder failed
+            recent_chads = set()
+        recent_chads.add(rand_chad_id)
 
         logging.info(tree.get_ascii(attributes=["anc_state_list_str"]))
         logging.info(str(random_chad))
@@ -348,6 +354,8 @@ def _do_random_rearrange(tree, bcode_meta, num_random_rearrange):
 
     return tree
 
+def make_chad_psuedo_id(node: CellLineageTree):
+    return tuple([str(a) for a in node.anc_state_list])
 
 def main(args=sys.argv[1:]):
     args = parse_args(args)
@@ -401,12 +409,17 @@ def main(args=sys.argv[1:]):
         # TODO: kind slow right now... reruns chad-finding code
         # cause nodes are getting renumbered...
         logging.info("chad finding time")
-        random_chad, recent_chads = hanging_chad_finder.get_random_chad(
+        random_chad = hanging_chad_finder.get_random_chad(
                 tree,
                 bcode_meta,
-                exclude_chads=recent_chads,
-                exclude_chad_func=lambda node: tuple([str(a) for a in node.anc_state_list]))
+                exclude_chad_func=lambda node: make_chad_psuedo_id(node) in recent_chads)
         has_chads = random_chad is not None
+        if has_chads:
+            rand_chad_id = make_chad_psuedo_id(random_chad.node)
+            # Reset the recent chad list since the random chad finder failed
+            if rand_chad_id in recent_chads:
+                recent_chads = set()
+            recent_chads.add(rand_chad_id)
         num_old_leaves = len(tree)
 
         # pick a chad at random

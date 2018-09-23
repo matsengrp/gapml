@@ -79,7 +79,8 @@ class CLTPenalizedEstimator(CLTEstimator):
             [self.model.smooth_log_lik,
                 self.model.log_lik,
                 self.model.dist_to_half_pen,
-                self.model.dist_to_root],
+                self.model.dist_to_root,
+            ],
             feed_dict=feed_dict)
         var_dict = self.model.get_vars_as_dict()
 

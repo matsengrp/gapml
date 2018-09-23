@@ -13,7 +13,7 @@ from cell_state import CellTypeTree
 from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
 from indel_sets import Singleton
-from target_status import TargetStatus, TargetDeactTract
+from target_status import TargetStatus
 from transition_wrapper_maker import TransitionWrapper
 import tf_common
 from common import inv_sigmoid, assign_rand_tree_lengths
@@ -159,8 +159,6 @@ class CLTLikelihoodModel:
 
             self._create_distance_to_root_dict()
             self.branch_lens = self._create_branch_lens()
-
-            #self._create_all_target_deact_hazards()
         else:
             self.branch_len_inners = []
             self.branch_len_offsets_proportion = []
@@ -418,8 +416,7 @@ class CLTLikelihoodModel:
                     branch_offsets[node.node_id] = self.branch_len_inners[node.node_id] * self.branch_len_offsets_proportion[node.node_id]
             else:
                 branch_offsets[node.node_id] = tf.constant(0, dtype=tf.float64)
-        branch_offsets = [branch_offsets[j] for j in range(self.num_nodes)]
-        self.branch_len_offsets = tf.stack(branch_offsets)
+        self.branch_len_offsets = tf.stack([branch_offsets[j] for j in range(self.num_nodes)])
 
     def _create_branch_lens(self):
         """
@@ -1020,11 +1017,11 @@ class CLTLikelihoodModel:
                         output_shape=[transition_wrapper.num_possible_states + 1, 1],
                         name="haz_away.multifurc")
                 haz_stay_scaled = -haz_aways * time_stays_constant
-                return haz_stay_scaled, haz_stay_scaled[:,0]
+                return haz_stay_scaled, time_stays_constant
             else:
                 root_haz_away = self.hazard_away_dict[TargetStatus()]
                 haz_stay_scaled = -root_haz_away * time_stays_constant
-                return haz_stay_scaled, [haz_stay_scaled]
+                return haz_stay_scaled, time_stays_constant
         else:
             return tf.constant(0, dtype=tf.float64), None
 
@@ -1060,19 +1057,17 @@ class CLTLikelihoodModel:
                 Lprob[node.node_id] = tf.constant(prob_array, dtype=tf.float64)
             else:
                 transition_wrapper = transition_wrappers[node.node_id][bcode_idx]
-                log_Lprob_node, spine_haz = self._initialize_lower_log_prob(
+                log_Lprob_node, spine_len = self._initialize_lower_log_prob(
                         transition_wrapper,
                         node)
                 # For a multifurcating tree, this is where we penalize spine length
                 # (constant penalty if no spine)
-                if spine_haz is not None:
+                if spine_len is not None:
                     if not node.is_root():
-                        targ_stat_to_pen = node.pen_targ_stat[bcode_idx]
-                        targ_stat_idx = transition_wrapper.key_dict[targ_stat_to_pen]
+                        haz_to_pen = self.hazard_away_dict[node.pen_targ_stat[bcode_idx]]
                     else:
-                        targ_stat_idx = 0
-                    haz_to_pen = spine_haz[targ_stat_idx]
-                    branch_probs_to_pen.append(tf.exp(haz_to_pen))
+                        haz_to_pen = self.hazard_away_dict[TargetStatus()]
+                    branch_probs_to_pen.append(tf.exp(-haz_to_pen * spine_len))
 
                 for child in node.children:
                     child_wrapper = transition_wrappers[child.node_id][bcode_idx]
@@ -1092,24 +1087,25 @@ class CLTLikelihoodModel:
                                 tr_mat,
                                 self.branch_lens[child.node_id])
 
-                        # Penalize branch length
-                        if hasattr(child, "spine_children"):
+                    # Penalize branch length/target rates
+                    self.spine_len = tf.constant(0)
+                    if hasattr(child, "spine_children"):
+                        # Only penalize things if there are elements in `spine_children`
+                        # Otherwise we should basically ignore this branch lenght penalty
+                        if len(child.spine_children):
+                            haz_to_pen = self.hazard_away_dict[child.pen_targ_stat[bcode_idx]]
                             # For a bifurcating tree, this is where we penalize branches and also groups of branches that were originally
                             # a single spine -- we use the instantaneous transition matrix from the top node and multiply by the entire
                             # spine length
-                            if len(child.spine_children):
-                                spine_len = tf.reduce_sum(
-                                        tf.gather(
-                                            params=self.branch_lens,
-                                            indices=child.spine_children))
-                                targ_stat_to_pen = child.pen_targ_stat[bcode_idx]
-                                targ_stat_idx = child_wrapper.key_dict[targ_stat_to_pen]
-                                haz_to_pen = trans_mats[child.node_id][targ_stat_idx, targ_stat_idx]
-                                branch_probs_to_pen.append(tf.exp(haz_to_pen * spine_len))
-                        elif not hasattr(child, "ignore_penalty") or not child.ignore_penalty:
-                            targ_stat_to_pen = child.pen_targ_stat[bcode_idx]
-                            targ_stat_idx = child_wrapper.key_dict[targ_stat_to_pen]
-                            branch_probs_to_pen.append(pt_matrix[child.node_id][targ_stat_idx, targ_stat_idx])
+                            spine_len = tf.reduce_sum(
+                                    tf.gather(
+                                        params=self.branch_lens,
+                                        indices=child.spine_children))
+                            self.spine_len = spine_len
+                            branch_probs_to_pen.append(tf.exp(-haz_to_pen * spine_len))
+                    elif not hasattr(child, "ignore_penalty") or not child.ignore_penalty:
+                        haz_to_pen = self.hazard_away_dict[child.pen_targ_stat[bcode_idx]]
+                        branch_probs_to_pen.append(tf.exp(-haz_to_pen * self.branch_lens[child.node_id]))
 
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.
@@ -1163,25 +1159,6 @@ class CLTLikelihoodModel:
         self.pt_matrix = pt_matrix
         self.trans_mats = trans_mats
         return log_lik_alleles, Ddiags, branch_probs_to_pen
-
-    def _create_all_target_deact_hazards(self):
-        start_state = TargetStatus()
-        all_target_deact_hazards = []
-        for i in range(self.bcode_meta.n_targets):
-            for j in range(i, self.bcode_meta.n_targets):
-                end_state = TargetStatus(TargetDeactTract(i, j))
-                target_tracts_for_transition = self.targ_stat_transitions_dict[start_state][end_state]
-                # if we already calculated the hazard of the transition between these target statuses,
-                # use the same node
-                if end_state in self.targ_stat_transition_hazards_dict[start_state]:
-                    hazard = self.targ_stat_transition_hazards_dict[start_state][end_state]
-                else:
-                    hazard_idxs = [self.target_tract_dict[tt] for tt in target_tracts_for_transition]
-                    hazard = tf.reduce_sum(tf.gather(
-                        params=self.target_tract_hazards,
-                        indices=hazard_idxs))
-                all_target_deact_hazards.append(hazard)
-        self.all_target_deact_hazards = all_target_deact_hazards
 
     @profile
     def _create_transition_matrix(self, transition_wrapper: TransitionWrapper):
