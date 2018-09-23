@@ -216,7 +216,7 @@ class SubprocessManager(ParallelWorkerManager):
                 time.sleep(sleep)
 
         res = self.read_batch_worker_results()
-        self.clean_outputs()
+        #self.clean_outputs()
         if successful_only:
             return self._get_successful_jobs(res, self.worker_list)
         else:

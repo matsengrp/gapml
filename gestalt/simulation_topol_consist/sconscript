@@ -177,7 +177,7 @@ def run_topology(env, outdir, c):
 def run_MLE(env, outdir, c):
     if c['num_barcodes'] == 1:
         #penalty_params = "6000,3200,1600"
-        penalty_params = '6400' #,3200,1600,800'
+        penalty_params = '800'
     elif c['num_barcodes'] == 3:
         penalty_params = "192,48,12,3"
     elif c['num_barcodes'] == 9:
@@ -213,7 +213,7 @@ def run_MLE(env, outdir, c):
         #'--do-refit',
         #'--lambda-known',
         '--num-processes 5',
-        '--num-init-random-rearrange 0',
+        '--num-init-random-rearrange 18',
     ]
     return env.Command(
         [

@@ -41,7 +41,7 @@ nest.add(
     'abundance_thres',
     [
         3,
-        #0,
+        #5,
     ],
     label_func=lambda c: "min_abund_%d" % c,
 )
@@ -150,7 +150,7 @@ def run_MLE(env, outdir, c):
         '--max-iters 50000',
         '--num-inits 1',
         '--tot-time-known',
-        '--num-processes 3',
+        '--num-processes 2',
         '--num-init-random-rearrange 10',
     ]
     return env.Command(

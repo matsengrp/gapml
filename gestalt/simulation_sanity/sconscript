@@ -26,7 +26,7 @@ nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_enviro
 nest.add(
     'seed',
     #range(5,6),
-    [0],
+    [1],
     label_func=lambda c: "seed%d" % c,
 )
 
@@ -48,13 +48,13 @@ def generate(env, outdir, c):
         '--out-obs-file ${TARGETS[0]}',
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
-        '--target-lambda 0.4',
-        #'--target-lambda 0.3,0.1',
-        #'--double 0.3',
+        #'--target-lambda 0.4',
+        '--target-lambda 0.0001,0.0001',
+        '--double 4000',
         '--trim-long-factor 0.001 0.001',
         '--time 1',
         '--num-barcodes',
-        1000,
+        400,
         '--min-uniq-alleles',
         0,
         '--max-uniq-alleles',
@@ -72,7 +72,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [100],
+    [400],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 

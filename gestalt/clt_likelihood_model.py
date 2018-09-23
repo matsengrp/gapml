@@ -569,6 +569,9 @@ class CLTLikelihoodModel:
         logging.info(self.topology.get_ascii(attributes=["node_id"]))
         logging.info("br lens %s", br_lens)
         logging.info("where neg %s", np.where(br_lens < 0))
+        #logging.info("known inners %s", self.known_params.branch_len_inners)
+        #logging.info("known propors %s", self.known_params.branch_len_offsets_proportion)
+        #logging.info(self.topology.get_ascii(attributes=["nochad_id"]))
         return np.all(br_lens[1:] > 0)
 
     def initialize_branch_lens(self, tot_time: float):
@@ -1158,6 +1161,7 @@ class CLTLikelihoodModel:
         self.down_probs_dict = down_probs_dict
         self.pt_matrix = pt_matrix
         self.trans_mats = trans_mats
+        print("brnach probs to pen", len(branch_probs_to_pen))
         return log_lik_alleles, Ddiags, branch_probs_to_pen
 
     @profile
