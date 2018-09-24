@@ -1077,7 +1077,7 @@ class CLTLikelihoodModel:
                 for child in node.children:
                     child_wrapper = transition_wrappers[child.node_id][bcode_idx]
                     with tf.name_scope("Transition_matrix%d" % node.node_id):
-                        trans_mats[child.node_id] = self._create_transition_matrix(
+                        trans_mats[child.node_id], possible_tt_matrix = self._create_transition_matrix(
                                 child_wrapper)
 
                     # Get the trim probabilities
@@ -1111,11 +1111,21 @@ class CLTLikelihoodModel:
                                 tf.exp(-haz_to_pen * spine_len) - tf.constant(0.5, dtype=tf.float64),
                                 2)))
                     elif not hasattr(child, "ignore_penalty") or not child.ignore_penalty:
-                        haz_to_pen = tf.stack(
-                            [self.hazard_away_dict[targ_stat] for targ_stat in child.pen_targ_stat[bcode_idx]])
-                        branch_probs_to_pen.append(tf.reduce_mean(tf.pow(
-                                tf.exp(-haz_to_pen * self.branch_lens[child.node_id]) - tf.constant(0.5, dtype=tf.float64),
-                                2)))
+                        #haz_to_pen = tf.stack(
+                        #    [self.hazard_away_dict[targ_stat] for targ_stat in child.pen_targ_stat[bcode_idx]])
+                        #branch_probs_to_pen.append(tf.reduce_mean(tf.pow(
+                        #        tf.exp(-haz_to_pen * self.branch_lens[child.node_id]) - tf.constant(0.5, dtype=tf.float64),
+                        #        2)))
+                        possible_tt_matrix = possible_tt_matrix[:-1,:]
+                        num_possibles = tf.reduce_sum(possible_tt_matrix, axis=1)
+                        self.num_possibles = num_possibles
+                        center_val = tf.reshape(
+                                tf.constant(1, dtype=tf.float64)/num_possibles,
+                                [child_wrapper.num_possible_states, 1])
+                        diffs = tf.pow((pt_matrix[child.node_id][:-1,:] - center_val) * possible_tt_matrix, 2)
+                        avg_diffs = tf.reduce_sum(diffs, axis=1)/num_possibles
+                        self.diffs = diffs
+                        branch_probs_to_pen.append(tf.reduce_mean(avg_diffs))
 
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.
@@ -1168,7 +1178,6 @@ class CLTLikelihoodModel:
         self.down_probs_dict = down_probs_dict
         self.pt_matrix = pt_matrix
         self.trans_mats = trans_mats
-        print("brnach probs to pen", len(branch_probs_to_pen))
         return log_lik_alleles, Ddiags, branch_probs_to_pen
 
     @profile
@@ -1190,6 +1199,7 @@ class CLTLikelihoodModel:
 
         possible_states = set(transition_wrapper.states)
 
+        possible_tt_sparse_indices = []
         single_tt_sparse_indices = []
         single_tt_gather_indices = []
         sparse_indices = []
@@ -1201,6 +1211,7 @@ class CLTLikelihoodModel:
             # Hazard of staying is negative of hazard away
             sparse_indices.append([start_key, start_key])
             sparse_vals.append(-haz_away)
+            possible_tt_sparse_indices.append([start_key, start_key])
 
             all_end_states = set(self.targ_stat_transitions_dict[start_state].keys())
             possible_end_states = all_end_states.intersection(possible_states)
@@ -1216,6 +1227,7 @@ class CLTLikelihoodModel:
                     matching_tt = list(matching_tts)[0]
                     single_tt_gather_indices.append(int(self.target_tract_dict[matching_tt]))
                     single_tt_sparse_indices.append([start_key, end_key])
+                    possible_tt_sparse_indices.append([start_key, end_key])
                 else:
                     # if we already calculated the hazard of the transition between these target statuses,
                     # use the same node
@@ -1232,6 +1244,7 @@ class CLTLikelihoodModel:
 
                     sparse_indices.append([start_key, end_key])
                     sparse_vals.append(hazard)
+                    possible_tt_sparse_indices.append([start_key, end_key])
 
         matrix_len = transition_wrapper.num_possible_states + 1
         if single_tt_gather_indices:
@@ -1261,7 +1274,11 @@ class CLTLikelihoodModel:
 
         q_matrix_full = tf.concat([q_matrix, hazard_impossible_states], axis=1)
 
-        return q_matrix_full
+        possible_tt_matrix = tf.scatter_nd(
+                possible_tt_sparse_indices,
+                [1] * len(possible_tt_sparse_indices),
+                [matrix_len, matrix_len])
+        return q_matrix_full, tf.cast(possible_tt_matrix, dtype=tf.float64)
 
     @profile
     def _create_trim_prob_matrix(self, child_transition_wrapper: TransitionWrapper):
