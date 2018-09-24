@@ -31,6 +31,9 @@ python3 -m unittest tests.<test_me>
 
 `tune_topology.py`: to select the best topology given a set of possible topologies
 
+# Fitting the trees via alternative methods
+`fit_chronos.py`: uses Sanderson 2002, the `chronos` function in R package `ape`
+
 # Submitting jobs to AWS Batch
 We rely on the `boto_run.py` script.
 We still run `scons` to submit to AWS batch.

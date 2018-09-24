@@ -47,6 +47,7 @@ def get_possible_anc_states(tree: CellLineageTree):
 def get_parsimony_score(tree: CellLineageTree):
     """
     Call this after calling `annotate_ancestral_states`
+    Assigns distance based on max parsimony
     @return parsimony score
     """
     # The parsimony score is the sum of the number of times a new singleton is introduced
