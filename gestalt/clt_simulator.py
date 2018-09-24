@@ -245,6 +245,7 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
             birth_sync_rounds: int,
             birth_sync_time: float,
             birth_decay: float,
+            birth_min: float,
             death_rate: float,
             cell_state_simulator: CellStateSimulator,
             allele_simulator: AlleleSimulator):
@@ -257,6 +258,7 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
         self.birth_sync_rounds = birth_sync_rounds
         self.birth_sync_time = birth_sync_time
         self.birth_decay = birth_decay
+        self.birth_min = birth_min
         self.death_rate = death_rate
         self.cell_state_simulator = cell_state_simulator
         self.allele_simulator = allele_simulator
@@ -286,6 +288,7 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
                 self.birth_sync_rounds,
                 self.birth_sync_time,
                 self.birth_decay,
+                self.birth_min,
                 self.death_rate)
         tree = bd_tree_simulator.simulate(
                 root_allele,
