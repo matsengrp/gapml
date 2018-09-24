@@ -48,8 +48,9 @@ class ModelAssessor:
             self.scratch_dir)
 
         dist_dict = tree_assessor.get_tree_dists([other_tree])[0]
-        for compare_key, compare_func in self.param_compare_funcs.items():
-            dist_dict[compare_key] = compare_func(other_param_dict)
+        if other_param_dict is not None:
+            for compare_key, compare_func in self.param_compare_funcs.items():
+                dist_dict[compare_key] = compare_func(other_param_dict)
         return dist_dict
 
     def _compare_double_cut(self, other_param_dict: Dict):
