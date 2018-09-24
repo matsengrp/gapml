@@ -51,15 +51,16 @@ def parse_args(args):
         default=None,
         help='pkl file with true model if available')
     parser.add_argument(
-        '--tot-time-known',
-        action='store_true',
-        help='is total time known?')
+        '--lambdas',
+        type=str,
+        default='0.01,0.1,1,10,100',
+        help='lambdas to use when fitting chronos')
     parser.add_argument(
         '--scratch-dir',
         type=str,
         default=None)
 
-    parser.set_defaults(tot_time_known=True)
+    parser.set_defaults()
     args = parser.parse_args(args)
 
     create_directory(args.out_model_file)
@@ -69,6 +70,7 @@ def parse_args(args):
     if not os.path.exists(args.scratch_dir):
         os.mkdir(args.scratch_dir)
 
+    args.lambdas = [float(lam) for lam in args.lambdas.split(",")]
     return args
 
 def _do_convert(tree_node, clt_node):
@@ -76,7 +78,8 @@ def _do_convert(tree_node, clt_node):
         clt_child = CellLineageTree(
             clt_node.allele_list,
             clt_node.allele_events_list,
-            clt_node.cell_state)
+            clt_node.cell_state,
+            dist=child.dist)
         clt_child.name = child.name
         clt_node.add_child(clt_child)
         _do_convert(child, clt_child)
@@ -117,51 +120,56 @@ def main(args=sys.argv[1:]):
     tree_out_file = "%s/fitted_tree%s.txt" % (
             args.scratch_dir, suffix)
 
-    cmd = [
-            command,
-            script_file,
-            tree_in_file,
-            tree_out_file,
-            str(obs_data_dict["time"]),
-            str(3),
-        ]
-    print("Calling:", " ".join(cmd))
-    res = subprocess.call(cmd)
+    results = []
+    for lam in args.lambdas:
+        cmd = [
+                command,
+                script_file,
+                tree_in_file,
+                tree_out_file,
+                str(obs_data_dict["time"]),
+                str(lam),
+            ]
+        print("Calling:", " ".join(cmd))
+        res = subprocess.call(cmd)
 
-    # Read fitted tree
-    with open(tree_out_file, "r") as f:
-        newick_tree = f.readlines()[0]
-        fitted_tree = Tree(newick_tree)
-    logging.info("Done with fitting tree using chronos")
-    logging.info(fitted_tree.get_ascii(attributes=["dist"]))
+        # Read fitted tree
+        with open(tree_out_file, "r") as f:
+            newick_tree = f.readlines()[0]
+            fitted_tree = Tree(newick_tree)
+        logging.info("Done with fitting tree using chronos, lam %f", lam)
+        logging.info(fitted_tree.get_ascii(attributes=["dist"]))
 
-    # Convert the fitted tree back to a cell lineage tree
-    root_clt = CellLineageTree(
-            tree.allele_list,
-            tree.allele_events_list,
-            tree.cell_state)
-    _do_convert(fitted_tree, root_clt)
-    for leaf in root_clt:
-        leaf_parent = leaf.up
-        leaf.detach()
-        orig_cell_lineage_tree = orig_leaf_dict[leaf.name]
-        orig_cell_lineage_tree.dist = leaf.dist
-        orig_cell_lineage_tree.detach()
-        leaf_parent.add_child(orig_cell_lineage_tree)
+        # Convert the fitted tree back to a cell lineage tree
+        root_clt = CellLineageTree(
+                tree.allele_list,
+                tree.allele_events_list,
+                tree.cell_state,
+                dist=0)
+        _do_convert(fitted_tree, root_clt)
+        for leaf in root_clt:
+            leaf_parent = leaf.up
+            leaf.detach()
+            orig_cell_lineage_tree = orig_leaf_dict[leaf.name]
+            orig_cell_lineage_tree.dist = leaf.dist
+            orig_cell_lineage_tree.detach()
+            leaf_parent.add_child(orig_cell_lineage_tree)
 
-    # Assess the tree if true tree supplied
-    dist_dict = None
-    if assessor is not None:
-        dist_dict = assessor.assess(None, root_clt)
-        logging.info("fitted tree: %s", dist_dict)
+        # Assess the tree if true tree supplied
+        dist_dict = None
+        if assessor is not None:
+            dist_dict = assessor.assess(None, root_clt)
+            logging.info("fitted tree: %s", dist_dict)
+        res = {
+            "lambda": lam,
+            "fitted_tree": root_clt,
+            "performance": dist_dict
+        }
+        results.append(res)
 
     # Save results
     with open(args.out_model_file, "wb") as f:
-        res = {
-            "tree": fitted_tree,
-            "tree_dist": dist_dict,
-            }
-        six.moves.cPickle.dump(res, f, protocol=2)
+        six.moves.cPickle.dump(results, f, protocol=2)
     logging.info("Complete!!!")
 
 

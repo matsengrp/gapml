@@ -8,6 +8,6 @@ lambda <- as.numeric(arg[4])
 
 tr <- read.tree(in.file)
 calibration <- makeChronosCalib(tr, node="root", age.max=tree.height)
-chr <- chronos(tr, lambda = lambda, calibration = calibration)
+chr <- chronos(tr, lambda = lambda, calibration = calibration, quiet=T)
 
 write.tree(chr, file = out.file)
