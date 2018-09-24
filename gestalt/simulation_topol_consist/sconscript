@@ -31,14 +31,14 @@ GROWTH_DICT = {
         "max_leaves": 120,
     },
     "small": {
-        "sampling_rate": 0.2,
-        "birth_sync_rounds": 5,
-        "birth_sync_time": 0.08,
+        "sampling_rate": 0.09,
+        "birth_sync_rounds": 3,
+        "birth_sync_time": 0.07,
         "death_lambda": 0.2,
-        "birth_decay": -3.4,
-        "lambda_sequence": [.65, .6, .5, .55, .35, .4, .45],
-        "double": 0.05,
-        "min_leaves": 50,
+        "birth_decay": -2,
+        "lambda_sequence": [.85, .8, .75, .7, .65, .6, .55],
+        "double": 0.04,
+        "min_leaves": 80,
         "max_leaves": 130,
     },
     "old": {
@@ -56,21 +56,21 @@ GROWTH_DICT = {
 
 nest.add(
     'model_seed',
-    [12],
+    [1],
     label_func=lambda c: 'model_seed%d' % c,
 )
 
 nest.add(
     'seed',
-    [21],
+    [0],
 )
 
 nest.add(
     'growth_stage',
     [
        #'30hpf',
-       #'small'
-      'old'
+       'small'
+      #'old'
     ])
 
 @nest.add_target_with_env(localenv)
@@ -100,7 +100,7 @@ def generate(env, outdir, c):
         '--death-lambda',
         GROWTH_DICT[c['growth_stage']]['death_lambda'],
         '--num-barcodes',
-        3,
+        1,
         '--min-uniq-alleles',
         GROWTH_DICT[c['growth_stage']]['min_leaves'],
         '--max-uniq-alleles',
@@ -177,7 +177,7 @@ def run_topology(env, outdir, c):
 def run_MLE(env, outdir, c):
     if c['num_barcodes'] == 1:
         #penalty_params = "6000,3200,1600"
-        penalty_params = '800'
+        penalty_params = '24000,12800,6400,3200'
     elif c['num_barcodes'] == 3:
         penalty_params = "192,48,12,3"
     elif c['num_barcodes'] == 9:

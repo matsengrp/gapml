@@ -74,6 +74,7 @@ class BirthDeathTreeSimulator:
             birth_sync_rounds: int,
             birth_sync_time: float,
             birth_decay: float,
+            birth_min: float,
             death_rate: float):
         """
         @param birth_sync_rounds: number of synchronous cell divisions (before async begins)
@@ -88,6 +89,7 @@ class BirthDeathTreeSimulator:
         self.birth_async_start_time = birth_sync_time * birth_sync_rounds + 1e-10
         self.start_birth_rate = 1.0/birth_sync_time
         self.birth_decay = birth_decay
+        self.birth_min = birth_min
         self.death_scale = 1.0 / death_rate
 
     def simulate(self, root_allele_list: AlleleList, time: float, max_nodes: int = 10):
@@ -147,7 +149,9 @@ class BirthDeathTreeSimulator:
             branch_length = self.birth_sync_time
         else:
             time_since_decay_begin = (self.tot_time - remain_time) - self.birth_async_start_time
-            curr_birth_scale = 1.0/(self.start_birth_rate * np.exp(self.birth_decay * time_since_decay_begin))
+            curr_birth_scale = 1.0/max(
+                self.birth_min,
+                self.start_birth_rate * np.exp(self.birth_decay * time_since_decay_begin))
             division_happens, branch_length = self._run_race(curr_birth_scale, self.death_scale)
         obs_branch_length = min(branch_length, remain_time)
         remain_time = remain_time - obs_branch_length

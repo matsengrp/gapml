@@ -111,6 +111,8 @@ def parse_args():
     parser.add_argument(
         '--birth-decay', type=float, default=-0.3, help='birth rate decay')
     parser.add_argument(
+        '--birth-min', type=float, default=2, help='birth rate minimum')
+    parser.add_argument(
         '--death-lambda', type=float, default=0.001, help='death rate')
     parser.add_argument(
         '--time', type=float, default=1, help='how much time to simulate')
@@ -200,6 +202,7 @@ def create_simulators(args, clt_model):
             args.birth_sync_rounds,
             args.birth_sync_time,
             args.birth_decay,
+            args.birth_min,
             args.death_lambda,
             cell_type_simulator,
             allele_simulator)
@@ -210,7 +213,7 @@ def create_cell_lineage_tree(
         args,
         clt_model: CLTLikelihoodModel,
         max_tries: int = 20,
-        incr: float = 0.01,
+        incr: float = 0.02,
         time_min: float = 1e-3):
     """
     @return original clt, the set of observed leaves, and the true topology for the observed leaves
@@ -243,9 +246,9 @@ def create_cell_lineage_tree(
                 len(clt))
             print("le....", len(true_subtree), birth_sync_time)
             if len(true_subtree) < args.min_uniq_alleles:
-                birth_sync_time -= incr
+                birth_sync_time -= incr * np.random.rand()
             elif len(true_subtree) >= args.max_uniq_alleles:
-                birth_sync_time += incr
+                birth_sync_time += incr * np.random.rand()
             else:
                 # We got a good number of leaves! Stop trying
                 print("done!")
