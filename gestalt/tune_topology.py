@@ -385,6 +385,9 @@ def main(args=sys.argv[1:]):
     logging.info(tree.get_ascii(attributes=["node_id"]))
     logging.info(tree.get_ascii(attributes=["abundance"]))
 
+    for node in tree.traverse():
+        assert node.node_id is not None
+
     # Begin tuning
     tuning_history = []
     recent_chads = set()
@@ -408,23 +411,26 @@ def main(args=sys.argv[1:]):
         # Find hanging chads
         # TODO: kind slow right now... reruns chad-finding code
         # cause nodes are getting renumbered...
-        logging.info("chad finding time")
-        random_chad = hanging_chad_finder.get_random_chad(
-                tree,
-                bcode_meta,
-                exclude_chad_func=lambda node: make_chad_psuedo_id(node) in recent_chads)
+        random_chad = None
+        if args.max_chad_tune_search > 1:
+            logging.info("chad finding time")
+            random_chad = hanging_chad_finder.get_random_chad(
+                    tree,
+                    bcode_meta,
+                    exclude_chad_func=lambda node: make_chad_psuedo_id(node) in recent_chads)
         has_chads = random_chad is not None
+        num_old_leaves = len(tree)
+
+        # pick a chad at random
+        chad_tune_result = None
         if has_chads:
+            # Mark which chads we've seen recently
             rand_chad_id = make_chad_psuedo_id(random_chad.node)
             # Reset the recent chad list since the random chad finder failed
             if rand_chad_id in recent_chads:
                 recent_chads = set()
             recent_chads.add(rand_chad_id)
-        num_old_leaves = len(tree)
 
-        # pick a chad at random
-        chad_tune_result = None
-        if has_chads and args.max_chad_tune_search > 1:
             # Now tune the hanging chads!
             logging.info(
                     "Iter %d: Tuning chad %s",

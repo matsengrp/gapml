@@ -946,8 +946,7 @@ class CLTLikelihoodModel:
         else:
             self.branch_log_barr = tf.constant(0, dtype=tf.float64)
 
-        self.dist_to_half_pen = tf.reduce_mean(
-            tf.pow(tf.stack(self.branch_probs_to_pen_list) - tf.constant(0.5, dtype=tf.float64), 2))
+        self.dist_to_half_pen = tf.reduce_mean(tf.stack(self.branch_probs_to_pen_list))
         self.smooth_log_lik = (
                 self.log_lik/self.bcode_meta.num_barcodes
                 + self.log_barr_pen_param_ph * self.branch_log_barr
@@ -1067,10 +1066,13 @@ class CLTLikelihoodModel:
                 # (constant penalty if no spine)
                 if spine_len is not None:
                     if not node.is_root():
-                        haz_to_pen = self.hazard_away_dict[node.pen_targ_stat[bcode_idx]]
+                        haz_to_pen = tf.stack(
+                                [self.hazard_away_dict[targ_stat] for targ_stat in node.pen_targ_stat[bcode_idx]])
                     else:
                         haz_to_pen = self.hazard_away_dict[TargetStatus()]
-                    branch_probs_to_pen.append(tf.exp(-haz_to_pen * spine_len))
+                    branch_probs_to_pen.append(tf.reduce_mean(tf.pow(
+                        tf.exp(-haz_to_pen * spine_len) - tf.constant(0.5, dtype=tf.float64),
+                        2)))
 
                 for child in node.children:
                     child_wrapper = transition_wrappers[child.node_id][bcode_idx]
@@ -1096,7 +1098,8 @@ class CLTLikelihoodModel:
                         # Only penalize things if there are elements in `spine_children`
                         # Otherwise we should basically ignore this branch lenght penalty
                         if len(child.spine_children):
-                            haz_to_pen = self.hazard_away_dict[child.pen_targ_stat[bcode_idx]]
+                            haz_to_pen = tf.stack(
+                                [self.hazard_away_dict[targ_stat] for targ_stat in child.pen_targ_stat[bcode_idx]])
                             # For a bifurcating tree, this is where we penalize branches and also groups of branches that were originally
                             # a single spine -- we use the instantaneous transition matrix from the top node and multiply by the entire
                             # spine length
@@ -1104,11 +1107,15 @@ class CLTLikelihoodModel:
                                     tf.gather(
                                         params=self.branch_lens,
                                         indices=child.spine_children))
-                            self.spine_len = spine_len
-                            branch_probs_to_pen.append(tf.exp(-haz_to_pen * spine_len))
+                            branch_probs_to_pen.append(tf.reduce_mean(tf.pow(
+                                tf.exp(-haz_to_pen * spine_len) - tf.constant(0.5, dtype=tf.float64),
+                                2)))
                     elif not hasattr(child, "ignore_penalty") or not child.ignore_penalty:
-                        haz_to_pen = self.hazard_away_dict[child.pen_targ_stat[bcode_idx]]
-                        branch_probs_to_pen.append(tf.exp(-haz_to_pen * self.branch_lens[child.node_id]))
+                        haz_to_pen = tf.stack(
+                            [self.hazard_away_dict[targ_stat] for targ_stat in child.pen_targ_stat[bcode_idx]])
+                        branch_probs_to_pen.append(tf.reduce_mean(tf.pow(
+                                tf.exp(-haz_to_pen * self.branch_lens[child.node_id]) - tf.constant(0.5, dtype=tf.float64),
+                                2)))
 
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.

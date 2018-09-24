@@ -107,6 +107,10 @@ class AncState:
         return [sgwc.get_singleton() for sgwc in self.get_singleton_wcs()]
 
     def generate_possible_target_statuses(self):
+        """
+        @return List[TargetStatus] for all target statuses that are possible
+                with that ancestral state
+        """
         def _get_target_sub_statuses(indel_set: IndelSet):
             if indel_set.__class__ == SingletonWC:
                 inner_wc = indel_set.inner_wc
