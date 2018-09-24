@@ -75,18 +75,14 @@ class CLTPenalizedEstimator(CLTEstimator):
         # Check branch lengths positive
         assert self.model._are_all_branch_lens_positive()
 
-        pen_log_lik, log_lik, dist_to_half_pen, dist_to_roots, diffs, possibles = self.model.sess.run(
+        pen_log_lik, log_lik, dist_to_half_pen, dist_to_roots = self.model.sess.run(
             [self.model.smooth_log_lik,
                 self.model.log_lik,
                 self.model.dist_to_half_pen,
                 self.model.dist_to_root,
-                self.model.diffs,
-                self.model.num_possibles,
             ],
             feed_dict=feed_dict)
         var_dict = self.model.get_vars_as_dict()
-        print(diffs)
-        print(possibles)
 
         logging.info("initial penalized log lik %f, unpen log lik %f, dist to half pen %f", pen_log_lik, log_lik, dist_to_half_pen)
         assert not np.isnan(pen_log_lik)

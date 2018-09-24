@@ -1212,6 +1212,7 @@ class CLTLikelihoodModel:
             sparse_indices.append([start_key, start_key])
             sparse_vals.append(-haz_away)
             possible_tt_sparse_indices.append([start_key, start_key])
+            possible_tt_sparse_indices.append([start_key, transition_wrapper.num_possible_states])
 
             all_end_states = set(self.targ_stat_transitions_dict[start_state].keys())
             possible_end_states = all_end_states.intersection(possible_states)
