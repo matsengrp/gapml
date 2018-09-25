@@ -13,7 +13,7 @@ from common import assign_rand_tree_lengths
 
 true_file = 'simulation_topol_consist/_output/model_seed%d/%d/small/true_model.pkl'
 obs_file = 'simulation_topol_consist/_output/model_seed%d/%d/small/num_barcodes1/obs_data.pkl'
-out_model = 'simulation_topol_consist/_output/model_seed%d/%d/small/num_barcodes1/tune_fitted.pkl'
+out_model = 'simulation_topol_consist/_output/model_seed%d/%d/small/num_barcodes1/tune_fitted_per_targ_pretun.pkl'
 topo_template = 'simulation_topol_consist/_output/model_seed%d/%d/small/num_barcodes1/tune_ll_step%d.pkl'
 init_template = 'simulation_topol_consist/_output/model_seed%d/%d/small/num_barcodes1/tune_ll_step_init%d.pkl'
 out_template = 'simulation_topol_consist/_output/model_seed%d/%d/small/num_barcodes1/tune_ll_step%d_out.pkl'
@@ -24,7 +24,7 @@ model_seed = 1
 seed = 0
 tot_height = 1
 
-new_log_file = "simulation_topol_consist/_output/model_seed%d/%d/small/num_barcodes1/tune_ll_steps.txt" % (model_seed, seed)
+new_log_file = "simulation_topol_consist/_output/model_seed%d/%d/small/num_barcodes1/tune_ll.txt" % (model_seed, seed)
 #new_log_file = "_output/test.txt"
 out_model = out_model % (model_seed, seed)
 obs_file = obs_file % (model_seed, seed)
@@ -113,7 +113,7 @@ for idx, tune_step in enumerate(tune_hist):
         '--log-barr',
         0.000000001,
         '--dist-to-half-pen-params',
-        6400,
+        3000,
         '--num-penalty-tune-iters',
         1,
         '--num-penalty-tune-splits',

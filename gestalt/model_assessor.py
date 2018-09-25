@@ -1,5 +1,6 @@
 from typing import List, Dict
 import numpy as np
+import scipy.stats
 
 from cell_lineage_tree import CellLineageTree
 from tree_distance import TreeDistanceMeasurerAgg
@@ -28,6 +29,7 @@ class ModelAssessor:
         self.param_compare_funcs = {
             "only_targ": self._compare_only_target_lams,
             "targ": self._compare_target_lams,
+            "targ_corr": self._target_lams_corr,
             "double": self._compare_double_cut}
 
     def assess(self, other_param_dict: Dict, other_tree: CellLineageTree):
@@ -57,6 +59,16 @@ class ModelAssessor:
         def _get_double_cut(param_dict: Dict):
             return param_dict["double_cut_weight"]
         return np.linalg.norm(_get_double_cut(self.ref_param_dict) - _get_double_cut(other_param_dict))
+
+    def _target_lams_corr(self, other_param_dict: Dict):
+        def _get_target_lams(param_dict: Dict):
+            target_lams = param_dict["target_lams"]
+            double_weight = param_dict["double_cut_weight"]
+            trim_long = param_dict["trim_long_factor"]
+            return np.concatenate([target_lams, double_weight, trim_long])
+        return scipy.stats.pearsonr(
+                _get_target_lams(self.ref_param_dict),
+                _get_target_lams(other_param_dict))[0]
 
     def _compare_target_lams(self, other_param_dict: Dict):
         def _get_target_lams(param_dict: Dict):
