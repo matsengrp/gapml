@@ -324,7 +324,7 @@ def _do_random_rearrange(tree, bcode_meta, num_random_rearrange):
     recent_chads = set()
     for i in range(num_random_rearrange):
         print("doing random rearrange", i)
-        random_chad = hanging_chad_finder.get_random_chad(
+        random_chad, _ = hanging_chad_finder.get_random_chad(
                 tree,
                 bcode_meta,
                 exclude_chad_func=lambda node: make_chad_psuedo_id(node) in recent_chads)
@@ -412,7 +412,7 @@ def main(args=sys.argv[1:]):
         # TODO: kind slow right now... reruns chad-finding code
         # cause nodes are getting renumbered...
         random_chad = None
-        if args.max_chad_tune_search > 1:
+        if args.max_chad_tune_search >= 1:
             logging.info("chad finding time")
             random_chad, node_mapping = hanging_chad_finder.get_random_chad(
                     tree,
@@ -438,6 +438,7 @@ def main(args=sys.argv[1:]):
                     random_chad)
             chad_tune_result = hanging_chad_finder.tune(
                 random_chad,
+                args.max_chad_tune_search,
                 tree,
                 bcode_meta,
                 args,
