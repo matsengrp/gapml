@@ -51,7 +51,7 @@ def parse_args():
     parser.add_argument(
         '--target-lambdas',
         type=str,
-        default=",".join([".4", ".5", ".1", "0.5", "0.3", "0.6"]),
+        default=",".join([".8", ".75", ".7", "0.65", "0.6", "0.5"]),
         help='target cut rates -- will get slightly perturbed for the true value')
     parser.add_argument(
         '--perturb-target-lambdas-variance',
@@ -61,7 +61,7 @@ def parse_args():
     parser.add_argument(
         '--double-cut-weight',
         type=float,
-        default=2,
+        default=0.05,
         help='Weight for double cuts')
     parser.add_argument(
         '--boost-probs',
@@ -107,13 +107,13 @@ def parse_args():
     parser.add_argument(
         '--birth-sync-rounds', type=float, default=2, help='number of syncronous birth rounds before async begins')
     parser.add_argument(
-        '--birth-sync-time', type=float, default=0.1, help='amount of time between syncronous birth rounds')
+        '--birth-sync-time', type=float, default=0.12, help='amount of time between syncronous birth rounds')
     parser.add_argument(
-        '--birth-decay', type=float, default=-0.3, help='birth rate decay')
+        '--birth-decay', type=float, default=-4, help='birth rate decay')
     parser.add_argument(
         '--birth-min', type=float, default=2, help='birth rate minimum')
     parser.add_argument(
-        '--death-lambda', type=float, default=0.001, help='death rate')
+        '--death-lambda', type=float, default=0.02, help='death rate')
     parser.add_argument(
         '--time', type=float, default=1, help='how much time to simulate')
     parser.add_argument(

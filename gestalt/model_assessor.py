@@ -10,15 +10,16 @@ class ModelAssessor:
             self,
             ref_param_dict: Dict,
             ref_tree: CellLineageTree,
-            n_bcodes: int,
-            tree_measurer_classes: List,
-            scratch_dir: str):
+            n_bcodes: int = None,
+            tree_measurer_classes: List = [],
+            scratch_dir: str = "_output/scratch"):
         """
         Assesses the tree branch length/topology and the model parameter estimates
         """
-        for node in ref_tree:
-            node.set_allele_list(node.allele_list.create_truncated_version(n_bcodes))
-            node.sync_allele_events_list_str()
+        if n_bcodes is not None:
+            for node in ref_tree:
+                node.set_allele_list(node.allele_list.create_truncated_version(n_bcodes))
+                node.sync_allele_events_list_str()
 
         self.ref_tree = ref_tree
         self.ref_param_dict = ref_param_dict
