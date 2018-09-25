@@ -178,6 +178,10 @@ class HangingChad:
         """
         @param node: the hanging chad
         @param possible_full_trees: first tree is the original tree
+        @param node_mapping: a dict mapping the node id in the `nochad_tree` to the node_id in the original tree
+                        that the nochad_tree was constructed from. This is useful if the original tree was already
+                        fitted via max pen log likelihood and has good model parameter values. We need this mapping
+                        to warm start.
         """
         self.node = node
         self.nochad_tree = nochad_tree
