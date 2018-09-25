@@ -214,7 +214,8 @@ def read_data(args):
                 evt_set.add(evt)
     logging.info("Num uniq events %d", len(evt_set))
     logging.info("Proportion of double cuts %f", np.mean([e.min_target != e.max_target for e in evt_set]))
-    logging.info("Number of leaves %d", len(tree))
+    if tree is not None:
+        logging.info("Number of leaves %d", len(tree))
 
     return bcode_meta, tree, obs_data_dict
 

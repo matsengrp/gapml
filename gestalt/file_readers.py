@@ -4,23 +4,26 @@ from typing import List
 from model_assessor import ModelAssessor
 
 
-def read_data(obs_file: str, topology_file: str):
+def read_data(obs_file: str, topology_file: str = None):
     """
     Read the data files...
     """
     with open(obs_file, "rb") as f:
         obs_data_dict = six.moves.cPickle.load(f)
 
-    with open(topology_file, "rb") as f:
-        tree_topology_info = six.moves.cPickle.load(f)
-        tree = tree_topology_info["tree"]
-        tree.label_node_ids()
+    if topology_file is not None:
+        with open(topology_file, "rb") as f:
+            tree_topology_info = six.moves.cPickle.load(f)
+            tree = tree_topology_info["tree"]
+            tree.label_node_ids()
 
-    # If this tree is not unresolved, then mark all the multifurcations as resolved
-    if not tree_topology_info["multifurc"]:
-        for node in tree.traverse():
-            node.resolved_multifurcation = True
-
+        # If this tree is not unresolved, then mark all the multifurcations as resolved
+        if not tree_topology_info["multifurc"]:
+            for node in tree.traverse():
+                node.resolved_multifurcation = True
+    else:
+        tree = None
+        
     return tree, obs_data_dict
 
 
