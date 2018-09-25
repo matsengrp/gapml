@@ -132,7 +132,7 @@ class CLTLikelihoodModel:
         self.targ_stat_transition_hazards_dict = {
             start_target_status: {} for start_target_status in self.targ_stat_transitions_dict.keys()}
         # Calculate hazard for transitioning away from all target statuses beforehand. Speeds up future computation.
-        self.hazard_away_dict = self._create_hazard_away_dict()
+        self.hazard_away_dict, self.hazard_cut_targ_dict = self._create_hazard_away_dict()
 
         if self.topology:
             assert not self.topology.is_leaf()
@@ -654,7 +654,9 @@ class CLTLikelihoodModel:
 
     def _create_hazard_away_dict(self):
         """
-        @return Dictionary mapping all possible TargetStatus to tensorflow tensor for the hazard away
+        @return (
+            Dictionary mapping all possible TargetStatus to tensorflow tensor for the hazard away,
+            Dictionary mapping all possible TargetStatus to tensorflow tensors of hazards of introducing focal and double cuts)
         """
         target_statuses = list(self.targ_stat_transitions_dict.keys())
 
@@ -663,7 +665,12 @@ class CLTLikelihoodModel:
         hazard_away_dict = {
                 targ_stat: hazard_away_nodes[i]
                 for i, targ_stat in enumerate(target_statuses)}
-        return hazard_away_dict
+
+        hazard_cut_targs = self._create_hazard_cut_target(target_statuses)
+        hazard_cut_targ_dict = {
+                targ_stat: hazard_cut_targs[i]
+                for i, targ_stat in enumerate(target_statuses)}
+        return hazard_away_dict, hazard_cut_targ_dict
 
     def _create_hazard_away_target_statuses(self, target_statuses: List[TargetStatus]):
         """
@@ -705,6 +712,31 @@ class CLTLikelihoodModel:
                 + end_to_other_hazard
                 + start_to_end_hazard)
         return hazard_away_nodes
+
+    def _create_hazard_cut_target(self, target_statuses: List[TargetStatus]):
+        """
+        @param target_statuses: list of target statuses that we want to calculate the hazards of transitioning from
+
+        @return tensorflow tensor with (approximate) hazards for transitioning away from each of the target statuses for each focal cut and any inter-targ cut
+                (if only one target, returns the hazard of transitioning away from each of the target statuses for a focal cut)
+        """
+        active_masks = tf.constant(
+                [(1 - targ_stat.get_binary_status(self.num_targets)).tolist() for targ_stat in target_statuses],
+                dtype=tf.float64)
+        active_targ_hazards = self.target_lams * active_masks
+
+        if self.num_targets == 1:
+            return active_targ_hazards
+
+        # If more than one target, we need to calculate a lot more things
+        # TODO" This is approximate but I think that's fine.
+        cut_focal_hazards = (1 + self.trim_long_factor[0]) * active_targ_hazards * (1 + self.trim_long_factor[1])
+        reshape_sum = tf.reshape(tf.reduce_sum(active_targ_hazards, axis=1), [len(target_statuses),1])
+        num_actives = tf.reshape(tf.reduce_sum(active_masks, axis=1), [len(target_statuses),1])
+        cut_double_hazards = (self.double_cut_weight
+                * (1 + self.trim_long_factor[0]) * (1 + self.trim_long_factor[1])
+                * (num_actives - 1) * reshape_sum)
+        return tf.concat([cut_focal_hazards, cut_double_hazards], axis=1)
 
     """
     SECTION: methods for helping to calculate Pr(indel | target target)
@@ -1067,9 +1099,10 @@ class CLTLikelihoodModel:
                 if spine_len is not None:
                     if not node.is_root():
                         haz_to_pen = tf.stack(
-                                [self.hazard_away_dict[targ_stat] for targ_stat in node.pen_targ_stat[bcode_idx]])
+                                [self.hazard_cut_targ_dict[targ_stat] for targ_stat in node.pen_targ_stat[bcode_idx]])
                     else:
-                        haz_to_pen = self.hazard_away_dict[TargetStatus()]
+                        #haz_to_pen = self.hazard_away_dict[TargetStatus()]
+                        haz_to_pen = self.hazard_cut_targ_dict[TargetStatus()]
                     branch_probs_to_pen.append(tf.reduce_mean(tf.pow(
                         tf.exp(-haz_to_pen * spine_len) - tf.constant(0.5, dtype=tf.float64),
                         2)))
@@ -1099,7 +1132,7 @@ class CLTLikelihoodModel:
                         # Otherwise we should basically ignore this branch lenght penalty
                         if len(child.spine_children):
                             haz_to_pen = tf.stack(
-                                [self.hazard_away_dict[targ_stat] for targ_stat in child.pen_targ_stat[bcode_idx]])
+                                [self.hazard_cut_targ_dict[targ_stat] for targ_stat in child.pen_targ_stat[bcode_idx]])
                             # For a bifurcating tree, this is where we penalize branches and also groups of branches that were originally
                             # a single spine -- we use the instantaneous transition matrix from the top node and multiply by the entire
                             # spine length
@@ -1112,7 +1145,7 @@ class CLTLikelihoodModel:
                                 2)))
                     elif not hasattr(child, "ignore_penalty") or not child.ignore_penalty:
                         haz_to_pen = tf.stack(
-                            [self.hazard_away_dict[targ_stat] for targ_stat in child.pen_targ_stat[bcode_idx]])
+                                [self.hazard_cut_targ_dict[targ_stat] for targ_stat in child.pen_targ_stat[bcode_idx]])
                         branch_probs_to_pen.append(tf.reduce_mean(tf.pow(
                                 tf.exp(-haz_to_pen * self.branch_lens[child.node_id]) - tf.constant(0.5, dtype=tf.float64),
                                 2)))
@@ -1168,7 +1201,6 @@ class CLTLikelihoodModel:
         self.down_probs_dict = down_probs_dict
         self.pt_matrix = pt_matrix
         self.trans_mats = trans_mats
-        print("brnach probs to pen", len(branch_probs_to_pen))
         return log_lik_alleles, Ddiags, branch_probs_to_pen
 
     @profile
