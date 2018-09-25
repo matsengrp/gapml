@@ -207,7 +207,7 @@ class LikelihoodScorer(ParallelWorker):
             sess,
             self.known_params,
             # doesnt matter what value is set here for now. will be overridden
-            # TODO: remove this line/argument...
+            # TODO: remove this line/argument eventually cause it's ugly...
             target_lams=self.fit_param_list[0]['target_lams'])
         estimator = CLTPenalizedEstimator(
             res_model,

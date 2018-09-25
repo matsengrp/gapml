@@ -405,14 +405,14 @@ def main(args=sys.argv[1:]):
                 # Tune penalty params!
                 logging.info("Iter %d: Tuning penalty params", i)
                 penalty_tune_result = hyperparam_tuner.tune(tree, bcode_meta, args, fit_params, assessor)
-                fit_params, best_res = penalty_tune_result.get_best_result()
+                _, fit_params, best_res = penalty_tune_result.get_best_result()
             logging.info("Iter %d: Best pen param %f", i, fit_params["dist_to_half_pen_param"])
 
         # Find hanging chads
         # TODO: kind slow right now... reruns chad-finding code
         # cause nodes are getting renumbered...
         random_chad = None
-        if args.max_chad_tune_search > 1:
+        if args.max_chad_tune_search >= 1:
             logging.info("chad finding time")
             random_chad = hanging_chad_finder.get_random_chad(
                     tree,
@@ -438,6 +438,7 @@ def main(args=sys.argv[1:]):
                     random_chad)
             chad_tune_result = hanging_chad_finder.tune(
                 random_chad,
+                args.max_chad_tune_search,
                 tree,
                 bcode_meta,
                 args,
@@ -445,7 +446,8 @@ def main(args=sys.argv[1:]):
                 assessor,
             )
             tree, fit_params, best_res = chad_tune_result.get_best_result()
-            print("leaf check!", len(tree), num_old_leaves)
+
+            # just for fun... check that the number of leaves match
             assert len(tree) == num_old_leaves
         else:
             best_res = fit_multifurc_tree(

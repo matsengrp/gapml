@@ -205,7 +205,7 @@ def run_MLE(env, outdir, c):
         '--num-chad-tune-iters',
         100,
         '--max-chad-tune-search',
-        20,
+        15,
         '--max-sum-states 2000',
         '--max-extra-steps 2',
         '--max-iters 50000',
@@ -214,12 +214,12 @@ def run_MLE(env, outdir, c):
         #'--do-refit',
         #'--lambda-known',
         '--num-processes 5',
-        '--num-init-random-rearrange 12',
+        '--num-init-random-rearrange 11',
     ]
     return env.Command(
         [
-            join(outdir, 'tune_fitted_per_targ_pretun.pkl'),
-            join(outdir, 'tune_fitted_per_targ_pretun.txt')],
+            join(outdir, 'tune_fitted_warm.pkl'),
+            join(outdir, 'tune_fitted_warm.txt')],
         [
             c['restrict_observed_alleles'][0],
             c['run_topology'][0],
