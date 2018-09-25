@@ -324,7 +324,7 @@ def _do_random_rearrange(tree, bcode_meta, num_random_rearrange):
     recent_chads = set()
     for i in range(num_random_rearrange):
         print("doing random rearrange", i)
-        random_chad, _ = hanging_chad_finder.get_random_chad(
+        random_chad = hanging_chad_finder.get_random_chad(
                 tree,
                 bcode_meta,
                 exclude_chad_func=lambda node: make_chad_psuedo_id(node) in recent_chads)
@@ -405,7 +405,7 @@ def main(args=sys.argv[1:]):
                 # Tune penalty params!
                 logging.info("Iter %d: Tuning penalty params", i)
                 penalty_tune_result = hyperparam_tuner.tune(tree, bcode_meta, args, fit_params, assessor)
-                fit_params, best_res = penalty_tune_result.get_best_result()
+                _, fit_params, best_res = penalty_tune_result.get_best_result()
             logging.info("Iter %d: Best pen param %f", i, fit_params["dist_to_half_pen_param"])
 
         # Find hanging chads
@@ -414,7 +414,7 @@ def main(args=sys.argv[1:]):
         random_chad = None
         if args.max_chad_tune_search >= 1:
             logging.info("chad finding time")
-            random_chad, node_mapping = hanging_chad_finder.get_random_chad(
+            random_chad = hanging_chad_finder.get_random_chad(
                     tree,
                     bcode_meta,
                     exclude_chad_func=lambda node: make_chad_psuedo_id(node) in recent_chads)
@@ -443,11 +443,11 @@ def main(args=sys.argv[1:]):
                 bcode_meta,
                 args,
                 fit_params,
-                node_mapping,
                 assessor,
             )
             tree, fit_params, best_res = chad_tune_result.get_best_result()
-            print("leaf check!", len(tree), num_old_leaves)
+
+            # just for fun... check that the number of leaves match
             assert len(tree) == num_old_leaves
         else:
             best_res = fit_multifurc_tree(
