@@ -177,7 +177,8 @@ def run_topology(env, outdir, c):
 def run_MLE(env, outdir, c):
     if c['num_barcodes'] == 1:
         #penalty_params = "6000,3200,1600"
-        penalty_params = '24000,12000,6000,3000'
+        penalty_params = '12000,6000,3000,1500,750'
+        penalty_params = '3000'
     elif c['num_barcodes'] == 3:
         penalty_params = "192,48,12,3"
     elif c['num_barcodes'] == 9:
@@ -217,8 +218,8 @@ def run_MLE(env, outdir, c):
     ]
     return env.Command(
         [
-            join(outdir, 'tune_fitted_all.pkl'),
-            join(outdir, 'tune_fitted_all.txt')],
+            join(outdir, 'tune_fitted_per_targ_pretun.pkl'),
+            join(outdir, 'tune_fitted_per_targ_pretun.txt')],
         [
             c['restrict_observed_alleles'][0],
             c['run_topology'][0],

@@ -654,7 +654,9 @@ class CLTLikelihoodModel:
 
     def _create_hazard_away_dict(self):
         """
-        @return Dictionary mapping all possible TargetStatus to tensorflow tensor for the hazard away
+        @return (
+            Dictionary mapping all possible TargetStatus to tensorflow tensor for the hazard away,
+            Dictionary mapping all possible TargetStatus to tensorflow tensors of hazards of introducing focal and double cuts)
         """
         target_statuses = list(self.targ_stat_transitions_dict.keys())
 
@@ -713,9 +715,10 @@ class CLTLikelihoodModel:
 
     def _create_hazard_cut_target(self, target_statuses: List[TargetStatus]):
         """
-        @param target_statuses: list of target statuses that we want to calculate the hazard of transitioning away from
+        @param target_statuses: list of target statuses that we want to calculate the hazards of transitioning from
 
-        @return tensorflow tensor with the hazards for transitioning away from each of the target statuses
+        @return tensorflow tensor with (approximate) hazards for transitioning away from each of the target statuses for each focal cut and any inter-targ cut
+                (if only one target, returns the hazard of transitioning away from each of the target statuses for a focal cut)
         """
         active_masks = tf.constant(
                 [(1 - targ_stat.get_binary_status(self.num_targets)).tolist() for targ_stat in target_statuses],
@@ -726,8 +729,7 @@ class CLTLikelihoodModel:
             return active_targ_hazards
 
         # If more than one target, we need to calculate a lot more things
-        # Prootype penalty
-        # TODO" This is not entirely correct
+        # TODO" This is approximate but I think that's fine.
         cut_focal_hazards = (1 + self.trim_long_factor[0]) * active_targ_hazards * (1 + self.trim_long_factor[1])
         reshape_sum = tf.reshape(tf.reduce_sum(active_targ_hazards, axis=1), [len(target_statuses),1])
         num_actives = tf.reshape(tf.reduce_sum(active_masks, axis=1), [len(target_statuses),1])
