@@ -414,7 +414,7 @@ def main(args=sys.argv[1:]):
         random_chad = None
         if args.max_chad_tune_search > 1:
             logging.info("chad finding time")
-            random_chad = hanging_chad_finder.get_random_chad(
+            random_chad, node_mapping = hanging_chad_finder.get_random_chad(
                     tree,
                     bcode_meta,
                     exclude_chad_func=lambda node: make_chad_psuedo_id(node) in recent_chads)
@@ -442,6 +442,7 @@ def main(args=sys.argv[1:]):
                 bcode_meta,
                 args,
                 fit_params,
+                node_mapping,
                 assessor,
             )
             tree, fit_params, best_res = chad_tune_result.get_best_result()
