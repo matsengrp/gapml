@@ -79,14 +79,16 @@ class HangingChadResult:
     def get_full_tree_fit_params(self, random_init_proportion: float = 0.1):
         """
         @return Dict with fit_params for the full tree for warm starting
+                Note that `branch_len_offsets_proportion` and `branch_len_inners` are Dicts instead of numpy arrays.
+                We do this because there might be a node_id in the full_tree that is None
         """
         fit_params = self.fit_res.get_fit_params()
         single_tree_br_len_offsets = fit_params["branch_len_offsets_proportion"]
         single_tree_dist_to_root = self.fit_res.train_history[-1]["dist_to_roots"]
 
         num_nodes = self.full_chad_tree.get_num_nodes()
-        full_tree_br_len_inners = np.zeros(num_nodes)
-        full_tree_br_len_offsets = np.ones(num_nodes) * 0.5
+        full_tree_br_len_inners = {}
+        full_tree_br_len_offsets = {}
         # First copy over the branch length estimates from the single-leaf chad tree.
         # This copies from all branches not in the chad.
         # It will also copy over the chad branch if the chad only had a single leaf.
@@ -94,6 +96,8 @@ class HangingChadResult:
             if node.node_id in self.single_full_chad_tree.node_mapping and node.up.node_id in self.single_full_chad_tree.node_mapping:
                 single_tree_node_id = self.single_full_chad_tree.node_mapping[node.node_id]
                 single_tree_up_node_id = self.single_full_chad_tree.node_mapping[node.up.node_id]
+                # Getting hte branch len inner by subtracting dist_to_roots is safest way to recover this value.
+                # avoids issues with implicit nodes and things being leaves vs internal nodes
                 full_tree_br_len_inners[node.node_id] = single_tree_dist_to_root[single_tree_node_id] - single_tree_dist_to_root[single_tree_up_node_id]
                 full_tree_br_len_offsets[node.node_id] = single_tree_br_len_offsets[single_tree_node_id]
 
@@ -103,13 +107,15 @@ class HangingChadResult:
             up_node_height = single_tree_dist_to_root[up_node_id]
             remain_height = fit_params['tot_time'] - up_node_height
             full_tree_br_len_inners[self.chad_node.node_id] = remain_height * random_init_proportion
+            full_tree_br_len_offsets[self.chad_node.node_id] = np.random.rand() * 0.5
             assign_rand_tree_lengths(self.chad_node, remain_height * (1 - random_init_proportion))
             for descendant in self.chad_node.get_descendants():
                 full_tree_br_len_inners[descendant.node_id] = descendant.dist
+                full_tree_br_len_offsets[descendant.node_id] = np.random.rand() * 0.5
 
         # At this point, we should have a completely filled-in initialization parameters for the full tree.
         # Double check that things are completely filled -- all branch len should be greater than 0
-        assert np.all(full_tree_br_len_inners[1:] > 0)
+        assert len(full_tree_br_len_inners) == num_nodes - 1
 
         fit_params["branch_len_inners"] = full_tree_br_len_inners
         fit_params["branch_len_offsets_proportion"] = full_tree_br_len_offsets

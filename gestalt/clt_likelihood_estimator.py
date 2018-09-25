@@ -76,7 +76,8 @@ class CLTPenalizedEstimator(CLTEstimator):
         assert self.model._are_all_branch_lens_positive()
 
         pen_log_lik, log_lik, dist_to_half_pen, dist_to_roots = self.model.sess.run(
-            [self.model.smooth_log_lik,
+            [
+                self.model.smooth_log_lik,
                 self.model.log_lik,
                 self.model.dist_to_half_pen,
                 self.model.dist_to_root,
