@@ -1,26 +1,24 @@
-import os
-import json
-import six
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
-from matplotlib import pyplot as plt
 
-from tree_distance import *
-from cell_lineage_tree import CellLineageTree
 import plot_simulation_common
+import file_readers
+from tree_distance import BHVDistanceMeasurer
 
 np.random.seed(0)
 
-model_seed = 200 # 510
-seeds = [500] #range(500,503)
+model_seed = 3
+seeds = [4]
 num_barcodes = [1]
 prefix = ""
-growth_stage = "larval" # "lambda_diff"
+growth_stage = "small"
 tree_idx = 1
-do_plots = False
+do_plots = True
+sum_states = 30
+extra_steps = 1
 
-TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/%s/num_barcodes%d/tune_fitted.pkl"
+TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/%s/num_barcodes%d/sum_states_%d/extra_steps_%d/tune_fitted.pkl"
 RAND_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/%s/num_barcodes%d/parsimony_tree0.pkl"
 TRUE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/%s/true_model.pkl"
 OUT_TRUE_TREE_PLOT = "/Users/jeanfeng/Desktop/true_tree.png"
@@ -29,10 +27,14 @@ OUT_NODE_PLOT = "/Users/jeanfeng/Desktop/node_heights.png"
 
 def get_true_model(seed, n_bcodes, _):
     file_name = TRUE_TEMPLATE % (prefix, model_seed, seed, growth_stage)
-    return plot_simulation_common.get_true_model(file_name, None, n_bcodes)
+    model_params, assessor = file_readers.read_true_model(
+            file_name,
+            n_bcodes,
+            measurer_classes=[BHVDistanceMeasurer])
+    return model_params, assessor.ref_tree
 
 def get_result(seed, n_bcodes, _):
-    res_file = TEMPLATE % (prefix, model_seed, seed, growth_stage, n_bcodes)
+    res_file = TEMPLATE % (prefix, model_seed, seed, growth_stage, n_bcodes, sum_states, extra_steps)
     return plot_simulation_common.get_result(res_file)
 
 def get_rand_tree(seed, n_bcodes, _):

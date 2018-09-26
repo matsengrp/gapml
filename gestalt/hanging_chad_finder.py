@@ -146,6 +146,7 @@ class HangingChadTuneResult:
         """
         self.no_chad_res = no_chad_res
         self.new_chad_results = new_chad_results
+        self.num_chad_leaves = len(new_chad_results[0].chad_node)
 
     def get_best_result(self):
         """
@@ -588,7 +589,9 @@ def _fit_nochad_result(
         trans_wrap_maker,
         fit_param_list=[fit_params],
         known_params=args.known_params,
+        scratch_dir=args.scratch_dir,
         assessor=assessor).run_worker(None)[0]
+    assert no_chad_res is not None
     return no_chad_res, pen_anc_state
 
 
@@ -703,6 +706,7 @@ def tune(
             trans_wrap_maker,
             fit_param_list=[warm_start_fit_params],
             known_params=args.known_params,
+            scratch_dir=args.scratch_dir,
             assessor=assessor,
             name="chad-tuning%d" % parent_idx)
         worker_list.append(worker)
@@ -730,14 +734,14 @@ def tune(
         if assessor is not None:
             logging.info("  chad truth: %s", chad_res.true_performance)
 
+    new_chad_results = chad_tune_res.new_chad_results
+    scores = [c.score for c in new_chad_results]
+    selected_idx = np.argmax(scores)
+    selected_chad = new_chad_results[selected_idx]
+    logging.info("Best chad (idx %d) %s", selected_idx, selected_chad)
     if assessor is not None:
-        new_chad_results = chad_tune_res.new_chad_results
         all_tree_dists = [c.true_performance[print_assess_metric] for c in new_chad_results]
         median_tree_dist = np.median(all_tree_dists)
-        scores = [c.score for c in new_chad_results]
-        selected_idx = np.argmax([c.score for c in new_chad_results])
-        selected_chad = new_chad_results[selected_idx]
-        logging.info("Best chad %s", selected_chad)
         selected_tree_dist = all_tree_dists[selected_idx]
         logging.info(
                 "Median %s: %f (%d options) (selected idx %d, better? %s, selected=%f)",
@@ -752,7 +756,7 @@ def tune(
         logging.info("scores = %s", scores)
         logging.info("scores vs. %ss %s", print_assess_metric, scipy.stats.spearmanr(scores, all_tree_dists))
 
-    return chad_tune_res
+    return chad_tune_res, selected_idx == 0
 
 
 def _create_chad_results(
@@ -767,10 +771,13 @@ def _create_chad_results(
     @return HangingChadTuneResult
     """
     assert len(fit_results) == len(single_full_chad_trees)
+    num_failures = sum([r is None for r in fit_results])
+    if any([r is None for r in fit_results]):
+        logging.info("WARNING: there were %d failures. unstable pen param?", num_failures)
 
     new_chad_results = [
         HangingChadResult(
-            fit_res.pen_log_lik[0],
+            fit_res.pen_log_lik[0] if fit_res is not None else -np.inf,
             hanging_chad.node.node_id,
             single_full_chad_tree,
             fit_res)

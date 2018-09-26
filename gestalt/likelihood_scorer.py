@@ -63,6 +63,7 @@ class LikelihoodScorer(ParallelWorker):
             transition_wrap_maker: TransitionWrapperMaker,
             fit_param_list: List[Dict],
             known_params: KnownModelParams,
+            scratch_dir: str,
             assessor: ModelAssessor = None,
             max_try_per_init: int = 2,
             name: str = "likelihoodscorer"):
@@ -92,6 +93,7 @@ class LikelihoodScorer(ParallelWorker):
         self.transition_wrap_maker = transition_wrap_maker
         self.fit_param_list = fit_param_list
         self.known_params = known_params
+        self.scratch_dir = scratch_dir
         self.assessor = assessor
         self.max_tries = max_try_per_init * num_inits
         self.name = name
@@ -206,6 +208,7 @@ class LikelihoodScorer(ParallelWorker):
             self.bcode_meta,
             sess,
             self.known_params,
+            scratch_dir=self.scratch_dir,
             # doesnt matter what value is set here for now. will be overridden
             # TODO: remove this line/argument eventually cause it's ugly...
             target_lams=self.fit_param_list[0]['target_lams'])

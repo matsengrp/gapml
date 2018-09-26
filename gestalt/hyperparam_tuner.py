@@ -11,6 +11,7 @@ from parallel_worker import SubprocessManager
 from common import get_randint
 from model_assessor import ModelAssessor
 from clt_likelihood_penalization import mark_target_status_to_penalize
+import ancestral_events_finder as anc_evt_finder
 
 
 class PenaltyScorerResult:
@@ -78,8 +79,6 @@ def tune(
 
     if bcode_meta.num_barcodes > 1:
         # For many barcodes, we split by barcode
-        fit_params.pop('branch_len_inners', None)
-        fit_params.pop('branch_len_offsets_proportion', None)
         return _tune_hyperparams(
             tree,
             bcode_meta,
@@ -89,6 +88,8 @@ def tune(
             _get_many_bcode_stability_score,
             assessor)
     else:
+        fit_params.pop('branch_len_inners', None)
+        fit_params.pop('branch_len_offsets_proportion', None)
         # For single barcode, we split into subtrees
         return _tune_hyperparams(
             tree,
@@ -131,6 +132,7 @@ def _tune_hyperparams(
             args.max_sum_states) for tree_split in tree_splits]
     # Mark the target status to penalize for each node in the tree
     for tree_split in tree_splits:
+        anc_evt_finder.annotate_ancestral_states(tree_split.tree, bcode_meta)
         mark_target_status_to_penalize(tree_split.tree)
 
     # First create the initialization/optimization settings
@@ -157,6 +159,7 @@ def _tune_hyperparams(
         transition_wrap_maker,
         fit_param_list=fit_param_list,
         known_params=args.known_params,
+        scratch_dir=args.scratch_dir,
         assessor=assessor)
         for tree_split, transition_wrap_maker in zip(tree_splits, trans_wrap_makers)]
 

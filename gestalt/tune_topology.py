@@ -23,6 +23,7 @@ from common import create_directory, get_randint, save_data, get_init_target_lam
 import file_readers
 import collapsed_tree
 from clt_likelihood_penalization import mark_target_status_to_penalize
+import ancestral_events_finder
 
 
 def parse_args(args):
@@ -88,6 +89,14 @@ def parse_args(args):
         Number of random splits of the data for tuning penalty params.
         """)
     parser.add_argument(
+        '--num-chad-stop',
+        type=int,
+        default=2,
+        help="""
+        If we select don't change the tree topology for this many steps in a row,
+        then we stop the hanging chad tuner.
+        """)
+    parser.add_argument(
         '--num-chad-tune-iters',
         type=int,
         default=2,
@@ -139,6 +148,12 @@ def parse_args(args):
         '--scratch-dir',
         type=str,
         default=None)
+    parser.add_argument(
+        '--count-chads',
+        action='store_true',
+        help="""
+        Log the number of hanging chads found in the tree
+        """)
 
     parser.set_defaults(tot_time_known=True)
     args = parser.parse_args(args)
@@ -259,7 +274,34 @@ def fit_multifurc_tree(
             bcode_meta,
             args.max_extra_steps,
             args.max_sum_states)
+    ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
     mark_target_status_to_penalize(tree)
+    if 'branch_len_inners' in param_dict:
+        # If branch length estimates are provided and we have the mapping between
+        # the full_tree nodes and the nodes in the no_chad tree, then we should do warm-start.
+        full_tree_br_inners = param_dict['branch_len_inners']
+        full_tree_br_offsets = param_dict['branch_len_offsets_proportion']
+        num_nodes = tree.get_num_nodes()
+        tree_br_len_inners = np.zeros(num_nodes)
+        tree_br_len_offsets = np.ones(num_nodes) * 0.4 + np.random.rand() * 0.1
+
+        # Mark the nodes to get the corresponding node_id in the full_tree
+        for node in tree.traverse():
+            node.add_feature("orig_node_id", node.node_id)
+
+        tree.label_node_ids()
+
+        node_mapping = {}
+        for node in tree.traverse():
+            node_mapping[node.node_id] = node.orig_node_id
+            node.del_feature("orig_node_id")
+
+        for node in tree.traverse():
+            if node.node_id in node_mapping and node_mapping[node.node_id] in full_tree_br_inners:
+                tree_br_len_inners[node.node_id] = full_tree_br_inners[node_mapping[node.node_id]]
+                tree_br_len_offsets[node.node_id] = full_tree_br_offsets[node_mapping[node.node_id]]
+        param_dict['branch_len_inners'] = tree_br_len_inners
+        param_dict['branch_len_offsets_proportion'] = tree_br_len_offsets
 
     result = LikelihoodScorer(
         get_randint(),
@@ -270,6 +312,7 @@ def fit_multifurc_tree(
         transition_wrap_maker,
         fit_param_list=[param_dict],
         known_params=args.known_params,
+        scratch_dir=args.scratch_dir,
         assessor=assessor).run_worker(None)[0]
     return result
 
@@ -373,11 +416,12 @@ def main(args=sys.argv[1:]):
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))
     logging.info(tree.get_ascii(attributes=["node_id"]))
 
-    all_chad_sketches = hanging_chad_finder.get_all_chads(
+    if args.count_chads:
+        all_chad_sketches = hanging_chad_finder.get_all_chads(
             tree,
             bcode_meta,
             max_possible_trees=2)
-    logging.info("Total of %d chads found", len(all_chad_sketches))
+        logging.info("Total of %d chads found", len(all_chad_sketches))
     tree = _do_random_rearrange(tree, bcode_meta, args.num_init_random_rearrange)
 
     logging.info("STARTING for reals!")
@@ -391,11 +435,13 @@ def main(args=sys.argv[1:]):
     # Begin tuning
     tuning_history = []
     recent_chads = set()
+    num_stable = 0
     for i in range(args.num_chad_tune_iters):
         np.random.seed(args.seed + i + 1)
         random.seed(args.seed + i + 1)
 
         penalty_tune_result = None
+        best_res = None
         if i < args.num_penalty_tune_iters:
             if len(args.dist_to_half_pen_params) == 1:
                 # If nothing to tune... do nothing
@@ -419,86 +465,86 @@ def main(args=sys.argv[1:]):
                     bcode_meta,
                     exclude_chad_func=lambda node: make_chad_psuedo_id(node) in recent_chads)
         has_chads = random_chad is not None
+        if not has_chads:
+            tuning_history.append({
+                "chad_tune_result": None,
+                "penalty_tune_result": penalty_tune_result,
+                "best_res": best_res,
+            })
+            save_data(tuning_history, args.out_model_file)
+            logging.info("No hanging chads found")
+            break
+
+        # Mark which chads we've seen recently
+        rand_chad_id = make_chad_psuedo_id(random_chad.node)
+        # Reset the recent chad list since the random chad finder failed
+        if rand_chad_id in recent_chads:
+            recent_chads = set()
+        recent_chads.add(rand_chad_id)
+
+        # Now tune the hanging chads!
+        logging.info(
+                "Iter %d: Tuning chad %s",
+                i,
+                random_chad)
         num_old_leaves = len(tree)
+        chad_tune_result, is_same = hanging_chad_finder.tune(
+            random_chad,
+            args.max_chad_tune_search,
+            tree,
+            bcode_meta,
+            args,
+            fit_params,
+            assessor,
+        )
+        tree, fit_params, best_res = chad_tune_result.get_best_result()
+        num_stable += int(is_same)
+        print("num stable", num_stable)
 
-        # pick a chad at random
-        chad_tune_result = None
-        if has_chads:
-            # Mark which chads we've seen recently
-            rand_chad_id = make_chad_psuedo_id(random_chad.node)
-            # Reset the recent chad list since the random chad finder failed
-            if rand_chad_id in recent_chads:
-                recent_chads = set()
-            recent_chads.add(rand_chad_id)
+        # just for fun... check that the number of leaves match
+        assert len(tree) == num_old_leaves
 
-            # Now tune the hanging chads!
-            logging.info(
-                    "Iter %d: Tuning chad %s",
-                    i,
-                    random_chad)
-            chad_tune_result = hanging_chad_finder.tune(
-                random_chad,
-                args.max_chad_tune_search,
-                tree,
-                bcode_meta,
-                args,
-                fit_params,
-                assessor,
-            )
-            tree, fit_params, best_res = chad_tune_result.get_best_result()
-
-            # just for fun... check that the number of leaves match
-            assert len(tree) == num_old_leaves
-        else:
-            best_res = fit_multifurc_tree(
-                    tree,
-                    bcode_meta,
-                    args,
-                    fit_params,
-                    assessor)
-
-        if assessor is not None:
-            logging.info(
-                    "Iter %d, begin dists %s, log lik %f %f",
-                    i,
-                    best_res.train_history[0]["performance"],
-                    best_res.train_history[0]["pen_log_lik"],
-                    best_res.train_history[0]["log_lik"])
-            logging.info(
-                    "Iter %d, end dists %s, log lik %f %f (num iters %d)",
-                    i,
-                    best_res.train_history[-1]["performance"],
-                    best_res.pen_log_lik,
-                    best_res.log_lik,
-                    len(best_res.train_history) - 1)
+        logging.info(
+                "Iter %d, begin dists %s, log lik %f %f",
+                i,
+                best_res.train_history[0]["performance"],
+                best_res.train_history[0]["pen_log_lik"],
+                best_res.train_history[0]["log_lik"])
+        logging.info(
+                "Iter %d, end dists %s, log lik %f %f (num iters %d)",
+                i,
+                best_res.train_history[-1]["performance"],
+                best_res.pen_log_lik,
+                best_res.log_lik,
+                len(best_res.train_history) - 1)
 
         tuning_history.append({
             "chad_tune_result": chad_tune_result,
             "penalty_tune_result": penalty_tune_result,
             "best_res": best_res,
         })
-        if not has_chads:
-            break
         save_data(tuning_history, args.out_model_file)
+        if num_stable >= args.num_chad_stop:
+            logging.info("Hanging chad tuner has converged")
+            break
 
-    logging.info("Iter refit bifurc tree!")
-    # Tune the final bifurcating tree one more time?
-    bifurc_res = None
-    if not has_unresolved_multifurcs(tree):
-        bifurc_res = best_res
-    elif args.do_refit:
-        bifurc_res = do_refit_bifurc_tree(
-                best_res,
+    logging.info("Done tuning chads!")
+    last_chad_res = tuning_history[-1]['chad_tune_result']
+    if last_chad_res is None or last_chad_res.num_chad_leaves > 1:
+        final_fit = fit_multifurc_tree(
+                tree,
                 bcode_meta,
                 args,
+                fit_params,
                 assessor)
-        logging.info("Final bifurc dists %s", bifurc_res.train_history[-1]["performance"])
+    else:
+        final_fit = best_res
 
     # Save results
     with open(args.out_model_file, "wb") as f:
         result = {
             "tuning_history": tuning_history,
-            "bifurc_res": bifurc_res,
+            "final_fit": final_fit,
         }
         six.moves.cPickle.dump(result, f, protocol=2)
     logging.info("Complete!!!")

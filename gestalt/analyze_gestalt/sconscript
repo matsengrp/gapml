@@ -40,7 +40,7 @@ nest.add(
 nest.add(
     'abundance_thres',
     [
-        3,
+        2,
         #5,
     ],
     label_func=lambda c: "min_abund_%d" % c,
@@ -124,7 +124,7 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = "3000,1000,300"
+    penalty_params = "9000,3000,1000,300"
     cmd = [
         'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
@@ -151,7 +151,7 @@ def run_MLE(env, outdir, c):
         '--num-inits 1',
         '--tot-time-known',
         '--num-processes 2',
-        '--num-init-random-rearrange 10',
+        '--num-init-random-rearrange 25',
     ]
     return env.Command(
         [

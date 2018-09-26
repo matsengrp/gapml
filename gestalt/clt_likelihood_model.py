@@ -19,6 +19,7 @@ import tf_common
 from common import inv_sigmoid, assign_rand_tree_lengths
 from constants import PERTURB_ZERO
 from optim_settings import KnownModelParams
+from clt_chronos_estimator import CLTChronosEstimator
 
 from profile_support import profile
 
@@ -46,6 +47,7 @@ class CLTLikelihoodModel:
             double_cut_weight: ndarray = np.array([1.0]),
             branch_len_inners: ndarray = np.array([]),
             branch_len_offsets_proportion: ndarray = np.array([]),
+            scratch_dir: str = "_output/scratch",
             cell_type_tree: CellTypeTree = None,
             tot_time: float = 1,
             tot_time_extra: float = 0.1,
@@ -84,6 +86,7 @@ class CLTLikelihoodModel:
         self.sess = sess
 
         self.known_params = known_params
+        self.scratch_dir = scratch_dir
 
         # Stores the penalty parameters
         self.log_barr_pen_param_ph = tf.placeholder(tf.float64)
@@ -574,16 +577,39 @@ class CLTLikelihoodModel:
         #logging.info(self.topology.get_ascii(attributes=["nochad_id"]))
         return np.all(br_lens[1:] > 0)
 
-    def initialize_branch_lens(self, tot_time: float):
+    def initialize_branch_lens(self, tot_time: float, chronos_lam: float=1):
         """
-        Will randomly initialize branch lengths if they are not all positive already
+        Initialize branch lengths using chronos estimator by updating the
+        model param values in this model (so this function modifies this
+        model. doesnt return anything)
+
         @param tot_time: the total height of the tree
+        @param chronos_lam: the penalty param to use with chronos
         """
         tree = self.topology.copy()
-        assign_rand_tree_lengths(tree, tot_time)
+
+        chronos_tree = tree.get_children()[0] if len(tree.get_children()) == 1 else tree
+        chronos_est = CLTChronosEstimator(
+            chronos_tree,
+            self.bcode_meta,
+            self.scratch_dir,
+            tot_time)
+        chronos_tree = chronos_est.estimate(chronos_lam)
+
         branch_len_inners = np.zeros(self.num_nodes)
-        for node in tree.traverse():
+        for node in chronos_tree.traverse():
             branch_len_inners[node.node_id] = node.dist
+
+        # Handle unifurcations in the tree because chronos cannot handle unifurc
+        # So let us just split the estimated distance from chronos in half
+        for node in self.topology.get_descendants('postorder'):
+            children = node.get_children()
+            if len(children) == 1:
+                child = children[0]
+                orig_dist_assign = branch_len_inners[child.node_id]
+                branch_len_inners[node.node_id] = orig_dist_assign/2
+                branch_len_inners[child.node_id] = orig_dist_assign/2
+        assert np.all(branch_len_inners[1:] > 0)
 
         model_vars = self.get_vars_as_dict()
         model_vars["branch_len_inners"] = branch_len_inners
@@ -987,11 +1013,6 @@ class CLTLikelihoodModel:
         if create_gradient:
             logging.info("Computing gradients....")
             st_time = time.time()
-            #self.smooth_log_lik_grad = self.adam_opt.compute_gradients(
-            #    self.smooth_log_lik,
-            #    var_list=[self.all_vars])
-            #logging.info("Finished making me gradient, time: %d", time.time() - st_time)
-            #print("time.time() - st_time", time.time() - st_time)
             self.adam_train_op = self.adam_opt.minimize(-self.smooth_log_lik, var_list=self.all_vars)
             logging.info("Finished making me an optimizer, time: %d", time.time() - st_time)
 

@@ -18,51 +18,41 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
+NUM_RANDOM_REARRANGE = 20
 GROWTH_DICT = {
-    "30hpf": {
-        "sampling_rate": 0.12,
-        "birth_sync_rounds": 4,
-        "birth_sync_time": 0.1,
-        "death_lambda": 0.2,
-        "birth_decay": -4,
-        "lambda_sequence": [.65, .6, .55, .5, .45, .4, .35],
-        "double": 0.2,
-        "min_leaves": 50,
-        "max_leaves": 120,
-    },
+    #"30hpf": {
+    #    "sampling_rate": 0.12,
+    #    "birth_sync_rounds": 4,
+    #    "birth_sync_time": 0.1,
+    #    "death_lambda": 0.2,
+    #    "birth_decay": -4,
+    #    "lambda_sequence": [.65, .6, .55, .5, .45, .4, .35],
+    #    "double": 0.2,
+    #    "min_leaves": 50,
+    #    "max_leaves": 120,
+    #},
     "small": {
-        "sampling_rate": 0.09,
-        "birth_sync_rounds": 3,
-        "birth_sync_time": 0.07,
+        "sampling_rate": 0.05,
+        "birth_sync_rounds": 5,
+        "birth_sync_time": 0.037,
         "death_lambda": 0.2,
-        "birth_decay": -2,
-        "lambda_sequence": [.85, .8, .75, .7, .65, .6, .55],
+        "birth_decay": -9,
+        "lambda_sequence": [.8, .75, .7, .65, .6, .55, .5, .45],
         "double": 0.04,
-        "min_leaves": 80,
-        "max_leaves": 130,
+        "min_leaves": 30,
+        "max_leaves": 80,
     },
-    "old": {
-        "sampling_rate": 0.2,
-        "birth_sync_rounds": 3,
-        "birth_sync_time": 0.05,
-        "death_lambda": 0.2,
-        "birth_decay": -4.45,
-        "lambda_sequence": [.7, .65, .6, .55, .5, .45, .4],
-        "double": 0.04,
-        "min_leaves": 80,
-        "max_leaves": 150,
-    }
 }
 
 nest.add(
     'model_seed',
-    [1],
+    [3],
     label_func=lambda c: 'model_seed%d' % c,
 )
 
 nest.add(
     'seed',
-    [0],
+    [4],
 )
 
 nest.add(
@@ -70,7 +60,6 @@ nest.add(
     [
        #'30hpf',
        'small'
-      #'old'
     ])
 
 @nest.add_target_with_env(localenv)
@@ -99,8 +88,10 @@ def generate(env, outdir, c):
         GROWTH_DICT[c['growth_stage']]['birth_decay'],
         '--death-lambda',
         GROWTH_DICT[c['growth_stage']]['death_lambda'],
+        '--max-clt-nodes',
+        int(GROWTH_DICT[c['growth_stage']]['max_leaves']/GROWTH_DICT[c['growth_stage']]['sampling_rate'] * 1.1),
         '--num-barcodes',
-        1,
+        9,
         '--min-uniq-alleles',
         GROWTH_DICT[c['growth_stage']]['min_leaves'],
         '--max-uniq-alleles',
@@ -128,7 +119,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [1],
+    [1], #3,9],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -174,17 +165,51 @@ def run_topology(env, outdir, c):
         ' '.join(map(str, cmd)))
 
 @nest.add_target_with_env(localenv)
+def run_chronos(env, outdir, c):
+    cmd = [
+        'python fit_chronos.py',
+        '--seed',
+        c['seed'] + 20,
+        '--obs-file ${SOURCES[0]}',
+        '--topology-file ${SOURCES[1]}',
+        '--out-model-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+        '--true-model-file ${SOURCES[2]}',
+        '--num-init-random-rearrange',
+        NUM_RANDOM_REARRANGE,
+        '--scratch-dir',
+	join('simulation_topol_consist', outdir, 'scratch'),
+    ]
+    return env.Command(
+        [
+            join(outdir, 'chronos_fitted.pkl'),
+            join(outdir, 'chronos_fitted.txt')],
+        [
+            c['restrict_observed_alleles'][0],
+            c['run_topology'][0],
+            c['generate'][1]],
+        ' '.join(map(str, cmd)))
+
+nest.add(
+    'sum_states',
+    [30],
+    label_func=lambda c: "sum_states_%d" % c,
+)
+
+nest.add(
+    'extra_steps',
+    [1],
+    label_func=lambda c: "extra_steps_%d" % c,
+)
+
+@nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
     if c['num_barcodes'] == 1:
-        #penalty_params = "6000,3200,1600"
-        penalty_params = '12000,6000,3000,1500,750'
-        penalty_params = '3000'
+        penalty_params = "1600,800,400,200"
     elif c['num_barcodes'] == 3:
-        penalty_params = "192,48,12,3"
+        penalty_params = "800,400,200,100"
     elif c['num_barcodes'] == 9:
-        penalty_params = "192,48,12,3"
-    elif c['num_barcodes'] == 27:
-        penalty_params = "192,48,12,3,.75"
+        penalty_params = "400,200,100,50"
 
     cmd = [
         'python tune_topology.py',
@@ -203,23 +228,29 @@ def run_MLE(env, outdir, c):
         '--num-penalty-tune-splits',
         5,
         '--num-chad-tune-iters',
-        100,
+        40,
+        '--num-chad-stop',
+        10,
         '--max-chad-tune-search',
         15,
-        '--max-sum-states 2000',
-        '--max-extra-steps 2',
+        '--max-sum-states',
+        c['sum_states'],
+        '--max-extra-steps',
+        c['extra_steps'],
         '--max-iters 50000',
         '--num-inits 1',
         '--tot-time-known',
-        #'--do-refit',
-        #'--lambda-known',
         '--num-processes 5',
-        '--num-init-random-rearrange 11',
+        '--num-init-random-rearrange',
+        NUM_RANDOM_REARRANGE,
+        '--count-chads',
+        '--scratch-dir',
+	join('simulation_topol_consist', outdir, 'scratch'),
     ]
     return env.Command(
         [
-            join(outdir, 'tune_fitted_warm.pkl'),
-            join(outdir, 'tune_fitted_warm.txt')],
+            join(outdir, 'tune_fitted.pkl'),
+            join(outdir, 'tune_fitted.txt')],
         [
             c['restrict_observed_alleles'][0],
             c['run_topology'][0],
