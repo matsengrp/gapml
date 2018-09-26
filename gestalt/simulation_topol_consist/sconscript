@@ -229,6 +229,8 @@ def run_MLE(env, outdir, c):
         5,
         '--num-chad-tune-iters',
         40,
+        '--num-chad-stop',
+        10,
         '--max-chad-tune-search',
         15,
         '--max-sum-states',

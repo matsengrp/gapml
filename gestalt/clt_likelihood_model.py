@@ -579,8 +579,12 @@ class CLTLikelihoodModel:
 
     def initialize_branch_lens(self, tot_time: float, chronos_lam: float=1):
         """
-        Will randomly initialize branch lengths if they are not all positive already
+        Initialize branch lengths using chronos estimator by updating the
+        model param values in this model (so this function modifies this
+        model. doesnt return anything)
+
         @param tot_time: the total height of the tree
+        @param chronos_lam: the penalty param to use with chronos
         """
         tree = self.topology.copy()
 
@@ -590,12 +594,22 @@ class CLTLikelihoodModel:
             self.bcode_meta,
             self.scratch_dir,
             tot_time)
-        chronos_tree = chronos_est.estimate(lam = 1)
+        chronos_tree = chronos_est.estimate(chronos_lam)
 
-        #assign_rand_tree_lengths(tree, tot_time)
         branch_len_inners = np.zeros(self.num_nodes)
         for node in chronos_tree.traverse():
             branch_len_inners[node.node_id] = node.dist
+
+        # Handle unifurcations in the tree because chronos cannot handle unifurc
+        # So let us just split the estimated distance from chronos in half
+        for node in self.topology.get_descendants('postorder'):
+            children = node.get_children()
+            if len(children) == 1:
+                child = children[0]
+                orig_dist_assign = branch_len_inners[child.node_id]
+                branch_len_inners[node.node_id] = orig_dist_assign/2
+                branch_len_inners[child.node_id] = orig_dist_assign/2
+        assert np.all(branch_len_inners[1:] > 0)
 
         model_vars = self.get_vars_as_dict()
         model_vars["branch_len_inners"] = branch_len_inners

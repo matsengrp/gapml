@@ -591,6 +591,7 @@ def _fit_nochad_result(
         known_params=args.known_params,
         scratch_dir=args.scratch_dir,
         assessor=assessor).run_worker(None)[0]
+    assert no_chad_res is not None
     return no_chad_res, pen_anc_state
 
 

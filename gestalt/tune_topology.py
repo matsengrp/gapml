@@ -441,6 +441,7 @@ def main(args=sys.argv[1:]):
         random.seed(args.seed + i + 1)
 
         penalty_tune_result = None
+        best_res = None
         if i < args.num_penalty_tune_iters:
             if len(args.dist_to_half_pen_params) == 1:
                 # If nothing to tune... do nothing
@@ -464,59 +465,58 @@ def main(args=sys.argv[1:]):
                     bcode_meta,
                     exclude_chad_func=lambda node: make_chad_psuedo_id(node) in recent_chads)
         has_chads = random_chad is not None
+        if not has_chads:
+            tuning_history.append({
+                "chad_tune_result": None,
+                "penalty_tune_result": penalty_tune_result,
+                "best_res": best_res,
+            })
+            save_data(tuning_history, args.out_model_file)
+            logging.info("No hanging chads found")
+            break
+
+        # Mark which chads we've seen recently
+        rand_chad_id = make_chad_psuedo_id(random_chad.node)
+        # Reset the recent chad list since the random chad finder failed
+        if rand_chad_id in recent_chads:
+            recent_chads = set()
+        recent_chads.add(rand_chad_id)
+
+        # Now tune the hanging chads!
+        logging.info(
+                "Iter %d: Tuning chad %s",
+                i,
+                random_chad)
         num_old_leaves = len(tree)
+        chad_tune_result, is_same = hanging_chad_finder.tune(
+            random_chad,
+            args.max_chad_tune_search,
+            tree,
+            bcode_meta,
+            args,
+            fit_params,
+            assessor,
+        )
+        tree, fit_params, best_res = chad_tune_result.get_best_result()
+        num_stable += int(is_same)
+        print("num stable", num_stable)
 
-        # pick a chad at random
-        chad_tune_result = None
-        if has_chads:
-            # Mark which chads we've seen recently
-            rand_chad_id = make_chad_psuedo_id(random_chad.node)
-            # Reset the recent chad list since the random chad finder failed
-            if rand_chad_id in recent_chads:
-                recent_chads = set()
-            recent_chads.add(rand_chad_id)
+        # just for fun... check that the number of leaves match
+        assert len(tree) == num_old_leaves
 
-            # Now tune the hanging chads!
-            logging.info(
-                    "Iter %d: Tuning chad %s",
-                    i,
-                    random_chad)
-            chad_tune_result, is_same = hanging_chad_finder.tune(
-                random_chad,
-                args.max_chad_tune_search,
-                tree,
-                bcode_meta,
-                args,
-                fit_params,
-                assessor,
-            )
-            tree, fit_params, best_res = chad_tune_result.get_best_result()
-            num_stable += int(is_same)
-
-            # just for fun... check that the number of leaves match
-            assert len(tree) == num_old_leaves
-        else:
-            best_res = fit_multifurc_tree(
-                    tree,
-                    bcode_meta,
-                    args,
-                    fit_params,
-                    assessor)
-
-        if assessor is not None:
-            logging.info(
-                    "Iter %d, begin dists %s, log lik %f %f",
-                    i,
-                    best_res.train_history[0]["performance"],
-                    best_res.train_history[0]["pen_log_lik"],
-                    best_res.train_history[0]["log_lik"])
-            logging.info(
-                    "Iter %d, end dists %s, log lik %f %f (num iters %d)",
-                    i,
-                    best_res.train_history[-1]["performance"],
-                    best_res.pen_log_lik,
-                    best_res.log_lik,
-                    len(best_res.train_history) - 1)
+        logging.info(
+                "Iter %d, begin dists %s, log lik %f %f",
+                i,
+                best_res.train_history[0]["performance"],
+                best_res.train_history[0]["pen_log_lik"],
+                best_res.train_history[0]["log_lik"])
+        logging.info(
+                "Iter %d, end dists %s, log lik %f %f (num iters %d)",
+                i,
+                best_res.train_history[-1]["performance"],
+                best_res.pen_log_lik,
+                best_res.log_lik,
+                len(best_res.train_history) - 1)
 
         tuning_history.append({
             "chad_tune_result": chad_tune_result,
@@ -524,12 +524,13 @@ def main(args=sys.argv[1:]):
             "best_res": best_res,
         })
         save_data(tuning_history, args.out_model_file)
-        if not has_chads or num_stable >= args.num_chad_stop:
+        if num_stable >= args.num_chad_stop:
+            logging.info("Hanging chad tuner has converged")
             break
 
     logging.info("Done tuning chads!")
     last_chad_res = tuning_history[-1]['chad_tune_result']
-    if last_chad_res is not None and last_chad_res.num_chad_leaves > 1:
+    if last_chad_res is None or last_chad_res.num_chad_leaves > 1:
         final_fit = fit_multifurc_tree(
                 tree,
                 bcode_meta,
