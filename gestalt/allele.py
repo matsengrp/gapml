@@ -1,15 +1,13 @@
 from typing import List, Dict, Tuple
 import re
-import numpy as np
 from numpy.random import choice
 
 from alignment import Aligner
 
 from indel_sets import TargetTract
 from allele_events import AlleleEvents, Event
-from constants import BARCODE_V7, NUM_BARCODE_V7_TARGETS
 from barcode_metadata import BarcodeMetadata
-from target_status import TargetDeactTract, TargetStatus
+from target_status import TargetStatus
 
 class AlleleList:
     """

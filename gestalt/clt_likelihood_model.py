@@ -577,7 +577,7 @@ class CLTLikelihoodModel:
         #logging.info(self.topology.get_ascii(attributes=["nochad_id"]))
         return np.all(br_lens[1:] > 0)
 
-    def initialize_branch_lens(self, tot_time: float, chronos_lam: float=1):
+    def initialize_branch_lens(self, tot_time: float, chronos_lam: float=1, root_unifurc_prop: float= 0.01):
         """
         Initialize branch lengths using chronos estimator by updating the
         model param values in this model (so this function modifies this
@@ -588,13 +588,33 @@ class CLTLikelihoodModel:
         """
         tree = self.topology.copy()
 
-        chronos_tree = tree.get_children()[0] if len(tree.get_children()) == 1 else tree
+        is_root_unifurc = len(tree.get_children()) == 1
+        chronos_tree = tree.get_children()[0] if is_root_unifurc else tree
         chronos_est = CLTChronosEstimator(
             chronos_tree,
             self.bcode_meta,
             self.scratch_dir,
             tot_time)
         chronos_tree = chronos_est.estimate(chronos_lam)
+
+        print(chronos_tree.get_ascii(attributes=['dist']))
+        # Check that chronos didn't assign terrible branch lengths
+        chronos_tree.dist = root_unifurc_prop * tot_time if is_root_unifurc else 0
+        chronos_tree.add_feature('dist_to_root', chronos_tree.dist)
+        for node in chronos_tree.get_descendants('preorder'):
+            node.dist = (1 - root_unifurc_prop) * node.dist if is_root_unifurc else node.dist
+            node.add_feature('dist_to_root', node.dist + node.up.dist_to_root)
+            if node.dist < 1e-8:
+                # Shit chronos screwed up
+                logging.info('chronos assigned bad branch length. reset with random assignments')
+                remain_time = tot_time - node.dist_to_root
+                dist_to_root = 0.95 * remain_time
+                print("remain", remain_time)
+                assign_rand_tree_lengths(node, dist_to_root)
+                node.dist = remain_time - dist_to_root
+                node.dist_to_root = dist_to_root
+
+        print(chronos_tree.get_ascii(attributes=['dist']))
 
         branch_len_inners = np.zeros(self.num_nodes)
         for node in chronos_tree.traverse():
@@ -609,6 +629,8 @@ class CLTLikelihoodModel:
                 orig_dist_assign = branch_len_inners[child.node_id]
                 branch_len_inners[node.node_id] = orig_dist_assign/2
                 branch_len_inners[child.node_id] = orig_dist_assign/2
+
+        logging.info("branch len inner init %s", branch_len_inners)
         assert np.all(branch_len_inners[1:] > 0)
 
         model_vars = self.get_vars_as_dict()
