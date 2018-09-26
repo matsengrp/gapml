@@ -119,7 +119,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [1],
+    [9],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -162,6 +162,31 @@ def run_topology(env, outdir, c):
             join(outdir, 'log_parsimony.txt')],
         [
             c['restrict_observed_alleles'][0]],
+        ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def run_chronos(env, outdir, c):
+    cmd = [
+        'python fit_chronos.py',
+        '--seed',
+        c['seed'] + 20,
+        '--obs-file ${SOURCES[0]}',
+        '--topology-file ${SOURCES[1]}',
+        '--out-model-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+        '--true-model-file ${SOURCES[2]}',
+        '--num-init-random-rearrange 0', #20',
+        '--scratch-dir',
+	join('simulation_topol_consist', outdir),
+    ]
+    return env.Command(
+        [
+            join(outdir, 'chronos_fitted.pkl'),
+            join(outdir, 'chronos_fitted.txt')],
+        [
+            c['restrict_observed_alleles'][0],
+            c['run_topology'][0],
+            c['generate'][1]],
         ' '.join(map(str, cmd)))
 
 nest.add(
@@ -217,8 +242,6 @@ def run_MLE(env, outdir, c):
         '--max-iters 0', #50000',
         '--num-inits 1',
         '--tot-time-known',
-        #'--do-refit',
-        #'--lambda-known',
         '--num-processes 5',
         '--num-init-random-rearrange 0', #20',
         '--count-chads',

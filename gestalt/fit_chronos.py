@@ -18,6 +18,7 @@ from common import create_directory, get_randint, save_data, get_init_target_lam
 import ancestral_events_finder
 from clt_likelihood_penalization import mark_target_status_to_penalize
 from tune_topology import read_data, read_true_model_files, _do_random_rearrange
+from collapsed_tree import _remove_single_child_unobs_nodes
 
 
 def parse_args(args):
@@ -101,6 +102,9 @@ def main(args=sys.argv[1:]):
     np.random.seed(args.seed)
     random.seed(args.seed)
     tree = _do_random_rearrange(tree, bcode_meta, args.num_init_random_rearrange)
+    _remove_single_child_unobs_nodes(tree)
+    if len(tree.get_children()) == 1:
+        tree.get_children()[0].delete()
 
     true_model_dict, assessor = read_true_model_files(args, bcode_meta.num_barcodes)
     ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
