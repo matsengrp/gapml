@@ -589,6 +589,7 @@ def _fit_nochad_result(
         trans_wrap_maker,
         fit_param_list=[fit_params],
         known_params=args.known_params,
+        scratch_dir=args.scratch_dir,
         assessor=assessor).run_worker(None)[0]
     return no_chad_res, pen_anc_state
 
@@ -704,6 +705,7 @@ def tune(
             trans_wrap_maker,
             fit_param_list=[warm_start_fit_params],
             known_params=args.known_params,
+            scratch_dir=args.scratch_dir,
             assessor=assessor,
             name="chad-tuning%d" % parent_idx)
         worker_list.append(worker)

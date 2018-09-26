@@ -18,18 +18,19 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
+NUM_RANDOM_REARRANGE = 20
 GROWTH_DICT = {
-    "30hpf": {
-        "sampling_rate": 0.12,
-        "birth_sync_rounds": 4,
-        "birth_sync_time": 0.1,
-        "death_lambda": 0.2,
-        "birth_decay": -4,
-        "lambda_sequence": [.65, .6, .55, .5, .45, .4, .35],
-        "double": 0.2,
-        "min_leaves": 50,
-        "max_leaves": 120,
-    },
+    #"30hpf": {
+    #    "sampling_rate": 0.12,
+    #    "birth_sync_rounds": 4,
+    #    "birth_sync_time": 0.1,
+    #    "death_lambda": 0.2,
+    #    "birth_decay": -4,
+    #    "lambda_sequence": [.65, .6, .55, .5, .45, .4, .35],
+    #    "double": 0.2,
+    #    "min_leaves": 50,
+    #    "max_leaves": 120,
+    #},
     "small": {
         "sampling_rate": 0.05,
         "birth_sync_rounds": 5,
@@ -59,7 +60,6 @@ nest.add(
     [
        #'30hpf',
        'small'
-      #'old'
     ])
 
 @nest.add_target_with_env(localenv)
@@ -119,7 +119,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [9],
+    [1], #3,9],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -175,7 +175,8 @@ def run_chronos(env, outdir, c):
         '--out-model-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
         '--true-model-file ${SOURCES[2]}',
-        '--num-init-random-rearrange 0', #20',
+        '--num-init-random-rearrange',
+        NUM_RANDOM_REARRANGE,
         '--scratch-dir',
 	join('simulation_topol_consist', outdir),
     ]
@@ -201,19 +202,14 @@ nest.add(
     label_func=lambda c: "extra_steps_%d" % c,
 )
 
-
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
     if c['num_barcodes'] == 1:
-        #penalty_params = "6000,3200,1600"
-        penalty_params = '6000' #,3000,1500,750'
+        penalty_params = "4000,2000,1000,500"
     elif c['num_barcodes'] == 3:
-        penalty_params = "192,48,12,3"
+        penalty_params = "2000,1000,500,250"
     elif c['num_barcodes'] == 9:
-        penalty_params = "192,48,12,3"
-    elif c['num_barcodes'] == 27:
-        penalty_params = "192,48,12,3,.75"
-    penalty_params = '6000'
+        penalty_params = "1000,500,250,125"
 
     cmd = [
         'python tune_topology.py',
@@ -243,7 +239,8 @@ def run_MLE(env, outdir, c):
         '--num-inits 1',
         '--tot-time-known',
         '--num-processes 5',
-        '--num-init-random-rearrange 0', #20',
+        '--num-init-random-rearrange',
+        NUM_RANDOM_REARRANGE,
         '--count-chads',
         '--scratch-dir',
 	join('simulation_topol_consist', outdir),

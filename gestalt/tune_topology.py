@@ -268,6 +268,32 @@ def fit_multifurc_tree(
             args.max_sum_states)
     ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
     mark_target_status_to_penalize(tree)
+    if 'branch_len_inners' in param_dict:
+        # If branch length estimates are provided and we have the mapping between
+        # the full_tree nodes and the nodes in the no_chad tree, then we should do warm-start.
+        full_tree_br_inners = param_dict['branch_len_inners']
+        full_tree_br_offsets = param_dict['branch_len_offsets_proportion']
+        num_nodes = tree.get_num_nodes()
+        tree_br_len_inners = np.zeros(num_nodes)
+        tree_br_len_offsets = np.ones(num_nodes) * 0.4 + np.random.rand() * 0.1
+
+        # Mark the nodes to get the corresponding node_id in the full_tree
+        for node in tree.traverse():
+            node.add_feature("orig_node_id", node.node_id)
+
+        tree.label_node_ids()
+
+        node_mapping = {}
+        for node in tree.traverse():
+            node_mapping[node.node_id] = node.orig_node_id
+            node.del_feature("orig_node_id")
+
+        for node in tree.traverse():
+            if node.node_id in node_mapping and node_mapping[node.node_id] in full_tree_br_inners:
+                tree_br_len_inners[node.node_id] = full_tree_br_inners[node_mapping[node.node_id]]
+                tree_br_len_offsets[node.node_id] = full_tree_br_offsets[node_mapping[node.node_id]]
+        param_dict['branch_len_inners'] = tree_br_len_inners
+        param_dict['branch_len_offsets_proportion'] = tree_br_len_offsets
 
     result = LikelihoodScorer(
         get_randint(),
@@ -278,6 +304,7 @@ def fit_multifurc_tree(
         transition_wrap_maker,
         fit_param_list=[param_dict],
         known_params=args.known_params,
+        scratch_dir=args.scratch_dir,
         assessor=assessor).run_worker(None)[0]
     return result
 
