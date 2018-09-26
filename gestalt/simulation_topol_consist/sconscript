@@ -178,7 +178,7 @@ def run_chronos(env, outdir, c):
         '--num-init-random-rearrange',
         NUM_RANDOM_REARRANGE,
         '--scratch-dir',
-	join('simulation_topol_consist', outdir),
+	join('simulation_topol_consist', outdir, 'scratch'),
     ]
     return env.Command(
         [
@@ -224,18 +224,18 @@ def run_MLE(env, outdir, c):
         '--dist-to-half-pen-params',
         penalty_params,
         '--num-penalty-tune-iters',
-        1, #2,
+        1,
         '--num-penalty-tune-splits',
         5,
         '--num-chad-tune-iters',
-        1, #100,
+        40,
         '--max-chad-tune-search',
-        1, #15,
+        15,
         '--max-sum-states',
         c['sum_states'],
         '--max-extra-steps',
         c['extra_steps'],
-        '--max-iters 0', #50000',
+        '--max-iters 50000',
         '--num-inits 1',
         '--tot-time-known',
         '--num-processes 5',
@@ -243,7 +243,7 @@ def run_MLE(env, outdir, c):
         NUM_RANDOM_REARRANGE,
         '--count-chads',
         '--scratch-dir',
-	join('simulation_topol_consist', outdir),
+	join('simulation_topol_consist', outdir, 'scratch'),
     ]
     return env.Command(
         [
