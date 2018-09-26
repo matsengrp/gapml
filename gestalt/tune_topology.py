@@ -82,6 +82,13 @@ def parse_args(args):
         Number of iterations to tune the penalty params
         """)
     parser.add_argument(
+        '--max-fit-splits',
+        type=int,
+        default=5,
+        help="""
+        Maximum number of random splits to fit on the data
+        """)
+    parser.add_argument(
         '--num-penalty-tune-splits',
         type=int,
         default=2,
@@ -498,7 +505,10 @@ def main(args=sys.argv[1:]):
             assessor,
         )
         tree, fit_params, best_res = chad_tune_result.get_best_result()
-        num_stable += int(is_same)
+        if is_same:
+            num_stable += int(is_same)
+        else:
+            num_stable = 0
         print("num stable", num_stable)
 
         # just for fun... check that the number of leaves match

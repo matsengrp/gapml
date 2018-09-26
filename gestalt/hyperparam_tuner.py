@@ -1,6 +1,7 @@
 import numpy as np
 from typing import List, Dict
 import logging
+import random
 
 from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
@@ -120,10 +121,14 @@ def _tune_hyperparams(
                 being tuned
     """
     # First split the barcode into kfold groups
-    tree_splits = kfold_fnc(
+    max_splits = len(tree.get_children()) if bcode_meta.num_barcodes == 1 else bcode_meta.num_barcodes
+    n_splits = min(args.num_penalty_tune_splits, max_splits)
+    all_tree_splits = kfold_fnc(
             tree,
             bcode_meta,
-            args.num_penalty_tune_splits)
+            n_splits)
+    random.shuffle(all_tree_splits)
+    tree_splits = all_tree_splits[:args.max_fit_splits]
 
     trans_wrap_makers = [TransitionWrapperMaker(
             tree_split.tree,
@@ -233,10 +238,10 @@ def _get_many_bcode_stability_score(
         mean_tree_param_est = sum(tree_param_ests)/len(tree_param_ests)
         tree_stability_score = -np.mean([
             np.power(np.linalg.norm(tree_param_est - mean_tree_param_est), 2)
-            for tree_param_est in tree_param_ests])/np.power(np.linalg.norm(mean_tree_param_est), 2)
+            for tree_param_est in tree_param_ests])
         targ_stability_score = -np.mean([
             np.power(np.linalg.norm(targ_param_est - mean_targ_param_est), 2)
-            for targ_param_est in targ_param_ests])/np.power(np.linalg.norm(mean_targ_param_est), 2)
+            for targ_param_est in targ_param_ests])
         stability_score = weight * tree_stability_score + (1 - weight) * targ_stability_score
 
         logging.info("all params... %s %s", mean_targ_param_est, mean_tree_param_est)
@@ -287,10 +292,10 @@ def _get_one_bcode_stability_score(
             break
 
     if is_stable:
-        mean_target_param_est = sum(target_param_ests)/len(target_param_ests)
+        mean_target_param_est = sum(np.log(target_param_ests))/len(target_param_ests)
         targ_stability_score = -np.mean([
-            np.power(np.linalg.norm(targ_param_est - mean_target_param_est), 2)
-            for targ_param_est in target_param_ests])/np.power(np.linalg.norm(mean_target_param_est), 2)
+            np.power(np.linalg.norm(np.log(targ_param_est) - mean_target_param_est), 2)
+            for targ_param_est in target_param_ests])
 
         stability_score = targ_stability_score
 
