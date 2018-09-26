@@ -89,6 +89,14 @@ def parse_args(args):
         Number of random splits of the data for tuning penalty params.
         """)
     parser.add_argument(
+        '--num-chad-stop',
+        type=int,
+        default=2,
+        help="""
+        If we select don't change the tree topology for this many steps in a row,
+        then we stop the hanging chad tuner.
+        """)
+    parser.add_argument(
         '--num-chad-tune-iters',
         type=int,
         default=2,
@@ -427,6 +435,7 @@ def main(args=sys.argv[1:]):
     # Begin tuning
     tuning_history = []
     recent_chads = set()
+    num_stable = 0
     for i in range(args.num_chad_tune_iters):
         np.random.seed(args.seed + i + 1)
         random.seed(args.seed + i + 1)
@@ -472,7 +481,7 @@ def main(args=sys.argv[1:]):
                     "Iter %d: Tuning chad %s",
                     i,
                     random_chad)
-            chad_tune_result = hanging_chad_finder.tune(
+            chad_tune_result, is_same = hanging_chad_finder.tune(
                 random_chad,
                 args.max_chad_tune_search,
                 tree,
@@ -482,6 +491,7 @@ def main(args=sys.argv[1:]):
                 assessor,
             )
             tree, fit_params, best_res = chad_tune_result.get_best_result()
+            num_stable += int(is_same)
 
             # just for fun... check that the number of leaves match
             assert len(tree) == num_old_leaves
@@ -513,9 +523,9 @@ def main(args=sys.argv[1:]):
             "penalty_tune_result": penalty_tune_result,
             "best_res": best_res,
         })
-        if not has_chads:
-            break
         save_data(tuning_history, args.out_model_file)
+        if not has_chads or num_stable >= args.num_chad_stop:
+            break
 
     logging.info("Done tuning chads!")
     last_chad_res = tuning_history[-1]['chad_tune_result']

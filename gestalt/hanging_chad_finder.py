@@ -755,7 +755,7 @@ def tune(
         logging.info("scores = %s", scores)
         logging.info("scores vs. %ss %s", print_assess_metric, scipy.stats.spearmanr(scores, all_tree_dists))
 
-    return chad_tune_res
+    return chad_tune_res, selected_idx == 0
 
 
 def _create_chad_results(
