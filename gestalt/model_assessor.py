@@ -66,9 +66,13 @@ class ModelAssessor:
             double_weight = param_dict["double_cut_weight"]
             trim_long = param_dict["trim_long_factor"]
             return np.concatenate([target_lams, double_weight, trim_long])
+
+        def _get_only_target_lams(param_dict: Dict):
+            return param_dict["target_lams"]
+
         return scipy.stats.pearsonr(
-                _get_target_lams(self.ref_param_dict),
-                _get_target_lams(other_param_dict))[0]
+                _get_only_target_lams(self.ref_param_dict),
+                _get_only_target_lams(other_param_dict))[0]
 
     def _compare_target_lams(self, other_param_dict: Dict):
         def _get_target_lams(param_dict: Dict):

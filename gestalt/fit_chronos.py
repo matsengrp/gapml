@@ -17,7 +17,7 @@ from cell_lineage_tree import CellLineageTree
 from common import create_directory, get_randint, save_data, get_init_target_lams
 import ancestral_events_finder
 from clt_likelihood_penalization import mark_target_status_to_penalize
-from tune_topology import read_data, read_true_model_files
+from tune_topology import read_data, read_true_model_files, _do_random_rearrange
 
 
 def parse_args(args):
@@ -56,6 +56,11 @@ def parse_args(args):
         default='0.01,0.1,1,10,100',
         help='lambdas to use when fitting chronos')
     parser.add_argument(
+        '--num-init-random-rearrange',
+        type=int,
+        default=0,
+        help='number of times we randomly rearrange tree at the beginning')
+    parser.add_argument(
         '--scratch-dir',
         type=str,
         default=None)
@@ -92,6 +97,11 @@ def main(args=sys.argv[1:]):
 
     # Load data and topology
     bcode_meta, tree, obs_data_dict = read_data(args)
+
+    np.random.seed(args.seed)
+    random.seed(args.seed)
+    tree = _do_random_rearrange(tree, bcode_meta, args.num_init_random_rearrange)
+
     true_model_dict, assessor = read_true_model_files(args, bcode_meta.num_barcodes)
     ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
     parsimony_score = ancestral_events_finder.get_parsimony_score(tree)
@@ -159,7 +169,7 @@ def main(args=sys.argv[1:]):
         dist_dict = None
         if assessor is not None:
             dist_dict = assessor.assess(None, root_clt)
-            logging.info("fitted tree: %s", dist_dict)
+            logging.info("fitted tree: lambda %f, %s", lam, dist_dict)
         res = {
             "lambda": lam,
             "fitted_tree": root_clt,

@@ -23,6 +23,7 @@ from common import create_directory, get_randint, save_data, get_init_target_lam
 import file_readers
 import collapsed_tree
 from clt_likelihood_penalization import mark_target_status_to_penalize
+import ancestral_events_finder
 
 
 def parse_args(args):
@@ -139,6 +140,12 @@ def parse_args(args):
         '--scratch-dir',
         type=str,
         default=None)
+    parser.add_argument(
+        '--count-chads',
+        action='store_true',
+        help="""
+        Log the number of hanging chads found in the tree
+        """)
 
     parser.set_defaults(tot_time_known=True)
     args = parser.parse_args(args)
@@ -259,6 +266,7 @@ def fit_multifurc_tree(
             bcode_meta,
             args.max_extra_steps,
             args.max_sum_states)
+    ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
     mark_target_status_to_penalize(tree)
 
     result = LikelihoodScorer(
@@ -373,11 +381,12 @@ def main(args=sys.argv[1:]):
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))
     logging.info(tree.get_ascii(attributes=["node_id"]))
 
-    all_chad_sketches = hanging_chad_finder.get_all_chads(
+    if args.count_chads:
+        all_chad_sketches = hanging_chad_finder.get_all_chads(
             tree,
             bcode_meta,
             max_possible_trees=2)
-    logging.info("Total of %d chads found", len(all_chad_sketches))
+        logging.info("Total of %d chads found", len(all_chad_sketches))
     tree = _do_random_rearrange(tree, bcode_meta, args.num_init_random_rearrange)
 
     logging.info("STARTING for reals!")
@@ -481,24 +490,23 @@ def main(args=sys.argv[1:]):
             break
         save_data(tuning_history, args.out_model_file)
 
-    logging.info("Iter refit bifurc tree!")
-    # Tune the final bifurcating tree one more time?
-    bifurc_res = None
-    if not has_unresolved_multifurcs(tree):
-        bifurc_res = best_res
-    elif args.do_refit:
-        bifurc_res = do_refit_bifurc_tree(
-                best_res,
+    logging.info("Done tuning chads!")
+    last_chad_res = tuning_history[-1]['chad_tune_result']
+    if last_chad_res is not None and last_chad_res.num_chad_leaves > 1:
+        final_fit = fit_multifurc_tree(
+                tree,
                 bcode_meta,
                 args,
+                fit_params,
                 assessor)
-        logging.info("Final bifurc dists %s", bifurc_res.train_history[-1]["performance"])
+    else:
+        final_fit = best_res
 
     # Save results
     with open(args.out_model_file, "wb") as f:
         result = {
             "tuning_history": tuning_history,
-            "bifurc_res": bifurc_res,
+            "final_fit": final_fit,
         }
         six.moves.cPickle.dump(result, f, protocol=2)
     logging.info("Complete!!!")

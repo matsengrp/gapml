@@ -987,11 +987,6 @@ class CLTLikelihoodModel:
         if create_gradient:
             logging.info("Computing gradients....")
             st_time = time.time()
-            #self.smooth_log_lik_grad = self.adam_opt.compute_gradients(
-            #    self.smooth_log_lik,
-            #    var_list=[self.all_vars])
-            #logging.info("Finished making me gradient, time: %d", time.time() - st_time)
-            #print("time.time() - st_time", time.time() - st_time)
             self.adam_train_op = self.adam_opt.minimize(-self.smooth_log_lik, var_list=self.all_vars)
             logging.info("Finished making me an optimizer, time: %d", time.time() - st_time)
 

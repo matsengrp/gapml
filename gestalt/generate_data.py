@@ -213,7 +213,7 @@ def create_cell_lineage_tree(
         args,
         clt_model: CLTLikelihoodModel,
         max_tries: int = 20,
-        incr: float = 0.02,
+        incr: float = 0.01,
         time_min: float = 1e-3):
     """
     @return original clt, the set of observed leaves, and the true topology for the observed leaves
@@ -255,6 +255,8 @@ def create_cell_lineage_tree(
                 break
         except ValueError as e:
             logging.info("ValueError warning.... %s", str(e))
+            print("ValueError warning.... %s" % str(e))
+            birth_sync_time += incr * np.random.rand()
             continue
         #except AssertionError as e:
         #    logging.info("AssertionError warning ... %s", str(e))
