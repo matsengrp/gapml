@@ -2,6 +2,7 @@ from typing import List, Dict
 import numpy as np
 import tensorflow as tf
 import logging
+import copy
 
 from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
@@ -19,14 +20,19 @@ class LikelihoodScorerResult:
     """
     def __init__(
             self,
-            log_barr_pen_param: float,
-            dist_to_half_pen_param: float,
+            fit_params: Dict,
             model_params_dict: Dict,
             orig_tree: CellLineageTree,
             fitted_bifurc_tree: CellLineageTree,
             train_history: List):
-        self.log_barr_pen_param = log_barr_pen_param
-        self.dist_to_half_pen_param = dist_to_half_pen_param
+        """
+        @param fit_params: the fitting parameters used for warm-start
+        """
+        self.fit_params = fit_params
+        self.log_barr_pen_param = fit_params['log_barr_pen_param']
+        self.dist_to_half_pen_param = fit_params['dist_to_half_pen_param']
+        self.target_lam_pen_param = fit_params['target_lam_pen_param']
+
         self.model_params_dict = model_params_dict
         self.orig_tree = orig_tree
         self.fitted_bifurc_tree = fitted_bifurc_tree
@@ -36,9 +42,10 @@ class LikelihoodScorerResult:
 
     def get_fit_params(self):
         # TODO: careful -- this isnt a deep copy
-        fit_params = self.model_params_dict.copy()
+        fit_params = copy.deepcopy(self.model_params_dict)
         fit_params["log_barr_pen_param"] = self.log_barr_pen_param
         fit_params["dist_to_half_pen_param"] = self.dist_to_half_pen_param
+        fit_params["target_lam_pen_param"] = self.target_lam_pen_param
         return fit_params
 
     def get_all_target_params(self):
@@ -72,8 +79,6 @@ class LikelihoodScorer(ParallelWorker):
         @param tree: the cell lineage tree topology to fit the likelihood for
         @param bcode_meta: BarcodeMetadata
         @param log_barr: log barrier penalty parameter, i.e. how much to scale the penalty
-        @param dist_to_half_pen_param: penalty parameter for penalizing how far the prob transition matrices
-                                are from having 1/2 on the diagonal
         @param max_iters: maximum number of iterations for MLE
         @param transition_wrap_maker: TransitionWrapperMaker
         @param fit_param_list: a list of dictionaries specifying model parameter initializations as well
@@ -138,11 +143,11 @@ class LikelihoodScorer(ParallelWorker):
         train_history = estimator.fit(
                 log_barr_pen_param=fit_params["log_barr_pen_param"],
                 dist_to_half_pen_param=fit_params["dist_to_half_pen_param"],
+                target_lam_pen_param=fit_params["target_lam_pen_param"],
                 conv_thres=fit_params["conv_thres"] if "conv_thres" in fit_params else conv_thres_default,
                 assessor=self.assessor)
         result = LikelihoodScorerResult(
-            fit_params["log_barr_pen_param"],
-            fit_params["dist_to_half_pen_param"],
+            fit_params,
             res_model.get_vars_as_dict(),
             res_model.topology,
             res_model.get_fitted_bifurcating_tree(),
@@ -163,9 +168,10 @@ class LikelihoodScorer(ParallelWorker):
         @return LikelihoodScorerResult, returns None if all attempts failed
         """
         logging.info(
-                "RUNNING log pen param %f dist to half pen param %f",
+                "RUNNING log pen param %f dist to half pen param %f target lam pen param %f",
                 fit_params["log_barr_pen_param"],
-                fit_params["dist_to_half_pen_param"])
+                fit_params["dist_to_half_pen_param"],
+                fit_params["target_lam_pen_param"])
         results = []
         for i in range(self.max_tries):
             try:

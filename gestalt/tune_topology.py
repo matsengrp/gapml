@@ -67,11 +67,19 @@ def parse_args(args):
         default=0.001,
         help="log barrier parameter on the branch lengths")
     parser.add_argument(
-        '--dist-to-half-pen-params',
+        '--target-lam-pen-params',
         type=str,
         default='1',
         help="""
         Comma-separated string with penalty parameters on the target lambdas.
+        We will tune over the different penalty params given
+        """)
+    parser.add_argument(
+        '--dist-to-half-pen-params',
+        type=str,
+        default='1',
+        help="""
+        Comma-separated string with penalty parameters on the dist-to-half penalty
         We will tune over the different penalty params given
         """)
     parser.add_argument(
@@ -168,6 +176,9 @@ def parse_args(args):
     assert args.log_barr_pen_param >= 0
     args.dist_to_half_pen_params = list(sorted(
         [float(lam) for lam in args.dist_to_half_pen_params.split(",")],
+        reverse=True))
+    args.target_lam_pen_params = list(sorted(
+        [float(lam) for lam in args.target_lam_pen_params.split(",")],
         reverse=True))
 
     create_directory(args.out_model_file)
@@ -450,10 +461,11 @@ def main(args=sys.argv[1:]):
         penalty_tune_result = None
         best_res = None
         if i < args.num_penalty_tune_iters:
-            if len(args.dist_to_half_pen_params) == 1:
+            if len(args.dist_to_half_pen_params) == 1 and len(args.target_lam_pen_params) == 1:
                 # If nothing to tune... do nothing
                 fit_params["log_barr_pen_param"] = args.log_barr_pen_param
                 fit_params["dist_to_half_pen_param"] = args.dist_to_half_pen_params[0]
+                fit_params["target_lam_pen_param"] = args.target_lam_pen_params[0]
             else:
                 # Tune penalty params!
                 logging.info("Iter %d: Tuning penalty params", i)
