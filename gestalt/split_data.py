@@ -19,6 +19,7 @@ class TreeDataSplit:
     """
     def __init__(self,
             tree: CellLineageTree,
+            val_obs: CellLineageTree,
             bcode_meta: BarcodeMetadata,
             node_to_orig_id: Dict[int, int],
             is_kfold_tree: bool = False):
@@ -26,6 +27,7 @@ class TreeDataSplit:
         @param is_kfold_tree: True = we split the tree into subtrees (for the 1 bcode case)
         """
         self.tree = tree
+        self.val_obs = val_obs
         self.bcode_meta = bcode_meta
         self.node_to_orig_id = node_to_orig_id
         self.is_kfold_tree = is_kfold_tree
@@ -56,6 +58,11 @@ def create_kfold_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadata, n_spl
         train_leaf_ids = set()
         for child_idx in fold_indices:
             train_leaf_ids.update([l.node_id for l in children[child_idx]])
+        val_obs = []
+        for leaf in tree:
+            if leaf.node_id not in train_leaf_ids:
+                val_obs.append(leaf.copy())
+                logging.info('val obs %d', leaf.node_id)
 
         train_tree = CellLineageTree.prune_tree(tree, train_leaf_ids)
         logging.info("SAMPLED TREE")
@@ -71,6 +78,7 @@ def create_kfold_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadata, n_spl
 
         all_train_trees.append(TreeDataSplit(
             train_tree,
+            val_obs,
             bcode_meta,
             node_to_orig_id,
             is_kfold_tree=True))

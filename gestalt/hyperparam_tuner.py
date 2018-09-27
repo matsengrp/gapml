@@ -13,14 +13,13 @@ from common import get_randint
 from model_assessor import ModelAssessor
 from clt_likelihood_penalization import mark_target_status_to_penalize
 import ancestral_events_finder as anc_evt_finder
+from optim_settings import KnownModelParams
 
 
 class PenaltyScorerResult:
     def __init__(
             self,
             score: float,
-            log_barr_pen_param: float,
-            dist_to_half_pen_param: float,
             fit_results: List[LikelihoodScorerResult]):
         """
         @param log_barr_pen_param: the log barrier penalty param used when fitting the model
@@ -30,8 +29,6 @@ class PenaltyScorerResult:
         @param score: assumed to be higher the better
         """
         self.score = score
-        self.log_barr_pen_param = log_barr_pen_param
-        self.dist_to_half_pen_param = dist_to_half_pen_param
         self.fit_results = fit_results
 
 
@@ -72,11 +69,11 @@ def tune(
         fit_params: Dict,
         assessor: ModelAssessor):
     """
-    Tunes the `dist_to_half_pen_param` penalty parameter
+    Tunes the `dist_to_half_pen_param`, `target_lam_pen_param` penalty parameters
 
     @return PenaltyTuneResult
     """
-    assert len(args.dist_to_half_pen_params) > 1
+    assert len(args.dist_to_half_pen_params) > 1 or len(args.target_lam_pen_params) > 1
 
     if bcode_meta.num_barcodes > 1:
         # For many barcodes, we split by barcode
@@ -123,6 +120,7 @@ def _tune_hyperparams(
     # First split the barcode into kfold groups
     max_splits = len(tree.get_children()) if bcode_meta.num_barcodes == 1 else bcode_meta.num_barcodes
     n_splits = min(args.num_penalty_tune_splits, max_splits)
+    logging.info("hyperparam tuning %d splits", n_splits)
     all_tree_splits = kfold_fnc(
             tree,
             bcode_meta,
@@ -142,15 +140,17 @@ def _tune_hyperparams(
 
     # First create the initialization/optimization settings
     fit_param_list = []
-    for idx, dist_to_half_pen_param in enumerate(args.dist_to_half_pen_params):
-        if idx == 0:
-            new_fit_params = fit_params.copy()
-        else:
-            new_fit_params = {}
-        new_fit_params["log_barr_pen_param"] = args.log_barr_pen_param
-        new_fit_params["dist_to_half_pen_param"] = dist_to_half_pen_param
-        new_fit_params["conv_thres"] = conv_thres
-        fit_param_list.append(new_fit_params)
+    for dist_to_half_pen_param in args.dist_to_half_pen_params:
+        for target_lam_pen_param in args.target_lam_pen_params:
+            if len(fit_param_list) == 0:
+                new_fit_params = fit_params.copy()
+            else:
+                new_fit_params = {}
+            new_fit_params["log_barr_pen_param"] = args.log_barr_pen_param
+            new_fit_params["dist_to_half_pen_param"] = dist_to_half_pen_param
+            new_fit_params["target_lam_pen_param"] = target_lam_pen_param
+            new_fit_params["conv_thres"] = conv_thres
+            fit_param_list.append(new_fit_params)
 
     # Actually fit the trees using the kfold barcodes
     # TODO: if one of the penalty params fails, then remove it from the subsequent
@@ -181,20 +181,26 @@ def _tune_hyperparams(
     # Now find the best penalty param by finding the most stable one
     # Stability is defined as the least variable target lambda estimates and branch length estimates
     tune_results = []
-    for idx, dist_to_half_pen_param in enumerate(args.dist_to_half_pen_params):
+    for idx, fit_param in enumerate(fit_param_list):
+        dist_to_half_pen_param = fit_param['dist_to_half_pen_param']
+        target_lam_pen_param = fit_param['target_lam_pen_param']
+        logging.info(
+                "PEN PARAM setting %d: dist_to_half_pen_param %f target_lam_pen_param %f",
+                idx,
+                fit_param['dist_to_half_pen_param'],
+                fit_param['target_lam_pen_param'])
         res_folds = [train_res[idx] for train_res in train_results]
         stability_score = stability_score_fnc(res_folds, tree_splits, tree)
 
         # Create our summary of tuning
         tune_result = PenaltyScorerResult(
             stability_score,
-            args.log_barr_pen_param,
-            dist_to_half_pen_param,
             res_folds)
         tune_results.append(tune_result)
         logging.info(
-                "Pen param %f stability score %s",
+                "Pen param dist_to_half %f, target_lam %f, stability score %s",
                 dist_to_half_pen_param,
+                target_lam_pen_param,
                 tune_result.score)
 
     return PenaltyTuneResult(
@@ -263,44 +269,83 @@ def _get_many_bcode_stability_score(
 def _get_one_bcode_stability_score(
         pen_param_results: List[LikelihoodScorerResult],
         tree_splits: List[TreeDataSplit],
-        orig_tree: CellLineageTree):
+        orig_tree: CellLineageTree,
+        max_num_leaves: int = None):
     """
     @param weight: weight on the tree stability score (0 to 1)
     @return stability score -- is the variance of the fitted target lambdas across folds
     """
-    for node in orig_tree.traverse('postorder'):
-        if node.is_leaf():
-            node.add_feature("leaf_ids", [node.node_id])
-        else:
-            node.add_feature("leaf_ids", [
-                leaf_id for c in node.children for leaf_id in c.leaf_ids])
-
     target_param_ests = []
-    tree_param_ests = {leaf.node_id: [] for leaf in orig_tree}
-    tree_param_ests[0] = []
     is_stable = True
+    scratch_dir = "_output/scratch"
+    all_known_params = KnownModelParams(
+            target_lams=True,
+            tot_time=True,
+            indel_params=True)
+    targ_stability_scores = []
     for pen_param_res, tree_split in zip(pen_param_results, tree_splits):
-        if pen_param_res is not None:
-            param_dict = pen_param_res.model_params_dict
-            target_param_ests.append(np.concatenate([
-                param_dict["target_lams"],
-                param_dict["double_cut_weight"],
-                param_dict["trim_long_factor"]]))
-        else:
+        if pen_param_res is None:
             logging.info("had trouble training. very instable")
             is_stable = False
             break
 
+        param_dict = pen_param_res.model_params_dict
+        target_param_ests.append(np.concatenate([
+            param_dict["target_lams"],
+            param_dict["double_cut_weight"],
+            param_dict["trim_long_factor"]]))
+
+        worker_list = []
+        for leaf in tree_split.val_obs:
+            root = CellLineageTree(
+                allele_list=orig_tree.allele_list,
+                allele_events_list=orig_tree.allele_events_list,
+                cell_state=orig_tree.cell_state,
+                dist=0)
+            leaf = CellLineageTree(
+                allele_list=leaf.allele_list,
+                allele_events_list=leaf.allele_events_list,
+                cell_state=leaf.cell_state,
+                dist=1)
+            root.add_feature('node_id', 0)
+            leaf.add_feature('node_id', 1)
+            root.add_child(leaf)
+            transition_wrap_maker = TransitionWrapperMaker(
+                root,
+                tree_split.bcode_meta,
+                100,
+                1000)
+            anc_evt_finder.annotate_ancestral_states(root, tree_split.bcode_meta)
+            mark_target_status_to_penalize(root)
+            fit_params = pen_param_res.get_fit_params()
+            fit_params.pop('branch_len_inners', None)
+            fit_params.pop('branch_len_offsets_proportion', None)
+            scorer = LikelihoodScorer(
+                1, # seed
+                root,
+                tree_split.bcode_meta,
+                max_iters=0,
+                num_inits=1,
+                transition_wrap_maker=transition_wrap_maker,
+                fit_param_list=[fit_params],
+                known_params=all_known_params,
+                scratch_dir=scratch_dir)
+            worker_list.append(scorer)
+        job_manager = SubprocessManager(
+                worker_list,
+                None,
+                scratch_dir,
+                num_processes=10)
+        train_results = [r for r, _ in job_manager.run()]
+        targ_stability_scores.append(np.mean([r[0].log_lik for r in train_results]))
+    targ_stability_score = np.sum(targ_stability_scores)
+    logging.info("all stability scores %s", targ_stability_scores)
+
     if is_stable:
-        mean_target_param_est = sum(np.log(target_param_ests))/len(target_param_ests)
-        targ_stability_score = -np.mean([
-            np.power(np.linalg.norm(np.log(targ_param_est) - mean_target_param_est), 2)
-            for targ_param_est in target_param_ests])
-
-        stability_score = targ_stability_score
-
+        mean_target_param_est = sum(target_param_ests)/len(target_param_ests)
         logging.info("mean targ %s", mean_target_param_est)
         logging.info("stability scores %s", targ_stability_score)
+        stability_score = targ_stability_score
         return stability_score
     else:
         return -np.inf

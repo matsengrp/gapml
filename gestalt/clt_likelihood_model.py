@@ -91,6 +91,7 @@ class CLTLikelihoodModel:
         # Stores the penalty parameters
         self.log_barr_pen_param_ph = tf.placeholder(tf.float64)
         self.dist_to_half_pen_param_ph = tf.placeholder(tf.float64)
+        self.target_lam_pen_param_ph = tf.placeholder(tf.float64)
 
         if branch_len_inners.size == 0:
             branch_len_inners = np.random.rand(self.num_nodes) * 0.3
@@ -135,7 +136,7 @@ class CLTLikelihoodModel:
         self.targ_stat_transition_hazards_dict = {
             start_target_status: {} for start_target_status in self.targ_stat_transitions_dict.keys()}
         # Calculate hazard for transitioning away from all target statuses beforehand. Speeds up future computation.
-        self.hazard_away_dict, self.hazard_cut_targ_dict = self._create_hazard_away_dict()
+        self.hazard_away_dict, self.hazard_cut_targ_dict, self.num_actives_targ_stat_dict = self._create_hazard_away_dict()
 
         if self.topology:
             assert not self.topology.is_leaf()
@@ -586,6 +587,14 @@ class CLTLikelihoodModel:
         @param tot_time: the total height of the tree
         @param chronos_lam: the penalty param to use with chronos
         """
+        num_internal_nodes = 0
+        for node in self.topology.traverse():
+            if not node.is_root() and not node.is_leaf():
+                num_internal_nodes += 1
+
+        if num_internal_nodes == 0:
+            return
+
         tree = self.topology.copy()
 
         is_root_unifurc = len(tree.get_children()) == 1
@@ -714,11 +723,14 @@ class CLTLikelihoodModel:
                 targ_stat: hazard_away_nodes[i]
                 for i, targ_stat in enumerate(target_statuses)}
 
-        hazard_cut_targs = self._create_hazard_cut_target(target_statuses)
+        hazard_cut_targs, num_actives_targ_stat = self._create_hazard_cut_target(target_statuses)
         hazard_cut_targ_dict = {
                 targ_stat: hazard_cut_targs[i]
                 for i, targ_stat in enumerate(target_statuses)}
-        return hazard_away_dict, hazard_cut_targ_dict
+        num_actives_targ_stat_dict = {
+                targ_stat: num_actives_targ_stat[i]
+                for i, targ_stat in enumerate(target_statuses)}
+        return hazard_away_dict, hazard_cut_targ_dict, num_actives_targ_stat_dict
 
     def _create_hazard_away_target_statuses(self, target_statuses: List[TargetStatus]):
         """
@@ -772,19 +784,22 @@ class CLTLikelihoodModel:
                 [(1 - targ_stat.get_binary_status(self.num_targets)).tolist() for targ_stat in target_statuses],
                 dtype=tf.float64)
         active_targ_hazards = self.target_lams * active_masks
+        num_actives = tf.reshape(tf.reduce_sum(active_masks, axis=1), (len(target_statuses), 1))
+        has_active_double = tf_common.greater_equal_float(
+                num_actives,
+                tf.constant(1, dtype=tf.float64))
 
         if self.num_targets == 1:
-            return active_targ_hazards
+            return active_targ_hazards, num_actives
 
         # If more than one target, we need to calculate a lot more things
         # TODO" This is approximate but I think that's fine.
         cut_focal_hazards = (1 + self.trim_long_factor[0]) * active_targ_hazards * (1 + self.trim_long_factor[1])
         reshape_sum = tf.reshape(tf.reduce_sum(active_targ_hazards, axis=1), [len(target_statuses),1])
-        num_actives = tf.reshape(tf.reduce_sum(active_masks, axis=1), [len(target_statuses),1])
         cut_double_hazards = (self.double_cut_weight
                 * (1 + self.trim_long_factor[0]) * (1 + self.trim_long_factor[1])
                 * (num_actives - 1) * reshape_sum)
-        return tf.concat([cut_focal_hazards, cut_double_hazards], axis=1)
+        return tf.concat([cut_focal_hazards, cut_double_hazards], axis=1), num_actives + has_active_double
 
     """
     SECTION: methods for helping to calculate Pr(indel | target target)
@@ -1027,10 +1042,13 @@ class CLTLikelihoodModel:
             self.branch_log_barr = tf.constant(0, dtype=tf.float64)
 
         self.dist_to_half_pen = tf.reduce_mean(tf.stack(self.branch_probs_to_pen_list))
+        log_targ_lams = tf.log(self.target_lams)
+        self.target_lam_pen = tf.reduce_sum(tf.pow(log_targ_lams - tf.reduce_mean(log_targ_lams), 2))
         self.smooth_log_lik = (
                 self.log_lik/self.bcode_meta.num_barcodes
                 + self.log_barr_pen_param_ph * self.branch_log_barr
-                - self.dist_to_half_pen * self.dist_to_half_pen_param_ph)
+                - self.dist_to_half_pen * self.dist_to_half_pen_param_ph
+                - self.target_lam_pen * self.target_lam_pen_param_ph)
 
         if create_gradient:
             logging.info("Computing gradients....")
@@ -1125,6 +1143,7 @@ class CLTLikelihoodModel:
         log_scaling_terms = dict()
         branch_probs_to_pen = []
         # Tree traversal order should be postorder
+        center = tf.constant(0.5, dtype=tf.float64)
         for node in self.topology.traverse("postorder"):
             if node.is_leaf():
                 node_wrapper = transition_wrappers[node.node_id][bcode_idx]
@@ -1141,13 +1160,11 @@ class CLTLikelihoodModel:
                 # (constant penalty if no spine)
                 if spine_len is not None:
                     if not node.is_root():
-                        haz_to_pen = tf.stack(
-                                [self.hazard_cut_targ_dict[targ_stat] for targ_stat in node.pen_targ_stat[bcode_idx]])
+                        haz_to_pen = tf.stack([[self.hazard_away_dict[targ_stat]] for targ_stat in node.pen_targ_stat[bcode_idx]])
                     else:
-                        #haz_to_pen = self.hazard_away_dict[TargetStatus()]
-                        haz_to_pen = self.hazard_cut_targ_dict[TargetStatus()]
+                        haz_to_pen = self.hazard_away_dict[TargetStatus()]
                     branch_probs_to_pen.append(tf.reduce_mean(tf.pow(
-                        tf.exp(-haz_to_pen * spine_len) - tf.constant(0.5, dtype=tf.float64),
+                        tf.exp(-haz_to_pen * spine_len) - center,
                         2)))
 
                 for child in node.children:
@@ -1174,8 +1191,6 @@ class CLTLikelihoodModel:
                         # Only penalize things if there are elements in `spine_children`
                         # Otherwise we should basically ignore this branch lenght penalty
                         if len(child.spine_children):
-                            haz_to_pen = tf.stack(
-                                [self.hazard_cut_targ_dict[targ_stat] for targ_stat in child.pen_targ_stat[bcode_idx]])
                             # For a bifurcating tree, this is where we penalize branches and also groups of branches that were originally
                             # a single spine -- we use the instantaneous transition matrix from the top node and multiply by the entire
                             # spine length
@@ -1183,14 +1198,16 @@ class CLTLikelihoodModel:
                                     tf.gather(
                                         params=self.branch_lens,
                                         indices=child.spine_children))
+                            haz_to_pen = tf.stack([self.hazard_away_dict[targ_stat] for targ_stat in child.pen_targ_stat[bcode_idx]])
+                            prob_aways = tf.exp(-haz_to_pen * spine_len)
                             branch_probs_to_pen.append(tf.reduce_mean(tf.pow(
-                                tf.exp(-haz_to_pen * spine_len) - tf.constant(0.5, dtype=tf.float64),
+                                prob_aways - center,
                                 2)))
                     elif not hasattr(child, "ignore_penalty") or not child.ignore_penalty:
-                        haz_to_pen = tf.stack(
-                                [self.hazard_cut_targ_dict[targ_stat] for targ_stat in child.pen_targ_stat[bcode_idx]])
+                        haz_to_pen = tf.stack([self.hazard_away_dict[targ_stat] for targ_stat in child.pen_targ_stat[bcode_idx]])
+                        prob_aways = tf.exp(-haz_to_pen * self.branch_lens[child.node_id])
                         branch_probs_to_pen.append(tf.reduce_mean(tf.pow(
-                                tf.exp(-haz_to_pen * self.branch_lens[child.node_id]) - tf.constant(0.5, dtype=tf.float64),
+                                prob_aways - center,
                                 2)))
 
                     # Get the probability for the data descended from the child node, assuming that the node

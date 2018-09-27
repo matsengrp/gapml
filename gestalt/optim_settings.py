@@ -1,8 +1,6 @@
-from typing import Dict
 from numpy import ndarray
 import numpy as np
 
-from cell_lineage_tree import CellLineageTree
 
 class KnownModelParams:
     """
