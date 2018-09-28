@@ -103,7 +103,7 @@ class LikelihoodScorer(ParallelWorker):
         self.max_tries = max_try_per_init * num_inits
         self.name = name
 
-    def run_worker(self, shared_obj):
+    def run_worker(self, shared_obj=None):
         """
         @param shared_obj: ignored
         """

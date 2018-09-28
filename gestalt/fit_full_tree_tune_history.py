@@ -13,25 +13,27 @@ from common import assign_rand_tree_lengths
 
 true_file = 'simulation_topol_consist/_output/model_seed%d/%d/small/true_model.pkl'
 obs_file = 'simulation_topol_consist/_output/model_seed%d/%d/small/num_barcodes1/obs_data.pkl'
-out_model = 'simulation_topol_consist/_output/model_seed%d/%d/small/num_barcodes1/tune_fitted_warm_pretun.pkl'
+out_model = 'simulation_topol_consist/_output/model_seed%d/%d/small/num_barcodes1/sum_states_%d/extra_steps_%d/tune_fitted_test.pkl'
 topo_template = 'simulation_topol_consist/_output/model_seed%d/%d/small/num_barcodes1/tune_ll_step%d.pkl'
 init_template = 'simulation_topol_consist/_output/model_seed%d/%d/small/num_barcodes1/tune_ll_step_init%d.pkl'
 out_template = 'simulation_topol_consist/_output/model_seed%d/%d/small/num_barcodes1/tune_ll_step%d_out.pkl'
 log_template = 'simulation_topol_consist/_output/model_seed%d/%d/small/num_barcodes1/tune_ll_step%d.txt'
 scratch_template = '_output/scratch%d'
 
-model_seed = 2
-seed = 3
+model_seed = 3
+seed = 4
+extra_steps = 1
+sum_states = 30
 tot_height = 1
 
-new_log_file = "simulation_topol_consist/_output/model_seed%d/%d/small/num_barcodes1/tune_ll_warm.txt" % (model_seed, seed)
+new_log_file = "simulation_topol_consist/_output/model_seed%d/%d/small/num_barcodes1/sum_states_%d/extra_steps_%d/tune_ll_test.txt" % (model_seed, seed, sum_states, extra_steps)
 #new_log_file = "_output/test.txt"
-out_model = out_model % (model_seed, seed)
+out_model = out_model % (model_seed, seed, sum_states, extra_steps)
 obs_file = obs_file % (model_seed, seed)
 true_file = true_file % (model_seed, seed)
 
 with open(out_model, 'rb') as f:
-    tune_hist = six.moves.cPickle.load(f)#['tuning_history']
+    tune_hist = six.moves.cPickle.load(f)['tuning_history']
     print("number of iters", len(tune_hist))
 
 for idx, tune_step in enumerate(tune_hist):
@@ -62,6 +64,8 @@ for idx, tune_step in enumerate(tune_hist):
     print("num nodes", num_nodes)
 
     print(best_fit_res.orig_tree.get_ascii(attributes=['nochad_id']))
+    print(best_fit_res.orig_tree.get_ascii(attributes=['old_id']))
+    print(best_fit_res.orig_tree.get_ascii(attributes=['node_id']))
     branch_len_inners_new = np.zeros(num_nodes)
     branch_len_offsets_new = np.ones(num_nodes) * 0.4 + np.random.rand(num_nodes) * 0.1
     for node in tree.traverse('preorder'):
@@ -73,13 +77,15 @@ for idx, tune_step in enumerate(tune_hist):
         if node.old_id is None or node.old_id not in nochad_to_node_id:
             if node.is_leaf():
                 branch_len_inners_new[node.node_id] = 1e-10
+                print("assigning leaf", node.node_id, 1e-10)
             else:
                 remain_height = tot_height - dist_to_root[nochad_to_node_id[node.up.old_id]]
                 assign_rand_tree_lengths(node, remain_height * 0.9)
                 branch_len_inners_new[node.node_id] = remain_height * 0.1
+                print("assigning intern", node.node_id, remain_height * 0.1)
                 for child_node in node.get_descendants():
                     branch_len_inners_new[child_node.node_id] = child_node.dist
-                    print("assigning", child_node.dist)
+                    print("assigning desc", child_node.node_id, child_node.dist)
             break
     print(branch_len_inners_new)
     assert np.all(branch_len_inners_new[1:] > 0)
@@ -113,7 +119,7 @@ for idx, tune_step in enumerate(tune_hist):
         '--log-barr',
         0.000000001,
         '--dist-to-half-pen-params',
-        3000,
+        500,
         '--num-penalty-tune-iters',
         1,
         '--num-penalty-tune-splits',
@@ -123,9 +129,9 @@ for idx, tune_step in enumerate(tune_hist):
         '--max-chad-tune-search',
         0,
         '--max-sum-states',
-        1000,
+        sum_states,
         '--max-extra-steps',
-        2,
+        extra_steps,
         '--max-iters',
         10000,
         '--num-inits',

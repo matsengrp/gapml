@@ -107,7 +107,7 @@ def _tune_hyperparams(
         kfold_fnc,
         stability_score_fnc,
         assessor: ModelAssessor = None,
-        conv_thres: float = 5 * 1e-7):
+        conv_thres: float = 1e-5):
     """
     @param max_num_chad_parents: max number of chad parents to consider
     @param conv_thres: the convergence threshold for training the model
@@ -278,11 +278,8 @@ def _get_one_bcode_stability_score(
     target_param_ests = []
     is_stable = True
     scratch_dir = "_output/scratch"
-    all_known_params = KnownModelParams(
-            target_lams=True,
-            tot_time=True,
-            indel_params=True)
     targ_stability_scores = []
+    worker_list = []
     for pen_param_res, tree_split in zip(pen_param_results, tree_splits):
         if pen_param_res is None:
             logging.info("had trouble training. very instable")
@@ -295,49 +292,95 @@ def _get_one_bcode_stability_score(
             param_dict["double_cut_weight"],
             param_dict["trim_long_factor"]]))
 
-        worker_list = []
-        for leaf in tree_split.val_obs:
-            root = CellLineageTree(
-                allele_list=orig_tree.allele_list,
-                allele_events_list=orig_tree.allele_events_list,
-                cell_state=orig_tree.cell_state,
-                dist=0)
-            leaf = CellLineageTree(
-                allele_list=leaf.allele_list,
-                allele_events_list=leaf.allele_events_list,
-                cell_state=leaf.cell_state,
-                dist=1)
-            root.add_feature('node_id', 0)
-            leaf.add_feature('node_id', 1)
-            root.add_child(leaf)
-            transition_wrap_maker = TransitionWrapperMaker(
-                root,
-                tree_split.bcode_meta,
-                100,
-                1000)
-            anc_evt_finder.annotate_ancestral_states(root, tree_split.bcode_meta)
-            mark_target_status_to_penalize(root)
-            fit_params = pen_param_res.get_fit_params()
-            fit_params.pop('branch_len_inners', None)
-            fit_params.pop('branch_len_offsets_proportion', None)
-            scorer = LikelihoodScorer(
-                1, # seed
-                root,
-                tree_split.bcode_meta,
-                max_iters=0,
-                num_inits=1,
-                transition_wrap_maker=transition_wrap_maker,
-                fit_param_list=[fit_params],
-                known_params=all_known_params,
-                scratch_dir=scratch_dir)
-            worker_list.append(scorer)
-        job_manager = SubprocessManager(
-                worker_list,
-                None,
-                scratch_dir,
-                num_processes=10)
-        train_results = [r for r, _ in job_manager.run()]
-        targ_stability_scores.append(np.mean([r[0].log_lik for r in train_results]))
+        #train_val_tree = CellLineageTree(
+        #    allele_list=orig_tree.allele_list,
+        #    allele_events_list=orig_tree.allele_events_list,
+        #    cell_state=orig_tree.cell_state)
+        #for leaf_idx, (orig_leaf, leaf_par_id) in enumerate(tree_split.val_obs):
+        #    train_val_tree.add_child(orig_leaf.copy())
+        #num_nodes = train_val_tree.label_node_ids()
+        #print(train_val_tree)
+        #train_val_tree.add_feature("resolved_multifurcation", True)
+        #fit_params = pen_param_res.get_fit_params()
+        ##new_br_inners_mask = np.zeros(num_nodes, dtype=bool)
+        ##new_br_inners_mask[:num_nodes] = True
+        ##new_br_offsets_mask = np.zeros(num_nodes, dtype=bool)
+        ##new_br_offsets_mask[:num_nodes] = True
+        #new_br_inners = np.ones(num_nodes) * 1e-10
+        #new_br_offsets = np.ones(num_nodes) * 1e-10
+        #all_known_params = KnownModelParams(
+        #        target_lams=True,
+        #        tot_time=True,
+        #        indel_params=True)
+
+
+        num_nodes = tree_split.tree.get_num_nodes()
+        num_val_nodes = len(tree_split.val_obs)
+        fit_params = pen_param_res.get_fit_params()
+        new_br_inners_mask = np.zeros(num_nodes + num_val_nodes, dtype=bool)
+        new_br_inners_mask[:num_nodes] = True
+        new_br_offsets_mask = np.zeros(num_nodes + num_val_nodes, dtype=bool)
+        new_br_offsets_mask[:num_nodes] = True
+        new_br_inners = np.ones(num_nodes + num_val_nodes) * 1e-10
+        new_br_inners[:num_nodes] = fit_params['branch_len_inners']
+        new_br_offsets = np.ones(num_nodes + num_val_nodes) * 0.1
+        new_br_offsets[:num_nodes] = fit_params['branch_len_offsets_proportion']
+        train_val_tree = tree_split.tree.copy()
+        for node in train_val_tree.traverse():
+            if len(node.get_children()) == 2:
+                node.resolved_multifurcation = True
+        for leaf_idx, (orig_leaf, leaf_par_id) in enumerate(tree_split.val_obs):
+            leaf = orig_leaf.copy()
+            leaf.add_feature("node_id", leaf_idx + num_nodes)
+            parent_node = train_val_tree.search_nodes(orig_node_id=leaf_par_id)[0]
+            parent_node.add_child(leaf)
+        all_known_params = KnownModelParams(
+                target_lams=True,
+                tot_time=True,
+                indel_params=True,
+                branch_lens=True,
+                branch_len_inners=new_br_inners_mask,
+                branch_len_offsets_proportion=new_br_offsets_mask)
+        fit_params['branch_len_inners'] = new_br_inners
+        fit_params['branch_len_offsets_proportion'] = new_br_offsets
+        fit_params['dist_to_half_pen_param'] = 0
+
+        anc_evt_finder.annotate_ancestral_states(train_val_tree, tree_split.bcode_meta)
+        mark_target_status_to_penalize(train_val_tree)
+        transition_wrap_maker = TransitionWrapperMaker(
+            train_val_tree,
+            tree_split.bcode_meta,
+            100,
+            1000)
+        scorer = LikelihoodScorer(
+            1, # seed
+            train_val_tree,
+            tree_split.bcode_meta,
+            max_iters=0, #50000,
+            num_inits=1,
+            transition_wrap_maker=transition_wrap_maker,
+            fit_param_list=[fit_params],
+            known_params=all_known_params,
+            scratch_dir=scratch_dir)
+        worker_list.append(scorer)
+
+    job_manager = SubprocessManager(
+            worker_list,
+            None,
+            "_output/scratch",
+            10)
+    worker_results = [w[0][0] for w in job_manager.run()]
+    #targ_stability_scores = [
+    #        res.log_lik/len(tree_split.val_obs)
+    #        for res, tree_split in zip(
+    #            worker_results,
+    #            tree_splits)]
+    targ_stability_scores = [
+            res.log_lik - pen_param_res.log_lik
+            for res, pen_param_res in zip(
+                worker_results,
+                pen_param_results)]
+
     targ_stability_score = np.sum(targ_stability_scores)
     logging.info("all stability scores %s", targ_stability_scores)
 

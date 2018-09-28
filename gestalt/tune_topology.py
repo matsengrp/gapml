@@ -295,6 +295,7 @@ def fit_multifurc_tree(
     ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
     mark_target_status_to_penalize(tree)
     if 'branch_len_inners' in param_dict:
+        print("PRONIG")
         # If branch length estimates are provided and we have the mapping between
         # the full_tree nodes and the nodes in the no_chad tree, then we should do warm-start.
         full_tree_br_inners = param_dict['branch_len_inners']
@@ -446,6 +447,8 @@ def main(args=sys.argv[1:]):
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))
     logging.info(tree.get_ascii(attributes=["node_id"]))
     logging.info(tree.get_ascii(attributes=["abundance"]))
+    for leaf in tree:
+        assert leaf.abundance >= 1
 
     for node in tree.traverse():
         assert node.node_id is not None

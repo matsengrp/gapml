@@ -81,7 +81,8 @@ class CLTPenalizedEstimator(CLTEstimator):
             [
                 self.model.smooth_log_lik,
                 self.model.log_lik,
-                self.model.dist_to_half_pen,
+                #self.model.dist_to_half_pen,
+                self.model.branch_log_barr,
                 self.model.dist_to_root,
                 self.model.target_lam_pen,
             ],
@@ -89,7 +90,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         var_dict = self.model.get_vars_as_dict()
 
         logging.info(
-                "initial penalized log lik %f, unpen log lik %f, dist to half pen %f, lambda pen %f",
+                "initial penalized log lik %f, unpen log lik %f, branch pen %f, lambda pen %f",
                 pen_log_lik, log_lik, dist_to_half_pen, target_lam_pen)
         assert not np.isnan(pen_log_lik)
         train_history = [{
@@ -117,7 +118,8 @@ class CLTPenalizedEstimator(CLTEstimator):
                         self.model.adam_train_op,
                         self.model.smooth_log_lik,
                         self.model.log_lik,
-                        self.model.dist_to_half_pen,
+                        #self.model.dist_to_half_pen,
+                        self.model.branch_log_barr,
                         self.model.target_lam_pen,
                         self.model.dist_to_root],
                     feed_dict=feed_dict)
@@ -132,7 +134,7 @@ class CLTPenalizedEstimator(CLTEstimator):
             }
             if i % print_iter == (print_iter - 1):
                 logging.info(
-                    "iter %d pen log lik %f log lik %f dist-to-half pen %f, lambda pen %f",
+                    "iter %d pen log lik %f log lik %f branch pen %f, lambda pen %f",
                     i, pen_log_lik, log_lik, dist_to_half_pen, target_lam_pen)
 
             if np.isnan(pen_log_lik):
@@ -145,6 +147,7 @@ class CLTPenalizedEstimator(CLTEstimator):
                 logging.info("iter %d, train time %f", i, time.time() - st_time)
                 if assessor is not None:
                     bifurc_tree = self.model.get_fitted_bifurcating_tree()
+                    logging.info(bifurc_tree.get_ascii(attributes=["dist"]))
                     performance_dict = assessor.assess(var_dict, bifurc_tree)
                     logging.info("iter %d assess: %s", i, performance_dict)
                     iter_info["performance"] = performance_dict

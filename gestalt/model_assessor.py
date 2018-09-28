@@ -17,9 +17,9 @@ class ModelAssessor:
         """
         Assesses the tree branch length/topology and the model parameter estimates
         """
-        for node in ref_tree:
-            node.set_allele_list(node.allele_list.create_truncated_version(n_bcodes))
-            node.sync_allele_events_list_str()
+        for leaf in ref_tree:
+            leaf.set_allele_list(leaf.allele_list.create_truncated_version(n_bcodes))
+            leaf.sync_allele_events_list_str()
 
         self.ref_tree = ref_tree
         self.ref_param_dict = ref_param_dict
@@ -42,6 +42,7 @@ class ModelAssessor:
         for leaf in self.ref_tree:
             if leaf.allele_events_list_str in other_tree_leaf_strs:
                 keep_leaf_ids.add(leaf.node_id)
+
         ref_tree_pruned = CellLineageTree.prune_tree(self.ref_tree, keep_leaf_ids)
 
         tree_assessor = TreeDistanceMeasurerAgg.create_single_abundance_measurer(
