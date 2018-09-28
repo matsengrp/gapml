@@ -1034,10 +1034,14 @@ class CLTLikelihoodModel:
         # Only penalizing leaves because that is the only thing that can possibly be nonpositive
         # in this parameterization
         if self.known_params.tot_time:
-            branch_lens_to_penalize = tf.gather(
-                self.branch_lens,
-                indices=[node.node_id for node in self.topology.traverse() if not node.is_root()])
-            self.branch_log_barr = tf.reduce_mean(tf.log(branch_lens_to_penalize))
+            #branch_lens_to_penalize = tf.gather(
+            #    self.branch_lens,
+            #    indices=[node.node_id for node in self.topology.traverse() if not node.is_root()])
+            #log_br = tf.log(branch_lens_to_penalize)
+            log_br = tf.log(self.branch_lens_to_pen)
+            self.branch_log_barr = tf.reduce_mean(tf.pow(
+                log_br - tf.reduce_mean(log_br),
+                2))
         else:
             self.branch_log_barr = tf.constant(0, dtype=tf.float64)
 
@@ -1046,8 +1050,8 @@ class CLTLikelihoodModel:
         self.target_lam_pen = tf.reduce_sum(tf.pow(log_targ_lams - tf.reduce_mean(log_targ_lams), 2))
         self.smooth_log_lik = (
                 self.log_lik/self.bcode_meta.num_barcodes
-                + self.log_barr_pen_param_ph * self.branch_log_barr
-                - self.dist_to_half_pen * self.dist_to_half_pen_param_ph
+                - self.dist_to_half_pen_param_ph * self.branch_log_barr #self.log_barr_pen_param_ph *
+                #- self.dist_to_half_pen * self.dist_to_half_pen_param_ph
                 - self.target_lam_pen * self.target_lam_pen_param_ph)
 
         if create_gradient:
@@ -1142,6 +1146,7 @@ class CLTLikelihoodModel:
         # Store all the scaling terms addressing numerical underflow
         log_scaling_terms = dict()
         branch_probs_to_pen = []
+        branch_lens_to_pen = []
         # Tree traversal order should be postorder
         center = tf.constant(0.5, dtype=tf.float64)
         for node in self.topology.traverse("postorder"):
@@ -1163,6 +1168,7 @@ class CLTLikelihoodModel:
                         haz_to_pen = tf.stack([[self.hazard_away_dict[targ_stat]] for targ_stat in node.pen_targ_stat[bcode_idx]])
                     else:
                         haz_to_pen = self.hazard_away_dict[TargetStatus()]
+                    branch_lens_to_pen.append(spine_len)
                     branch_probs_to_pen.append(tf.reduce_mean(tf.pow(
                         tf.exp(-haz_to_pen * spine_len) - center,
                         2)))
@@ -1200,12 +1206,14 @@ class CLTLikelihoodModel:
                                         indices=child.spine_children))
                             haz_to_pen = tf.stack([self.hazard_away_dict[targ_stat] for targ_stat in child.pen_targ_stat[bcode_idx]])
                             prob_aways = tf.exp(-haz_to_pen * spine_len)
+                            branch_lens_to_pen.append(spine_len)
                             branch_probs_to_pen.append(tf.reduce_mean(tf.pow(
                                 prob_aways - center,
                                 2)))
                     elif not hasattr(child, "ignore_penalty") or not child.ignore_penalty:
                         haz_to_pen = tf.stack([self.hazard_away_dict[targ_stat] for targ_stat in child.pen_targ_stat[bcode_idx]])
                         prob_aways = tf.exp(-haz_to_pen * self.branch_lens[child.node_id])
+                        branch_lens_to_pen.append(self.branch_lens[child.node_id])
                         branch_probs_to_pen.append(tf.reduce_mean(tf.pow(
                                 prob_aways - center,
                                 2)))
@@ -1261,6 +1269,7 @@ class CLTLikelihoodModel:
         self.down_probs_dict = down_probs_dict
         self.pt_matrix = pt_matrix
         self.trans_mats = trans_mats
+        self.branch_lens_to_pen = branch_lens_to_pen
         return log_lik_alleles, Ddiags, branch_probs_to_pen
 
     @profile

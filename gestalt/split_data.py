@@ -2,7 +2,7 @@
 Helper code for splitting trees into training and validation sets
 This is our version of k-fold CV for trees
 """
-from typing import Dict
+from typing import Dict, List
 import numpy as np
 from numpy import ndarray
 import logging
@@ -19,7 +19,7 @@ class TreeDataSplit:
     """
     def __init__(self,
             tree: CellLineageTree,
-            val_obs: CellLineageTree,
+            val_obs: List[CellLineageTree],
             bcode_meta: BarcodeMetadata,
             node_to_orig_id: Dict[int, int],
             is_kfold_tree: bool = False):
@@ -47,24 +47,52 @@ def create_kfold_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadata, n_spl
 
     # Assign by splitting on children of root node -- perform k-fold cv
     # This decreases the correlation between training sets
-    children = tree.get_children()
-    children_indices = [c.node_id for c in children]
-    logging.info("Splitting tree into %d, total %d children", n_splits, len(children))
+    #children = tree.get_children()
+    #children_indices = [c.node_id for c in children]
+    #logging.info("Splitting tree into %d, total %d children", n_splits, len(children))
+    leaves = [leaf for leaf in tree]
+    leaf_indices = [c.node_id for c in leaves]
+    logging.info("Splitting tree into %d, total %d children", n_splits, len(leaves))
 
     kf = KFold(n_splits=n_splits, shuffle=True)
     all_train_trees = []
-    for fold_indices, _ in kf.split(children_indices):
+    #for fold_indices, _ in kf.split(children_indices):
+    for fold_indices, _ in kf.split(leaf_indices):
+        print("split")
+        tree_copy = tree.copy()
         # Now actually assign the leaf nodes appropriately
-        train_leaf_ids = set()
-        for child_idx in fold_indices:
-            train_leaf_ids.update([l.node_id for l in children[child_idx]])
-        val_obs = []
-        for leaf in tree:
-            if leaf.node_id not in train_leaf_ids:
-                val_obs.append(leaf.copy())
-                logging.info('val obs %d', leaf.node_id)
+        #train_leaf_ids = set()
+        #for child_idx in fold_indices:
+        #    train_leaf_ids.update([l.node_id for l in children[child_idx]])
+        print(len(fold_indices), fold_indices)
+        train_leaf_ids = set([leaf_indices[idx] for idx in fold_indices])
 
-        train_tree = CellLineageTree.prune_tree(tree, train_leaf_ids)
+        #val_obs = []
+        #for leaf in tree_copy:
+        #    if leaf.node_id not in train_leaf_ids:
+        #        val_obs.append((
+        #            leaf.copy(),
+        #            leaf.up.node_id))
+        #        logging.info('val obs %d', leaf.node_id)
+        #        print("leaf id", leaf.node_id, "parent node id", leaf.up.node_id)
+
+        val_obs = []
+        parent_used = set()
+        for leaf in tree_copy:
+            if leaf.node_id not in train_leaf_ids and len(leaf.up.get_children()) > 3 and leaf.up.node_id not in parent_used:
+                if not leaf.up.is_root():
+                    parent_used.add(leaf.up.node_id)
+                val_obs.append((
+                    leaf.copy(),
+                    leaf.up.node_id))
+                logging.info('val obs %d', leaf.node_id)
+                print("leaf id", leaf.node_id, "parent node id", leaf.up.node_id)
+                leaf.detach()
+            else:
+                train_leaf_ids.add(leaf.node_id)
+
+        train_tree = CellLineageTree.prune_tree(tree_copy, train_leaf_ids)
+        logging.info("before")
         logging.info("SAMPLED TREE")
         logging.info(train_tree.get_ascii(attributes=["node_id"], show_internal=True))
 
