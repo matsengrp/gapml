@@ -539,7 +539,7 @@ class InternalCorrMeasurer(MRCADistanceMeasurer):
         node_val = []
         for node in internal_nodes:
             leaf_idxs = np.array([self.leaf_dict[getattr(leaf, self.attr)] for leaf in node])
-            node_dist = np.max(tree_mrca_matrix[leaf_idxs, leaf_idxs])
+            node_dist = np.max(tree_mrca_matrix[leaf_idxs][:, leaf_idxs])
             node_val.append(node_dist)
         return internal_nodes, node_val
 
@@ -547,7 +547,7 @@ class InternalCorrMeasurer(MRCADistanceMeasurer):
         node_val = []
         for node in internal_nodes:
             leaf_idxs = np.array([self.leaf_dict[getattr(leaf, self.attr)] for leaf in node])
-            node_dist = np.max(tree_mrca_matrix[leaf_idxs, leaf_idxs])
+            node_dist = np.max(tree_mrca_matrix[leaf_idxs][:, leaf_idxs])
             node_val.append(node_dist)
         return node_val
 

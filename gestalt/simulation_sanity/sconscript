@@ -40,7 +40,8 @@ def generate(env, outdir, c):
     cmd = [
         'python generate_data.py',
         "--is-%s" % c['setting'].replace("_", "-") if c['setting'] != 'none' else '',
-        '--sampling 1',
+        '--sampling',
+        1,
         '--model-seed',
         c['seed'],
         '--data-seed',
@@ -55,6 +56,7 @@ def generate(env, outdir, c):
         '--time 1',
         '--num-barcodes',
         1,
+        '--birth-sync-time 0.2',
         '--birth-decay -8',
         '--birth-min 1',
         '--min-uniq-alleles',
