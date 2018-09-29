@@ -32,28 +32,28 @@ GROWTH_DICT = {
     #    "max_leaves": 120,
     #},
     "small": {
-        "sampling_rate": 0.05,
+        "sampling_rate": 0.08,
         "birth_sync_rounds": 5,
-        "birth_sync_time": 0.034,
+        "birth_sync_time": 0.035,
         "death_lambda": 0.2,
         "birth_decay": -9,
         "birth_min": 3,
         "lambda_sequence": [.8, .75, .7, .65, .6, .55, .5],
-        "double": 0.04,
-        "min_leaves": 50,
-        "max_leaves": 130,
+        "double": 0.03,
+        "min_leaves": 90,
+        "max_leaves": 200,
     },
 }
 
 nest.add(
     'model_seed',
-    [4],
+    [5],
     label_func=lambda c: 'model_seed%d' % c,
 )
 
 nest.add(
     'seed',
-    [4],
+    [12],
 )
 
 nest.add(
@@ -208,8 +208,9 @@ nest.add(
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
     if c['num_barcodes'] == 1:
-        penalty_params = "20,2"
-        #penalty_params = "400"
+        #penalty_params = "100,25,6,2"
+        #target_lam_penalty_params = "10,0.1"
+        penalty_params = "25"
         target_lam_penalty_params = "10"
     elif c['num_barcodes'] == 3:
         penalty_params = "800,400,200,100"
@@ -251,7 +252,7 @@ def run_MLE(env, outdir, c):
         '--tot-time-known',
         '--num-processes 5',
         '--num-init-random-rearrange',
-        10, #NUM_RANDOM_REARRANGE,
+        NUM_RANDOM_REARRANGE,
         '--count-chads',
         '--scratch-dir',
         #'_output/scratch',

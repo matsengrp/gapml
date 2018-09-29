@@ -118,8 +118,7 @@ def _tune_hyperparams(
                 being tuned
     """
     # First split the barcode into kfold groups
-    max_splits = len(tree.get_children()) if bcode_meta.num_barcodes == 1 else bcode_meta.num_barcodes
-    n_splits = min(args.num_penalty_tune_splits, max_splits)
+    n_splits = args.num_penalty_tune_splits if bcode_meta.num_barcodes == 1 else min(args.num_penalty_tune_splits, bcode_meta.num_barcodes)
     logging.info("hyperparam tuning %d splits", n_splits)
     all_tree_splits = kfold_fnc(
             tree,

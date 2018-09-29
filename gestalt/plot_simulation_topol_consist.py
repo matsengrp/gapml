@@ -1,15 +1,17 @@
 import numpy as np
+import six
 import matplotlib
 matplotlib.use('Agg')
 
 import plot_simulation_common
 import file_readers
 from tree_distance import BHVDistanceMeasurer
+from tree_distance import TreeDistanceMeasurerAgg
 
 np.random.seed(0)
 
-model_seed = 3
-seeds = [4]
+model_seed = 4
+seeds = [10]
 num_barcodes = [1]
 prefix = ""
 growth_stage = "small"
@@ -18,7 +20,7 @@ do_plots = True
 sum_states = 30
 extra_steps = 1
 
-TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/%s/num_barcodes%d/sum_states_%d/extra_steps_%d/tune_fitted.pkl"
+TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/%s/num_barcodes%d/sum_states_%d/extra_steps_%d/tune_fitted_pretun.pkl"
 RAND_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/%s/num_barcodes%d/parsimony_tree0.pkl"
 TRUE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/%s/true_model.pkl"
 OUT_TRUE_TREE_PLOT = "/Users/jeanfeng/Desktop/true_tree.png"
@@ -27,11 +29,18 @@ OUT_NODE_PLOT = "/Users/jeanfeng/Desktop/node_heights.png"
 
 def get_true_model(seed, n_bcodes, _):
     file_name = TRUE_TEMPLATE % (prefix, model_seed, seed, growth_stage)
-    model_params, assessor = file_readers.read_true_model(
-            file_name,
-            n_bcodes,
-            measurer_classes=[BHVDistanceMeasurer])
-    return model_params, assessor.ref_tree
+    with open(file_name, "rb") as f:
+        true_model = six.moves.cPickle.load(f)
+    model_params = true_model["true_model_params"]
+    ref_tree = true_model["true_subtree"]
+    for leaf in ref_tree:
+        leaf.set_allele_list(leaf.allele_list.create_truncated_version(n_bcodes))
+        leaf.sync_allele_events_list_str()
+    single_measurer = TreeDistanceMeasurerAgg.create_single_abundance_measurer(
+            ref_tree,
+            measurer_classes=[BHVDistanceMeasurer],
+            scratch_dir="_output/scratch")
+    return model_params, single_measurer.ref_tree
 
 def get_result(seed, n_bcodes, _):
     res_file = TEMPLATE % (prefix, model_seed, seed, growth_stage, n_bcodes, sum_states, extra_steps)
