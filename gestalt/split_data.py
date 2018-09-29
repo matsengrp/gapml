@@ -6,6 +6,7 @@ from typing import Dict, List
 import numpy as np
 from numpy import ndarray
 import logging
+import random
 
 from sklearn.model_selection import KFold
 
@@ -32,7 +33,6 @@ class TreeDataSplit:
         self.node_to_orig_id = node_to_orig_id
         self.is_kfold_tree = is_kfold_tree
 
-
 def create_kfold_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadata, n_splits: int):
     """
     Take a tree and create k-fold datasets based on children of the root node
@@ -43,52 +43,31 @@ def create_kfold_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadata, n_spl
 
     @return List[TreeDataSplit] corresponding to each fold
     """
-    assert len(tree.get_children()) > 1 and n_splits >= 2
-
-    # Assign by splitting on children of root node -- perform k-fold cv
-    # This decreases the correlation between training sets
-    #children = tree.get_children()
-    #children_indices = [c.node_id for c in children]
-    #logging.info("Splitting tree into %d, total %d children", n_splits, len(children))
-    leaves = [leaf for leaf in tree]
-    leaf_indices = [c.node_id for c in leaves]
-    logging.info("Splitting tree into %d, total %d children", n_splits, len(leaves))
-
-    kf = KFold(n_splits=n_splits, shuffle=True)
     all_train_trees = []
-    #for fold_indices, _ in kf.split(children_indices):
-    for fold_indices, _ in kf.split(leaf_indices):
+    for i in range(n_splits):
         print("split")
         tree_copy = tree.copy()
-        # Now actually assign the leaf nodes appropriately
-        #train_leaf_ids = set()
-        #for child_idx in fold_indices:
-        #    train_leaf_ids.update([l.node_id for l in children[child_idx]])
-        print(len(fold_indices), fold_indices)
-        train_leaf_ids = set([leaf_indices[idx] for idx in fold_indices])
-
-        #val_obs = []
-        #for leaf in tree_copy:
-        #    if leaf.node_id not in train_leaf_ids:
-        #        val_obs.append((
-        #            leaf.copy(),
-        #            leaf.up.node_id))
-        #        logging.info('val obs %d', leaf.node_id)
-        #        print("leaf id", leaf.node_id, "parent node id", leaf.up.node_id)
 
         val_obs = []
-        parent_used = set()
+        for node in tree_copy.traverse():
+            if node.is_leaf():
+                continue
+
+            if len(node.get_children()) <= 3:
+                continue
+
+            leaf_children = [c for c in node.get_children() if c.is_leaf()]
+            leaf = random.choice(leaf_children)
+            val_obs.append((
+                leaf.copy(),
+                leaf.up.node_id))
+            logging.info('val obs %d', leaf.node_id)
+            print("leaf id", leaf.node_id, "parent node id", leaf.up.node_id)
+
+        val_obs_ids = set([n.node_id for n, _ in val_obs])
+        train_leaf_ids = set()
         for leaf in tree_copy:
-            if leaf.node_id not in train_leaf_ids and len(leaf.up.get_children()) > 3 and leaf.up.node_id not in parent_used:
-                if not leaf.up.is_root():
-                    parent_used.add(leaf.up.node_id)
-                val_obs.append((
-                    leaf.copy(),
-                    leaf.up.node_id))
-                logging.info('val obs %d', leaf.node_id)
-                print("leaf id", leaf.node_id, "parent node id", leaf.up.node_id)
-                leaf.detach()
-            else:
+            if leaf.node_id not in val_obs_ids:
                 train_leaf_ids.add(leaf.node_id)
 
         train_tree = CellLineageTree.prune_tree(tree_copy, train_leaf_ids)
@@ -113,6 +92,7 @@ def create_kfold_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadata, n_spl
 
     return all_train_trees
 
+
 def create_kfold_barcode_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadata, n_splits: int):
     """
     Take a tree and create k-fold datasets by splitting on the independent barcodes.
@@ -122,6 +102,7 @@ def create_kfold_barcode_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadat
 
     @return List[TreeDataSplit] corresponding to each fold
     """
+    raise NotImplementedError("not yet. doesnt calc Pr(V|T)")
     # Assign by splitting on children of root node -- perform k-fold cv
     # This decreases the correlation between training sets
     logging.info("Splitting barcode into %d splits", n_splits)

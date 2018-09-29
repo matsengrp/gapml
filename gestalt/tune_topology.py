@@ -446,6 +446,7 @@ def main(args=sys.argv[1:]):
     logging.info("STARTING for reals!")
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))
     logging.info(tree.get_ascii(attributes=["node_id"]))
+    logging.info("Abudance...")
     logging.info(tree.get_ascii(attributes=["abundance"]))
     for leaf in tree:
         assert leaf.abundance >= 1

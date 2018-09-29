@@ -11,6 +11,7 @@ import seaborn as sns
 from tree_distance import *
 from cell_lineage_tree import CellLineageTree
 from common import assign_rand_tree_lengths
+from tree_distance import TreeDistanceMeasurerAgg
 #from plot_mrca_matrices import plot_tree
 
 def get_result(res_file):
@@ -18,10 +19,11 @@ def get_result(res_file):
     Read fitted model
     """
     with open(res_file, "rb") as f:
-        result = six.moves.cPickle.load(f)[-1]["chad_tune_result"]
+        result = six.moves.cPickle.load(f)["final_fit"]
 
     # Create appropriate number of leaves to match abundance
-    leaved_bifurc_tree = _get_leaved_result(result.fitted_bifurc_tree)
+    leaved_bifurc_tree = TreeDistanceMeasurerAgg.create_single_abundance_tree(
+            result.fitted_bifurc_tree)
     return (result.model_params_dict, leaved_bifurc_tree, result.fitted_bifurc_tree)
 
 def get_rand_tree(res_file):
