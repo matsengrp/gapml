@@ -75,11 +75,11 @@ def parse_args(args):
         We will tune over the different penalty params given
         """)
     parser.add_argument(
-        '--dist-to-half-pen-params',
+        '--branch-pen-params',
         type=str,
         default='1',
         help="""
-        Comma-separated string with penalty parameters on the dist-to-half penalty
+        Comma-separated string with penalty parameters on the branch penalty
         We will tune over the different penalty params given
         """)
     parser.add_argument(
@@ -174,8 +174,8 @@ def parse_args(args):
     args = parser.parse_args(args)
 
     assert args.log_barr_pen_param >= 0
-    args.dist_to_half_pen_params = list(sorted(
-        [float(lam) for lam in args.dist_to_half_pen_params.split(",")],
+    args.branch_pen_params = list(sorted(
+        [float(lam) for lam in args.branch_pen_params.split(",")],
         reverse=True))
     args.target_lam_pen_params = list(sorted(
         [float(lam) for lam in args.target_lam_pen_params.split(",")],
@@ -466,17 +466,17 @@ def main(args=sys.argv[1:]):
         penalty_tune_result = None
         best_res = None
         if i < args.num_penalty_tune_iters:
-            if len(args.dist_to_half_pen_params) == 1 and len(args.target_lam_pen_params) == 1:
+            if len(args.branch_pen_params) == 1 and len(args.target_lam_pen_params) == 1:
                 # If nothing to tune... do nothing
                 fit_params["log_barr_pen_param"] = args.log_barr_pen_param
-                fit_params["dist_to_half_pen_param"] = args.dist_to_half_pen_params[0]
+                fit_params["branch_pen_param"] = args.branch_pen_params[0]
                 fit_params["target_lam_pen_param"] = args.target_lam_pen_params[0]
             else:
                 # Tune penalty params!
                 logging.info("Iter %d: Tuning penalty params", i)
                 penalty_tune_result = hyperparam_tuner.tune(tree, bcode_meta, args, fit_params, assessor)
                 _, fit_params, best_res = penalty_tune_result.get_best_result()
-            logging.info("Iter %d: Best pen param %f", i, fit_params["dist_to_half_pen_param"])
+            logging.info("Iter %d: Best pen param %f", i, fit_params["branch_pen_param"])
 
         # Find hanging chads
         # TODO: kind slow right now... reruns chad-finding code
@@ -531,19 +531,20 @@ def main(args=sys.argv[1:]):
         # just for fun... check that the number of leaves match
         assert len(tree) == num_old_leaves
 
-        logging.info(
-                "Iter %d, begin dists %s, log lik %f %f",
-                i,
-                best_res.train_history[0]["performance"],
-                best_res.train_history[0]["pen_log_lik"],
-                best_res.train_history[0]["log_lik"])
-        logging.info(
-                "Iter %d, end dists %s, log lik %f %f (num iters %d)",
-                i,
-                best_res.train_history[-1]["performance"],
-                best_res.pen_log_lik,
-                best_res.log_lik,
-                len(best_res.train_history) - 1)
+        if assessor is not None:
+            logging.info(
+                    "Iter %d, begin dists %s, log lik %f %f",
+                    i,
+                    best_res.train_history[0]["performance"],
+                    best_res.train_history[0]["pen_log_lik"],
+                    best_res.train_history[0]["log_lik"])
+            logging.info(
+                    "Iter %d, end dists %s, log lik %f %f (num iters %d)",
+                    i,
+                    best_res.train_history[-1]["performance"],
+                    best_res.pen_log_lik,
+                    best_res.log_lik,
+                    len(best_res.train_history) - 1)
 
         tuning_history.append({
             "chad_tune_result": chad_tune_result,

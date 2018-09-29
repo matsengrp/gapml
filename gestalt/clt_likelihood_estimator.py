@@ -50,7 +50,7 @@ class CLTPenalizedEstimator(CLTEstimator):
 
     def fit(self,
             log_barr_pen_param: float,
-            dist_to_half_pen_param: float = 0,
+            branch_pen_param: float = 0,
             target_lam_pen_param: float = 0,
             print_iter: int = 1,
             save_iter: int = 40,
@@ -60,14 +60,14 @@ class CLTPenalizedEstimator(CLTEstimator):
         """
         Finds the best model parameters
         @param log_barr: penalty parameter for the log barrier function
-        @param dist_to_half_pen: penalty parameter for the log target lambda difference from the mean
+        @param branch_pen: penalty parameter for the log target lambda difference from the mean
         @param print_iter: number of iters to wait to print iterim results
         @param dist_measurer: if available, this is use to measure how close current tree is to the true tree
                             useful to see how progress is being made
         """
         feed_dict = {
             self.model.log_barr_pen_param_ph: log_barr_pen_param,
-            self.model.dist_to_half_pen_param_ph: dist_to_half_pen_param,
+            self.model.branch_pen_param_ph: branch_pen_param,
             self.model.target_lam_pen_param_ph: target_lam_pen_param,
         }
         # Check tree is ultrametric
@@ -78,12 +78,11 @@ class CLTPenalizedEstimator(CLTEstimator):
         # Check branch lengths positive
         assert self.model._are_all_branch_lens_positive()
 
-        pen_log_lik, log_lik, dist_to_half_pen, dist_to_roots, target_lam_pen = self.model.sess.run(
+        pen_log_lik, log_lik, branch_pen, dist_to_roots, target_lam_pen = self.model.sess.run(
             [
                 self.model.smooth_log_lik,
                 self.model.log_lik,
-                #self.model.dist_to_half_pen,
-                self.model.branch_log_barr,
+                self.model.branch_pen,
                 self.model.dist_to_root,
                 self.model.target_lam_pen,
             ],
@@ -92,7 +91,7 @@ class CLTPenalizedEstimator(CLTEstimator):
 
         logging.info(
                 "initial penalized log lik %f, unpen log lik %f, branch pen %f, lambda pen %f",
-                pen_log_lik, log_lik, dist_to_half_pen, target_lam_pen)
+                pen_log_lik, log_lik, branch_pen, target_lam_pen)
         assert not np.isnan(pen_log_lik)
         train_history = [{
                     "iter": -1,
@@ -114,20 +113,19 @@ class CLTPenalizedEstimator(CLTEstimator):
                 if k not in ["branch_len_offsets_proportion", "branch_len_inners", "boost_probs"]:
                     logging.info("%s: %s", k, v)
 
-            _, pen_log_lik, log_lik, dist_to_half_pen, target_lam_pen, dist_to_roots = self.model.sess.run(
+            _, pen_log_lik, log_lik, branch_pen, target_lam_pen, dist_to_roots = self.model.sess.run(
                     [
                         self.model.adam_train_op,
                         self.model.smooth_log_lik,
                         self.model.log_lik,
-                        #self.model.dist_to_half_pen,
-                        self.model.branch_log_barr,
+                        self.model.branch_pen,
                         self.model.target_lam_pen,
                         self.model.dist_to_root],
                     feed_dict=feed_dict)
 
             iter_info = {
                     "iter": i,
-                    "dist_to_half_pen": dist_to_half_pen,
+                    "branch_pen": branch_pen,
                     "target_lam_pen": target_lam_pen,
                     "log_lik": log_lik,
                     "pen_log_lik": pen_log_lik,
@@ -136,7 +134,7 @@ class CLTPenalizedEstimator(CLTEstimator):
             if i % print_iter == (print_iter - 1):
                 logging.info(
                     "iter %d pen log lik %f log lik %f branch pen %f, lambda pen %f",
-                    i, pen_log_lik, log_lik, dist_to_half_pen, target_lam_pen)
+                    i, pen_log_lik, log_lik, branch_pen, target_lam_pen)
 
             if np.isnan(pen_log_lik):
                 logging.info("ERROR: pen log like is nan. branch lengths are negative?")
