@@ -21,6 +21,9 @@ from tune_topology import read_data, read_true_model_files
 from Bio.Phylo import draw_ascii, write
 from Bio.Phylo.TreeConstruction import _DistanceMatrix, DistanceTreeConstructor
 
+from tree_distance import BHVDistanceMeasurer
+from fit_chronos import _do_convert
+
 def parse_args(args):
     parser = argparse.ArgumentParser(
             description='compute neighbor joining tree')
@@ -61,17 +64,6 @@ def parse_args(args):
 
     return args
 
-def _do_convert(tree_node, clt_node):
-    for child in tree_node.get_children():
-        clt_child = CellLineageTree(
-            clt_node.allele_list,
-            clt_node.allele_events_list,
-            clt_node.cell_state,
-            dist=child.dist)
-        clt_child.name = child.name
-        clt_node.add_child(clt_child)
-        _do_convert(child, clt_child)
-
 
 def main(args=sys.argv[1:]):
     args = parse_args(args)
@@ -80,7 +72,7 @@ def main(args=sys.argv[1:]):
 
     # Load data
     bcode_meta, _, obs_data_dict = read_data(args)
-    true_model_dict, assessor = read_true_model_files(args, bcode_meta.num_barcodes)
+    true_model_dict, assessor = read_true_model_files(args, bcode_meta.num_barcodes, measurer_classes=[BHVDistanceMeasurer])
 
     # construct a right-triangular distance matrix using the cardinality of the
     # symmetric difference of the sets of events in each barcode in two leaves
@@ -118,9 +110,16 @@ def main(args=sys.argv[1:]):
                 obs_data_dict['obs_leaves'][int(leaf.name)].allele_list,
                 obs_data_dict['obs_leaves'][int(leaf.name)].allele_events_list,
                 obs_data_dict['obs_leaves'][int(leaf.name)].cell_state,
-                dist=leaf.dist))
+                dist=leaf.dist,
+                abundance=obs_data_dict['obs_leaves'][int(leaf.name)].abundance))
     logging.info("Done with fitting tree using neighbor joining")
     logging.info(fitted_tree.get_ascii(attributes=["dist"]))
+
+    print(root_clt)
+    print(len(obs_data_dict['obs_leaves']))
+    print(len(root_clt))
+    print(len(assessor.ref_tree))
+
 
     # Assess the tree if true tree supplied
     dist_dict = None
