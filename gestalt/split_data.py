@@ -4,7 +4,6 @@ This is our version of k-fold CV for trees
 """
 from typing import Dict, List
 import numpy as np
-from numpy import ndarray
 import logging
 import random
 
@@ -132,9 +131,10 @@ def create_kfold_barcode_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadat
                 len(val_idxs),
                 bcode_meta.cut_site,
                 bcode_meta.crucial_pos_len)
-        train_clt = _restrict_barcodes(tree.copy(), bcode_idxs)
-        val_clt = _restrict_barcodes(tree.copy(), val_idxs)
-        print("train bcode", bcode_idxs)
+        train_clt = tree.copy()
+        train_clt.restrict_barcodes(bcode_idxs)
+        val_clt = tree.copy()
+        val_clt.restrict_barcodes(val_idxs)
         all_train_trees.append(TreeDataSplit(
             train_clt,
             [],
@@ -147,14 +147,3 @@ def create_kfold_barcode_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadat
             is_kfold_tree=False))
 
     return all_train_trees
-
-def _restrict_barcodes(clt: CellLineageTree, bcode_idxs: ndarray):
-    """
-    @param bcode_idxs: the indices of the barcodes we observe
-    Update the alleles for each node in the tree to correspond to only the barcodes indicated
-    """
-    print(bcode_idxs)
-    for node in clt.traverse():
-        node.allele_events_list = [node.allele_events_list[i] for i in bcode_idxs]
-    #clt.label_tree_with_strs()
-    return clt

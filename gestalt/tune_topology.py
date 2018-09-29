@@ -428,10 +428,10 @@ def main(args=sys.argv[1:]):
 
     # Load data
     bcode_meta, tree, obs_data_dict = read_data(args)
-    print("num bar", bcode_meta.num_barcodes)
     true_model_dict, assessor = read_true_model_files(args, bcode_meta.num_barcodes)
     fit_params = read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict)
 
+    logging.info("num barcodes %d", bcode_meta.num_barcodes)
     logging.info("STARTING.... before random rearrange")
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))
     logging.info(tree.get_ascii(attributes=["node_id"]))
@@ -447,7 +447,7 @@ def main(args=sys.argv[1:]):
     logging.info("STARTING for reals!")
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))
     logging.info(tree.get_ascii(attributes=["node_id"]))
-    logging.info("Abudance...")
+    logging.info("Abundance...")
     logging.info(tree.get_ascii(attributes=["abundance"]))
     for leaf in tree:
         assert leaf.abundance >= 1

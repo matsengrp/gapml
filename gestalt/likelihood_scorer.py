@@ -72,7 +72,6 @@ class LikelihoodScorer(ParallelWorker):
             known_params: KnownModelParams,
             scratch_dir: str,
             assessor: ModelAssessor = None,
-            assess_bcode_idxs: List[int] = [0],
             max_try_per_init: int = 2,
             name: str = "likelihoodscorer"):
         """
@@ -101,7 +100,6 @@ class LikelihoodScorer(ParallelWorker):
         self.known_params = known_params
         self.scratch_dir = scratch_dir
         self.assessor = assessor
-        self.assess_bcode_idxs = assess_bcode_idxs
         self.max_tries = max_try_per_init * num_inits
         self.name = name
 
@@ -147,8 +145,7 @@ class LikelihoodScorer(ParallelWorker):
                 dist_to_half_pen_param=fit_params["dist_to_half_pen_param"],
                 target_lam_pen_param=fit_params["target_lam_pen_param"],
                 conv_thres=fit_params["conv_thres"] if "conv_thres" in fit_params else conv_thres_default,
-                assessor=self.assessor,
-                assess_bcode_idxs=self.assess_bcode_idxs)
+                assessor=self.assessor)
         result = LikelihoodScorerResult(
             fit_params,
             res_model.get_vars_as_dict(),

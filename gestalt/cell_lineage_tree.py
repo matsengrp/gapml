@@ -1,6 +1,7 @@
 import re
 from ete3 import TreeNode
 from typing import List, Set
+from numpy import ndarray
 
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
@@ -100,6 +101,15 @@ class CellLineageTree(TreeNode):
         for node in self.traverse("preorder"):
             node.allele_events_list_str = CellLineageTree._allele_list_to_str(node.allele_events_list)
 
+    def restrict_barcodes(self, bcode_idxs: ndarray):
+        """
+        @param bcode_idxs: the indices of the barcodes we observe
+        Update the alleles for each node in the tree to correspond to only the barcodes indicated
+        """
+        for node in self.traverse():
+            node.allele_events_list = [node.allele_events_list[i] for i in bcode_idxs]
+        self.label_tree_with_strs()
+
     def get_max_depth(self):
         """
         @return maximum number of nodes between leaf and root
@@ -167,6 +177,15 @@ class CellLineageTree(TreeNode):
                 node.detach()
         collapsed_tree._remove_single_child_unobs_nodes(clt_copy)
         return clt_copy
+
+    def copy_single(self):
+        """
+        @return a new CellLienageTree object but no children
+        """
+        copy_of_me = self.copy()
+        for child in copy_of_me.get_children():
+            child.detach()
+        return copy_of_me
 
     @staticmethod
     def convert(node: TreeNode,
