@@ -4,6 +4,7 @@ import scipy.stats
 
 from cell_lineage_tree import CellLineageTree
 from tree_distance import TreeDistanceMeasurerAgg
+import collapsed_tree
 
 
 class ModelAssessor:
@@ -24,6 +25,9 @@ class ModelAssessor:
         self.ref_tree = ref_tree
         self.ref_param_dict = ref_param_dict
 
+        self.ref_collapsed_tree = collapsed_tree.collapse_ultrametric(ref_tree)
+        self.ref_collapsed_tree.label_node_ids()
+
         self.tree_measurer_classes = tree_measurer_classes
         self.scratch_dir = scratch_dir
         self.param_compare_funcs = {
@@ -37,6 +41,9 @@ class ModelAssessor:
         Note: is able to compare the `other_tree` if `other_tree` contains a subset of the leaves
         in the reference tree
         """
+        dist_dict = {}
+
+        # Compare to no collapse tree
         other_tree_leaf_strs = set([l.allele_events_list_str for l in other_tree])
         keep_leaf_ids = set()
         for leaf in self.ref_tree:
@@ -50,7 +57,36 @@ class ModelAssessor:
             self.tree_measurer_classes,
             self.scratch_dir)
 
-        dist_dict = tree_assessor.get_tree_dists([other_tree])[0]
+        full_dist_dict = tree_assessor.get_tree_dists([other_tree])[0]
+        for k, v in full_dist_dict.items():
+            dist_dict["full_%s" % k] = v
+
+        # Collapsed version
+        num_times_obs = {}
+        keep_leaf_ids = set()
+        for leaf in self.ref_collapsed_tree:
+            if leaf.allele_events_list_str in other_tree_leaf_strs:
+                if leaf.allele_events_list_str not in num_times_obs:
+                    num_times_obs[leaf.allele_events_list_str] = 1
+                else:
+                    num_times_obs[leaf.allele_events_list_str] += 1
+                keep_leaf_ids.add(leaf.node_id)
+        ref_collapsed_tree_pruned = CellLineageTree.prune_tree(self.ref_collapsed_tree, keep_leaf_ids)
+        for leaf in ref_collapsed_tree_pruned:
+            leaf.abundance = 1
+        other_tree_collapse_compare = other_tree.copy()
+        for leaf in other_tree_collapse_compare:
+            leaf.abundance = num_times_obs[leaf.allele_events_list_str]
+
+        tree_collapse_assessor = TreeDistanceMeasurerAgg.create_single_abundance_measurer(
+            ref_collapsed_tree_pruned,
+            self.tree_measurer_classes,
+            self.scratch_dir)
+
+        collapse_dist_dict = tree_collapse_assessor.get_tree_dists([other_tree_collapse_compare])[0]
+        for k, v in collapse_dist_dict.items():
+            dist_dict["collapse_%s" % k] = v
+
         if other_param_dict is not None:
             for compare_key, compare_func in self.param_compare_funcs.items():
                 dist_dict[compare_key] = compare_func(other_param_dict)

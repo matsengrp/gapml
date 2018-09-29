@@ -262,7 +262,7 @@ def read_true_model_files(args, num_barcodes):
     true_model_dict, assessor = file_readers.read_true_model(
             args.true_model_file,
             num_barcodes,
-            measurer_classes=[BHVDistanceMeasurer, InternalCorrMeasurer],
+            measurer_classes=[BHVDistanceMeasurer], #InternalCorrMeasurer],
             scratch_dir=args.scratch_dir)
 
     return true_model_dict, assessor
