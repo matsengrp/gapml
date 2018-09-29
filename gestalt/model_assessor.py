@@ -18,7 +18,7 @@ class ModelAssessor:
         """
         Assesses the tree branch length/topology and the model parameter estimates
         """
-        for node in ref_tree:
+        for node in ref_tree.traverse():
             node.set_allele_list(node.allele_list.create_truncated_version(n_bcodes))
             node.sync_allele_events_list_str()
 
@@ -27,6 +27,8 @@ class ModelAssessor:
 
         self.ref_collapsed_tree = collapsed_tree.collapse_ultrametric(ref_tree)
         self.ref_collapsed_tree.label_node_ids()
+        print("num leaves coll", len(self.ref_collapsed_tree))
+        print("num leaves nooo coll", len(self.ref_tree))
 
         self.tree_measurer_classes = tree_measurer_classes
         self.scratch_dir = scratch_dir
