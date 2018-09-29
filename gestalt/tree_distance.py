@@ -46,6 +46,8 @@ class TreeDistanceMeasurerAgg:
         """
         all_dists = []
         for tree in trees:
+            print("tree", tree)
+            print("meas", len(self.measurers))
             tree_dists = {}
             compare_tree = TreeDistanceMeasurerAgg.create_single_abundance_tree(tree) if self.do_expand_abundance else tree
             for measurer in self.measurers:
@@ -97,6 +99,9 @@ class TreeDistanceMeasurerAgg:
         leaved_tree = tree.copy()
         for node in leaved_tree:
             curr_node = node
+            # TODO: this is kinda jenky. to deal with diff
+            # str between list and str. bad syncing issue
+            orig_str = curr_node.allele_events_list_str
             for idx in range(node.abundance - 1):
                 new_child = CellLineageTree(
                     curr_node.allele_list,
@@ -106,7 +111,7 @@ class TreeDistanceMeasurerAgg:
                     abundance=1,
                     resolved_multifurcation=True)
                 new_child.allele_events_list_str = "%s==%d" % (
-                    new_child.allele_events_list_str,
+                    orig_str,
                     idx + 1)
                 copy_leaf = CellLineageTree(
                     curr_node.allele_list,
@@ -115,10 +120,10 @@ class TreeDistanceMeasurerAgg:
                     dist=0,
                     abundance=1,
                     resolved_multifurcation=True)
-                copy_leaf.allele_events_list_str = curr_node.allele_events_list_str
+                copy_leaf.allele_events_list_str = orig_str
                 curr_node.add_child(new_child)
                 curr_node.add_child(copy_leaf)
-                curr_node = new_child
+                curr_node = copy_leaf
             node.abundance = 1
         return leaved_tree
 

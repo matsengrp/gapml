@@ -578,7 +578,7 @@ class CLTLikelihoodModel:
         #logging.info(self.topology.get_ascii(attributes=["nochad_id"]))
         return np.all(br_lens[1:] > 0)
 
-    def initialize_branch_lens(self, tot_time: float, chronos_lam: float=1, root_unifurc_prop: float= 0.01):
+    def initialize_branch_lens(self, tot_time: float, chronos_lam: float=10, root_unifurc_prop: float= 0.01):
         """
         Initialize branch lengths using chronos estimator by updating the
         model param values in this model (so this function modifies this
@@ -597,49 +597,62 @@ class CLTLikelihoodModel:
 
         tree = self.topology.copy()
 
-        is_root_unifurc = len(tree.get_children()) == 1
-        chronos_tree = tree.get_children()[0] if is_root_unifurc else tree
-        chronos_est = CLTChronosEstimator(
-            chronos_tree,
-            self.bcode_meta,
-            self.scratch_dir,
-            tot_time)
-        chronos_tree = chronos_est.estimate(chronos_lam)
+        try:
+            # TODO: figure out if there is easy way to use chrnos
+            is_root_unifurc = len(tree.get_children()) == 1
+            chronos_tree = tree.get_children()[0] if is_root_unifurc else tree
+            chronos_est = CLTChronosEstimator(
+                chronos_tree,
+                self.bcode_meta,
+                self.scratch_dir,
+                tot_time)
+            chronos_tree = chronos_est.estimate(chronos_lam)
 
-        print(chronos_tree.get_ascii(attributes=['dist']))
-        # Check that chronos didn't assign terrible branch lengths
-        chronos_tree.dist = root_unifurc_prop * tot_time if is_root_unifurc else 0
-        chronos_tree.add_feature('dist_to_root', chronos_tree.dist)
-        for node in chronos_tree.get_descendants('preorder'):
-            node.dist = (1 - root_unifurc_prop) * node.dist if is_root_unifurc else node.dist
-            node.add_feature('dist_to_root', node.dist + node.up.dist_to_root)
-            if node.dist < 1e-8:
-                # Shit chronos screwed up
-                logging.info('chronos assigned bad branch length. reset with random assignments')
-                remain_time = tot_time - node.dist_to_root
-                dist_to_root = 0.95 * remain_time
-                print("remain", remain_time)
-                assign_rand_tree_lengths(node, dist_to_root)
-                node.dist = remain_time - dist_to_root
-                node.dist_to_root = dist_to_root
+            logging.info(chronos_tree.get_ascii(attributes=['dist']))
+            # Check that chronos didn't assign terrible branch lengths
+            chronos_tree.dist = root_unifurc_prop * tot_time if is_root_unifurc else 0
+            chronos_tree.add_feature('dist_to_root', chronos_tree.dist)
+            # TODO make this work faster
+            for node in chronos_tree.get_descendants('preorder'):
+                if is_root_unifurc:
+                    node.dist = (1 - root_unifurc_prop) * node.dist
+                elif node.is_leaf():
+                    node.dist = tot_time - node.up.dist_to_root
 
-        print(chronos_tree.get_ascii(attributes=['dist']))
+                node.add_feature('dist_to_root', node.dist + node.up.dist_to_root)
+                modify_node = node.up if node.is_leaf() else node
+                if node.dist < 1e-8:
+                    # Shit chronos screwed up
+                    logging.info('chronos assigned bad branch length. reset with random assignments')
+                    remain_time = tot_time - node.dist_to_root
+                    dist_to_root = 0.95 * remain_time
+                    assign_rand_tree_lengths(modify_node, dist_to_root)
 
-        branch_len_inners = np.zeros(self.num_nodes)
-        for node in chronos_tree.traverse():
-            branch_len_inners[node.node_id] = node.dist
+            branch_len_inners = np.zeros(self.num_nodes)
+            for node in chronos_tree.traverse():
+                branch_len_inners[node.node_id] = node.dist
 
-        # Handle unifurcations in the tree because chronos cannot handle unifurc
-        # So let us just split the estimated distance from chronos in half
-        for node in self.topology.get_descendants('postorder'):
-            children = node.get_children()
-            if len(children) == 1:
-                child = children[0]
-                orig_dist_assign = branch_len_inners[child.node_id]
-                branch_len_inners[node.node_id] = orig_dist_assign/2
-                branch_len_inners[child.node_id] = orig_dist_assign/2
+            # Handle unifurcations in the tree because chronos cannot handle unifurc
+            # So let us just split the estimated distance from chronos in half
+            for node in self.topology.get_descendants('postorder'):
+                children = node.get_children()
+                if len(children) == 1:
+                    child = children[0]
+                    orig_dist_assign = branch_len_inners[child.node_id]
+                    branch_len_inners[node.node_id] = orig_dist_assign/2
+                    branch_len_inners[child.node_id] = orig_dist_assign/2
+            logging.info("branch len inner init %s", branch_len_inners)
+            logging.info(np.where(branch_len_inners < 0))
+            assert np.all(branch_len_inners[1:] > 0)
+        except Exception as e:
+            # If chronos fails us, just use random branch lnegth assignments
+            assign_rand_tree_lengths(tree, tot_time)
+            branch_len_inners = np.zeros(self.num_nodes)
+            for node in tree.traverse():
+                branch_len_inners[node.node_id] = node.dist
 
         logging.info("branch len inner init %s", branch_len_inners)
+        logging.info(np.where(branch_len_inners < 0))
         assert np.all(branch_len_inners[1:] > 0)
 
         model_vars = self.get_vars_as_dict()

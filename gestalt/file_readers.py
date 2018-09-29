@@ -41,7 +41,6 @@ def read_true_model(
         assessor = ModelAssessor(
             true_model["true_model_params"],
             true_model["true_subtree"],
-            n_bcodes,
             measurer_classes,
             scratch_dir)
     return true_model["true_model_params"], assessor

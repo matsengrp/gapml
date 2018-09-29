@@ -2,6 +2,7 @@ import time
 import numpy as np
 import tensorflow as tf
 import logging
+from typing import List
 
 from clt_estimator import CLTEstimator
 from clt_likelihood_model import CLTLikelihoodModel
@@ -54,6 +55,7 @@ class CLTPenalizedEstimator(CLTEstimator):
             print_iter: int = 1,
             save_iter: int = 40,
             assessor: ModelAssessor = None,
+            assess_bcode_idxs: List[int] = [0],
             conv_thres: float = 1e-4,
             min_iters: int = 20):
         """
@@ -99,7 +101,7 @@ class CLTPenalizedEstimator(CLTEstimator):
                     "pen_log_lik": pen_log_lik}]
         if assessor is not None:
             bifurc_tree = self.model.get_fitted_bifurcating_tree()
-            train_history[0]["performance"] = assessor.assess(var_dict, bifurc_tree)
+            train_history[0]["performance"] = assessor.assess(var_dict, bifurc_tree, assess_bcode_idxs)
             logging.info("initial tree dists: %s", train_history[0]["performance"])
 
         st_time = time.time()
@@ -148,7 +150,7 @@ class CLTPenalizedEstimator(CLTEstimator):
                 if assessor is not None:
                     bifurc_tree = self.model.get_fitted_bifurcating_tree()
                     logging.info(bifurc_tree.get_ascii(attributes=["dist"]))
-                    performance_dict = assessor.assess(var_dict, bifurc_tree)
+                    performance_dict = assessor.assess(var_dict, bifurc_tree, assess_bcode_idxs)
                     logging.info("iter %d assess: %s", i, performance_dict)
                     iter_info["performance"] = performance_dict
 
@@ -163,7 +165,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         train_history[-1]["dist_to_roots"] = dist_to_roots
         if assessor is not None:
             bifurc_tree = self.model.get_fitted_bifurcating_tree()
-            performance_dict = assessor.assess(var_dict, bifurc_tree)
+            performance_dict = assessor.assess(var_dict, bifurc_tree, assess_bcode_idxs)
             train_history[-1]["performance"] = performance_dict
             logging.info("last_iter tree dists: %s", performance_dict)
 

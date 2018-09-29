@@ -262,7 +262,7 @@ def read_true_model_files(args, num_barcodes):
     true_model_dict, assessor = file_readers.read_true_model(
             args.true_model_file,
             num_barcodes,
-            measurer_classes=[BHVDistanceMeasurer], #InternalCorrMeasurer],
+            measurer_classes=[BHVDistanceMeasurer, InternalCorrMeasurer],
             scratch_dir=args.scratch_dir)
 
     return true_model_dict, assessor
@@ -428,6 +428,7 @@ def main(args=sys.argv[1:]):
 
     # Load data
     bcode_meta, tree, obs_data_dict = read_data(args)
+    print("num bar", bcode_meta.num_barcodes)
     true_model_dict, assessor = read_true_model_files(args, bcode_meta.num_barcodes)
     fit_params = read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict)
 

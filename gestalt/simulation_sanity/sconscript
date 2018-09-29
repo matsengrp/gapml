@@ -55,7 +55,7 @@ def generate(env, outdir, c):
         '--trim-long-factor 0.001 0.001',
         '--time 1',
         '--num-barcodes',
-        1,
+        3,
         '--birth-sync-time 0.2',
         '--birth-decay -8',
         '--birth-min 1',
@@ -76,7 +76,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [1],
+    [3],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -153,12 +153,12 @@ def run_MLE(env, outdir, c):
         '100,20',
         '--max-sum-states 2002',
         '--max-extra-steps 2',
-        '--max-iters 0',
+        '--max-iters 50',
         '--num-penalty-tune-splits 2',
         '--num-penalty-tune-iters 1',
         '--num-chad-tune-iters 3',
         '--max-chad-tune-search 2',
-        '--num-init-random-rearrange 2',
+        '--num-init-random-rearrange 0',
         '--tot-time-known',
     ]
     return env.Command(

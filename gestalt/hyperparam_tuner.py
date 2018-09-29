@@ -164,7 +164,8 @@ def _tune_hyperparams(
         fit_param_list=fit_param_list,
         known_params=args.known_params,
         scratch_dir=args.scratch_dir,
-        assessor=assessor)
+        assessor=assessor,
+        assess_bcode_idxs=tree_split.train_bcode_idxs)
         for tree_split, transition_wrap_maker in zip(tree_splits, trans_wrap_makers)]
 
     if args.num_processes > 1 and len(worker_list) > 1:
@@ -209,6 +210,61 @@ def _tune_hyperparams(
 
 
 def _get_many_bcode_stability_score(
+        pen_param_results: List[LikelihoodScorerResult],
+        tree_splits: List[TreeDataSplit],
+        orig_tree: CellLineageTree,
+        max_num_leaves: int = None):
+    """
+    """
+    is_stable = True
+    for pen_param_res in pen_param_results:
+        if pen_param_res is None:
+            is_stable = False
+            break
+
+    if is_stable:
+        worker_list = []
+        for pen_param_res, tree_split in zip(pen_param_results, tree_splits):
+            fit_params = pen_param_res.get_fit_params()
+            all_known_params = KnownModelParams(
+                target_lams=True,
+                tot_time=True,
+                indel_params=True)
+            anc_evt_finder.annotate_ancestral_states(tree_split.val_clt, tree_split.bcode_meta)
+            mark_target_status_to_penalize(tree_split.val_clt)
+            transition_wrap_maker = TransitionWrapperMaker(
+                tree_split.val_clt,
+                tree_split.val_bcode_meta,
+                100,
+                1000)
+            scorer = LikelihoodScorer(
+                1, # seed
+                tree_split.val_clt,
+                tree_split.val_bcode_meta,
+                max_iters=0, #50000,
+                num_inits=1,
+                transition_wrap_maker=transition_wrap_maker,
+                fit_param_list=[fit_params],
+                known_params=all_known_params,
+                scratch_dir="_output/scratch")
+            worker_list.append(scorer)
+
+        job_manager = SubprocessManager(
+                worker_list,
+                None,
+                "_output/scratch",
+                10)
+        worker_results = [w[0][0] for w in job_manager.run()]
+        val_log_liks = [res.log_lik for res in worker_results]
+
+        val_log_lik = np.sum(val_log_liks)
+        logging.info("all hyperparam split-scores %s", val_log_liks)
+        logging.info("hyperparam sum-split-scores %s", val_log_lik)
+        return val_log_lik
+    else:
+        return -np.inf
+
+def _get_many_bcode_stability_score_old(
         pen_param_results: List[LikelihoodScorerResult],
         weight: float = 0.5):
     """
@@ -290,28 +346,6 @@ def _get_one_bcode_stability_score(
             param_dict["target_lams"],
             param_dict["double_cut_weight"],
             param_dict["trim_long_factor"]]))
-
-        #train_val_tree = CellLineageTree(
-        #    allele_list=orig_tree.allele_list,
-        #    allele_events_list=orig_tree.allele_events_list,
-        #    cell_state=orig_tree.cell_state)
-        #for leaf_idx, (orig_leaf, leaf_par_id) in enumerate(tree_split.val_obs):
-        #    train_val_tree.add_child(orig_leaf.copy())
-        #num_nodes = train_val_tree.label_node_ids()
-        #print(train_val_tree)
-        #train_val_tree.add_feature("resolved_multifurcation", True)
-        #fit_params = pen_param_res.get_fit_params()
-        ##new_br_inners_mask = np.zeros(num_nodes, dtype=bool)
-        ##new_br_inners_mask[:num_nodes] = True
-        ##new_br_offsets_mask = np.zeros(num_nodes, dtype=bool)
-        ##new_br_offsets_mask[:num_nodes] = True
-        #new_br_inners = np.ones(num_nodes) * 1e-10
-        #new_br_offsets = np.ones(num_nodes) * 1e-10
-        #all_known_params = KnownModelParams(
-        #        target_lams=True,
-        #        tot_time=True,
-        #        indel_params=True)
-
 
         num_nodes = tree_split.tree.get_num_nodes()
         num_val_nodes = len(tree_split.val_obs)

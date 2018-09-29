@@ -22,14 +22,22 @@ class TreeDataSplit:
             tree: CellLineageTree,
             val_obs: List[CellLineageTree],
             bcode_meta: BarcodeMetadata,
+            train_bcode_idxs: List[int],
+            val_bcode_idxs: List[int],
             node_to_orig_id: Dict[int, int],
+            val_clt: CellLineageTree = None,
+            val_bcode_meta: BarcodeMetadata = None,
             is_kfold_tree: bool = False):
         """
         @param is_kfold_tree: True = we split the tree into subtrees (for the 1 bcode case)
         """
         self.tree = tree
         self.val_obs = val_obs
+        self.val_clt = val_clt
         self.bcode_meta = bcode_meta
+        self.train_bcode_idxs = train_bcode_idxs
+        self.val_bcode_idxs = val_bcode_idxs
+        self.val_bcode_meta = val_bcode_meta
         self.node_to_orig_id = node_to_orig_id
         self.is_kfold_tree = is_kfold_tree
 
@@ -87,6 +95,8 @@ def create_kfold_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadata, n_spl
             train_tree,
             val_obs,
             bcode_meta,
+            [0],
+            [0],
             node_to_orig_id,
             is_kfold_tree=True))
 
@@ -102,7 +112,6 @@ def create_kfold_barcode_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadat
 
     @return List[TreeDataSplit] corresponding to each fold
     """
-    raise NotImplementedError("not yet. doesnt calc Pr(V|T)")
     # Assign by splitting on children of root node -- perform k-fold cv
     # This decreases the correlation between training sets
     logging.info("Splitting barcode into %d splits", n_splits)
@@ -110,7 +119,7 @@ def create_kfold_barcode_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadat
 
     kf = KFold(n_splits=n_splits, shuffle=True)
     all_train_trees = []
-    for bcode_idxs, _ in kf.split(np.arange(bcode_meta.num_barcodes)):
+    for bcode_idxs, val_idxs in kf.split(np.arange(bcode_meta.num_barcodes)):
         logging.info("Train fold barcode idxs %s", bcode_idxs)
         num_train_bcodes = len(bcode_idxs)
         train_bcode_meta = BarcodeMetadata(
@@ -118,10 +127,23 @@ def create_kfold_barcode_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadat
                 num_train_bcodes,
                 bcode_meta.cut_site,
                 bcode_meta.crucial_pos_len)
+        val_bcode_meta = BarcodeMetadata(
+                bcode_meta.unedited_barcode,
+                len(val_idxs),
+                bcode_meta.cut_site,
+                bcode_meta.crucial_pos_len)
         train_clt = _restrict_barcodes(tree.copy(), bcode_idxs)
+        val_clt = _restrict_barcodes(tree.copy(), val_idxs)
+        print("train bcode", bcode_idxs)
         all_train_trees.append(TreeDataSplit(
             train_clt,
+            [],
             train_bcode_meta,
+            train_bcode_idxs=bcode_idxs,
+            val_bcode_idxs=bcode_idxs,
+            node_to_orig_id={},
+            val_clt=val_clt,
+            val_bcode_meta=val_bcode_meta,
             is_kfold_tree=False))
 
     return all_train_trees
@@ -131,7 +153,8 @@ def _restrict_barcodes(clt: CellLineageTree, bcode_idxs: ndarray):
     @param bcode_idxs: the indices of the barcodes we observe
     Update the alleles for each node in the tree to correspond to only the barcodes indicated
     """
+    print(bcode_idxs)
     for node in clt.traverse():
         node.allele_events_list = [node.allele_events_list[i] for i in bcode_idxs]
-    clt.label_tree_with_strs()
+    #clt.label_tree_with_strs()
     return clt
