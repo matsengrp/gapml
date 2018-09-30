@@ -102,7 +102,7 @@ def main(args=sys.argv[1:]):
         # Assess the tree if true tree supplied
         dist_dict = None
         if assessor is not None:
-            dist_dict = assessor.assess(None, root_clt)
+            dist_dict = assessor.assess(root_clt)
             logging.info("fitted tree: lambda %f, %s", lam, dist_dict)
 
         res = {

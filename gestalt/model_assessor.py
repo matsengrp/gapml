@@ -18,6 +18,11 @@ class ModelAssessor:
             leaf_key: str = "leaf_key"):
         """
         Assesses the tree branch length/topology and the model parameter estimates
+        @param ref_tree: the tree we want to measure distances to
+        @param ref_param_dict: a dictionary with the true model parameters (see the dict from clt_likelihood_model)
+        @param tree_measurer_classes: a list of tree measurer classes we want to use to assess trees
+        @param scratch_dir: a scratch directory that we can write silly newick files into
+        @param leaf_key: the attribute to use for aligning leaves between trees
         """
         self.ref_tree = ref_tree
         self.ref_collapsed_tree = collapsed_tree.collapse_ultrametric(ref_tree)
@@ -39,8 +44,14 @@ class ModelAssessor:
             "targ_corr": self._target_lams_corr,
             "double": self._compare_double_cut}
 
-    def assess(self, other_param_dict: Dict, other_tree: CellLineageTree):
+    def assess(
+                self,
+                other_tree: CellLineageTree,
+                other_param_dict: Dict = None):
         """
+        @param other_tree: the tree we want to assess (comparing to the reference tree)
+        @param other_param_dict: the estimated model parameters we want to assess
+
         Note: is able to compare the `other_tree` if `other_tree` contains a subset of the leaves
         in the reference tree
         """

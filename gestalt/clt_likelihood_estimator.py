@@ -20,7 +20,8 @@ class CLTPenalizedEstimator(CLTEstimator):
             self,
             model: CLTLikelihoodModel,
             transition_wrapper_maker: TransitionWrapperMaker,
-            max_iters: int):
+            max_iters: int,
+            min_iters: int = 20):
         """
         @param model: initial CLT model params
         @param transition_wrapper_maker: TransitionWrapperMaker
@@ -28,6 +29,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         """
         self.model = model
         self.max_iters = max_iters
+        self.min_iters = min_iters
 
         # Create the skeletons for the transition matrices -- via state sum approximation
         transition_wrappers = transition_wrapper_maker.create_transition_wrappers()
@@ -54,14 +56,14 @@ class CLTPenalizedEstimator(CLTEstimator):
             print_iter: int = 1,
             save_iter: int = 40,
             assessor: ModelAssessor = None,
-            conv_thres: float = 1e-4,
-            min_iters: int = 20):
+            conv_thres: float = 1e-4):
         """
         Finds the best model parameters
         @param branch_pen: penalty parameter for the log target lambda difference from the mean
         @param print_iter: number of iters to wait to print iterim results
         @param dist_measurer: if available, this is use to measure how close current tree is to the true tree
                             useful to see how progress is being made
+
         """
         feed_dict = {
             self.model.branch_pen_param_ph: branch_pen_param,
@@ -96,7 +98,7 @@ class CLTPenalizedEstimator(CLTEstimator):
                     "pen_log_lik": pen_log_lik}]
         if assessor is not None:
             bifurc_tree = self.model.get_fitted_bifurcating_tree()
-            train_history[0]["performance"] = assessor.assess(var_dict, bifurc_tree)
+            train_history[0]["performance"] = assessor.assess(bifurc_tree, var_dict)
             logging.info("initial tree dists: %s", train_history[0]["performance"])
 
         st_time = time.time()
@@ -143,12 +145,12 @@ class CLTPenalizedEstimator(CLTEstimator):
                 logging.info("iter %d, train time %f", i, time.time() - st_time)
                 if assessor is not None:
                     bifurc_tree = self.model.get_fitted_bifurcating_tree()
-                    performance_dict = assessor.assess(var_dict, bifurc_tree)
+                    performance_dict = assessor.assess(bifurc_tree, var_dict)
                     logging.info("iter %d assess: %s", i, performance_dict)
                     iter_info["performance"] = performance_dict
 
             train_history.append(iter_info)
-            if i > min_iters and (pen_log_lik[0] - prev_pen_log_lik)/np.abs(prev_pen_log_lik) < conv_thres:
+            if i > self.min_iters and (pen_log_lik[0] - prev_pen_log_lik)/np.abs(prev_pen_log_lik) < conv_thres:
                 # Convergence reached
                 logging.info("Convergence reached %f", conv_thres)
                 break
@@ -158,7 +160,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         train_history[-1]["dist_to_roots"] = dist_to_roots
         if assessor is not None:
             bifurc_tree = self.model.get_fitted_bifurcating_tree()
-            performance_dict = assessor.assess(var_dict, bifurc_tree)
+            performance_dict = assessor.assess(bifurc_tree, var_dict)
             train_history[-1]["performance"] = performance_dict
             logging.info("last_iter tree dists: %s", performance_dict)
 
