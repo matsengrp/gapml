@@ -54,6 +54,11 @@ def parse_args():
         default=",".join([".4", ".5", ".1", "0.5", "0.3", "0.6"]),
         help='target cut rates -- will get slightly perturbed for the true value')
     parser.add_argument(
+        '--target-lam-decay-rate',
+        type=float,
+        default=0,
+        help='param for how much the hazard rate decays (right now is a linear decay)')
+    parser.add_argument(
         '--perturb-target-lambdas-variance',
         type=float,
         default=0.002,
@@ -205,7 +210,8 @@ def create_simulators(args, clt_model):
             args.birth_min,
             args.death_lambda,
             cell_type_simulator,
-            allele_simulator)
+            allele_simulator,
+            scale_hazard_func=lambda t: 1 - (t/args.time) * args.target_lam_decay_rate)
     observer = CLTObserver()
     return clt_simulator, observer
 
@@ -301,6 +307,7 @@ def main(args=sys.argv[1:]):
             bcode_meta,
             sess,
             target_lams = np.array(args.target_lambdas),
+            target_lam_decay_rate = np.array([args.target_lam_decay_rate]),
             known_params = known_params,
             double_cut_weight = [args.double_cut_weight],
             trim_long_factor = np.array(args.trim_long_factor),
@@ -324,6 +331,7 @@ def main(args=sys.argv[1:]):
     # Check that the the abundance of the leaves is not too high
     if args.max_abundance is not None:
         for obs in obs_leaves:
+            print(obs.abundance) #, str(obs))
             if obs.abundance > args.max_abundance:
                 raise ValueError(
                     "Number of barcodes does not seem to be enough. There are leaves with %d abundance" % obs.abundance)

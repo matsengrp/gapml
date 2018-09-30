@@ -34,14 +34,16 @@ GROWTH_DICT = {
     "small": {
         "sampling_rate": 0.08,
         "birth_sync_rounds": 5,
-        "birth_sync_time": 0.035,
+        "birth_sync_time": 0.036,
         "death_lambda": 0.2,
-        "birth_decay": -9,
-        "birth_min": 3,
-        "lambda_sequence": [.8, .75, .7, .65, .6, .55, .5],
-        "double": 0.03,
+        "birth_decay": -8,
+        "birth_min": 4,
+        #"lambda_sequence": [.8, .75, .7, .65, .6, .55, .5],
+        "lambda_sequence": [1.1, 1.0, 0.9, .8, .75, .7, .6],
+        "target_decay": .6,
+        "double": 0.045,
         "min_leaves": 70,
-        "max_leaves": 200,
+        "max_leaves": 150,
     },
     "mini": {
         "sampling_rate": 0.1,
@@ -51,6 +53,7 @@ GROWTH_DICT = {
         "birth_decay": -1,
         "birth_min": 2,
         "lambda_sequence": [1.2, 0.9, .8, .75, .7, .65],
+        "target_decay": .6,
         "double": 0.03,
         "min_leaves": 20,
         "max_leaves": 100,
@@ -65,7 +68,7 @@ nest.add(
 
 nest.add(
     'seed',
-    [90], #[12],
+    [20],
 )
 
 nest.add(
@@ -107,7 +110,7 @@ def generate(env, outdir, c):
         '--max-clt-nodes',
         int(GROWTH_DICT[c['growth_stage']]['max_leaves']/GROWTH_DICT[c['growth_stage']]['sampling_rate'] * 1.1),
         '--num-barcodes',
-        2,
+        3,
         '--min-uniq-alleles',
         GROWTH_DICT[c['growth_stage']]['min_leaves'],
         '--max-uniq-alleles',
@@ -117,6 +120,8 @@ def generate(env, outdir, c):
         GROWTH_DICT[c['growth_stage']]['double'],
         '--target-lambdas',
         targ_lambdas,
+        '--target-lam-decay',
+        GROWTH_DICT[c['growth_stage']]['target_decay'],
         '--trim-zero-probs 0.1 0.1',
         '--trim-poissons 4 4',
         '--trim-long-factor 0.02 0.02',
@@ -135,7 +140,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [2], #3,9],
+    [1], #9],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -182,6 +187,7 @@ def run_topology(env, outdir, c):
 
 @nest.add_target_with_env(localenv)
 def run_chronos(env, outdir, c):
+    return
     cmd = [
         'python fit_chronos.py',
         '--seed',
@@ -225,6 +231,7 @@ def run_MLE(env, outdir, c):
         target_lam_penalty_params = "10,1"
     elif c['num_barcodes'] == 3:
         penalty_params = "64,16,4,1"
+        penalty_params = "16"
         target_lam_penalty_params = "1"
     elif c['num_barcodes'] == 9:
         penalty_params = "400,200,100,50"

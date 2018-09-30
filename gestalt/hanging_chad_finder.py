@@ -596,7 +596,7 @@ def _create_warm_start_fit_params(
         hanging_chad: HangingChad,
         nochad_res: LikelihoodScorerResult,
         new_chad_tree: CellLineageTree,
-        conv_thres: float = 5 * 1e-7):
+        conv_thres: float = 1e-6):
     """
     @param conv_thres: the convergence threshold for maximizing the partially-penalized log lik
             (this is usually smaller than the one for the nochad

@@ -1,7 +1,6 @@
 from numpy import ndarray
 from typing import List
 import numpy as np
-from numpy import ndarray
 from scipy.stats import expon
 from numpy.random import choice, random
 from scipy.stats import poisson
@@ -87,7 +86,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             dstns.append(long_short_dstns)
         return dstns
 
-    def _race_target_tracts(self, allele: Allele):
+    def _race_target_tracts(self, allele: Allele, scale_hazard: float):
         """
         Race cutting (with no regard to time limits)
         @return race_winner: target tract if event occurs
@@ -99,7 +98,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         target_tracts = targ_stat.get_possible_target_tracts(self.bcode_meta)
         if len(target_tracts):
             all_hazards = [
-                self.all_target_tract_hazards[self.model.target_tract_dict[tt]]
+                self.all_target_tract_hazards[self.model.target_tract_dict[tt]] * scale_hazard
                 for tt in target_tracts]
             all_haz_sum = np.sum(all_hazards)
             min_time = expon.rvs(scale=1.0/all_haz_sum)
@@ -109,7 +108,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         else:
             return None, None
 
-    def simulate(self, init_allele: Allele, time: float):
+    def simulate(self, init_allele: Allele, time: float, scale_hazard: float):
         """
         @param init_allele: the initial state of the allele
         @param time: the amount of time to simulate the allele modification process
@@ -120,7 +119,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
 
         time_remain = time
         while time_remain > 0:
-            target_tract, event_time = self._race_target_tracts(allele)
+            target_tract, event_time = self._race_target_tracts(allele, scale_hazard)
             if event_time is None:
                 break
             time_remain = max(time_remain - event_time, 0)

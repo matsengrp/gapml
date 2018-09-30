@@ -1,9 +1,8 @@
-from typing import List, Dict, Tuple
+from typing import List
 import numpy as np
 import logging
-import random
 
-from allele import Allele, AlleleList
+from allele import AlleleList
 from allele_events import AlleleEvents
 from cell_state import CellState
 from cell_lineage_tree import CellLineageTree

@@ -18,13 +18,15 @@ class CLTSimulator:
     """
     def __init__(self,
         cell_state_simulator: CellStateSimulator,
-        allele_simulator: AlleleSimulator):
+        allele_simulator: AlleleSimulator,
+        scale_hazard_func=None):
         """
         @param cell_type_tree: the tree that specifies how cells differentiate
         @param allele_simulator: a simulator for how alleles get modified
         """
         self.cell_state_simulator = cell_state_simulator
         self.allele_simulator = allele_simulator
+        self.scale_hazard_func = scale_hazard_func
 
     def simulate(self, root_allele: Allele, root_cell_state: CellState, tot_time: float, max_nodes: int = 50):
         raise NotImplementedError()
@@ -33,6 +35,10 @@ class CLTSimulator:
         """
         assumes the tree has been built and we just simulate alleles along the branches in `tree`
         """
+        tree.add_feature("dist_to_root", 0)
+        for node in tree.get_descendants('preorder'):
+            node.add_feature("dist_to_root", node.dist + node.up.dist_to_root)
+
         for bcode_idx in range(tree.allele_list.bcode_meta.num_barcodes):
             for node in tree.traverse('preorder'):
                 if not node.is_root():
@@ -46,7 +52,8 @@ class CLTSimulator:
         allele = node.up.allele_list.alleles[bcode_idx]
         branch_end_allele = self.allele_simulator.simulate(
             allele,
-            time=node.dist)
+            time=node.dist,
+            scale_hazard=self.scale_hazard_func(node.up.dist_to_root))
         new_allele_list = [a.allele for a in node.allele_list.alleles]
         new_allele_list[bcode_idx] = branch_end_allele.allele
         branch_end_allele_list = AlleleList(
@@ -248,7 +255,8 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
             birth_min: float,
             death_rate: float,
             cell_state_simulator: CellStateSimulator,
-            allele_simulator: AlleleSimulator):
+            allele_simulator: AlleleSimulator,
+            scale_hazard_func=None):
         """
         @param birth_rate: the CTMC rate param for cell division
         @param death_rate: the CTMC rate param for cell death
@@ -262,6 +270,7 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
         self.death_rate = death_rate
         self.cell_state_simulator = cell_state_simulator
         self.allele_simulator = allele_simulator
+        self.scale_hazard_func = scale_hazard_func if scale_hazard_func is not None else lambda x: 1
 
     def simulate(self,
             tree_seed: int,

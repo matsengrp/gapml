@@ -37,6 +37,7 @@ class CLTLikelihoodModel:
             sess: Session,
             known_params: KnownModelParams,
             target_lams: ndarray,
+            target_lam_decay_rate: ndarray = np.array([1e-10]),
             boost_softmax_weights: ndarray = np.ones(3),
             trim_long_factor: ndarray = 0.05 * np.ones(2),
             trim_zero_probs: ndarray = 0.5 * np.ones(2),
@@ -101,6 +102,7 @@ class CLTLikelihoodModel:
         # Create all the variables
         self._create_known_parameters(
                 target_lams,
+                target_lam_decay_rate,
                 double_cut_weight,
                 boost_softmax_weights,
                 trim_long_factor,
@@ -114,6 +116,7 @@ class CLTLikelihoodModel:
                 tot_time_extra)
         self._create_parameters(
                 target_lams,
+                target_lam_decay_rate,
                 double_cut_weight,
                 boost_softmax_weights,
                 trim_long_factor,
@@ -172,6 +175,7 @@ class CLTLikelihoodModel:
     def _create_known_parameters(
             self,
             target_lams: ndarray,
+            target_lam_decay_rate: ndarray,
             double_cut_weight: ndarray,
             boost_softmax_weights: ndarray,
             trim_long_factor: ndarray,
@@ -189,6 +193,7 @@ class CLTLikelihoodModel:
         known_model_params = np.concatenate([
                     [0] if self.known_params.tot_time else [],
                     target_lams if self.known_params.target_lams else [],
+                    target_lam_decay_rate if self.known_params.target_lam_decay_rate else [],
                     double_cut_weight if self.known_params.double_cut_weight else [],
                     trim_long_factor if self.known_params.trim_long_factor else [],
                     trim_short_poissons if self.known_params.indel_poissons else [],
@@ -212,6 +217,10 @@ class CLTLikelihoodModel:
         if self.known_params.target_lams:
             up_to_size += target_lams.size
             self.target_lams = self.known_vars[prev_size: up_to_size]
+        prev_size = up_to_size
+        if self.known_params.target_lam_decay_rate:
+            up_to_size += 1
+            self.target_lam_decay_rate = self.known_vars[prev_size: up_to_size]
         prev_size = up_to_size
         if self.known_params.double_cut_weight:
             up_to_size += 1
@@ -264,6 +273,7 @@ class CLTLikelihoodModel:
     def _create_parameters(
             self,
             target_lams: ndarray,
+            target_lam_decay_rate: ndarray,
             double_cut_weight: ndarray,
             boost_softmax_weights: ndarray,
             trim_long_factor: ndarray,
@@ -284,6 +294,7 @@ class CLTLikelihoodModel:
         model_params = np.concatenate([
                     [] if self.known_params.tot_time else np.log([tot_time_extra]),
                     [] if self.known_params.target_lams else np.log(target_lams),
+                    [] if self.known_params.target_lam_decay_rate else inv_sigmoid(target_lam_decay_rate),
                     [] if self.known_params.double_cut_weight else np.log(double_cut_weight),
                     [] if self.known_params.trim_long_factor else inv_sigmoid(trim_long_factor),
                     [] if self.known_params.indel_poissons else np.log(trim_short_poissons),
@@ -307,6 +318,10 @@ class CLTLikelihoodModel:
         if not self.known_params.target_lams:
             up_to_size += target_lams.size
             self.target_lams = tf.exp(self.all_vars[prev_size: up_to_size])
+        prev_size = up_to_size
+        if not self.known_params.target_lam_decay_rate:
+            up_to_size += 1
+            self.target_lam_decay_rate = tf.sigmoid(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
         if not self.known_params.double_cut_weight:
             up_to_size += 1
@@ -455,6 +470,7 @@ class CLTLikelihoodModel:
     def set_params_from_dict(self, param_dict: Dict[str, ndarray]):
         self.set_params(
                 param_dict["target_lams"],
+                param_dict["target_lam_decay_rate"],
                 param_dict["double_cut_weight"],
                 param_dict["boost_softmax_weights"],
                 param_dict["trim_long_factor"],
@@ -470,6 +486,7 @@ class CLTLikelihoodModel:
     def set_params(
             self,
             target_lams: ndarray,
+            target_lam_decay_rate: ndarray,
             double_cut_weight: float,
             boost_softmax_weights: ndarray,
             trim_long_factor: ndarray,
@@ -488,6 +505,7 @@ class CLTLikelihoodModel:
         known_vals = np.concatenate([
             [] if not self.known_params.tot_time else [tot_time_extra],
             [] if not self.known_params.target_lams else target_lams,
+            [] if not self.known_params.target_lam_decay_rate else target_lam_decay_rate,
             [] if not self.known_params.double_cut_weight else double_cut_weight,
             [] if not self.known_params.trim_long_factor else trim_long_factor,
             [] if not self.known_params.indel_poissons else trim_short_poissons,
@@ -501,6 +519,7 @@ class CLTLikelihoodModel:
         init_val = np.concatenate([
             [] if self.known_params.tot_time else np.log([tot_time_extra]),
             [] if self.known_params.target_lams else np.log(target_lams),
+            [] if self.known_params.target_lam_decay_rate else np.log(target_lam_decay_rate),
             [] if self.known_params.double_cut_weight else np.log(double_cut_weight),
             [] if self.known_params.trim_long_factor else inv_sigmoid(trim_long_factor),
             [] if self.known_params.indel_poissons else np.log(trim_short_poissons),
@@ -525,6 +544,7 @@ class CLTLikelihoodModel:
         """
         return self.sess.run([
             self.target_lams,
+            self.target_lam_decay_rate,
             self.double_cut_weight,
             self.boost_softmax_weights,
             self.trim_long_factor,
@@ -545,6 +565,7 @@ class CLTLikelihoodModel:
         var_vals = self.get_vars()
         var_labels = [
             "target_lams",
+            "target_lam_decay_rate",
             "double_cut_weight",
             "boost_softmax_weights",
             "trim_long_factor",
@@ -557,6 +578,7 @@ class CLTLikelihoodModel:
             "branch_len_offsets_proportion",
             "tot_time",
             "tot_time_extra"]
+        assert len(var_labels) == len(var_vals)
         var_dict = {lab: val for lab, val in zip(var_labels, var_vals)}
         return var_dict
 
@@ -1048,6 +1070,7 @@ class CLTLikelihoodModel:
         self.log_lik_alleles_list = []
         self.Ddiags_list = []
         for bcode_idx in range(self.bcode_meta.num_barcodes):
+            print("likelihood bcode", bcode_idx)
             log_lik_alleles, Ddiags = self._create_topology_log_lik_barcode(transition_wrappers, bcode_idx)
             self.log_lik_alleles_list.append(log_lik_alleles)
             self.Ddiags_list.append(Ddiags)
@@ -1069,6 +1092,7 @@ class CLTLikelihoodModel:
             time_stays_constant = tf.reduce_max(tf.stack([
                 self.branch_len_offsets[child.node_id]
                 for child in node.children]))
+            decay_factor = tf.constant(1, dtype=tf.float64) - self.target_lam_decay_rate[0] * (self.dist_to_root[node.node_id] - self.branch_lens[node.node_id])/self.tot_time
             if not node.is_root():
                 # When making this probability, order the elements per the transition matrix of this node
                 index_vals = [[
@@ -1079,11 +1103,11 @@ class CLTLikelihoodModel:
                         index_vals,
                         output_shape=[transition_wrapper.num_possible_states + 1, 1],
                         name="haz_away.multifurc")
-                haz_stay_scaled = -haz_aways * time_stays_constant
+                haz_stay_scaled = -haz_aways * time_stays_constant * decay_factor
                 return haz_stay_scaled
             else:
                 root_haz_away = self.hazard_away_dict[TargetStatus()]
-                haz_stay_scaled = -root_haz_away * time_stays_constant
+                haz_stay_scaled = -root_haz_away * time_stays_constant * decay_factor
                 return haz_stay_scaled
         else:
             return tf.constant(0, dtype=tf.float64)
@@ -1172,10 +1196,11 @@ class CLTLikelihoodModel:
                     # Create the probability matrix exp(Qt)
                     with tf.name_scope("expm_ops%d" % node.node_id):
                         tr_mat = tf.verify_tensor_all_finite(trans_mats[child.node_id], "transmat %d problem" % child.node_id)
+                        decay_factor = tf.constant(1, dtype=tf.float64) - self.target_lam_decay_rate[0] * (self.dist_to_root[child.node_id] - self.branch_lens[child.node_id])/self.tot_time
                         pt_matrix[child.node_id], _, _, Ddiags[child.node_id] = tf_common.myexpm(
                                 # trans_mats[child.node_id],
                                 tr_mat,
-                                self.branch_lens[child.node_id])
+                                self.branch_lens[child.node_id] * decay_factor)
 
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.
