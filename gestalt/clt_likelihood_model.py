@@ -1092,7 +1092,9 @@ class CLTLikelihoodModel:
             time_stays_constant = tf.reduce_max(tf.stack([
                 self.branch_len_offsets[child.node_id]
                 for child in node.children]))
-            decay_factor = tf.constant(1, dtype=tf.float64) - self.target_lam_decay_rate[0] * (self.dist_to_root[node.node_id] - self.branch_lens[node.node_id])/self.tot_time
+            decay_factor = self._get_decay_factor(
+                self.dist_to_root[node.up.node_id],
+                time_stays_constant)
             if not node.is_root():
                 # When making this probability, order the elements per the transition matrix of this node
                 index_vals = [[
@@ -1111,6 +1113,18 @@ class CLTLikelihoodModel:
                 return haz_stay_scaled
         else:
             return tf.constant(0, dtype=tf.float64)
+
+    def _get_decay_factor(self, a, delta):
+        """
+        We suppose a linear decay rate of the instantaneous rate matrix (so a linear decay in the target lam values).
+        This is the factor from \int_a^(a + delta) decay(t) dt
+        where decay(t) = 1 - c * t/T
+        where T = total height of tree
+
+        @return tensorflow node with decay rate
+        """
+        b = a + delta
+        return delta - self.target_lam_decay_rate[0] * (tf.pow(b, 2) - tf.pow(a, 2))/(tf.constant(2, dtype=tf.float64) * self.tot_time)
 
     @profile
     def _create_branch_len_penalties(self):
@@ -1196,7 +1210,9 @@ class CLTLikelihoodModel:
                     # Create the probability matrix exp(Qt)
                     with tf.name_scope("expm_ops%d" % node.node_id):
                         tr_mat = tf.verify_tensor_all_finite(trans_mats[child.node_id], "transmat %d problem" % child.node_id)
-                        decay_factor = tf.constant(1, dtype=tf.float64) - self.target_lam_decay_rate[0] * (self.dist_to_root[child.node_id] - self.branch_lens[child.node_id])/self.tot_time
+                        decay_factor = self._get_decay_factor(
+                            self.dist_to_root[child.node_id] - self.branch_lens[child.node_id],
+                            self.branch_lens[child.node_id])
                         pt_matrix[child.node_id], _, _, Ddiags[child.node_id] = tf_common.myexpm(
                                 # trans_mats[child.node_id],
                                 tr_mat,

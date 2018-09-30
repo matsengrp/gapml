@@ -7,6 +7,7 @@ from scipy.stats import poisson
 
 from allele import Allele, AlleleList
 from indel_sets import TargetTract
+from cell_lineage_tree import CellLineageTree
 from target_status import TargetStatus
 from allele_simulator import AlleleSimulator
 from barcode_metadata import BarcodeMetadata
@@ -108,25 +109,34 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         else:
             return None, None
 
-    def simulate(self, init_allele: Allele, time: float, scale_hazard: float):
+    def simulate(self,
+            init_allele: Allele,
+            node: CellLineageTree,
+            scale_hazard_func,
+            time_incr: float = 0.025):
         """
         @param init_allele: the initial state of the allele
-        @param time: the amount of time to simulate the allele modification process
 
         @return allele after the simulation procedure
         """
         allele = Allele(init_allele.allele, init_allele.bcode_meta)
 
-        time_remain = time
+        time_remain = node.dist
         while time_remain > 0:
+            curr_time = (node.up.dist_to_root + node.dist - time_remain)
+            scale_hazard = scale_hazard_func(node.up.dist_to_root + node.dist - time_remain)
+            print(curr_time, scale_hazard)
             target_tract, event_time = self._race_target_tracts(allele, scale_hazard)
             if event_time is None:
                 break
-            time_remain = max(time_remain - event_time, 0)
 
-            if time_remain > 0:
+            if event_time < min(time_remain, time_incr):
                 # Target(s) got cut
                 self._do_repair(allele, target_tract)
+                time_remain -= event_time
+            else:
+                time_remain -= time_incr
+
         return allele
 
     def _do_repair(self, allele: Allele, target_tract: TargetTract):

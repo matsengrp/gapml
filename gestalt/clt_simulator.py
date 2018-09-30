@@ -52,8 +52,8 @@ class CLTSimulator:
         allele = node.up.allele_list.alleles[bcode_idx]
         branch_end_allele = self.allele_simulator.simulate(
             allele,
-            time=node.dist,
-            scale_hazard=self.scale_hazard_func(node.up.dist_to_root))
+            node,
+            scale_hazard_func=self.scale_hazard_func)
         new_allele_list = [a.allele for a in node.allele_list.alleles]
         new_allele_list[bcode_idx] = branch_end_allele.allele
         branch_end_allele_list = AlleleList(
