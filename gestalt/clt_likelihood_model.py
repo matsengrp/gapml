@@ -1102,7 +1102,8 @@ class CLTLikelihoodModel:
                 if not node.is_resolved_multifurcation():
                     spine_len = tf.reduce_max(tf.stack([
                         self.branch_len_offsets[child.node_id]
-                        for child in node.children]))
+                        for child in node.children
+                        if not hasattr(child, "ignore_penalty") or not child.ignore_penalty]))
                     branch_lens_to_pen.append(spine_len)
 
                 for child in node.children:
