@@ -203,6 +203,8 @@ class HangingChad:
                     (same random leaf across all trees). Also returns the original tree.
                     This marks the tree appropriately for the estimation method -- it will mark the
                     hanging chad with `ignore_penalty` so we know that its penalty should be excluded.
+                    `ignore_penalty` will make sure that we have the same penalty for regrafts onto multifurcs and branches.
+                    So all branch penalties should be exactly the same now.
                     It will also mark which node is implicit by adding an `implicit_child` and which
                     node should have its penalty be based on a sum of branch lengths, as specified by
                     the `spine_children` attr.
