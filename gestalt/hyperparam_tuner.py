@@ -61,7 +61,8 @@ def tune(
         bcode_meta: BarcodeMetadata,
         args,
         fit_params: Dict,
-        assessor: ModelAssessor):
+        assessor: ModelAssessor,
+        conv_thres: float = 1e-6):
     """
     Tunes the `branch_pen_param`, `target_lam_pen_param` penalty parameters
 
@@ -69,9 +70,23 @@ def tune(
     """
     assert len(args.branch_pen_params) > 1 or len(args.target_lam_pen_params) > 1
 
+    # First create the initialization/optimization settings under consideration
+    fit_param_list = []
+    for branch_pen_param in args.branch_pen_params:
+        for target_lam_pen_param in args.target_lam_pen_params:
+            if len(fit_param_list) == 0:
+                new_fit_params = fit_params.copy()
+            else:
+                new_fit_params = {}
+            new_fit_params["branch_pen_param"] = branch_pen_param
+            new_fit_params["target_lam_pen_param"] = target_lam_pen_param
+            new_fit_params["conv_thres"] = conv_thres
+            fit_param_list.append(new_fit_params)
+
     if bcode_meta.num_barcodes > 1:
         # For many barcodes, we split by barcode
         return _tune_hyperparams(
+            fit_param_list,
             tree,
             bcode_meta,
             args,
@@ -84,6 +99,7 @@ def tune(
         fit_params.pop('branch_len_offsets_proportion', None)
         # For single barcode, we split into subtrees
         return _tune_hyperparams(
+            fit_param_list,
             tree,
             bcode_meta,
             args,
@@ -94,14 +110,14 @@ def tune(
 
 
 def _tune_hyperparams(
+        fit_param_list: List[Dict],
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
         args,
         fit_params: Dict,
         kfold_fnc,
         hyperparam_score_fnc,
-        assessor: ModelAssessor = None,
-        conv_thres: float = 1e-5):
+        assessor: ModelAssessor = None):
     """
     @param max_num_chad_parents: max number of chad parents to consider
     @param conv_thres: the convergence threshold for training the model
@@ -125,19 +141,6 @@ def _tune_hyperparams(
             tree_split.train_bcode_meta,
             args.max_extra_steps,
             args.max_sum_states) for tree_split in tree_splits]
-
-    # First create the initialization/optimization settings
-    fit_param_list = []
-    for branch_pen_param in args.branch_pen_params:
-        for target_lam_pen_param in args.target_lam_pen_params:
-            if len(fit_param_list) == 0:
-                new_fit_params = fit_params.copy()
-            else:
-                new_fit_params = {}
-            new_fit_params["branch_pen_param"] = branch_pen_param
-            new_fit_params["target_lam_pen_param"] = target_lam_pen_param
-            new_fit_params["conv_thres"] = conv_thres
-            fit_param_list.append(new_fit_params)
 
     # Actually fit the trees using the kfold barcodes
     worker_list = [LikelihoodScorer(
