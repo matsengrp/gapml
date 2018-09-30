@@ -507,7 +507,6 @@ class MRCASpearmanMeasurer(MRCADistanceMeasurer):
 
 
 class InternalCorrMeasurer(MRCADistanceMeasurer):
-    # TODO: I think there is bug in this code
     name = "internal_pearson"
 
     def __init__(

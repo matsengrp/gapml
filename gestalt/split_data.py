@@ -32,7 +32,16 @@ class TreeDataSplit:
         self.val_bcode_meta = val_bcode_meta
 
 
-def _pick_random_validation_node_ids(tree: CellLineageTree, min_multifurc_children: int):
+def _pick_random_leaves_from_mulifurcs(tree: CellLineageTree, min_multifurc_children: int):
+    """
+    For each multifurcation in the tree with a sufficient number of children,
+    randomly pick a leaf node.
+
+    @param min_multifurc_children: the min number of children at a multifurcation
+            before we consider grabbing a random child
+
+    @return List[CellLineageTree] a list of the randomly picked leaves
+    """
     val_obs = []
     for node in tree.traverse():
         if node.is_leaf():
@@ -44,6 +53,9 @@ def _pick_random_validation_node_ids(tree: CellLineageTree, min_multifurc_childr
             continue
 
         leaf_children = [c for c in node.get_children() if c.is_leaf()]
+        if len(leaf_children) == 0:
+            continue
+
         leaf = random.choice(leaf_children)
         val_obs.append((leaf.copy(), leaf.up.node_id))
     return val_obs
@@ -67,11 +79,11 @@ def create_kfold_trees(
     for i in range(n_splits):
         tree_copy = tree.copy()
 
-        val_obs = _pick_random_validation_node_ids(tree_copy, min_multifurc_children)
+        val_obs = _pick_random_leaves_from_mulifurcs(tree_copy, min_multifurc_children)
         val_obs_ids = set([n.node_id for n, _ in val_obs])
         if len(val_obs) == 0:
             # If cannot find enough validation leaves, try a smaller threshold
-            val_obs = _pick_random_validation_node_ids(tree_copy, max(min_multifurc_children - 1, 3))
+            val_obs = _pick_random_leaves_from_mulifurcs(tree_copy, max(min_multifurc_children - 1, 3))
             val_obs_ids = set([n.node_id for n, _ in val_obs])
         assert len(val_obs) > 0
 
