@@ -2,7 +2,6 @@ import time
 import numpy as np
 import tensorflow as tf
 import logging
-from typing import List
 
 from clt_estimator import CLTEstimator
 from clt_likelihood_model import CLTLikelihoodModel
@@ -59,11 +58,13 @@ class CLTPenalizedEstimator(CLTEstimator):
             conv_thres: float = 1e-4):
         """
         Finds the best model parameters
-        @param branch_pen: penalty parameter for the log target lambda difference from the mean
+        @param branch_pen_param: penalty parameter for branch lengths
+        @param target_lam_pen_param: penalty parameter for target lambdas
         @param print_iter: number of iters to wait to print iterim results
-        @param dist_measurer: if available, this is use to measure how close current tree is to the true tree
+        @param save_iter: number of iters before we collect param estimates and assess how good our model is
+        @param assessor: if available, this is use to measure how close current tree is to the true tree
                             useful to see how progress is being made
-
+        @param conv_thres: threshold for declaring convergence
         """
         feed_dict = {
             self.model.branch_pen_param_ph: branch_pen_param,
