@@ -49,7 +49,6 @@ class CLTPenalizedEstimator(CLTEstimator):
         #self.model.check_grad(transition_wrappers)
 
     def fit(self,
-            log_barr_pen_param: float,
             branch_pen_param: float = 0,
             target_lam_pen_param: float = 0,
             print_iter: int = 1,
@@ -59,14 +58,12 @@ class CLTPenalizedEstimator(CLTEstimator):
             min_iters: int = 20):
         """
         Finds the best model parameters
-        @param log_barr: penalty parameter for the log barrier function
         @param branch_pen: penalty parameter for the log target lambda difference from the mean
         @param print_iter: number of iters to wait to print iterim results
         @param dist_measurer: if available, this is use to measure how close current tree is to the true tree
                             useful to see how progress is being made
         """
         feed_dict = {
-            self.model.log_barr_pen_param_ph: log_barr_pen_param,
             self.model.branch_pen_param_ph: branch_pen_param,
             self.model.target_lam_pen_param_ph: target_lam_pen_param,
         }

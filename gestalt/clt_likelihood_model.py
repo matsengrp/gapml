@@ -89,7 +89,6 @@ class CLTLikelihoodModel:
         self.scratch_dir = scratch_dir
 
         # Stores the penalty parameters
-        self.log_barr_pen_param_ph = tf.placeholder(tf.float64)
         self.branch_pen_param_ph = tf.placeholder(tf.float64)
         self.target_lam_pen_param_ph = tf.placeholder(tf.float64)
 

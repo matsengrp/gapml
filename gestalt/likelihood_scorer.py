@@ -29,7 +29,6 @@ class LikelihoodScorerResult:
         @param fit_params: the fitting parameters used for warm-start
         """
         self.fit_params = fit_params
-        self.log_barr_pen_param = fit_params['log_barr_pen_param']
         self.branch_pen_param = fit_params['branch_pen_param']
         self.target_lam_pen_param = fit_params['target_lam_pen_param']
 
@@ -41,9 +40,7 @@ class LikelihoodScorerResult:
         self.log_lik = train_history[-1]["log_lik"]
 
     def get_fit_params(self):
-        # TODO: careful -- this isnt a deep copy
         fit_params = copy.deepcopy(self.model_params_dict)
-        fit_params["log_barr_pen_param"] = self.log_barr_pen_param
         fit_params["branch_pen_param"] = self.branch_pen_param
         fit_params["target_lam_pen_param"] = self.target_lam_pen_param
         return fit_params
@@ -78,12 +75,11 @@ class LikelihoodScorer(ParallelWorker):
         @param seed: required to set the seed of each parallel worker
         @param tree: the cell lineage tree topology to fit the likelihood for
         @param bcode_meta: BarcodeMetadata
-        @param log_barr: log barrier penalty parameter, i.e. how much to scale the penalty
         @param max_iters: maximum number of iterations for MLE
         @param transition_wrap_maker: TransitionWrapperMaker
         @param fit_param_list: a list of dictionaries specifying model parameter initializations as well
                                     as penalty parameter values. At the very least, each model param list
-                                    must contain the penalty parameter settings (branch_pen_param and log_barr_pen_param).
+                                    must contain the penalty parameter settings (branch_pen_param and target lam).
                                     If dictionaries for indices >= 1 have few model param initialization values,
                                     we copy the fitted values over from the previous optimization results. This
                                     serves as a way to warm start.
@@ -141,7 +137,6 @@ class LikelihoodScorer(ParallelWorker):
 
         # Actually fit the model
         train_history = estimator.fit(
-                log_barr_pen_param=fit_params["log_barr_pen_param"],
                 branch_pen_param=fit_params["branch_pen_param"],
                 target_lam_pen_param=fit_params["target_lam_pen_param"],
                 conv_thres=fit_params["conv_thres"] if "conv_thres" in fit_params else conv_thres_default,
@@ -168,8 +163,7 @@ class LikelihoodScorer(ParallelWorker):
         @return LikelihoodScorerResult, returns None if all attempts failed
         """
         logging.info(
-                "RUNNING log pen param %f dist to half pen param %f target lam pen param %f",
-                fit_params["log_barr_pen_param"],
+                "RUNNING branch pen param %f target lam pen param %f",
                 fit_params["branch_pen_param"],
                 fit_params["target_lam_pen_param"])
         results = []

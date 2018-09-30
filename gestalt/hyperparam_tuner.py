@@ -22,7 +22,6 @@ class PenaltyScorerResult:
             score: float,
             fit_results: List[LikelihoodScorerResult]):
         """
-        @param log_barr_pen_param: the log barrier penalty param used when fitting the model
         @param branch_pen_param: the penalty parameter to make branch lengths more similar
         @param model_params_dict: an example of the final fitted parameters when we did
                         train/validation split/kfold CV. (this is used mostly as a warm start)
@@ -145,7 +144,6 @@ def _tune_hyperparams(
                 new_fit_params = fit_params.copy()
             else:
                 new_fit_params = {}
-            new_fit_params["log_barr_pen_param"] = args.log_barr_pen_param
             new_fit_params["branch_pen_param"] = branch_pen_param
             new_fit_params["target_lam_pen_param"] = target_lam_pen_param
             new_fit_params["conv_thres"] = conv_thres

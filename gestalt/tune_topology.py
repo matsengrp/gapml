@@ -62,11 +62,6 @@ def parse_args(args):
         default=None,
         help='pkl file with true model if available')
     parser.add_argument(
-        '--log-barr-pen-param',
-        type=float,
-        default=0.001,
-        help="log barrier parameter on the branch lengths")
-    parser.add_argument(
         '--target-lam-pen-params',
         type=str,
         default='1',
@@ -173,13 +168,14 @@ def parse_args(args):
     parser.set_defaults(tot_time_known=True)
     args = parser.parse_args(args)
 
-    assert args.log_barr_pen_param >= 0
     args.branch_pen_params = list(sorted(
         [float(lam) for lam in args.branch_pen_params.split(",")],
         reverse=True))
+    assert all([p > 0 for p in args.branch_pen_params])
     args.target_lam_pen_params = list(sorted(
         [float(lam) for lam in args.target_lam_pen_params.split(",")],
         reverse=True))
+    assert all([p > 0 for p in args.target_lam_pen_params])
 
     create_directory(args.out_model_file)
     if args.scratch_dir is None:
@@ -468,7 +464,6 @@ def main(args=sys.argv[1:]):
         if i < args.num_penalty_tune_iters:
             if len(args.branch_pen_params) == 1 and len(args.target_lam_pen_params) == 1:
                 # If nothing to tune... do nothing
-                fit_params["log_barr_pen_param"] = args.log_barr_pen_param
                 fit_params["branch_pen_param"] = args.branch_pen_params[0]
                 fit_params["target_lam_pen_param"] = args.target_lam_pen_params[0]
             else:
