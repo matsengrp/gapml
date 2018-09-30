@@ -22,8 +22,6 @@ import hanging_chad_finder
 from common import create_directory, get_randint, save_data, get_init_target_lams
 import file_readers
 import collapsed_tree
-from clt_likelihood_penalization import mark_target_status_to_penalize
-import ancestral_events_finder
 
 
 def parse_args(args):
@@ -62,16 +60,19 @@ def parse_args(args):
         default=None,
         help='pkl file with true model if available')
     parser.add_argument(
-        '--log-barr-pen-param',
-        type=float,
-        default=0.001,
-        help="log barrier parameter on the branch lengths")
-    parser.add_argument(
-        '--dist-to-half-pen-params',
+        '--target-lam-pen-params',
         type=str,
         default='1',
         help="""
         Comma-separated string with penalty parameters on the target lambdas.
+        We will tune over the different penalty params given
+        """)
+    parser.add_argument(
+        '--branch-pen-params',
+        type=str,
+        default='1',
+        help="""
+        Comma-separated string with penalty parameters on the branch penalty
         We will tune over the different penalty params given
         """)
     parser.add_argument(
@@ -165,10 +166,14 @@ def parse_args(args):
     parser.set_defaults(tot_time_known=True)
     args = parser.parse_args(args)
 
-    assert args.log_barr_pen_param >= 0
-    args.dist_to_half_pen_params = list(sorted(
-        [float(lam) for lam in args.dist_to_half_pen_params.split(",")],
+    args.branch_pen_params = list(sorted(
+        [float(lam) for lam in args.branch_pen_params.split(",")],
         reverse=True))
+    assert all([p > 0 for p in args.branch_pen_params])
+    args.target_lam_pen_params = list(sorted(
+        [float(lam) for lam in args.target_lam_pen_params.split(",")],
+        reverse=True))
+    assert all([p > 0 for p in args.target_lam_pen_params])
 
     create_directory(args.out_model_file)
     if args.scratch_dir is None:
@@ -251,7 +256,7 @@ def read_true_model_files(args, num_barcodes):
     true_model_dict, assessor = file_readers.read_true_model(
             args.true_model_file,
             num_barcodes,
-            measurer_classes=[BHVDistanceMeasurer], #InternalCorrMeasurer],
+            measurer_classes=[BHVDistanceMeasurer, InternalCorrMeasurer],
             scratch_dir=args.scratch_dir)
 
     return true_model_dict, assessor
@@ -281,8 +286,6 @@ def fit_multifurc_tree(
             bcode_meta,
             args.max_extra_steps,
             args.max_sum_states)
-    ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
-    mark_target_status_to_penalize(tree)
     if 'branch_len_inners' in param_dict:
         # If branch length estimates are provided and we have the mapping between
         # the full_tree nodes and the nodes in the no_chad tree, then we should do warm-start.
@@ -419,6 +422,7 @@ def main(args=sys.argv[1:]):
     true_model_dict, assessor = read_true_model_files(args, bcode_meta.num_barcodes)
     fit_params = read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict)
 
+    logging.info("num barcodes %d", bcode_meta.num_barcodes)
     logging.info("STARTING.... before random rearrange")
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))
     logging.info(tree.get_ascii(attributes=["node_id"]))
@@ -434,7 +438,10 @@ def main(args=sys.argv[1:]):
     logging.info("STARTING for reals!")
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))
     logging.info(tree.get_ascii(attributes=["node_id"]))
+    logging.info("Abundance...")
     logging.info(tree.get_ascii(attributes=["abundance"]))
+    for leaf in tree:
+        assert leaf.abundance >= 1
 
     for node in tree.traverse():
         assert node.node_id is not None
@@ -450,16 +457,16 @@ def main(args=sys.argv[1:]):
         penalty_tune_result = None
         best_res = None
         if i < args.num_penalty_tune_iters:
-            if len(args.dist_to_half_pen_params) == 1:
+            if len(args.branch_pen_params) == 1 and len(args.target_lam_pen_params) == 1:
                 # If nothing to tune... do nothing
-                fit_params["log_barr_pen_param"] = args.log_barr_pen_param
-                fit_params["dist_to_half_pen_param"] = args.dist_to_half_pen_params[0]
+                fit_params["branch_pen_param"] = args.branch_pen_params[0]
+                fit_params["target_lam_pen_param"] = args.target_lam_pen_params[0]
             else:
                 # Tune penalty params!
                 logging.info("Iter %d: Tuning penalty params", i)
                 penalty_tune_result = hyperparam_tuner.tune(tree, bcode_meta, args, fit_params, assessor)
                 _, fit_params, best_res = penalty_tune_result.get_best_result()
-            logging.info("Iter %d: Best pen param %f", i, fit_params["dist_to_half_pen_param"])
+            logging.info("Iter %d: Best pen param %f", i, fit_params["branch_pen_param"])
 
         # Find hanging chads
         # TODO: kind slow right now... reruns chad-finding code
@@ -514,19 +521,20 @@ def main(args=sys.argv[1:]):
         # just for fun... check that the number of leaves match
         assert len(tree) == num_old_leaves
 
-        logging.info(
-                "Iter %d, begin dists %s, log lik %f %f",
-                i,
-                best_res.train_history[0]["performance"],
-                best_res.train_history[0]["pen_log_lik"],
-                best_res.train_history[0]["log_lik"])
-        logging.info(
-                "Iter %d, end dists %s, log lik %f %f (num iters %d)",
-                i,
-                best_res.train_history[-1]["performance"],
-                best_res.pen_log_lik,
-                best_res.log_lik,
-                len(best_res.train_history) - 1)
+        if assessor is not None:
+            logging.info(
+                    "Iter %d, begin dists %s, log lik %f %f",
+                    i,
+                    best_res.train_history[0]["performance"],
+                    best_res.train_history[0]["pen_log_lik"],
+                    best_res.train_history[0]["log_lik"])
+            logging.info(
+                    "Iter %d, end dists %s, log lik %f %f (num iters %d)",
+                    i,
+                    best_res.train_history[-1]["performance"],
+                    best_res.pen_log_lik,
+                    best_res.log_lik,
+                    len(best_res.train_history) - 1)
 
         tuning_history.append({
             "chad_tune_result": chad_tune_result,

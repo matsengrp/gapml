@@ -15,7 +15,6 @@ from common import get_randint
 from model_assessor import ModelAssessor
 import collapsed_tree
 import ancestral_events_finder
-from clt_likelihood_penalization import mark_target_status_to_penalize
 from common import assign_rand_tree_lengths
 
 
@@ -575,10 +574,6 @@ def _fit_nochad_result(
         bcode_meta,
         args.max_extra_steps,
         args.max_sum_states)
-    mark_target_status_to_penalize(nochad_tree)
-    pen_anc_state = dict()
-    for node in nochad_tree.get_descendants():
-        pen_anc_state[node.node_id] = node.pen_targ_stat
 
     no_chad_res = LikelihoodScorer(
         get_randint(),
@@ -592,7 +587,7 @@ def _fit_nochad_result(
         scratch_dir=args.scratch_dir,
         assessor=assessor).run_worker(None)[0]
     assert no_chad_res is not None
-    return no_chad_res, pen_anc_state
+    return no_chad_res
 
 
 def _create_warm_start_fit_params(
@@ -658,7 +653,7 @@ def tune(
     # If we have valid branch length estimates, then there isn't really a need to train a no chad tree.
     # Hence zero iterations
     nochad_max_iters = 0 if 'branch_len_inners' in full_tree_fit_params else args.max_iters
-    no_chad_res, pen_anc_state = _fit_nochad_result(
+    no_chad_res = _fit_nochad_result(
         hanging_chad,
         bcode_meta,
         args,
@@ -678,19 +673,6 @@ def tune(
             hanging_chad,
             no_chad_res,
             new_chad_tree)
-
-        # Mark the target statuses to penalize -- these are adopted from the nochad tree
-        for node in new_chad_tree.get_descendants():
-            # Recall that we do not penalize the hanging chad
-            if node.nochad_id is not None:
-                node.add_feature('pen_targ_stat',
-                    pen_anc_state[node.nochad_id])
-                if node.up.nochad_id is None:
-                    # If the parent node is the implicit node,
-                    # we should have the implicit node get penalized.
-                    # The child of the implicit node will not be.
-                    node.up.add_feature('pen_targ_stat',
-                        pen_anc_state[node.nochad_id])
 
         trans_wrap_maker = TransitionWrapperMaker(
             new_chad_tree,

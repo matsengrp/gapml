@@ -26,7 +26,7 @@ nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_enviro
 nest.add(
     'seed',
     #range(5,6),
-    [0],
+    [1],
     label_func=lambda c: "seed%d" % c,
 )
 
@@ -50,12 +50,12 @@ def generate(env, outdir, c):
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
         #'--target-lambda 0.4',
-        '--target-lambda 0.7,0.7,0.7',
+        '--target-lambda 0.8,0.7,0.6,.5,.4',
         '--double 0.04',
         '--trim-long-factor 0.001 0.001',
         '--time 1',
         '--num-barcodes',
-        1,
+        3,
         '--birth-sync-time 0.2',
         '--birth-decay -8',
         '--birth-min 1',
@@ -76,7 +76,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [1],
+    [3],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -148,15 +148,18 @@ def run_MLE(env, outdir, c):
         '--log-file ${TARGETS[1]}',
         '--seed',
 	c['seed'] + 1,
-        '--log-barr 1e-20',
-        '--dist-to-half-pen 1e-20',
+        '--branch-pen',
+        '100,20',
+        '--target-lam-pen',
+        '1',
         '--max-sum-states 2002',
         '--max-extra-steps 2',
-        '--max-iters 10',
+        '--max-iters 50',
+        '--num-penalty-tune-splits 2',
         '--num-penalty-tune-iters 1',
         '--num-chad-tune-iters 3',
         '--max-chad-tune-search 2',
-        '--num-init-random-rearrange 2',
+        '--num-init-random-rearrange 0',
         '--tot-time-known',
     ]
     return env.Command(
