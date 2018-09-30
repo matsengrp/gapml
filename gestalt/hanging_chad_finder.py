@@ -640,7 +640,7 @@ def tune(
         args,
         full_tree_fit_params: Dict,
         assessor: ModelAssessor = None,
-        print_assess_metric: str = "bhv"):
+        print_assess_metric: str = "full_bhv"):
     """
     Tune the given hanging chad
     @param max_chad_tune_search: maximum number of hanging chad locations to consider

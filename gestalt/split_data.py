@@ -9,6 +9,7 @@ import random
 
 from sklearn.model_selection import KFold
 
+from anc_state import AncState
 from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
 
@@ -32,7 +33,11 @@ class TreeDataSplit:
         self.val_bcode_meta = val_bcode_meta
 
 
-def _pick_random_leaves_from_mulifurcs(tree: CellLineageTree, min_multifurc_children: int):
+def _pick_random_leaves_from_mulifurcs(
+        tree: CellLineageTree,
+        min_multifurc_children: int,
+        bcode_meta: BarcodeMetadata,
+        max_tries: int = 2):
     """
     For each multifurcation in the tree with a sufficient number of children,
     randomly pick a leaf node.
@@ -47,17 +52,41 @@ def _pick_random_leaves_from_mulifurcs(tree: CellLineageTree, min_multifurc_chil
         if node.is_leaf():
             continue
 
-        if len(node.get_children()) <= min_multifurc_children:
+        num_children = len(node.get_children())
+        if num_children - 1 <= min_multifurc_children:
             # Only create validation leaves from multifurcations with
             # 4 or more children
             continue
 
+        # Pick out a random target tract -- we will be taking away all leaves
+        # with same target tract
         leaf_children = [c for c in node.get_children() if c.is_leaf()]
-        if len(leaf_children) == 0:
-            continue
+        leaf_target_tract_tuples = dict()
+        for leaf in leaf_children:
+            leaf_anc_states = [
+                    AncState.create_for_observed_allele(allele_events, bcode_meta)
+                    for allele_events in leaf.allele_events_list]
+            tt_tuple = tuple([tuple([
+                sg.get_singleton().get_target_tract() for sg in anc_state.indel_set_list])
+                for anc_state in leaf_anc_states])
+            if tt_tuple in leaf_target_tract_tuples:
+                leaf_target_tract_tuples[tt_tuple].append(leaf)
+            else:
+                leaf_target_tract_tuples[tt_tuple] = [leaf]
 
-        leaf = random.choice(leaf_children)
-        val_obs.append((leaf.copy(), leaf.up.node_id))
+        # Keep trying to randomly pick a good leaf
+        # We want to pick out all the leaves with the same target tract status
+        # But we also want to make sure we don't end up taking away too many children of that node
+        for i in range(max_tries):
+            chosen_tt_tuple = random.choice(list(leaf_target_tract_tuples.keys()))
+            chosen_leaves = leaf_target_tract_tuples[chosen_tt_tuple]
+            if num_children - len(chosen_leaves) <= min_multifurc_children:
+                chosen_leaves = []
+            else:
+                break
+
+        for leaf in chosen_leaves:
+            val_obs.append((leaf.copy(), leaf.up.node_id))
     return val_obs
 
 
@@ -79,11 +108,17 @@ def create_kfold_trees(
     for i in range(n_splits):
         tree_copy = tree.copy()
 
-        val_obs = _pick_random_leaves_from_mulifurcs(tree_copy, min_multifurc_children)
+        val_obs = _pick_random_leaves_from_mulifurcs(
+                tree_copy,
+                min_multifurc_children,
+                bcode_meta)
         val_obs_ids = set([n.node_id for n, _ in val_obs])
         if len(val_obs) == 0:
             # If cannot find enough validation leaves, try a smaller threshold
-            val_obs = _pick_random_leaves_from_mulifurcs(tree_copy, max(min_multifurc_children - 1, 3))
+            val_obs = _pick_random_leaves_from_mulifurcs(
+                    tree_copy,
+                    max(min_multifurc_children - 1, 2),
+                    bcode_meta)
             val_obs_ids = set([n.node_id for n, _ in val_obs])
         assert len(val_obs) > 0
 

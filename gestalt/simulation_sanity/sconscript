@@ -76,7 +76,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [3],
+    [1],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 

@@ -333,6 +333,6 @@ def _get_one_bcode_hyperparam_score(
     hyperparam_scores = [
             res.log_lik - pen_param_res.log_lik
             for res, pen_param_res in zip(worker_results, pen_param_results)]
-    tot_hyperparam_score = np.sum(hyperparam_scores)
+    tot_hyperparam_score = np.mean(hyperparam_scores)
     logging.info("all Pr(Val given T) %s (sum %f)", hyperparam_scores, tot_hyperparam_score)
     return tot_hyperparam_score
