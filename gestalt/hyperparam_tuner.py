@@ -11,8 +11,6 @@ from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from parallel_worker import SubprocessManager
 from common import get_randint
 from model_assessor import ModelAssessor
-from clt_likelihood_penalization import mark_target_status_to_penalize
-import ancestral_events_finder as anc_evt_finder
 from optim_settings import KnownModelParams
 
 
@@ -131,10 +129,6 @@ def _tune_hyperparams(
             tree_split.bcode_meta,
             args.max_extra_steps,
             args.max_sum_states) for tree_split in tree_splits]
-    # Mark the target status to penalize for each node in the tree
-    for tree_split in tree_splits:
-        anc_evt_finder.annotate_ancestral_states(tree_split.tree, bcode_meta)
-        mark_target_status_to_penalize(tree_split.tree)
 
     # First create the initialization/optimization settings
     fit_param_list = []
@@ -228,8 +222,6 @@ def _get_many_bcode_stability_score(
                 target_lams=True,
                 tot_time=True,
                 indel_params=True)
-            anc_evt_finder.annotate_ancestral_states(tree_split.val_clt, tree_split.bcode_meta)
-            mark_target_status_to_penalize(tree_split.val_clt)
             transition_wrap_maker = TransitionWrapperMaker(
                 tree_split.val_clt,
                 tree_split.val_bcode_meta,
@@ -320,8 +312,6 @@ def _get_one_bcode_stability_score(
         fit_params['branch_len_offsets_proportion'] = new_br_offsets
         fit_params['branch_pen_param'] = 0
 
-        anc_evt_finder.annotate_ancestral_states(train_val_tree, tree_split.bcode_meta)
-        mark_target_status_to_penalize(train_val_tree)
         transition_wrap_maker = TransitionWrapperMaker(
             train_val_tree,
             tree_split.bcode_meta,

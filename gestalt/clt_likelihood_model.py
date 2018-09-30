@@ -1119,6 +1119,8 @@ class CLTLikelihoodModel:
                                         indices=child.spine_children))
                             branch_lens_to_pen.append(resolved_spine_len)
                     elif not hasattr(child, "ignore_penalty") or not child.ignore_penalty:
+                        # We sometimes have branches where we need to ignore this penalty
+                        # in order to make penalties comparable between different topologies
                         branch_lens_to_pen.append(self.branch_lens[child.node_id])
         log_br = tf.log(branch_lens_to_pen)
         return tf.reduce_mean(tf.pow(log_br - tf.reduce_mean(log_br), 2))

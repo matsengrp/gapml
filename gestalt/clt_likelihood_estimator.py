@@ -143,7 +143,6 @@ class CLTPenalizedEstimator(CLTEstimator):
                 logging.info("iter %d, train time %f", i, time.time() - st_time)
                 if assessor is not None:
                     bifurc_tree = self.model.get_fitted_bifurcating_tree()
-                    logging.info(bifurc_tree.get_ascii(attributes=["dist"]))
                     performance_dict = assessor.assess(var_dict, bifurc_tree)
                     logging.info("iter %d assess: %s", i, performance_dict)
                     iter_info["performance"] = performance_dict

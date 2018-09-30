@@ -22,8 +22,6 @@ import hanging_chad_finder
 from common import create_directory, get_randint, save_data, get_init_target_lams
 import file_readers
 import collapsed_tree
-from clt_likelihood_penalization import mark_target_status_to_penalize
-import ancestral_events_finder
 
 
 def parse_args(args):
@@ -288,10 +286,7 @@ def fit_multifurc_tree(
             bcode_meta,
             args.max_extra_steps,
             args.max_sum_states)
-    ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
-    mark_target_status_to_penalize(tree)
     if 'branch_len_inners' in param_dict:
-        print("PRONIG")
         # If branch length estimates are provided and we have the mapping between
         # the full_tree nodes and the nodes in the no_chad tree, then we should do warm-start.
         full_tree_br_inners = param_dict['branch_len_inners']
