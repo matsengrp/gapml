@@ -564,9 +564,9 @@ class InternalCorrMeasurer(MRCADistanceMeasurer):
                 self.ref_leaf_groups,
                 tree_mrca_matrix)
         corr1, _ = self.corr_func(self.ref_node_val, tree_node_val1)
-        logging.info("first set %f, len %d", corr1, len(tree_node_val1))
-        logging.info("ref=%s", self.ref_node_val)
-        logging.info("me=%s", tree_node_val1)
+        #logging.info("first set %f, len %d", corr1, len(tree_node_val1))
+        #logging.info("ref=%s", self.ref_node_val)
+        #logging.info("me=%s", tree_node_val1)
 
         tree_leaf_groups2, tree_node_val2 = self.get_ref_node_distances(
                 tree,
@@ -575,8 +575,8 @@ class InternalCorrMeasurer(MRCADistanceMeasurer):
                 tree_leaf_groups2,
                 self.ref_tree_mrca_matrix)
         corr2, _ = self.corr_func(ref_node_val2, tree_node_val2)
-        logging.info("second set %f, len %d", corr2, len(tree_node_val2))
-        logging.info("ref=%s", ref_node_val2)
-        logging.info("me=%s", tree_node_val2)
+        #logging.info("second set %f, len %d", corr2, len(tree_node_val2))
+        #logging.info("ref=%s", ref_node_val2)
+        #logging.info("me=%s", tree_node_val2)
 
         return 1 - (corr1 + corr2)/2

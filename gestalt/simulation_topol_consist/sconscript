@@ -39,7 +39,7 @@ GROWTH_DICT = {
         "birth_decay": -9,
         "birth_min": 3,
         "lambda_sequence": [.8, .75, .7, .65, .6, .55, .5],
-        "double": 0.03,
+        "double": 0.01, # 0.04
         "min_leaves": 70,
         "max_leaves": 200,
     },
@@ -59,13 +59,13 @@ GROWTH_DICT = {
 
 nest.add(
     'model_seed',
-    [0],
+    [100],
     label_func=lambda c: 'model_seed%d' % c,
 )
 
 nest.add(
     'seed',
-    [90], #[12],
+    [105],
 )
 
 nest.add(
@@ -107,7 +107,7 @@ def generate(env, outdir, c):
         '--max-clt-nodes',
         int(GROWTH_DICT[c['growth_stage']]['max_leaves']/GROWTH_DICT[c['growth_stage']]['sampling_rate'] * 1.1),
         '--num-barcodes',
-        2,
+        9,
         '--min-uniq-alleles',
         GROWTH_DICT[c['growth_stage']]['min_leaves'],
         '--max-uniq-alleles',
@@ -135,7 +135,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [2], #3,9],
+    [1], #2,4],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -208,7 +208,7 @@ def run_chronos(env, outdir, c):
 
 nest.add(
     'sum_states',
-    [30],
+    [10], # not really different from using 30
     label_func=lambda c: "sum_states_%d" % c,
 )
 
@@ -220,14 +220,14 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
+    penalty_params = "64,16,4,2,0.5"
+    target_lam_penalty_params = "1"
     if c['num_barcodes'] == 1:
-        penalty_params = "128,32,8,2"
-        target_lam_penalty_params = "10,1"
-    elif c['num_barcodes'] == 3:
-        penalty_params = "64,16,4,1"
+        target_lam_penalty_params = "10"
+    elif c['num_barcodes'] == 2:
         target_lam_penalty_params = "1"
-    elif c['num_barcodes'] == 9:
-        penalty_params = "400,200,100,50"
+    elif c['num_barcodes'] == 4:
+        target_lam_penalty_params = "1"
 
     cmd = [
         'python tune_topology.py',
@@ -245,15 +245,15 @@ def run_MLE(env, outdir, c):
         '--num-penalty-tune-iters',
         1,
         '--num-penalty-tune-splits',
-        6,
+        3 if c['num_barcodes'] == 1 else 2,
         '--max-fit-splits',
-        6,
+        3 if c['num_barcodes'] == 1 else 2,
         '--num-chad-tune-iters',
-        5,
+        15,
         '--num-chad-stop',
         10,
         '--max-chad-tune-search',
-        15,
+        15 if c['num_barcodes'] == 1 else 0,
         '--max-sum-states',
         c['sum_states'],
         '--max-extra-steps',
