@@ -150,7 +150,6 @@ class CLTPenalizedEstimator(CLTEstimator):
                 logging.info("leaf lens %f", np.mean([leaf.dist for leaf in bifurc_tree]))
                 if assessor is not None:
                     performance_dict = assessor.assess(bifurc_tree, var_dict)
-                    logging.info("leaf lens %s", [leaf.dist for leaf in bifurc_tree])
                     logging.info("iter %d assess: %s", i, performance_dict)
                     iter_info["performance"] = performance_dict
 

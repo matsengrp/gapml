@@ -330,7 +330,6 @@ def main(args=sys.argv[1:]):
     # Check that the the abundance of the leaves is not too high
     if args.max_abundance is not None:
         for obs in obs_leaves:
-            print(obs.abundance) #, str(obs))
             if obs.abundance > args.max_abundance:
                 raise ValueError(
                     "Number of barcodes does not seem to be enough. There are leaves with %d abundance" % obs.abundance)

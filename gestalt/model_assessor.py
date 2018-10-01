@@ -29,6 +29,8 @@ class ModelAssessor:
         self.ref_collapsed_tree.label_node_ids()
         logging.info("num leaves not collapsed version %d", len(self.ref_tree))
         logging.info("num leaves collapsed version %d", len(self.ref_collapsed_tree))
+        logging.info(self.ref_collapsed_tree.get_ascii(attributes=["dist"]))
+        logging.info(self.ref_collapsed_tree.get_ascii(attributes=[leaf_key]))
 
         self.leaf_key = leaf_key
         for leaf in ref_tree:
