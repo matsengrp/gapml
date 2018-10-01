@@ -1105,11 +1105,11 @@ class CLTLikelihoodModel:
                         index_vals,
                         output_shape=[transition_wrapper.num_possible_states + 1, 1],
                         name="haz_away.multifurc")
-                haz_stay_scaled = -haz_aways * time_stays_constant * decay_factor
+                haz_stay_scaled = -haz_aways * decay_factor
                 return haz_stay_scaled
             else:
                 root_haz_away = self.hazard_away_dict[TargetStatus()]
-                haz_stay_scaled = -root_haz_away * time_stays_constant * decay_factor
+                haz_stay_scaled = -root_haz_away * decay_factor
                 return haz_stay_scaled
         else:
             return tf.constant(0, dtype=tf.float64)
@@ -1217,9 +1217,8 @@ class CLTLikelihoodModel:
                             self.dist_to_root[child.node_id] - self.branch_lens[child.node_id],
                             self.branch_lens[child.node_id])
                         pt_matrix[child.node_id], _, _, Ddiags[child.node_id] = tf_common.myexpm(
-                                # trans_mats[child.node_id],
                                 tr_mat,
-                                self.branch_lens[child.node_id] * decay_factor)
+                                decay_factor)
 
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.
