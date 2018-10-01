@@ -164,7 +164,6 @@ def run_MLE(env, outdir, c):
         '--max-chad-tune-search 0',
         '--num-init-random-rearrange 0',
         '--tot-time-known',
-        '--lambda-known',
     ]
     return env.Command(
         [

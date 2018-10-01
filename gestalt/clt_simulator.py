@@ -23,6 +23,8 @@ class CLTSimulator:
         """
         @param cell_type_tree: the tree that specifies how cells differentiate
         @param allele_simulator: a simulator for how alleles get modified
+        @param scale_hazard_func: a function that takes in the current time in the tree
+                        and returns how much to scale the cut rates
         """
         self.cell_state_simulator = cell_state_simulator
         self.allele_simulator = allele_simulator
@@ -262,6 +264,8 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
         @param death_rate: the CTMC rate param for cell death
         @param cell_type_tree: the tree that specifies how cells differentiate
         @param allele_simulator: a simulator for how alleles get modified
+        @param scale_hazard_func: a function that takes in the current time in the tree
+                        and returns how much to scale the cut rates
         """
         self.birth_sync_rounds = birth_sync_rounds
         self.birth_sync_time = birth_sync_time

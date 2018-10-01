@@ -116,16 +116,18 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             time_incr: float = 0.025):
         """
         @param init_allele: the initial state of the allele
+        @param scale_hazard_func: a function that takes in the current time in the tree
+                        and returns how much to scale the cut rates
 
         @return allele after the simulation procedure
         """
         allele = Allele(init_allele.allele, init_allele.bcode_meta)
 
+        # TODO: this is currently the stupidest and slowest implementation of changing target cut rates
+        # try to make this faster please.
         time_remain = node.dist
         while time_remain > 0:
-            curr_time = (node.up.dist_to_root + node.dist - time_remain)
             scale_hazard = scale_hazard_func(node.up.dist_to_root + node.dist - time_remain)
-            print(curr_time, scale_hazard)
             target_tract, event_time = self._race_target_tracts(allele, scale_hazard)
             if event_time is None:
                 break
