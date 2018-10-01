@@ -124,7 +124,8 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = "9000,3000,1000,300"
+    penalty_params = "512,128,32,8"
+    targ_lam_penalty_params = "10,1"
     cmd = [
         'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
@@ -132,17 +133,20 @@ def run_MLE(env, outdir, c):
         '--out-model-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
         '--seed 400',
-        '--log-barr 0.0001',
-        '--dist-to-half-pen-params',
+        '--branch-pen-params',
         penalty_params,
+        '--target-lam-pen-params',
+        targ_lam_penalty_params,
         '--num-penalty-tune-iters',
-        2,
+        1,
         '--num-penalty-tune-splits',
-        6,
+        4,
+        '--max-fit-splits',
+        4,
         '--num-chad-tune-iters',
-        100,
+        50,
         '--max-chad-tune-search',
-        20,
+        10,
         '--max-sum-states',
         c['sum_states'],
         '--max-extra-steps',
@@ -150,8 +154,8 @@ def run_MLE(env, outdir, c):
         '--max-iters 50000',
         '--num-inits 1',
         '--tot-time-known',
-        '--num-processes 2',
-        '--num-init-random-rearrange 25',
+        '--num-processes 4',
+        '--num-init-random-rearrange 5',
     ]
     return env.Command(
         [
