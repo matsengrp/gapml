@@ -268,18 +268,20 @@ def run_MLE(env, outdir, c):
         '--max-iters 50000',
         '--num-inits 1',
         '--tot-time-known',
-        '--num-processes 3',
+        '--num-processes',
+        6 if c['num_barcodes'] == 1 else 3,
         '--num-init-random-rearrange',
+        #3 if c['num_barcodes'] == 1 else 0,
         NUM_RANDOM_REARRANGE if c['num_barcodes'] == 1 else 0,
-        #'--count-chads',
+        '--count-chads',
         '--scratch-dir',
         #'_output/scratch',
 	join('simulation_topol_consist', outdir, 'scratch'),
     ]
     return env.Command(
         [
-            join(outdir, 'tune_fitted.pkl'),
-            join(outdir, 'tune_fitted.txt')],
+            join(outdir, 'tune_fitted_retune.pkl'),
+            join(outdir, 'tune_fitted_retune.txt')],
         [
             c['restrict_observed_alleles'][0],
             c['run_topology'][0],

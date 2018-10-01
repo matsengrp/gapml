@@ -54,6 +54,7 @@ def generate(env, outdir, c):
         '--target-lambda 1.5,1.2,1,.8',
         '--target-lam-decay 0.6',
         '--double 0.04',
+        '--double 0.01',
         '--trim-long-factor 0.001 0.001',
         '--time 1',
         '--num-barcodes',
