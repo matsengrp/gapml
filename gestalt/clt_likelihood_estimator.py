@@ -78,13 +78,14 @@ class CLTPenalizedEstimator(CLTEstimator):
         # Check branch lengths positive
         assert self.model._are_all_branch_lens_positive()
 
-        pen_log_lik, log_lik, branch_pen, dist_to_roots, target_lam_pen = self.model.sess.run(
+        pen_log_lik, log_lik, branch_pen, target_lam_pen, dist_to_roots, spine_lens = self.model.sess.run(
             [
                 self.model.smooth_log_lik,
                 self.model.log_lik,
                 self.model.branch_pen,
-                self.model.dist_to_root,
                 self.model.target_lam_pen,
+                self.model.dist_to_root,
+                self.model.spine_lens,
             ],
             feed_dict=feed_dict)
         var_dict = self.model.get_vars_as_dict()
@@ -113,14 +114,15 @@ class CLTPenalizedEstimator(CLTEstimator):
                 if k not in ["branch_len_offsets_proportion", "branch_len_inners", "boost_probs"]:
                     logging.info("%s: %s", k, v)
 
-            _, pen_log_lik, log_lik, branch_pen, target_lam_pen, dist_to_roots = self.model.sess.run(
+            _, pen_log_lik, log_lik, branch_pen, target_lam_pen, dist_to_roots, spine_lens = self.model.sess.run(
                     [
                         self.model.adam_train_op,
                         self.model.smooth_log_lik,
                         self.model.log_lik,
                         self.model.branch_pen,
                         self.model.target_lam_pen,
-                        self.model.dist_to_root],
+                        self.model.dist_to_root,
+                        self.model.spine_lens],
                     feed_dict=feed_dict)
 
             iter_info = {
@@ -144,8 +146,9 @@ class CLTPenalizedEstimator(CLTEstimator):
                 iter_info["var_dict"] = var_dict
                 iter_info["dist_to_roots"] = dist_to_roots
                 logging.info("iter %d, train time %f", i, time.time() - st_time)
+                bifurc_tree = self.model.get_fitted_bifurcating_tree()
+                logging.info("leaf lens %f", np.mean([leaf.dist for leaf in bifurc_tree]))
                 if assessor is not None:
-                    bifurc_tree = self.model.get_fitted_bifurcating_tree()
                     performance_dict = assessor.assess(bifurc_tree, var_dict)
                     logging.info("leaf lens %s", [leaf.dist for leaf in bifurc_tree])
                     logging.info("iter %d assess: %s", i, performance_dict)
@@ -160,6 +163,7 @@ class CLTPenalizedEstimator(CLTEstimator):
 
         train_history[-1]["var_dict"] = var_dict
         train_history[-1]["dist_to_roots"] = dist_to_roots
+        train_history[-1]["spine_lens"] = spine_lens
         if assessor is not None:
             bifurc_tree = self.model.get_fitted_bifurcating_tree()
             performance_dict = assessor.assess(bifurc_tree, var_dict)
