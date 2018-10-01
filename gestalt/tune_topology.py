@@ -135,6 +135,10 @@ def parse_args(args):
         action='store_true',
         help='are target rates known?')
     parser.add_argument(
+        '--lambda-decay-known',
+        action='store_true',
+        help='are target rate decay rates known?')
+    parser.add_argument(
         '--tot-time-known',
         action='store_true',
         help='is total time known?')
@@ -184,6 +188,7 @@ def parse_args(args):
 
     args.known_params = KnownModelParams(
          target_lams=args.lambda_known,
+         target_lam_decay_rate=args.lambda_decay_known,
          tot_time=args.tot_time_known)
 
     assert args.num_penalty_tune_iters >= 1
