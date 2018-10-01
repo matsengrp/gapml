@@ -1,9 +1,8 @@
-from typing import List, Dict, Tuple
+from typing import List
 import numpy as np
 import logging
-import random
 
-from allele import Allele, AlleleList
+from allele import AlleleList
 from allele_events import AlleleEvents
 from cell_state import CellState
 from cell_lineage_tree import CellLineageTree
@@ -65,21 +64,16 @@ class CLTObserver:
         return observed_leaf_ids
 
     @staticmethod
-    def _sample_leaves(clt_orig: CellLineageTree, sampling_rate: float):
+    def sample_leaves(clt_orig: CellLineageTree, sampling_rate: float):
         """
         Makes a copy of the original tree, samples leaves, and returns back a new tree
         @return CellLineageTree that represents a subsampled `clt_orig`
         """
-        clt = clt_orig.copy()
-        observed_leaf_ids = CLTObserver._sample_leaf_ids(clt, sampling_rate)
-
-        # Now prune the tree -- custom pruning (cause ete was doing weird things...)
-        # TODO: maybe make this faster
-        for node in clt.iter_descendants():
-            if sum((node2.node_id in observed_leaf_ids) for node2 in node.traverse()) == 0:
-                node.detach()
-        collapsed_tree._remove_single_child_unobs_nodes(clt)
-        return clt
+        observed_leaf_ids = CLTObserver._sample_leaf_ids(clt_orig, sampling_rate)
+        sampled_clt = CellLineageTree.prune_tree(clt_orig, observed_leaf_ids)
+        collapsed_tree._remove_single_child_unobs_nodes(sampled_clt)
+        sampled_clt.label_node_ids()
+        return sampled_clt
 
     def _observe_leaf_with_error(self, leaf):
         """
@@ -101,8 +95,7 @@ class CLTObserver:
         return allele_list_with_errors
 
     def observe_leaves(self,
-                       sampling_rate: float,
-                       cell_lineage_tree: CellLineageTree,
+                       sampled_clt: CellLineageTree,
                        seed: int = None,
                        observe_cell_state: bool = False):
         """
@@ -119,11 +112,8 @@ class CLTObserver:
                     2. the subtree of the full cell lineage tree with the sampled leaves
                     3. List[leaf node ids that observation at this index maps to]
         """
-        assert (0 < sampling_rate <= 1)
         np.random.seed(seed)
-        sampled_clt = self._sample_leaves(cell_lineage_tree, sampling_rate)
         sampled_clt.label_tree_with_strs()
-
         observations = {}
         # When observing each leaf, observe with specified error rate
         # Gather observed leaves, calculating abundance
@@ -154,4 +144,4 @@ class CLTObserver:
         obs_vals = [obs[0] for obs in observations.values()]
         obs_idx_to_leaves = [obs[1] for obs in observations.values()]
 
-        return obs_vals, sampled_clt, obs_idx_to_leaves
+        return obs_vals, obs_idx_to_leaves

@@ -343,6 +343,9 @@ def _get_one_bcode_hyperparam_score(
     worker_results = [w[0][0] for w in job_manager.run()]
 
     # Get Pr(V|T)
+    #hyperparam_scores = [
+    #        res.log_lik/len(tree_split.val_clt)
+    #        for res, tree_split in zip(worker_results, tree_splits)]
     hyperparam_scores = [
             res.log_lik - pen_param_res.log_lik
             for res, pen_param_res in zip(worker_results, pen_param_results)]

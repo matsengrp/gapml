@@ -18,21 +18,29 @@ class CLTSimulator:
     """
     def __init__(self,
         cell_state_simulator: CellStateSimulator,
-        allele_simulator: AlleleSimulator):
+        allele_simulator: AlleleSimulator,
+        scale_hazard_func=None):
         """
         @param cell_type_tree: the tree that specifies how cells differentiate
         @param allele_simulator: a simulator for how alleles get modified
+        @param scale_hazard_func: a function that takes in the current time in the tree
+                        and returns how much to scale the cut rates
         """
         self.cell_state_simulator = cell_state_simulator
         self.allele_simulator = allele_simulator
+        self.scale_hazard_func = scale_hazard_func
 
     def simulate(self, root_allele: Allele, root_cell_state: CellState, tot_time: float, max_nodes: int = 50):
         raise NotImplementedError()
 
-    def _simulate_alleles(self, tree: CellLineageTree):
+    def simulate_alleles(self, tree: CellLineageTree):
         """
         assumes the tree has been built and we just simulate alleles along the branches in `tree`
         """
+        tree.add_feature("dist_to_root", 0)
+        for node in tree.get_descendants('preorder'):
+            node.add_feature("dist_to_root", node.dist + node.up.dist_to_root)
+
         for bcode_idx in range(tree.allele_list.bcode_meta.num_barcodes):
             for node in tree.traverse('preorder'):
                 if not node.is_root():
@@ -46,7 +54,8 @@ class CLTSimulator:
         allele = node.up.allele_list.alleles[bcode_idx]
         branch_end_allele = self.allele_simulator.simulate(
             allele,
-            time=node.dist)
+            node,
+            scale_hazard_func=self.scale_hazard_func)
         new_allele_list = [a.allele for a in node.allele_list.alleles]
         new_allele_list[bcode_idx] = branch_end_allele.allele
         branch_end_allele_list = AlleleList(
@@ -55,7 +64,7 @@ class CLTSimulator:
 
         node.set_allele_list(branch_end_allele_list)
 
-    def _simulate_cell_states(self, tree: CellLineageTree):
+    def simulate_cell_states(self, tree: CellLineageTree):
         """
         assumes the tree has been built and we just simulate cell states along the branches in `tree`
         """
@@ -248,12 +257,15 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
             birth_min: float,
             death_rate: float,
             cell_state_simulator: CellStateSimulator,
-            allele_simulator: AlleleSimulator):
+            allele_simulator: AlleleSimulator,
+            scale_hazard_func=None):
         """
         @param birth_rate: the CTMC rate param for cell division
         @param death_rate: the CTMC rate param for cell death
         @param cell_type_tree: the tree that specifies how cells differentiate
         @param allele_simulator: a simulator for how alleles get modified
+        @param scale_hazard_func: a function that takes in the current time in the tree
+                        and returns how much to scale the cut rates
         """
         self.birth_sync_rounds = birth_sync_rounds
         self.birth_sync_time = birth_sync_time
@@ -262,10 +274,9 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
         self.death_rate = death_rate
         self.cell_state_simulator = cell_state_simulator
         self.allele_simulator = allele_simulator
+        self.scale_hazard_func = scale_hazard_func if scale_hazard_func is not None else lambda x: 1
 
-    def simulate(self,
-            tree_seed: int,
-            data_seed: int,
+    def simulate_full_skeleton(self,
             tot_time: float,
             max_nodes: int = 10,
             max_tries: int = 3,
@@ -280,7 +291,6 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
         @param dominating_percent: if an event appears in at least this percentage of the observed leaves,
                                 then we are going to resimulate the alleles along the tree.
         """
-        np.random.seed(tree_seed)
         root_allele = self.allele_simulator.get_root()
         root_cell_state = self.cell_state_simulator.get_root()
         # Run the simulation to just create the tree topology
@@ -296,29 +306,5 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
                 max_nodes)
         tree.cell_state = root_cell_state
         num_leaves = len(tree)
-        print("TOTAL tree leaves", len(tree))
-
-        np.random.seed(data_seed)
-        for _ in range(max_tries):
-            # Run the simulation to create the alleles along the tree topology
-            self._simulate_alleles(tree)
-            # Check there is no event super early on that everyone shares this same evt
-            # Otherwise learning will be really hard. This simulated tree
-            # also won't look anything like real data.
-            intersection_evt_count = {}
-            for leaf in tree:
-                for evt in leaf.allele_events_list[0].events:
-                    if evt in intersection_evt_count:
-                        intersection_evt_count[evt] += 1
-                    else:
-                        intersection_evt_count[evt] = 1
-            no_dominating_evt = True
-            for evt, val in intersection_evt_count.items():
-                if val > num_leaves * dominating_percent:
-                    no_dominating_evt = False
-                    break
-
-            if no_dominating_evt:
-                self._simulate_cell_states(tree)
-                break
+        print("TOTAL tree leaves", num_leaves)
         return tree

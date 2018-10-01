@@ -135,6 +135,10 @@ def parse_args(args):
         action='store_true',
         help='are target rates known?')
     parser.add_argument(
+        '--lambda-decay-known',
+        action='store_true',
+        help='are target rate decay rates known?')
+    parser.add_argument(
         '--tot-time-known',
         action='store_true',
         help='is total time known?')
@@ -184,6 +188,7 @@ def parse_args(args):
 
     args.known_params = KnownModelParams(
          target_lams=args.lambda_known,
+         target_lam_decay_rate=args.lambda_decay_known,
          tot_time=args.tot_time_known)
 
     assert args.num_penalty_tune_iters >= 1
@@ -194,7 +199,8 @@ def parse_args(args):
 
 def read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
     fit_params = {
-            "target_lams": get_init_target_lams(bcode_meta.n_targets, -0.5),
+            "target_lams": get_init_target_lams(bcode_meta.n_targets, 0),
+            "target_lam_decay_rate": np.array([0.5]),
             "boost_softmax_weights": np.array([1, 2, 2]),
             "trim_long_factor": 0.05 * np.ones(2),
             "trim_zero_probs": 0.5 * np.ones(2),
@@ -220,6 +226,8 @@ def read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
             fit_params["tot_time_extra"] = 1e-10
     if args.known_params.trim_long_factor:
         fit_params["trim_long_factor"] = true_model_dict['trim_long_factor']
+    if args.known_params.target_lam_decay_rate:
+        fit_params["target_lam_decay_rate"] = true_model_dict['target_lam_decay_rate']
     if args.known_params.target_lams:
         fit_params["target_lams"] = true_model_dict['target_lams']
         fit_params["double_cut_weight"] = true_model_dict['double_cut_weight']
@@ -241,6 +249,8 @@ def read_data(args):
                 evt_set.add(evt)
     logging.info("Num uniq events %d", len(evt_set))
     logging.info("Proportion of double cuts %f", np.mean([e.min_target != e.max_target for e in evt_set]))
+    abundances = [obs.abundance for obs in obs_data_dict["obs_leaves"]]
+    logging.info("Range of abundance vals %d %d (mean %f)", np.min(abundances), np.max(abundances), np.mean(abundances))
     logging.info("Number of leaves %d", len(tree))
 
     return bcode_meta, tree, obs_data_dict
@@ -466,7 +476,7 @@ def main(args=sys.argv[1:]):
                 logging.info("Iter %d: Tuning penalty params", i)
                 penalty_tune_result = hyperparam_tuner.tune(tree, bcode_meta, args, fit_params, assessor)
                 _, fit_params, best_res = penalty_tune_result.get_best_result()
-            logging.info("Iter %d: Best pen param %f", i, fit_params["branch_pen_param"])
+            logging.info("Iter %d: Best pen param %f %s", i, fit_params["branch_pen_param"], fit_params["target_lam_pen_param"])
 
         # Find hanging chads
         # TODO: kind slow right now... reruns chad-finding code
