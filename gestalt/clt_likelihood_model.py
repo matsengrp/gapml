@@ -1096,7 +1096,7 @@ class CLTLikelihoodModel:
         @return tensorflow tensor branch length penalty
         """
         branch_lens_to_pen = []
-        spine_lens = {}
+        self.spine_lens = {}
         # Tree traversal order should be postorder
         for node in self.topology.traverse("postorder"):
             if not node.is_leaf():
@@ -1106,7 +1106,7 @@ class CLTLikelihoodModel:
                         for child in node.children
                         if not hasattr(child, "ignore_penalty") or not child.ignore_penalty]))
                     branch_lens_to_pen.append(spine_len)
-                    spine_lens[node.node_id] = spine_len
+                    self.spine_lens[node.node_id] = spine_len
 
                 for child in node.children:
                     if hasattr(child, "spine_children"):
@@ -1126,8 +1126,6 @@ class CLTLikelihoodModel:
                         # in order to make penalties comparable between different topologies
                         branch_lens_to_pen.append(self.branch_lens[child.node_id])
         log_br = tf.log(branch_lens_to_pen)
-
-        self.spine_lens = spine_lens
 
         return tf.reduce_mean(tf.pow(log_br - tf.reduce_mean(log_br), 2))
 
