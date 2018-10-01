@@ -87,7 +87,7 @@ def _pick_random_leaves_from_mulifurcs(
         weights = np.array(abundances)/np.sum(abundances)
         chosen_leaf_group_idxs = np.random.choice(
                 len(leaf_groups),
-                size=max(1, int(proportion * num_children)),
+                size=max(1, int(proportion * len(leaf_groups))),
                 replace=False,
                 p=weights)
         for idx in chosen_leaf_group_idxs:
@@ -103,7 +103,7 @@ def create_kfold_trees(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
         n_splits: int,
-        split_proportion: float = 0.25,
+        split_proportion: float = 0.33,
         min_multifurc_children: int = 2):
     """
     Take a tree and create k-fold datasets based on children of the root node
@@ -147,7 +147,10 @@ def create_kfold_trees(
         logging.info(
                 "val leaves (num %d): %s",
                 len(val_obs),
-                sorted([(obs.node_id, obs.allele_events_list_str) for obs, _ in val_obs]))
+                sorted([obs.node_id for obs, _ in val_obs]))
+        logging.info(
+            "val leaves strs: %s",
+            sorted([obs.allele_events_list_str for obs, _ in val_obs]))
 
         # Clean up the extra attribute
         for node in train_tree.traverse():
