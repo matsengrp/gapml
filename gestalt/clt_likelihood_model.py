@@ -1092,10 +1092,10 @@ class CLTLikelihoodModel:
             time_stays_constant = tf.reduce_max(tf.stack([
                 self.branch_len_offsets[child.node_id]
                 for child in node.children]))
-            decay_factor = self._get_decay_factor(
-                self.dist_to_root[node.up.node_id],
-                time_stays_constant)
             if not node.is_root():
+                decay_factor = self._get_decay_factor(
+                    self.dist_to_root[node.up.node_id],
+                    time_stays_constant)
                 # When making this probability, order the elements per the transition matrix of this node
                 index_vals = [[
                         [transition_wrapper.key_dict[state], 0],
@@ -1109,6 +1109,9 @@ class CLTLikelihoodModel:
                 return haz_stay_scaled
             else:
                 root_haz_away = self.hazard_away_dict[TargetStatus()]
+                decay_factor = self._get_decay_factor(
+                    tf.constant(0, dtype=tf.float64),
+                    time_stays_constant)
                 haz_stay_scaled = -root_haz_away * decay_factor
                 return haz_stay_scaled
         else:

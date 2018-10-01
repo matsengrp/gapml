@@ -230,26 +230,14 @@ def create_cell_lineage_tree(
     birth_sync_time = args.birth_sync_time
     for i in range(max_tries):
         try:
+            np.random.seed(args.model_seed)
             clt_simulator.birth_sync_time = birth_sync_time
-            clt = clt_simulator.simulate(
-                tree_seed = args.model_seed,
-                data_seed = args.data_seed,
-                tot_time = args.time,
-                max_nodes = args.max_clt_nodes)
+            clt = clt_simulator.simulate_full_skeleton(
+                tot_time=args.time,
+                max_nodes=args.max_clt_nodes)
             clt.label_node_ids()
-
             # Now sample the leaves and create the true topology
-            obs_leaves, true_subtree, obs_idx_to_leaves = observer.observe_leaves(
-                    args.sampling_rate,
-                    clt,
-                    seed=args.model_seed)
-
-            logging.info(
-                "birth time %f, num uniq alleles %d, num sampled leaves %d, num tot_leaves %d",
-                birth_sync_time,
-                len(obs_leaves),
-                len(true_subtree),
-                len(clt))
+            true_subtree = CLTObserver.sample_leaves(clt, args.sampling_rate)
             print("le....", len(true_subtree), birth_sync_time)
             if len(true_subtree) < args.min_uniq_alleles:
                 birth_sync_time -= incr * np.random.rand()
@@ -264,12 +252,23 @@ def create_cell_lineage_tree(
             print("ValueError warning.... %s" % str(e))
             birth_sync_time += incr * np.random.rand()
             continue
-        #except AssertionError as e:
-        #    logging.info("AssertionError warning ... %s", str(e))
-        #    continue
 
     if len(true_subtree) < args.min_uniq_alleles:
         raise Exception("Could not manage to get enough leaves")
+
+    np.random.seed(args.data_seed)
+    clt_simulator.simulate_alleles(true_subtree)
+    clt_simulator.simulate_cell_states(true_subtree)
+    obs_leaves, obs_idx_to_leaves = observer.observe_leaves(
+            true_subtree,
+            seed=args.data_seed)
+
+    logging.info(
+        "birth time %f, num uniq alleles %d, num sampled leaves %d, num tot_leaves %d",
+        birth_sync_time,
+        len(obs_leaves),
+        len(true_subtree),
+        len(clt))
 
     true_subtree.label_tree_with_strs()
     logging.info(true_subtree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))

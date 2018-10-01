@@ -33,7 +33,7 @@ class CLTSimulator:
     def simulate(self, root_allele: Allele, root_cell_state: CellState, tot_time: float, max_nodes: int = 50):
         raise NotImplementedError()
 
-    def _simulate_alleles(self, tree: CellLineageTree):
+    def simulate_alleles(self, tree: CellLineageTree):
         """
         assumes the tree has been built and we just simulate alleles along the branches in `tree`
         """
@@ -64,7 +64,7 @@ class CLTSimulator:
 
         node.set_allele_list(branch_end_allele_list)
 
-    def _simulate_cell_states(self, tree: CellLineageTree):
+    def simulate_cell_states(self, tree: CellLineageTree):
         """
         assumes the tree has been built and we just simulate cell states along the branches in `tree`
         """
@@ -276,9 +276,7 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
         self.allele_simulator = allele_simulator
         self.scale_hazard_func = scale_hazard_func if scale_hazard_func is not None else lambda x: 1
 
-    def simulate(self,
-            tree_seed: int,
-            data_seed: int,
+    def simulate_full_skeleton(self,
             tot_time: float,
             max_nodes: int = 10,
             max_tries: int = 3,
@@ -293,7 +291,6 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
         @param dominating_percent: if an event appears in at least this percentage of the observed leaves,
                                 then we are going to resimulate the alleles along the tree.
         """
-        np.random.seed(tree_seed)
         root_allele = self.allele_simulator.get_root()
         root_cell_state = self.cell_state_simulator.get_root()
         # Run the simulation to just create the tree topology
@@ -309,29 +306,5 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
                 max_nodes)
         tree.cell_state = root_cell_state
         num_leaves = len(tree)
-        print("TOTAL tree leaves", len(tree))
-
-        np.random.seed(data_seed)
-        for _ in range(max_tries):
-            # Run the simulation to create the alleles along the tree topology
-            self._simulate_alleles(tree)
-            # Check there is no event super early on that everyone shares this same evt
-            # Otherwise learning will be really hard. This simulated tree
-            # also won't look anything like real data.
-            intersection_evt_count = {}
-            for leaf in tree:
-                for evt in leaf.allele_events_list[0].events:
-                    if evt in intersection_evt_count:
-                        intersection_evt_count[evt] += 1
-                    else:
-                        intersection_evt_count[evt] = 1
-            no_dominating_evt = True
-            for evt, val in intersection_evt_count.items():
-                if val > num_leaves * dominating_percent:
-                    no_dominating_evt = False
-                    break
-
-            if no_dominating_evt:
-                self._simulate_cell_states(tree)
-                break
+        print("TOTAL tree leaves", num_leaves)
         return tree

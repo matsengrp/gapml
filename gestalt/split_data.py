@@ -64,6 +64,9 @@ def _pick_random_leaves_from_mulifurcs(
         # Pick out a random target tract -- we will be taking away all leaves
         # with same target tract
         leaf_children = [c for c in node.get_children() if c.is_leaf()]
+        if len(leaf_children) == 0:
+            continue
+
         leaf_target_tract_tuples = dict()
         for leaf in leaf_children:
             leaf_anc_states = [
@@ -82,7 +85,6 @@ def _pick_random_leaves_from_mulifurcs(
         leaf_groups = list(leaf_target_tract_tuples.values())
         abundances = [sum([leaf.abundance for leaf in leaves]) for leaves in leaf_groups]
         weights = np.array(abundances)/np.sum(abundances)
-
         chosen_leaf_group_idxs = np.random.choice(
                 len(leaf_groups),
                 size=max(1, int(proportion * num_children)),
@@ -143,9 +145,9 @@ def create_kfold_trees(
             parent_node = val_tree.search_nodes(orig_node_id=leaf_par_id)[0]
             parent_node.add_child(leaf)
         logging.info(
-                "num val leaves %d: %s",
+                "val leaves (num %d): %s",
                 len(val_obs),
-                sorted([v[0].node_id for v in val_obs]))
+                sorted([(obs.node_id, obs.allele_events_list_str) for obs, _ in val_obs]))
 
         # Clean up the extra attribute
         for node in train_tree.traverse():

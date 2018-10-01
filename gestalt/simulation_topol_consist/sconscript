@@ -34,16 +34,16 @@ GROWTH_DICT = {
     "small": {
         "sampling_rate": 0.08,
         "birth_sync_rounds": 5,
-        "birth_sync_time": 0.036,
+        "birth_sync_time": 0.038,
         "death_lambda": 0.2,
-        "birth_decay": -8,
-        "birth_min": 4,
+        "birth_decay": -7,
+        "birth_min": 5,
         #"lambda_sequence": [.8, .75, .7, .65, .6, .55, .5],
         "lambda_sequence": [1.1, 1.0, 0.9, .8, .75, .7, .6],
         "target_decay": .6,
         "double": 0.01,
-        "min_leaves": 70,
-        "max_leaves": 150,
+        "min_leaves": 80,
+        "max_leaves": 200,
     },
     "mini": {
         "sampling_rate": 0.1,
@@ -68,7 +68,7 @@ nest.add(
 
 nest.add(
     'seed',
-    [20],
+    [200],
 )
 
 nest.add(
@@ -279,8 +279,8 @@ def run_MLE(env, outdir, c):
     ]
     return env.Command(
         [
-            join(outdir, 'tune_fitted_retune.pkl'),
-            join(outdir, 'tune_fitted_retune.txt')],
+            join(outdir, 'tune_fitted.pkl'),
+            join(outdir, 'tune_fitted.txt')],
         [
             c['restrict_observed_alleles'][0],
             c['run_topology'][0],
