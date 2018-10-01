@@ -277,26 +277,39 @@ def _get_one_bcode_hyperparam_score(
     for pen_param_res, tree_split in zip(pen_param_results, tree_splits):
         # Need to create model parameters for the full tree since
         # we only trained on a subset of the leaves
+        fit_params = pen_param_res.get_fit_params()
+        #fit_params.pop('branch_len_inners', None)
+        #fit_params.pop('branch_len_offsets_proportion', None)
 
         # First we need to preserve any bifurcations in the train tree
         for node in tree_split.train_clt.traverse():
             if len(node.get_children()) == 2:
-                node.resolved_multifurcation = True
+                matching_node = tree_split.val_clt.search_nodes(node_id=node.node_id)[0]
+                matching_node.resolved_multifurcation = True
 
         # Let's start creating the branch lenght assignments for the
         # validation leaves
-        fit_params = pen_param_res.get_fit_params()
+        spine_lens = pen_param_res.train_history[-1]["spine_lens"]
+        dist_to_roots = pen_param_res.train_history[-1]["dist_to_roots"]
         num_tot_nodes = tree_split.val_clt.get_num_nodes()
         num_train_nodes = tree_split.train_clt.get_num_nodes()
-
         new_br_inners = np.ones(num_tot_nodes) * 1e-10
         new_br_inners[:num_train_nodes] = fit_params['branch_len_inners']
         # We will place the validation leaves at the top of the multifurcation
         # This is a somewhat arbitrary choice.
         # However we definitely cannot maximize validation log lik wrt the validation offsets.
         # Otherwise penalty param picking will not work.
-        new_br_offsets = np.ones(num_tot_nodes) * 1e-10
+        new_br_offsets = np.ones(num_tot_nodes) * 0.15
         new_br_offsets[:num_train_nodes] = fit_params['branch_len_offsets_proportion']
+        for node_id in range(num_train_nodes, num_tot_nodes):
+            val_node = tree_split.val_clt.search_nodes(node_id=node_id)[0]
+            if not val_node.up.resolved_multifurcation:
+                up_id = val_node.up.node_id
+                br_inner = fit_params["tot_time"] - dist_to_roots[up_id]
+                spine_len = spine_lens[up_id]
+                # Place halfway on the spine...
+                new_br_offsets[node_id] = spine_len/2/br_inner
+
         fit_params['branch_len_inners'] = new_br_inners
         fit_params['branch_len_offsets_proportion'] = new_br_offsets
         all_known_params = KnownModelParams(
