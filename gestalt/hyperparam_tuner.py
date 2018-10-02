@@ -163,7 +163,7 @@ def _tune_hyperparams(
                 None,
                 args.scratch_dir,
                 args.num_processes)
-        train_results = [r for r, _ in job_manager.run(successfuly_only=True)]
+        train_results = [r for r, _ in job_manager.run()]
     else:
         train_results = [w.run_worker(None) for w in worker_list]
     train_results = [(res, tree_split) for res, tree_split in zip(train_results, tree_splits) if res is not None]
