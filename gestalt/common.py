@@ -10,6 +10,9 @@ from typing import List, Tuple, Dict
 
 from constants import COLORS
 
+def parse_comma_str(comma_str, type_cast=float):
+    return [type_cast(a) for a in comma_str.split(",")]
+
 def get_color(cell_type):
     if cell_type is None:
         return "lightgray"

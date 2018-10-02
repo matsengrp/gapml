@@ -19,7 +19,7 @@ from likelihood_scorer import LikelihoodScorer, LikelihoodScorerResult
 from barcode_metadata import BarcodeMetadata
 import hyperparam_tuner
 import hanging_chad_finder
-from common import create_directory, get_randint, save_data, get_init_target_lams
+from common import create_directory, get_randint, save_data, get_init_target_lams, parse_comma_str
 import file_readers
 import collapsed_tree
 
@@ -171,11 +171,11 @@ def parse_args(args):
     args = parser.parse_args(args)
 
     args.branch_pen_params = list(sorted(
-        [float(lam) for lam in args.branch_pen_params.split(",")],
+        parse_comma_str(args.branch_pen_params),
         reverse=True))
     assert all([p > 0 for p in args.branch_pen_params])
     args.target_lam_pen_params = list(sorted(
-        [float(lam) for lam in args.target_lam_pen_params.split(",")],
+        parse_comma_str(args.target_lam_pen_params),
         reverse=True))
     assert all([p > 0 for p in args.target_lam_pen_params])
 

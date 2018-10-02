@@ -46,19 +46,7 @@ class ModelAssessor:
             "targ_corr": self._target_lams_corr,
             "double": self._compare_double_cut}
 
-    def assess(
-                self,
-                other_tree: CellLineageTree,
-                other_param_dict: Dict = None):
-        """
-        @param other_tree: the tree we want to assess (comparing to the reference tree)
-        @param other_param_dict: the estimated model parameters we want to assess
-
-        Note: is able to compare the `other_tree` if `other_tree` contains a subset of the leaves
-        in the reference tree
-        """
-        dist_dict = {}
-
+    def _get_full_tree_assessor(self, other_tree):
         # Compare to no collapse tree
         # If the other tree has a different set of leaves, figure out which subset of leaves to compare
         # against in the reference tree
@@ -76,12 +64,10 @@ class ModelAssessor:
             self.tree_measurer_classes,
             self.scratch_dir,
             self.leaf_key)
-        full_dist_dict = tree_assessor.get_tree_dists([other_tree])[0]
-        # Copy over results
-        for k, v in full_dist_dict.items():
-            dist_dict["full_%s" % k] = v
+        return tree_assessor
 
-        # Compare to collapsed tree
+    def _get_collapse_tree_assessor(self, other_tree):
+        other_tree_leaf_strs = set([getattr(l, self.leaf_key) for l in other_tree])
         # If the other tree has a different set of leaves, figure out which subset of leaves to compare
         # against in the reference tree
         keep_leaf_ids = set()
@@ -107,7 +93,34 @@ class ModelAssessor:
             self.scratch_dir,
             do_expand_abundance=False,
             leaf_key=self.leaf_key)
-        collapse_dist_dict = tree_collapse_assessor.get_tree_dists([other_tree_collapse_compare])[0]
+
+        return tree_collapse_assessor, other_tree_collapse_compare
+
+    def assess(
+                self,
+                other_tree: CellLineageTree,
+                other_param_dict: Dict = None):
+        """
+        @param other_tree: the tree we want to assess (comparing to the reference tree)
+        @param other_param_dict: the estimated model parameters we want to assess
+
+        Note: is able to compare the `other_tree` if `other_tree` contains a subset of the leaves
+        in the reference tree
+        """
+        dist_dict = {}
+
+        # Compare to no collapse tree
+        # If the other tree has a different set of leaves, figure out which subset of leaves to compare
+        # against in the reference tree
+        tree_assessor = self._get_full_tree_assessor(other_tree)
+        full_dist_dict = tree_assessor.get_tree_dists([other_tree])[0]
+        # Copy over results
+        for k, v in full_dist_dict.items():
+            dist_dict["full_%s" % k] = v
+
+        # Compare to collapsed tree
+        tree_collapse_assessor, other_tree_collapsed = self._get_collapse_tree_assessor(other_tree)
+        collapse_dist_dict = tree_collapse_assessor.get_tree_dists([other_tree_collapsed])[0]
         # Copy over results
         for k, v in collapse_dist_dict.items():
             dist_dict["collapse_%s" % k] = v
