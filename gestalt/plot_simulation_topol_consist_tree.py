@@ -108,6 +108,7 @@ def plot_internal_node_heights(internal_node_heights, file_name):
             y="fitted",
             hue="method",
             col="n_bcodes",
+            row="assess",
             data=internal_node_heights,
             aspect=.5,
             ci=None,
@@ -128,8 +129,10 @@ def main(args=sys.argv[1:]):
         mle_params, mle_tree = get_mle_result(args, args.data_seed, n_bcodes)
         full_mle_tree = TreeDistanceMeasurerAgg.create_single_abundance_tree(mle_tree, "leaf_key")
         full_tree_assessor = assessor._get_full_tree_assessor(mle_tree)
+        collapse_tree_assessor, collapse_mle_tree = assessor._get_collapse_tree_assessor(mle_tree)
         _, chronos_tree = get_chronos_result(args, args.data_seed, n_bcodes, assessor)
         full_chronos_tree = TreeDistanceMeasurerAgg.create_single_abundance_tree(chronos_tree, "leaf_key")
+        _, collapse_chronos_tree = assessor._get_collapse_tree_assessor(chronos_tree)
 
         if n_bcodes == args.n_bcodes_list[0]:
             plot_tree(
@@ -147,23 +150,30 @@ def main(args=sys.argv[1:]):
             full_tree_assessor.ref_tree,
             args.out_plot_template % (n_bcodes, args.data_seed, "chronos"))
 
-        intern_measurer = full_tree_assessor.measurers[0]
-        mle_heights = intern_measurer.get_compare_node_distances(
-            intern_measurer.ref_leaf_groups,
-            intern_measurer._get_mrca_matrix(full_mle_tree))
-        internal_node_heights.append(pd.DataFrame.from_dict({
-            "method": "mle",
-            "n_bcodes": n_bcodes,
-            "true": intern_measurer.ref_node_val,
-            "fitted": mle_heights}))
-        chronos_heights = intern_measurer.get_compare_node_distances(
-            intern_measurer.ref_leaf_groups,
-            intern_measurer._get_mrca_matrix(full_chronos_tree))
-        internal_node_heights.append(pd.DataFrame.from_dict({
-            "method": "chronos",
-            "n_bcodes": n_bcodes,
-            "true": intern_measurer.ref_node_val,
-            "fitted": chronos_heights}))
+        tree_assessor_dict = {
+                "full": (full_tree_assessor, full_mle_tree, full_chronos_tree),
+                "collapse": (collapse_tree_assessor, collapse_mle_tree, collapse_chronos_tree)}
+        for assessor_name, (tree_assessor, mle_tree, chronos_tree) in tree_assessor_dict.items():
+            print(assessor_name)
+            intern_measurer = tree_assessor.measurers[0]
+            mle_heights = intern_measurer.get_compare_node_distances(
+                intern_measurer.ref_leaf_groups,
+                intern_measurer._get_mrca_matrix(mle_tree))
+            internal_node_heights.append(pd.DataFrame.from_dict({
+                "method": "mle",
+                "assess": assessor_name,
+                "n_bcodes": n_bcodes,
+                "true": intern_measurer.ref_node_val,
+                "fitted": mle_heights}))
+            chronos_heights = intern_measurer.get_compare_node_distances(
+                intern_measurer.ref_leaf_groups,
+                intern_measurer._get_mrca_matrix(chronos_tree))
+            internal_node_heights.append(pd.DataFrame.from_dict({
+                "method": "chronos",
+                "assess": assessor_name,
+                "n_bcodes": n_bcodes,
+                "true": intern_measurer.ref_node_val,
+                "fitted": chronos_heights}))
     internal_node_heights = pd.concat(internal_node_heights)
     plot_internal_node_heights(
             internal_node_heights,
