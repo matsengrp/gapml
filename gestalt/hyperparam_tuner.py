@@ -156,15 +156,18 @@ def _tune_hyperparams(
         assessor=assessor)
         for tree_split, transition_wrap_maker in zip(tree_splits, trans_wrap_makers)]
 
+    # Only need the successful results
     if args.num_processes > 1 and len(worker_list) > 1:
         job_manager = SubprocessManager(
                 worker_list,
                 None,
                 args.scratch_dir,
                 args.num_processes)
-        train_results = [r for r, _ in job_manager.run()]
+        train_results = [r for r, _ in job_manager.run(successfuly_only=True)]
     else:
         train_results = [w.run_worker(None) for w in worker_list]
+        train_results = [res for res in train_results if res not None]
+    assert len(train_results) >= 1
 
     # Now find the best penalty param by finding the most stable one
     # Stability is defined as the least variable target lambda estimates and branch length estimates
