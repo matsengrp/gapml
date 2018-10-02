@@ -1,80 +1,153 @@
 import numpy as np
+import sys
+import argparse
+import os
 import six
+import pandas as pd
 import matplotlib
 matplotlib.use('Agg')
+import seaborn as sns
 
-import plot_simulation_common
+from tree_distance import BHVDistanceMeasurer, InternalCorrMeasurer
+from common import parse_comma_str
 import file_readers
-from tree_distance import BHVDistanceMeasurer
-from tree_distance import TreeDistanceMeasurerAgg
 
-np.random.seed(0)
 
-model_seed = 4
-seeds = [10]
-num_barcodes = [1]
-prefix = ""
-growth_stage = "small"
-tree_idx = 1
-do_plots = True
-sum_states = 30
-extra_steps = 1
+def parse_args(args):
+    parser = argparse.ArgumentParser(
+            description='tune over topologies and fit model parameters')
+    parser.add_argument(
+        '--true-model-file-template',
+        type=str,
+        default="simulation_topol_consist/_output/model_seed%d/%d/%s/true_model.pkl")
+    parser.add_argument(
+        '--mle-file-template',
+        type=str,
+        default="simulation_topol_consist/_output/model_seed%d/%d/%s/num_barcodes%d/sum_states_10/extra_steps_1/tune_fitted.pkl")
+    parser.add_argument(
+        '--chronos-file-template',
+        type=str,
+        default="simulation_topol_consist/_output/model_seed%d/%d/%s/num_barcodes%d/chronos_fitted.pkl")
+    parser.add_argument(
+        '--model-seed',
+        type=int,
+        default=100)
+    parser.add_argument(
+        '--data-seeds',
+        type=str,
+        default="200")
+    parser.add_argument(
+        '--n-bcodes-list',
+        type=str,
+        default="1,2,4")
+    parser.add_argument(
+        '--growth-stage',
+        type=str,
+        default="small")
+    parser.add_argument(
+        '--out-plot',
+        type=str,
+        default="_output/simulation_topol_consist_plot.png")
+    parser.add_argument(
+        '--scratch-dir',
+        type=str,
+        default="_output/scratch")
 
-TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/%s/num_barcodes%d/sum_states_%d/extra_steps_%d/tune_fitted_pretun.pkl"
-RAND_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/%s/num_barcodes%d/parsimony_tree0.pkl"
-TRUE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/%s/true_model.pkl"
-OUT_TRUE_TREE_PLOT = "/Users/jeanfeng/Desktop/true_tree.png"
-OUT_FITTED_TREE_PLOT = "/Users/jeanfeng/Desktop/fitted_tree%d.png"
-OUT_NODE_PLOT = "/Users/jeanfeng/Desktop/node_heights.png"
+    parser.set_defaults()
+    args = parser.parse_args(args)
 
-def get_true_model(seed, n_bcodes, _):
-    file_name = TRUE_TEMPLATE % (prefix, model_seed, seed, growth_stage)
+    if not os.path.exists(args.scratch_dir):
+        os.mkdir(args.scratch_dir)
+
+    args.data_seeds = parse_comma_str(args.data_seeds, int)
+    args.n_bcodes_list = parse_comma_str(args.n_bcodes_list, int)
+    return args
+
+def get_true_model(args, seed, n_bcodes):
+    file_name = args.true_model_file_template % (args.model_seed, seed, args.growth_stage)
+    model_params, assessor = file_readers.read_true_model(
+            file_name,
+            n_bcodes,
+            measurer_classes=[BHVDistanceMeasurer, InternalCorrMeasurer],
+            scratch_dir=args.scratch_dir)
+    return model_params, assessor
+
+def get_mle_result(args, seed, n_bcodes):
+    file_name = args.mle_file_template % (args.model_seed, seed, args.growth_stage, n_bcodes)
+    print(file_name)
     with open(file_name, "rb") as f:
-        true_model = six.moves.cPickle.load(f)
-    model_params = true_model["true_model_params"]
-    ref_tree = true_model["true_subtree"]
-    for leaf in ref_tree:
-        leaf.set_allele_list(leaf.allele_list.create_truncated_version(n_bcodes))
-        leaf.sync_allele_events_list_str()
-    single_measurer = TreeDistanceMeasurerAgg.create_single_abundance_measurer(
-            ref_tree,
-            measurer_classes=[BHVDistanceMeasurer],
-            scratch_dir="_output/scratch")
-    return model_params, single_measurer.ref_tree
+        mle_model = six.moves.cPickle.load(f)["final_fit"]
+    return mle_model.model_params_dict, mle_model.fitted_bifurc_tree
 
-def get_result(seed, n_bcodes, _):
-    res_file = TEMPLATE % (prefix, model_seed, seed, growth_stage, n_bcodes, sum_states, extra_steps)
-    return plot_simulation_common.get_result(res_file)
+def get_chronos_result(args, seed, n_bcodes, assessor, perf_measure="full_bhv"):
+    file_name = args.chronos_file_template % (args.model_seed, seed, args.growth_stage, n_bcodes)
+    with open(file_name, "rb") as f:
+        fitted_models = six.moves.cPickle.load(f)[:1]
 
-def get_rand_tree(seed, n_bcodes, _):
-    res_file = RAND_TEMPLATE % (prefix, model_seed, seed, growth_stage, n_bcodes)
-    return plot_simulation_common.get_rand_tree(res_file)
+    perfs = []
+    for chronos_model in fitted_models:
+        perf_dict = assessor.assess(chronos_model["fitted_tree"])
+        perfs.append(perf_dict[perf_measure])
+    best_perf_idx = np.argmin(perfs)
+    return None, fitted_models[best_perf_idx]["fitted_tree"]
+
+def main(args=sys.argv[1:]):
+    args = parse_args(args)
+    plot_perf_measures = [
+            "full_bhv",
+            "collapse_bhv",
+            "full_internal_pearson",
+            "collapse_internal_pearson"]
+    plot_perf_measures_set = set(plot_perf_measures)
+
+    all_perfs = []
+    for n_bcodes in args.n_bcodes_list:
+        print("barcodes", n_bcodes)
+        for seed in args.data_seeds:
+            print("seed", seed)
+            true_params, assessor = get_true_model(args, seed, n_bcodes)
+            mle_params, mle_tree = get_mle_result(args, seed, n_bcodes)
+            _, chronos_tree = get_chronos_result(args, seed, n_bcodes, assessor)
+
+            mle_perf_dict = assessor.assess(mle_tree, mle_params)
+            for k, v in mle_perf_dict.items():
+                if k in plot_perf_measures_set:
+                    small_dict = {
+                            'method': 'mle',
+                            'n_bcodes': n_bcodes,
+                            'seed': seed,
+                            'perf_meas': k,
+                            'value': v}
+                    all_perfs.append(small_dict)
+
+            chronos_perf_dict = assessor.assess(chronos_tree)
+            for k, v in chronos_perf_dict.items():
+                if k in plot_perf_measures_set:
+                    small_dict = {
+                            'method': 'chronos',
+                            'n_bcodes': n_bcodes,
+                            'seed': seed,
+                            'perf_meas': k,
+                            'value': v}
+                    all_perfs.append(small_dict)
+
+    method_perfs = pd.DataFrame(all_perfs)
+    print(method_perfs)
+    sns_plot = sns.catplot(
+            x="n_bcodes",
+            y="value",
+            hue="method",
+            col="perf_meas",
+            data=method_perfs,
+            kind="point",
+            col_wrap=2,
+            col_order=plot_perf_measures,
+            sharey=False)
+    sns_plot.savefig(args.out_plot)
 
 
-plot_simulation_common.gather_results(
-        get_true_model,
-        get_result,
-        get_rand_tree,
-        seeds,
-        num_barcodes,
-        n_bcode = None,
-        tree_idx = tree_idx,
-        do_plots = do_plots,
-        num_rands = 10,
-        print_keys = [
-            "bhv",
-            "random_bhv",
-            "zero_bhv",
-            "super_zero_bhv",
-            "internal_corr",
-            "internal_random_corr",
-            "targ",
-            #"double"
-            ],
-        out_true_tree_plot = OUT_TRUE_TREE_PLOT,
-        out_fitted_tree_plot = OUT_FITTED_TREE_PLOT,
-        out_node_height_plot = OUT_NODE_PLOT,
-        setting_name= "barcodes")
+if __name__ == "__main__":
+    main()
 
 #ONE_TREE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/tune_example_refitnew_tree0.pkl" % (prefix, model_seed, seeds[0], 3)
 #ONE_TREE_PLOT_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/tune_example_refitnew_tree0.png" % (prefix, model_seed, seeds[0], 3)
