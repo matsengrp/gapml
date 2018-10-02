@@ -191,7 +191,7 @@ def _tune_hyperparams(
         # Create our summary of tuning
         tune_result = PenaltyScorerResult(
             hyperparam_score,
-            res_folds)
+            [res for res, _ in res_folds])
         tune_results.append(tune_result)
         logging.info(
                 "Pen param branch %f, target_lam %f, hyperparam score %s",
@@ -201,7 +201,7 @@ def _tune_hyperparams(
 
     return PenaltyTuneResult(
                 tree,
-                tree_splits,
+                [tree_split for _, tree_split in train_results],
                 tune_results)
 
 
