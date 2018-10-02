@@ -11,7 +11,7 @@ import seaborn as sns
 from cell_lineage_tree import CellLineageTree
 from common import parse_comma_str
 import file_readers
-from tree_distance import TreeDistanceMeasurerAgg
+from tree_distance import TreeDistanceMeasurerAgg, InternalCorrMeasurer, BHVDistanceMeasurer
 from plot_simulation_topol_consist import get_true_model, get_mle_result, get_chronos_result
 
 
@@ -35,9 +35,9 @@ def parse_args(args):
         type=int,
         default=100)
     parser.add_argument(
-        '--data-seeds',
-        type=str,
-        default="200")
+        '--data-seed',
+        type=int,
+        default=200)
     parser.add_argument(
         '--n-bcodes-list',
         type=str,
@@ -51,6 +51,10 @@ def parse_args(args):
         type=str,
         default="_output/simulation_tree_%d_%d_%s.png")
     parser.add_argument(
+        '--out-heights-plot-template',
+        type=str,
+        default="_output/simulation_tree_heights_%d.png")
+    parser.add_argument(
         '--scratch-dir',
         type=str,
         default="_output/scratch")
@@ -61,7 +65,6 @@ def parse_args(args):
     if not os.path.exists(args.scratch_dir):
         os.mkdir(args.scratch_dir)
 
-    args.data_seeds = parse_comma_str(args.data_seeds, int)
     args.n_bcodes_list = parse_comma_str(args.n_bcodes_list, int)
     return args
 
@@ -97,37 +100,75 @@ def plot_tree(
     ts.scale = 100
 
     tree.render(file_name, w=width, units="mm", tree_style=ts)
-    print("done")
+
+def plot_internal_node_heights(internal_node_heights, file_name):
+    print(file_name)
+    sns_plot = sns.lmplot(
+            x="true",
+            y="fitted",
+            hue="method",
+            col="n_bcodes",
+            data=internal_node_heights,
+            aspect=.5,
+            ci=None,
+            markers=["o", "x"])
+    sns_plot.savefig(file_name)
 
 def main(args=sys.argv[1:]):
     args = parse_args(args)
 
+    internal_node_heights = []
     for n_bcodes in args.n_bcodes_list:
         print("barcodes", n_bcodes)
-        for seed in args.data_seeds:
-            print("seed", seed)
-            true_params, assessor = get_true_model(args, seed, n_bcodes)
-            mle_params, mle_tree = get_mle_result(args, seed, n_bcodes)
-            full_mle_tree = TreeDistanceMeasurerAgg.create_single_abundance_tree(mle_tree, "leaf_key")
-            full_tree_assessor = assessor._get_full_tree_assessor(mle_tree)
-            _, chronos_tree = get_chronos_result(args, seed, n_bcodes, assessor)
-            full_chronos_tree = TreeDistanceMeasurerAgg.create_single_abundance_tree(chronos_tree, "leaf_key")
+        true_params, assessor = get_true_model(
+                args,
+                args.data_seed,
+                n_bcodes,
+                measurer_classes=[InternalCorrMeasurer, BHVDistanceMeasurer])
+        mle_params, mle_tree = get_mle_result(args, args.data_seed, n_bcodes)
+        full_mle_tree = TreeDistanceMeasurerAgg.create_single_abundance_tree(mle_tree, "leaf_key")
+        full_tree_assessor = assessor._get_full_tree_assessor(mle_tree)
+        _, chronos_tree = get_chronos_result(args, args.data_seed, n_bcodes, assessor)
+        full_chronos_tree = TreeDistanceMeasurerAgg.create_single_abundance_tree(chronos_tree, "leaf_key")
 
-            if n_bcodes == args.n_bcodes_list[0]:
-                plot_tree(
-                    full_tree_assessor.ref_tree,
-                    full_tree_assessor.ref_tree,
-                    args.out_plot_template % (0, seed, "true"))
-
+        if n_bcodes == args.n_bcodes_list[0]:
             plot_tree(
-                full_mle_tree,
                 full_tree_assessor.ref_tree,
-                args.out_plot_template % (n_bcodes, seed, "mle"))
+                full_tree_assessor.ref_tree,
+                args.out_plot_template % (0, args.data_seed, "true"))
 
-            plot_tree(
-                full_chronos_tree,
-                full_tree_assessor.ref_tree,
-                args.out_plot_template % (n_bcodes, seed, "chronos"))
+        plot_tree(
+            full_mle_tree,
+            full_tree_assessor.ref_tree,
+            args.out_plot_template % (n_bcodes, args.data_seed, "mle"))
+
+        plot_tree(
+            full_chronos_tree,
+            full_tree_assessor.ref_tree,
+            args.out_plot_template % (n_bcodes, args.data_seed, "chronos"))
+
+        intern_measurer = full_tree_assessor.measurers[0]
+        mle_heights = intern_measurer.get_compare_node_distances(
+            intern_measurer.ref_leaf_groups,
+            intern_measurer._get_mrca_matrix(full_mle_tree))
+        internal_node_heights.append(pd.DataFrame.from_dict({
+            "method": "mle",
+            "n_bcodes": n_bcodes,
+            "true": intern_measurer.ref_node_val,
+            "fitted": mle_heights}))
+        chronos_heights = intern_measurer.get_compare_node_distances(
+            intern_measurer.ref_leaf_groups,
+            intern_measurer._get_mrca_matrix(full_chronos_tree))
+        internal_node_heights.append(pd.DataFrame.from_dict({
+            "method": "chronos",
+            "n_bcodes": n_bcodes,
+            "true": intern_measurer.ref_node_val,
+            "fitted": chronos_heights}))
+    internal_node_heights = pd.concat(internal_node_heights)
+    plot_internal_node_heights(
+            internal_node_heights,
+            args.out_heights_plot_template % args.data_seed)
+
 
 if __name__ == "__main__":
     main()

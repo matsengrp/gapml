@@ -63,12 +63,16 @@ def parse_args(args):
     args.n_bcodes_list = parse_comma_str(args.n_bcodes_list, int)
     return args
 
-def get_true_model(args, seed, n_bcodes):
+def get_true_model(
+        args,
+        seed,
+        n_bcodes,
+        measurer_classes=[BHVDistanceMeasurer, InternalCorrMeasurer]):
     file_name = args.true_model_file_template % (args.model_seed, seed, args.growth_stage)
     model_params, assessor = file_readers.read_true_model(
             file_name,
             n_bcodes,
-            measurer_classes=[BHVDistanceMeasurer, InternalCorrMeasurer],
+            measurer_classes=measurer_classes,
             scratch_dir=args.scratch_dir)
     return model_params, assessor
 
