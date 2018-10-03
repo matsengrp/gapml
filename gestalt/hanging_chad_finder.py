@@ -479,6 +479,7 @@ def get_random_chad(
         bcode_meta: BarcodeMetadata,
         exclude_chad_func=None,
         branch_len_attaches: bool = True,
+        masking_only: bool = False,
         print_iter: int = 50):
     """
     @param exclude_chad_func: the function to use to check if chad should be considered
@@ -496,7 +497,8 @@ def get_random_chad(
         if exclude_chad_func is not None and exclude_chad_func(node):
             continue
 
-        if node.dist == 0:
+        has_masking_cuts = any([sg.min_target + 1 < sg.max_target for anc_state in node.anc_state_list for sg in anc_state.get_singletons()])
+        if node.dist == 0 or (masking_only and has_masking_cuts):
             # We're assuming that a tree with no parsimony score probably can't be placed anywhere in the tree
             continue
 
@@ -518,26 +520,37 @@ def get_random_chad(
             #    logging.info("chad %d %s", chad.node_id, chad.allele_events_list_str)
             #    logging.info(p_tree.get_ascii(attributes=['anc_state_list_str']))
             #    logging.info(p_tree.get_ascii(attributes=['dist']))
-
             return hanging_chad
 
     # We still haven't found our chad friend apparently...
-    if exclude_chad_func is None:
-        # There is no hanging chad at all
-        return None
-    else:
+    if exclude_chad_func is not None:
+        # If we have the exclude criteria, we can't find cahds...
+        # don't use exclude crtieria in that case
         return get_random_chad(
             tree,
             bcode_meta,
             exclude_chad_func=None,
             branch_len_attaches=branch_len_attaches)
+    elif masking_only is True:
+        # If we have the mask criteria, we can't find cahds...
+        # don't mask in that case
+        return get_random_chad(
+            tree,
+            bcode_meta,
+            exclude_chad_func=None,
+            branch_len_attaches=branch_len_attaches,
+            masking_only=False)
+    else:
+        # There is no hanging chad at all
+        return None
 
 
 def get_all_chads(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
         max_possible_trees: int = None,
-        print_iter: int = 50):
+        print_iter: int = 50,
+        masking_only: bool = False):
     """
     @param max_possible_trees: stop once you find at least `max_possible_trees` in a chad
     @return List[HangingChad] all hanging chads in the tree
@@ -550,7 +563,9 @@ def get_all_chads(
     for node_idx, node in enumerate(tree.get_descendants()):
         if node_idx % print_iter == 0:
             print(node_idx, time.time() - st_time)
-        if node.dist == 0:
+
+        has_masking_cuts = any([sg.min_target + 1 < sg.max_target for anc_state in node.anc_state_list for sg in anc_state.get_singletons()])
+        if node.dist == 0 or (masking_only and has_masking_cuts):
             # We're assuming a tree with no parsimony score contribution probably can't be placed anywhere else in tree
             continue
 
