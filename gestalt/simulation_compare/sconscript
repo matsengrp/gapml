@@ -162,6 +162,8 @@ def run_chronos(env, outdir, c):
         'python boto_run.py 2 6000 fit_chronos.py' if USE_AWS else 'python fit_chronos.py',
         '--seed',
         c['seed'] + 20,
+        '--lambdas',
+        '0.0001,0.001,0.01,0.1,1',
         '--obs-file ${SOURCES[0]}',
         '--topology-file ${SOURCES[1]}',
         '--out-model-file ${TARGETS[0]}',
