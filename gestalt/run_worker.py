@@ -33,15 +33,21 @@ def main(args=sys.argv[1:]):
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
 
-    with open(args.input_file, "rb") as input_file:
-        batched_workers = six.moves.cPickle.load(input_file)
+    try:
+        with open(args.input_file, "rb") as input_file:
+            batched_workers = six.moves.cPickle.load(input_file)
 
-    results = []
-    for worker in batched_workers.workers:
-        results.append(worker.run(batched_workers.shared_obj))
-
-    with open(args.output_file, "wb") as output_file:
-        six.moves.cPickle.dump(results, output_file, protocol=2)
+        results = []
+        for worker in batched_workers.workers:
+            results.append(worker.run(batched_workers.shared_obj))
+        with open(args.output_file, "wb") as output_file:
+            six.moves.cPickle.dump(results, output_file, protocol=2)
+    except Exception as e:
+        logging.info("Exception: %s", str(e))
+        raise
+    except:
+        logging.info("Unexpected error: %s", sys.exc_info()[0])
+        raise
 
 if __name__ == "__main__":
     main(sys.argv[1:])
