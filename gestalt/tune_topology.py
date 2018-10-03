@@ -437,12 +437,14 @@ def main(args=sys.argv[1:]):
     logging.info(tree.get_ascii(attributes=["allele_events_list_str"]))
     logging.info(tree.get_ascii(attributes=["node_id"]))
 
+    num_all_chads = None
     if args.count_chads:
         all_chad_sketches = hanging_chad_finder.get_all_chads(
             tree,
             bcode_meta,
             max_possible_trees=2)
         logging.info("Total of %d chads found", len(all_chad_sketches))
+        num_all_chads = len(all_chad_sketches)
     tree = _do_random_rearrange(tree, bcode_meta, args.num_init_random_rearrange)
 
     logging.info("STARTING for reals!")
@@ -552,7 +554,7 @@ def main(args=sys.argv[1:]):
             "best_res": best_res,
         })
         save_data(tuning_history, args.out_model_file)
-        if num_stable >= args.num_chad_stop:
+        if (num_all_chads is not None and num_stable >= num_all_chads) or num_stable >= args.num_chad_stop:
             logging.info("Hanging chad tuner has converged")
             break
 

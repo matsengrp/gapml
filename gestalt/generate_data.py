@@ -248,8 +248,8 @@ def create_cell_lineage_tree(
                 print("done!")
                 break
         except ValueError as e:
-            logging.info("ValueError warning.... %s", str(e))
-            print("ValueError warning.... %s" % str(e))
+            logging.info("ValueError warning.... %s %f", str(e), birth_sync_time)
+            print("ValueError warning.... %s %f" % (str(e), birth_sync_time))
             birth_sync_time += incr * np.random.rand()
             continue
 

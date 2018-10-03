@@ -15,8 +15,8 @@ jobNamePrefix = "test_job"
 def main(args=sys.argv[1:]):
     vcpus = int(args[0])
     assert vcpus >= 2
+    # Memory in MB
     memory = int(args[1])
-    # For run_estimator, choose memory something like 20000
     command = [command0, "jjfeng"] + (" ".join(args[2:])).split(" ")
     print(command)
     resp = batch.submit_job(

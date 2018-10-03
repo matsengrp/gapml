@@ -18,19 +18,22 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
+USE_AWS = False
 NUM_RANDOM_REARRANGE = 20
 GROWTH_DICT = {
-    #"30hpf": {
-    #    "sampling_rate": 0.12,
-    #    "birth_sync_rounds": 4,
-    #    "birth_sync_time": 0.1,
-    #    "death_lambda": 0.2,
-    #    "birth_decay": -4,
-    #    "lambda_sequence": [.65, .6, .55, .5, .45, .4, .35],
-    #    "double": 0.2,
-    #    "min_leaves": 50,
-    #    "max_leaves": 120,
-    #},
+    "30hpf": {
+        "sampling_rate": 0.04,
+        "birth_sync_rounds": 9,
+        "birth_sync_time": 0.01,
+        "death_lambda": 0.2,
+        "birth_decay": -17,
+        "birth_min": 3,
+        "lambda_sequence": [0.4, 0.4, 0.7, 0.4, 0.3, 0.2, 0.4, 0.2, 1.0, 0.2],
+        "target_decay": .5,
+        "double": 0.1,
+        "min_leaves": 600,
+        "max_leaves": 1200,
+    },
     "small": {
         "sampling_rate": 0.08,
         "birth_sync_rounds": 5,
@@ -40,7 +43,7 @@ GROWTH_DICT = {
         "birth_min": 6,
         "lambda_sequence": [0.9, 0.85, .8, .75, .7, .6, .65],
         "target_decay": .6,
-        "double": 0.01,
+        "double": 0.1,
         "min_leaves": 80,
         "max_leaves": 150,
     },
@@ -73,8 +76,8 @@ nest.add(
 nest.add(
     'growth_stage',
     [
-       #'30hpf',
-       'small'
+       '30hpf',
+       #'small'
        #'mini'
     ])
 
@@ -84,8 +87,7 @@ def generate(env, outdir, c):
         GROWTH_DICT[c['growth_stage']]['lambda_sequence']))
 
     cmd = [
-        #'python boto_run.py 2 2000 generate_data.py',
-        'python generate_data.py',
+        'python boto_run.py 2 2000 generate_data.py' if USE_AWS else 'python generate_data.py',
         '--sampling-rate',
         GROWTH_DICT[c['growth_stage']]['sampling_rate'],
         '--model-seed',
@@ -109,7 +111,7 @@ def generate(env, outdir, c):
         '--max-clt-nodes',
         int(GROWTH_DICT[c['growth_stage']]['max_leaves']/GROWTH_DICT[c['growth_stage']]['sampling_rate'] * 1.1),
         '--num-barcodes',
-        4,
+        1,
         '--min-uniq-alleles',
         GROWTH_DICT[c['growth_stage']]['min_leaves'],
         '--max-uniq-alleles',
@@ -146,8 +148,7 @@ nest.add(
 @nest.add_target_with_env(localenv)
 def restrict_observed_alleles(env, outdir, c):
     cmd = [
-        #'python boto_run.py 2 2000 restrict_observed_barcodes.py',
-        'python restrict_observed_barcodes.py',
+        'python boto_run.py 2 2000 restrict_observed_barcodes.py' if USE_AWS else 'python restrict_observed_barcodes.py',
         '--obs-file ${SOURCES[0]}',
         '--num-barcodes',
         c['num_barcodes'],
@@ -164,8 +165,7 @@ def restrict_observed_alleles(env, outdir, c):
 @nest.add_target_with_env(localenv)
 def run_topology(env, outdir, c):
     cmd = [
-        #'python boto_run.py 2 6000 get_parsimony_topologies.py',
-        'python get_parsimony_topologies.py',
+        'python boto_run.py 2 6000 get_parsimony_topologies.py' if USE_AWS else 'python get_parsimony_topologies.py',
         '--obs-file ${SOURCES[0]}',
         '--out-template-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
@@ -187,7 +187,7 @@ def run_topology(env, outdir, c):
 @nest.add_target_with_env(localenv)
 def run_chronos(env, outdir, c):
     cmd = [
-        'python fit_chronos.py',
+        'python boto_run.py 2 6000 fit_chronos.py' if USE_AWS else 'python fit_chronos.py',
         '--seed',
         c['seed'] + 20,
         '--obs-file ${SOURCES[0]}',
@@ -235,7 +235,7 @@ def run_MLE(env, outdir, c):
         target_lam_penalty_params = "1"
 
     cmd = [
-        'python tune_topology.py',
+        'python boto_run.py 16 30000 tune_topology.py' if USE_AWS else 'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
         '--topology-file ${SOURCES[1]}',
         '--true-model-file ${SOURCES[2]}',
@@ -270,7 +270,7 @@ def run_MLE(env, outdir, c):
         6 if c['num_barcodes'] == 1 else 3,
         '--num-init-random-rearrange',
         NUM_RANDOM_REARRANGE if c['num_barcodes'] == 1 else 0,
-        '--count-chads',
+        '--count-chads' if c['num_barcodes'] == 1 else '',
         '--scratch-dir',
         #'_output/scratch',
 	join('simulation_topol_consist', outdir, 'scratch'),
