@@ -201,6 +201,9 @@ def run_MLE(env, outdir, c):
     penalty_params = "1024,256,64,16"
     target_lam_penalty_params = "10,1"
 
+    # Best pen params something like
+    # RUNNING branch pen param 256.000000 target lam pen param 1.000000
+
     cmd = [
         'python boto_run.py 20 30000 tune_topology.py' if USE_AWS else 'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',

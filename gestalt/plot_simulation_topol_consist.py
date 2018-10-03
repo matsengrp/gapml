@@ -110,30 +110,36 @@ def main(args=sys.argv[1:]):
         for seed in args.data_seeds:
             print("seed", seed)
             true_params, assessor = get_true_model(args, seed, n_bcodes)
-            mle_params, mle_tree = get_mle_result(args, seed, n_bcodes)
-            _, chronos_tree = get_chronos_result(args, seed, n_bcodes, assessor)
 
-            mle_perf_dict = assessor.assess(mle_tree, mle_params)
-            for k, v in mle_perf_dict.items():
-                if k in plot_perf_measures_set:
-                    small_dict = {
-                            'method': 'mle',
-                            'n_bcodes': n_bcodes,
-                            'seed': seed,
-                            'perf_meas': k,
-                            'value': v}
-                    all_perfs.append(small_dict)
+            try:
+                mle_params, mle_tree = get_mle_result(args, seed, n_bcodes)
+                mle_perf_dict = assessor.assess(mle_tree, mle_params)
+                for k, v in mle_perf_dict.items():
+                    if k in plot_perf_measures_set:
+                        small_dict = {
+                                'method': 'mle',
+                                'n_bcodes': n_bcodes,
+                                'seed': seed,
+                                'perf_meas': k,
+                                'value': v}
+                        all_perfs.append(small_dict)
+            except FileNotFoundError:
+                print("not found mle", n_bcodes, seed)
 
-            chronos_perf_dict = assessor.assess(chronos_tree)
-            for k, v in chronos_perf_dict.items():
-                if k in plot_perf_measures_set:
-                    small_dict = {
-                            'method': 'chronos',
-                            'n_bcodes': n_bcodes,
-                            'seed': seed,
-                            'perf_meas': k,
-                            'value': v}
-                    all_perfs.append(small_dict)
+            try:
+                _, chronos_tree = get_chronos_result(args, seed, n_bcodes, assessor)
+                chronos_perf_dict = assessor.assess(chronos_tree)
+                for k, v in chronos_perf_dict.items():
+                    if k in plot_perf_measures_set:
+                        small_dict = {
+                                'method': 'chronos',
+                                'n_bcodes': n_bcodes,
+                                'seed': seed,
+                                'perf_meas': k,
+                                'value': v}
+                        all_perfs.append(small_dict)
+            except FileNotFoundError:
+                print("not found mle", n_bcodes, seed)
 
     method_perfs = pd.DataFrame(all_perfs)
     print(method_perfs)
