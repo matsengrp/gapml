@@ -4,6 +4,7 @@ from typing import List, Dict
 import logging
 import random
 import copy
+import time
 
 from allele_events import AlleleEvents
 from cell_lineage_tree import CellLineageTree
@@ -287,6 +288,28 @@ class HangingChad:
             self.num_possible_trees,
             chad_parent_strs)
 
+def _mark_nodes_for_recalc(changed_nodes: List[CellLineageTree]):
+    """
+    Mark nodes that need to be recalculated -- see ancestral_events_finder for what the flags are
+        negative distances mean we need to recalc
+        ancestral states set to None means we need to recalc
+
+    @param changed_nodes: a list of nodes where we need to recalc their ancestral state
+                Therefore we need to calculate any ancestral state along their path up
+                to the root.
+                Also we need to mark associated branches that need their parsimony score distance
+                updated. These would be all the nodes that are direct children of any node
+                along the upwards path of the changed_nodes
+    """
+    for changed_node in changed_nodes:
+        up_path_node = changed_node
+        while up_path_node is not None:
+            for child in up_path_node.get_children():
+                child.dist = -1
+            up_path_node.dist = -1
+            up_path_node.anc_state_list = None
+            up_path_node.anc_state_list_str = None
+            up_path_node = up_path_node.up
 
 def _get_chad_possibilities(
         chad_id: int,
@@ -359,11 +382,15 @@ def _get_chad_possibilities(
         if node.is_leaf() or node.node_id == chad_orig_parent.node_id:
             continue
 
+        # The nodes with potentially different ancestral states are the chad and where it was detached
+        nodes_to_update = [chad] + chad.up.get_children()
         chad.detach()
         node.add_child(chad)
 
-        ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
-        new_pars_score = ancestral_events_finder.get_parsimony_score(tree)
+        # mark which nodes need to recalc so we can get the new parsimony score
+        _mark_nodes_for_recalc(nodes_to_update)
+        ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta, do_fast=True)
+        new_pars_score = ancestral_events_finder.get_parsimony_score(tree, do_fast=True)
         if new_pars_score < parsimony_score:
             logging.info("We beat MIX (attach to multifurc): %d< %d", new_pars_score, parsimony_score)
             logging.info(tree.get_ascii(attributes=['anc_state_list_str']))
@@ -382,6 +409,8 @@ def _get_chad_possibilities(
             if node.is_root() or (chad_orig_parent_unifurc and node.node_id == chad_orig_parent.node_id):
                 continue
 
+            # The nodes with potentially different ancestral states are the chad and where it was detached
+            nodes_to_update = [chad] + chad.up.get_children()
             chad.detach()
 
             # Consider adding chad to an edge, so parent -- new_node -- node, chad
@@ -396,8 +425,10 @@ def _get_chad_possibilities(
             new_node.add_child(node)
             new_node.add_child(chad)
 
-            ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
-            new_pars_score = ancestral_events_finder.get_parsimony_score(tree)
+            # mark which nodes need to recalc so we can get the new parsimony score
+            _mark_nodes_for_recalc(nodes_to_update)
+            ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta, do_fast=True)
+            new_pars_score = ancestral_events_finder.get_parsimony_score(tree, do_fast=True)
             if new_pars_score < parsimony_score:
                 logging.info("we beat MIX (attach in middle): %d< %d", new_pars_score, parsimony_score)
                 logging.info(tree.get_ascii(attributes=['anc_state_list_str']))
@@ -447,21 +478,26 @@ def get_random_chad(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
         exclude_chad_func=None,
-        branch_len_attaches: bool = True):
+        branch_len_attaches: bool = True,
+        print_iter: int = 50):
     """
     @param exclude_chad_func: the function to use to check if chad should be considered
     @return a randomly chosen HangingChad, also a set of the recently seen chads (indexed by psuedo id)
     """
+    st_time = time.time()
     tree, parsimony_score = _preprocess_tree_for_chad_finding(tree, bcode_meta)
 
     descendants = tree.get_descendants()
     random.shuffle(descendants)
-    for node in descendants:
+    for node_idx, node in enumerate(descendants):
+        if node_idx % print_iter == 0:
+            print(node_idx, time.time() - st_time)
+
         if exclude_chad_func is not None and exclude_chad_func(node):
             continue
 
-        has_masking_cuts = any([sg.min_target + 1 < sg.max_target for anc_state in node.anc_state_list for sg in anc_state.get_singletons()])
-        if not has_masking_cuts:
+        if node.dist == 0:
+            # We're assuming that a tree with no parsimony score probably can't be placed anywhere in the tree
             continue
 
         tree_copy = tree.copy()
@@ -500,17 +536,22 @@ def get_random_chad(
 def get_all_chads(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
-        max_possible_trees: int = None):
+        max_possible_trees: int = None,
+        print_iter: int = 50):
     """
     @param max_possible_trees: stop once you find at least `max_possible_trees` in a chad
     @return List[HangingChad] all hanging chads in the tree
     """
+    st_time = time.time()
     tree, parsimony_score = _preprocess_tree_for_chad_finding(tree, bcode_meta)
 
     hanging_chads = []
-    for node in tree.get_descendants():
-        has_masking_cuts = any([sg.min_target + 1 < sg.max_target for anc_state in node.anc_state_list for sg in anc_state.get_singletons()])
-        if not has_masking_cuts:
+    print("get all chads... num descen", len(tree.get_descendants()))
+    for node_idx, node in enumerate(tree.get_descendants()):
+        if node_idx % print_iter == 0:
+            print(node_idx, time.time() - st_time)
+        if node.dist == 0:
+            # We're assuming a tree with no parsimony score contribution probably can't be placed anywhere else in tree
             continue
 
         tree_copy = tree.copy()
