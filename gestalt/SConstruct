@@ -38,29 +38,32 @@ env.SConsignFile()
 flag = 'simulation_sanity'
 SConscript(flag + '/sconscript', exports=['flag'])
 
-flag = 'simulation_consistency'
-SConscript(flag + '/sconscript', exports=['flag'])
+#flag = 'simulation_consistency'
+#SConscript(flag + '/sconscript', exports=['flag'])
 
 flag = 'simulation_topol_consist'
 SConscript(flag + '/sconscript', exports=['flag'])
 
-flag = 'simulation_topology_same_diff'
+flag = 'simulation_compare'
 SConscript(flag + '/sconscript', exports=['flag'])
 
-flag = 'simulation_topology_random_vs_sorted'
-SConscript(flag + '/sconscript', exports=['flag'])
-
-flag = 'simulation_topology_sampling'
-SConscript(flag + '/sconscript', exports=['flag'])
-
-flag = 'simulation_topology_magnitude'
-SConscript(flag + '/sconscript', exports=['flag'])
-
-flag = 'simulation_topology_double'
-SConscript(flag + '/sconscript', exports=['flag'])
-
-flag = 'simulation_one_barcode'
-SConscript(flag + '/sconscript', exports=['flag'])
+#flag = 'simulation_topology_same_diff'
+#SConscript(flag + '/sconscript', exports=['flag'])
+#
+#flag = 'simulation_topology_random_vs_sorted'
+#SConscript(flag + '/sconscript', exports=['flag'])
+#
+#flag = 'simulation_topology_sampling'
+#SConscript(flag + '/sconscript', exports=['flag'])
+#
+#flag = 'simulation_topology_magnitude'
+#SConscript(flag + '/sconscript', exports=['flag'])
+#
+#flag = 'simulation_topology_double'
+#SConscript(flag + '/sconscript', exports=['flag'])
+#
+#flag = 'simulation_one_barcode'
+#SConscript(flag + '/sconscript', exports=['flag'])
 
 flag = 'analyze_gestalt'
 SConscript(flag + '/sconscript', exports=['flag'])

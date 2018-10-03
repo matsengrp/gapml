@@ -13,6 +13,7 @@ from pathlib import Path
 import six
 from typing import List
 import glob
+import time
 
 from cell_lineage_tree import CellLineageTree
 from clt_observer import ObservedAlignedSeq
@@ -247,10 +248,12 @@ def main(args=sys.argv[1:]):
     trees_to_output = []
 
     # Get the parsimony-estimated topologies
+    st_time = time.time()
     parsimony_trees = get_parsimony_trees(
         obs_leaves,
         args,
         bcode_meta)
+    logging.info("Finished getting parsimony trees %d", time.time() - st_time)
 
     if args.max_best_multifurc or args.max_best:
         # Get the trees based on distance to the true tree

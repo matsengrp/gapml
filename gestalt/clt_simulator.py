@@ -30,7 +30,7 @@ class CLTSimulator:
         self.allele_simulator = allele_simulator
         self.scale_hazard_func = scale_hazard_func
 
-    def simulate(self, root_allele: Allele, root_cell_state: CellState, tot_time: float, max_nodes: int = 50):
+    def simulate(self, root_allele: Allele, root_cell_state: CellState, tot_time: float, max_leaves: int = 50):
         raise NotImplementedError()
 
     def simulate_alleles(self, tree: CellLineageTree):
@@ -101,14 +101,14 @@ class BirthDeathTreeSimulator:
         self.birth_min = birth_min
         self.death_scale = 1.0 / death_rate
 
-    def simulate(self, root_allele_list: AlleleList, time: float, max_nodes: int = 10):
+    def simulate(self, root_allele_list: AlleleList, time: float, max_leaves: int = 10):
         """
         Generates a CLT based on the model
         The root_allele and root_cell_state is constant (used as a dummy only).
 
         @param root_allele_list: this is copied as the AlleleList for all nodes in this tree
         @param time: amount of time to simulate the CLT
-        @param max_nodes: maximum number of nodes to have in the full CLT
+        @param max_leaves: maximum number of nodes to have in the full CLT
 
         @return CellLineageTree from the birth death tree simulator -- provides a topology only
         """
@@ -118,7 +118,7 @@ class BirthDeathTreeSimulator:
             dist=0)
 
         self.curr_nodes = 1
-        self.max_nodes = max_nodes
+        self.max_leaves = max_leaves
         self._simulate_tree(tree, time)
         return tree
 
@@ -144,7 +144,7 @@ class BirthDeathTreeSimulator:
         @param time: the max amount of time to simulate from this node
         """
         self.curr_nodes += 1
-        if self.curr_nodes > self.max_nodes:
+        if self.curr_nodes > 2 * self.max_leaves:
             raise ValueError("too many nodes %d", self.curr_nodes)
             return
 
@@ -278,14 +278,14 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
 
     def simulate_full_skeleton(self,
             tot_time: float,
-            max_nodes: int = 10,
+            max_leaves: int = 10,
             max_tries: int = 3,
             dominating_percent: float = 0.8):
         """
         Generates a CLT based on the model
 
         @param time: amount of time to simulate the CLT
-        @param max_nodes: maximum number of CLT nodes to simulate
+        @param max_leaves: maximum number of CLT nodes to simulate
         @param max_tries: number of times we try to resimulate the alleles to satisfy
                         our allele event "diversity" requirement
         @param dominating_percent: if an event appears in at least this percentage of the observed leaves,
@@ -303,7 +303,7 @@ class CLTSimulatorBifurcating(CLTSimulator, BirthDeathTreeSimulator):
         tree = bd_tree_simulator.simulate(
                 root_allele,
                 tot_time,
-                max_nodes)
+                max_leaves)
         tree.cell_state = root_cell_state
         num_leaves = len(tree)
         print("TOTAL tree leaves", num_leaves)

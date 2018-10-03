@@ -18,34 +18,21 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
-USE_AWS = True
-NUM_RANDOM_REARRANGE = 20
+USE_AWS = False
+NUM_RANDOM_REARRANGE = 0
 GROWTH_DICT = {
-    "small": {
-        "sampling_rate": 0.08,
-        "birth_sync_rounds": 5,
-        "birth_sync_time": 0.02,
+    "30hpf": {
+        "sampling_rate": 0.03,
+        "birth_sync_rounds": 10,
+        "birth_sync_time": 0.015,
         "death_lambda": 0.2,
-        "birth_decay": -16,
-        "birth_min": 6,
-        "lambda_sequence": [.95, 0.9, 0.85, .8, .75, .7, .6],
-        "target_decay": .4,
-        "double": 0.06,
-        "min_leaves": 80,
-        "max_leaves": 150,
-    },
-    "mini": {
-        "sampling_rate": 0.1,
-        "birth_sync_rounds": 5,
-        "birth_sync_time": 0.07,
-        "death_lambda": 0.2,
-        "birth_decay": -1,
-        "birth_min": 2,
-        "lambda_sequence": [1.2, 0.9, .8, .75, .7, .65],
+        "birth_decay": -65,
+        "birth_min": 2.5,
+        "lambda_sequence": [0.3, 0.3, 0.6, 0.3, 0.2, 0.1, 0.3, 0.2, 1.3, 0.1],
         "target_decay": .6,
-        "double": 0.03,
-        "min_leaves": 20,
-        "max_leaves": 100,
+        "double": 0.1,
+        "min_leaves": 200,
+        "max_leaves": 600,
     },
 }
 
@@ -57,13 +44,15 @@ nest.add(
 
 nest.add(
     'seed',
-    [300, 301],
+    [300],
 )
 
 nest.add(
     'growth_stage',
     [
-       'small'
+       '30hpf',
+       #'small'
+       #'mini'
     ])
 
 @nest.add_target_with_env(localenv)
@@ -93,10 +82,10 @@ def generate(env, outdir, c):
         GROWTH_DICT[c['growth_stage']]['birth_min'],
         '--death-lambda',
         GROWTH_DICT[c['growth_stage']]['death_lambda'],
-        '--max-clt-nodes',
+        '--max-clt-leaves',
         int(GROWTH_DICT[c['growth_stage']]['max_leaves']/GROWTH_DICT[c['growth_stage']]['sampling_rate'] * 1.1),
         '--num-barcodes',
-        4,
+        1,
         '--min-uniq-alleles',
         GROWTH_DICT[c['growth_stage']]['min_leaves'],
         '--max-uniq-alleles',
@@ -126,7 +115,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [4],
+    [1],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -183,7 +172,7 @@ def run_chronos(env, outdir, c):
         '--num-init-random-rearrange',
         NUM_RANDOM_REARRANGE if c['num_barcodes'] == 1 else 0,
         '--scratch-dir',
-	join('simulation_topol_consist', outdir, 'scratch'),
+	join('simulation_compare', outdir, 'scratch'),
     ]
     return env.Command(
         [
@@ -220,7 +209,7 @@ def run_MLE(env, outdir, c):
         target_lam_penalty_params = "1"
 
     cmd = [
-        'python boto_run.py 36 50000 tune_topology.py' if USE_AWS else 'python tune_topology.py',
+        'python boto_run.py 20 30000 tune_topology.py' if USE_AWS else 'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
         '--topology-file ${SOURCES[1]}',
         '--true-model-file ${SOURCES[2]}',
@@ -258,7 +247,7 @@ def run_MLE(env, outdir, c):
         '--count-chads' if c['num_barcodes'] == 1 else '',
         '--scratch-dir',
         #'_output/scratch',
-	join('simulation_topol_consist', outdir, 'scratch'),
+	join('simulation_compare', outdir, 'scratch'),
     ]
     return env.Command(
         [

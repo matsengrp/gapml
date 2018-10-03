@@ -140,7 +140,7 @@ def parse_args():
         help="Seed for generating data")
     parser.add_argument('--min-uniq-alleles', type=int, default=3)
     parser.add_argument('--max-uniq-alleles', type=int, default=10)
-    parser.add_argument('--max-clt-nodes', type=int, default=1000000)
+    parser.add_argument('--max-clt-leaves', type=int, default=1000000)
     parser.add_argument(
         '--max-abundance',
         type=int,
@@ -219,7 +219,7 @@ def create_cell_lineage_tree(
         args,
         clt_model: CLTLikelihoodModel,
         max_tries: int = 20,
-        incr: float = 0.01,
+        incr: float = 0.005,
         time_min: float = 1e-3):
     """
     @return original clt, the set of observed leaves, and the true topology for the observed leaves
@@ -234,7 +234,7 @@ def create_cell_lineage_tree(
             clt_simulator.birth_sync_time = birth_sync_time
             clt = clt_simulator.simulate_full_skeleton(
                 tot_time=args.time,
-                max_nodes=args.max_clt_nodes)
+                max_leaves=args.max_clt_leaves)
             clt.label_node_ids()
             # Now sample the leaves and create the true topology
             true_subtree = CLTObserver.sample_leaves(clt, args.sampling_rate)
