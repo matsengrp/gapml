@@ -17,6 +17,7 @@ def annotate_ancestral_states(tree: CellLineageTree, bcode_meta: BarcodeMetadata
     @param do_fast: indicates whether to keep valid ancestral states alone and
                     only recalculate ancestral states for those that are set to None
     """
+    # TODO: add python unit test for this fast version
     for node in tree.traverse("postorder"):
         if do_fast and node.anc_state_list is not None:
             continue
@@ -57,6 +58,7 @@ def get_parsimony_score(tree: CellLineageTree, do_fast: bool=False):
                     only recalculate distance for branches with negative distance
     @return parsimony score
     """
+    # TODO: add python unit test for this fast version
     # The parsimony score is the sum of the number of times a new singleton is introduced
     # in the ancestral state list for each node
     pars_score = 0
