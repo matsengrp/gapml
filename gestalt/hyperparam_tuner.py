@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List, Dict
+from typing import List, Dict, Tuple
 import logging
 import random
 
@@ -163,10 +163,10 @@ def _tune_hyperparams(
                 None,
                 args.scratch_dir,
                 args.num_processes)
-        train_results = [r for r, _ in job_manager.run(successfuly_only=True)]
+        train_results = [r for r, _ in job_manager.run()]
     else:
         train_results = [w.run_worker(None) for w in worker_list]
-        train_results = [res for res in train_results if res not None]
+    train_results = [(res, tree_split) for res, tree_split in zip(train_results, tree_splits) if res is not None]
     assert len(train_results) >= 1
 
     # Now find the best penalty param by finding the most stable one
@@ -180,10 +180,9 @@ def _tune_hyperparams(
                 idx,
                 fit_param['branch_pen_param'],
                 fit_param['target_lam_pen_param'])
-        res_folds = [train_res[idx] for train_res in train_results]
+        res_folds = [(train_res[idx], tree_split) for train_res, tree_split in train_results]
         hyperparam_score = hyperparam_score_fnc(
             res_folds,
-            tree_splits,
             args.max_extra_steps,
             args.max_sum_states,
             args.scratch_dir,
@@ -192,7 +191,7 @@ def _tune_hyperparams(
         # Create our summary of tuning
         tune_result = PenaltyScorerResult(
             hyperparam_score,
-            res_folds)
+            [res for res, _ in res_folds])
         tune_results.append(tune_result)
         logging.info(
                 "Pen param branch %f, target_lam %f, hyperparam score %s",
@@ -202,13 +201,12 @@ def _tune_hyperparams(
 
     return PenaltyTuneResult(
                 tree,
-                tree_splits,
+                [tree_split for _, tree_split in train_results],
                 tune_results)
 
 
 def _get_many_bcode_hyperparam_score(
-        pen_param_results: List[LikelihoodScorerResult],
-        tree_splits: List[TreeDataSplit],
+        pen_param_results: List[Tuple[LikelihoodScorerResult, TreeDataSplit]],
         max_extra_steps: int,
         max_sum_states: int,
         scratch_dir: str,
@@ -216,13 +214,13 @@ def _get_many_bcode_hyperparam_score(
     """
     @return score = the validation log likelihood
     """
-    for pen_param_res in pen_param_results:
+    for pen_param_res, _ in pen_param_results:
         if pen_param_res is None:
             # This pen param setting is not stable
             return -np.inf
 
     worker_list = []
-    for pen_param_res, tree_split in zip(pen_param_results, tree_splits):
+    for pen_param_res, tree_split in pen_param_results:
         # Use all the fitted params from the training data since we have the
         # same tree topology
         fit_params = pen_param_res.get_fit_params()
@@ -262,8 +260,7 @@ def _get_many_bcode_hyperparam_score(
 
 
 def _get_one_bcode_hyperparam_score(
-        pen_param_results: List[LikelihoodScorerResult],
-        tree_splits: List[TreeDataSplit],
+        pen_param_results: List[Tuple[LikelihoodScorerResult, TreeDataSplit]],
         max_extra_steps: int,
         max_sum_states: int,
         scratch_dir: str,
@@ -271,13 +268,13 @@ def _get_one_bcode_hyperparam_score(
     """
     @return score = Pr(validation data | train data)
     """
-    for pen_param_res in pen_param_results:
+    for pen_param_res, _ in pen_param_results:
         if pen_param_res is None:
             # This pen param setting is not stable
             return -np.inf
 
     worker_list = []
-    for pen_param_res, tree_split in zip(pen_param_results, tree_splits):
+    for pen_param_res, tree_split in pen_param_results:
         # Need to create model parameters for the full tree since
         # we only trained on a subset of the leaves
         fit_params = pen_param_res.get_fit_params()
@@ -346,12 +343,9 @@ def _get_one_bcode_hyperparam_score(
     worker_results = [w[0][0] for w in job_manager.run()]
 
     # Get Pr(V|T)
-    #hyperparam_scores = [
-    #        res.log_lik/len(tree_split.val_clt)
-    #        for res, tree_split in zip(worker_results, tree_splits)]
     hyperparam_scores = [
             res.log_lik - pen_param_res.log_lik
-            for res, pen_param_res in zip(worker_results, pen_param_results)]
+            for res, (pen_param_res, _) in zip(worker_results, pen_param_results)]
     tot_hyperparam_score = np.mean(hyperparam_scores)
     logging.info("all Pr(Val given T) %s (sum %f)", hyperparam_scores, tot_hyperparam_score)
     return tot_hyperparam_score
