@@ -57,7 +57,7 @@ nest.add(
 
 nest.add(
     'seed',
-    [302],
+    [300,301],
 )
 
 nest.add(
@@ -150,7 +150,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [4],
+    [1],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -392,6 +392,8 @@ def run_MLE(env, outdir, c):
         cmd_str_arg = ' '.join(map(str, cmd_arg))
         cmd = [
             'python boto_run.py',
+            '--vcpus 36',
+            '--memory 55000',
             '--out-job-id ${TARGETS[-1]}',
             '--in-job-dependency ${SOURCES[-1]}',
             '--cmd',

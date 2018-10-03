@@ -72,6 +72,9 @@ class TreeDistanceMeasurerAgg:
         ref_tree = raw_tree.copy()
 
         # Append leaf ids with an index if there are multiple occurances
+        # Dict mapping leaf key value to number of times observed
+        # Need to keep track of leaf keys that we've seen before becuase homoplasy
+        # might happen
         existing_strs = {}
         for node in ref_tree:
             node_leaf_key = getattr(node, leaf_key)
@@ -96,10 +99,27 @@ class TreeDistanceMeasurerAgg:
         Just attach with zero distance to the existing leaf node
         Now we can compare it to the tree created in the `create` func
         """
+        # Dict mapping leaf key value to number of times observed
+        # Need to keep track of leaf keys that we've seen before becuase homoplasy
+        # might happen.
+        # Though homoplasy should really not be happening for the trees
+        # that we are estimating... so this code is just from paranoia i guess
+        observed_leaf_keys = dict()
         leaved_tree = tree.copy()
-        for node in leaved_tree:
+        all_leaves = [leaf for leaf in leaved_tree]
+        for node in all_leaves:
             curr_node = node
-            orig_str = getattr(curr_node, leaf_key)
+            leaf_key_val = getattr(curr_node, leaf_key)
+            if leaf_key_val in observed_leaf_keys:
+                offset = observed_leaf_keys[leaf_key_val]
+            else:
+                observed_leaf_keys[leaf_key_val] = 0
+                offset = 0
+
+            if offset > 0:
+                node.add_feature(leaf_key, "%s==%d" % (leaf_key_val, offset))
+            orig_node_str = getattr(node, leaf_key)
+
             for idx in range(node.abundance - 1):
                 new_child = CellLineageTree(
                     curr_node.allele_list,
@@ -108,7 +128,7 @@ class TreeDistanceMeasurerAgg:
                     dist=0,
                     abundance=1,
                     resolved_multifurcation=True)
-                new_child.add_feature(leaf_key, "%s==%d" % (orig_str, idx + 1))
+                new_child.add_feature(leaf_key, "%s==%d" % (leaf_key_val, offset + idx + 1))
                 copy_leaf = CellLineageTree(
                     curr_node.allele_list,
                     curr_node.allele_events_list,
@@ -116,11 +136,12 @@ class TreeDistanceMeasurerAgg:
                     dist=0,
                     abundance=1,
                     resolved_multifurcation=True)
-                copy_leaf.add_feature(leaf_key, orig_str)
+                copy_leaf.add_feature(leaf_key, orig_node_str)
                 curr_node.add_child(new_child)
                 curr_node.add_child(copy_leaf)
                 curr_node = copy_leaf
             node.abundance = 1
+            observed_leaf_keys[leaf_key_val] += node.abundance
         return leaved_tree
 
 

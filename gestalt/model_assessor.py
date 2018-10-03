@@ -71,27 +71,33 @@ class ModelAssessor:
         # If the other tree has a different set of leaves, figure out which subset of leaves to compare
         # against in the reference tree
         keep_leaf_ids = set()
+        num_times_observed = {}
         for leaf in self.ref_collapsed_tree:
             leaf_key_val = getattr(leaf, self.leaf_key)
             if leaf_key_val in other_tree_leaf_strs:
                 keep_leaf_ids.add(leaf.node_id)
+                if leaf_key_val not in num_times_observed:
+                    num_times_observed[leaf_key_val] = 1
+                else:
+                    num_times_observed[leaf_key_val] += 1
+
         assert len(keep_leaf_ids) > 1
         ref_collapsed_tree_pruned = CellLineageTree.prune_tree(self.ref_collapsed_tree, keep_leaf_ids)
 
         # Properly adjust abundances in the collapsed and the comparison tree
-        # Remember: collapsed trees always have abundance = 1
+        # Remember: the true collapsed tree should have abundance = 1
         for leaf in ref_collapsed_tree_pruned:
             leaf.abundance = 1
+        # There might be homoplasy, which would lead to abundance > 1 in the estimated tree
         other_tree_collapse_compare = other_tree.copy()
         for leaf in other_tree_collapse_compare:
-            leaf.abundance = 1
+            leaf.abundance = num_times_observed[getattr(leaf, self.leaf_key)]
 
         # Actually do the comparison
-        tree_collapse_assessor = TreeDistanceMeasurerAgg(
+        tree_collapse_assessor = TreeDistanceMeasurerAgg.create_single_abundance_measurer(
             ref_collapsed_tree_pruned,
             self.tree_measurer_classes,
             self.scratch_dir,
-            do_expand_abundance=False,
             leaf_key=self.leaf_key)
 
         return tree_collapse_assessor, other_tree_collapse_compare
