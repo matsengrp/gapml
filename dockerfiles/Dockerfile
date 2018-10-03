@@ -11,6 +11,9 @@ RUN pip install scipy==0.19.1
 RUN pip install seaborn==0.8.1
 RUN pip install six==1.11.0
 
+RUN apt-get update && apt-get install -y r-base
+RUN R -e "install.packages('ape', repos = 'http://cran.us.r-project.org')"
+
 COPY run_script.sh /usr/local/bin/run_script.sh
 WORKDIR "/tmp"
 ENTRYPOINT ["/usr/local/bin/run_script.sh"]
