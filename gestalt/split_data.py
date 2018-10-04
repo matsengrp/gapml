@@ -5,6 +5,7 @@ This is our version of k-fold CV for trees
 import numpy as np
 import logging
 import random
+import itertools
 
 from sklearn.model_selection import KFold
 
@@ -180,8 +181,21 @@ def create_kfold_barcode_trees(tree: CellLineageTree, bcode_meta: BarcodeMetadat
     assert n_splits > 1
 
     kf = KFold(n_splits=n_splits, shuffle=True)
+    kf_splits = [s for s in kf.split(np.arange(bcode_meta.num_barcodes))]
+    if len(kf_splits) <= 2:
+        all_bcode_idxs = set(list(range(bcode_meta.num_barcodes)))
+        combo_size = int(bcode_meta.num_barcodes/n_splits)
+        if combo_size > 0:
+            all_combos = itertools.combinations(all_bcode_idxs, combo_size)
+            kf_splits = []
+            for combo in all_combos:
+                train_set = set([c for c in combo])
+                kf_splits.append((
+                        list(train_set),
+                        list(all_bcode_idxs - train_set)))
+
     all_train_trees = []
-    for bcode_idxs, val_idxs in kf.split(np.arange(bcode_meta.num_barcodes)):
+    for bcode_idxs, val_idxs in kf_splits:
         logging.info("Train fold barcode idxs %s, %s", bcode_idxs, val_idxs)
         num_train_bcodes = len(bcode_idxs)
         train_bcode_meta = BarcodeMetadata(

@@ -335,7 +335,7 @@ def run_MLE(env, outdir, c):
         '--num-penalty-tune-splits',
         4 if c['num_barcodes'] == 1 else 2,
         '--max-fit-splits',
-        4 if c['num_barcodes'] == 1 else 2,
+        4 if c['num_barcodes'] == 1 else 4,
         '--num-chad-tune-iters',
         15,
         '--num-chad-stop',
