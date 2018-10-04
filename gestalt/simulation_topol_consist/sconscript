@@ -32,7 +32,7 @@ GROWTH_DICT = {
         "target_decay": .4,
         "double": 0.06,
         "min_leaves": 80,
-        "max_leaves": 150,
+        "max_leaves": 120,
     },
     "mini": {
         "sampling_rate": 0.1,
@@ -57,7 +57,7 @@ nest.add(
 
 nest.add(
     'seed',
-    [300,301],
+    [400],
 )
 
 nest.add(
@@ -88,7 +88,7 @@ def generate(env, outdir, c):
         GROWTH_DICT[c['growth_stage']]['birth_min'],
         '--death-lambda',
         GROWTH_DICT[c['growth_stage']]['death_lambda'],
-        '--max-clt-nodes',
+        '--max-clt-leaves',
         int(GROWTH_DICT[c['growth_stage']]['max_leaves']/GROWTH_DICT[c['growth_stage']]['sampling_rate'] * 1.1),
         '--num-barcodes',
         4,
