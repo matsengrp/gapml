@@ -136,6 +136,19 @@ class CellLineageTree(TreeNode):
             anc = anc.up
         return anc
 
+    def label_dist_to_roots(self):
+        """
+        Label each node with `dist_to_root` attribute.
+        Supposes we are starting from this node, which is the root node
+        Numbers nodes according to order in preorder traversal
+
+        @return number of nodes
+        """
+        assert self.is_root()
+        self.add_feature("dist_to_root", 0)
+        for node in self.get_descendants("preorder"):
+            node.add_feature("dist_to_root", node.dist + node.up.dist_to_root)
+
     def label_node_ids(self, order="preorder"):
         """
         Label each node with `node_id` attribute.

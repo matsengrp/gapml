@@ -542,59 +542,49 @@ class InternalCorrMeasurer(MRCADistanceMeasurer):
 
         # Number the leaves because we need to represent each tree by its pairwise
         # MRCA distance matrix
-        leaf_str_sorted = [getattr(leaf, attr) for leaf in ref_tree]
-        self.leaf_dict = {}
-        for idx, leaf_str in enumerate(leaf_str_sorted):
-            self.leaf_dict[leaf_str] = idx
         self.num_leaves = len(ref_tree)
 
-        self.ref_tree_mrca_matrix = self._get_mrca_matrix(ref_tree)
+        #self.ref_tree_mrca_matrix = self._get_mrca_matrix(ref_tree)
+        ref_tree.label_dist_to_roots()
 
-        self.ref_leaf_groups, self.ref_node_val = self.get_ref_node_distances(ref_tree, self.ref_tree_mrca_matrix)
+        self.ref_leaf_groups, self.ref_node_val = self.get_ref_node_distances(ref_tree)
 
-    def get_ref_node_distances(self, tree, tree_mrca_matrix):
+    def get_ref_node_distances(self, tree):
         all_internal_nodes = [
                 node for node in tree.traverse("preorder") if not node.is_root() and not node.is_leaf()]
         node_val = []
         leaf_groups = []
         for node in all_internal_nodes:
-            leaf_idxs = np.array([self.leaf_dict[getattr(leaf, self.attr)] for leaf in node])
-            node_dist = np.max(tree_mrca_matrix[leaf_idxs][:, leaf_idxs])
+            leaf_idxs = [getattr(leaf, self.attr) for leaf in node]
+            node_dist = node.dist_to_root
             if node_dist < 1e-10:
                 continue
             leaf_groups.append(leaf_idxs)
             node_val.append(node_dist)
         return leaf_groups, node_val
 
-    def get_compare_node_distances(self, leaf_groups, tree_mrca_matrix):
+    def get_compare_node_distances(self, tree, leaf_groups):
+        leaf_dict = {}
+        for leaf in tree:
+            leaf_dict[getattr(leaf, self.attr)] = leaf
+
         node_val = []
         for leaf_idxs in leaf_groups:
-            node_dist = np.max(tree_mrca_matrix[leaf_idxs][:, leaf_idxs])
-            node_val.append(node_dist)
+            tree_mrca = tree.get_common_ancestor([
+                leaf_dict[leaf_key_val] for leaf_key_val in leaf_idxs])
+            node_val.append(tree_mrca.dist_to_root)
         return node_val
 
-    def _get_node_val(self, tree):
-        tree_mrca_matrix = self._get_mrca_matrix(tree)
-        return self.get_compare_node_distances(
-                self.ref_leaf_groups,
-                tree_mrca_matrix)
-
     def get_dist(self, tree):
-        tree_mrca_matrix = self._get_mrca_matrix(tree)
-        tree_node_val1 = self.get_compare_node_distances(
-                self.ref_leaf_groups,
-                tree_mrca_matrix)
+        tree.label_dist_to_roots()
+        tree_node_val1 = self.get_compare_node_distances(tree, self.ref_leaf_groups)
         corr1, _ = self.corr_func(self.ref_node_val, tree_node_val1)
         #logging.info("first set %f, len %d", corr1, len(tree_node_val1))
         #logging.info("ref=%s", self.ref_node_val)
         #logging.info("me=%s", tree_node_val1)
 
-        tree_leaf_groups2, tree_node_val2 = self.get_ref_node_distances(
-                tree,
-                tree_mrca_matrix)
-        ref_node_val2 = self.get_compare_node_distances(
-                tree_leaf_groups2,
-                self.ref_tree_mrca_matrix)
+        tree_leaf_groups2, tree_node_val2 = self.get_ref_node_distances(tree)
+        ref_node_val2 = self.get_compare_node_distances(self.ref_tree, tree_leaf_groups2)
         corr2, _ = self.corr_func(ref_node_val2, tree_node_val2)
         #logging.info("second set %f, len %d", corr2, len(tree_node_val2))
         #logging.info("ref=%s", ref_node_val2)
