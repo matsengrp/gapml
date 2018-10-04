@@ -93,6 +93,8 @@ def plot_tree(
     for leaf_idx, leaf in enumerate(ref_tree):
         leaf_dict[leaf.leaf_key] = leaf_idx
     for leaf_idx, leaf in enumerate(tree):
+        print(leaf.leaf_key)
+    for leaf_idx, leaf in enumerate(tree):
         leaf.name = "%d" % leaf_dict[leaf.leaf_key]
     print(len(tree), len(ref_tree))
     assert len(tree) == len(ref_tree)
@@ -114,8 +116,10 @@ def plot_internal_node_heights(internal_node_heights, file_name):
             col="n_bcodes",
             row="assess",
             data=internal_node_heights,
-            aspect=.5,
-            ci=None,
+            aspect=1,
+            x_jitter=0.01,
+            y_jitter=0.02,
+            fit_reg=False,
             markers=["o", "x"])
     sns_plot.savefig(file_name)
 
@@ -140,21 +144,21 @@ def main(args=sys.argv[1:]):
         _, collapse_chronos_tree_raw = assessor._get_collapse_tree_assessor(chronos_tree)
         collapse_chronos_tree = TreeDistanceMeasurerAgg.create_single_abundance_tree(collapse_chronos_tree_raw, "leaf_key")
 
-        if n_bcodes == args.n_bcodes_list[0]:
-            plot_tree(
-                full_tree_assessor.ref_tree,
-                full_tree_assessor.ref_tree,
-                args.out_plot_template % (0, args.data_seed, "true"))
+        #if n_bcodes == args.n_bcodes_list[0]:
+        #    plot_tree(
+        #        full_tree_assessor.ref_tree,
+        #        full_tree_assessor.ref_tree,
+        #        args.out_plot_template % (0, args.data_seed, "true"))
 
-        plot_tree(
-            full_mle_tree,
-            full_tree_assessor.ref_tree,
-            args.out_plot_template % (n_bcodes, args.data_seed, "mle"))
+        #plot_tree(
+        #    full_mle_tree,
+        #    full_tree_assessor.ref_tree,
+        #    args.out_plot_template % (n_bcodes, args.data_seed, "mle"))
 
-        plot_tree(
-            full_chronos_tree,
-            full_tree_assessor.ref_tree,
-            args.out_plot_template % (n_bcodes, args.data_seed, "chronos"))
+        #plot_tree(
+        #    full_chronos_tree,
+        #    full_tree_assessor.ref_tree,
+        #    args.out_plot_template % (n_bcodes, args.data_seed, "chronos"))
 
         tree_assessor_dict = {
                 "full": (full_tree_assessor, full_mle_tree, full_chronos_tree),
