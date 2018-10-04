@@ -2,6 +2,7 @@
 A simulation engine to create cell lineage tree and data samples
 """
 import sys
+import random
 import numpy as np
 import argparse
 import time
@@ -281,6 +282,7 @@ def main(args=sys.argv[1:]):
     args = parse_args()
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     np.random.seed(seed=args.model_seed)
+    random.seed(seed=args.model_seed)
 
     # Create the barcode in the embryo cell. Use default sequence if ten targets. Otherwise create a new one.
     barcode_orig = BarcodeMetadata.create_fake_barcode_str(args.num_targets) if args.num_targets != NUM_BARCODE_V7_TARGETS else BARCODE_V7
