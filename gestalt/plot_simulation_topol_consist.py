@@ -92,9 +92,11 @@ def get_mle_result(args, seed, n_bcodes):
             args.growth_stage,
             n_bcodes)
     print(file_name)
-    with open(file_name, "rb") as f:
-        mle_model = six.moves.cPickle.load(f)[-1]["best_res"]
-        #mle_model = six.moves.cPickle.load(f)["final_fit"]
+    try:
+        with open(file_name, "rb") as f:
+            mle_model = six.moves.cPickle.load(f)["final_fit"]
+    except Exception:
+        raise FileNotFoundError("nope %s" % file_name)
     return mle_model.model_params_dict, mle_model.fitted_bifurc_tree
 
 def get_chronos_result(args, seed, n_bcodes, assessor, perf_measure="full_bhv"):
