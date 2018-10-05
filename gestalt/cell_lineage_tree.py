@@ -1,6 +1,7 @@
 import re
 from ete3 import TreeNode
 from typing import List, Set
+from numpy import ndarray
 
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
@@ -100,6 +101,15 @@ class CellLineageTree(TreeNode):
         for node in self.traverse("preorder"):
             node.allele_events_list_str = CellLineageTree._allele_list_to_str(node.allele_events_list)
 
+    def restrict_barcodes(self, bcode_idxs: ndarray):
+        """
+        @param bcode_idxs: the indices of the barcodes we observe
+        Update the alleles for each node in the tree to correspond to only the barcodes indicated
+        """
+        for node in self.traverse():
+            node.allele_events_list = [node.allele_events_list[i] for i in bcode_idxs]
+        self.label_tree_with_strs()
+
     def get_max_depth(self):
         """
         @return maximum number of nodes between leaf and root
@@ -125,6 +135,19 @@ class CellLineageTree(TreeNode):
                 break
             anc = anc.up
         return anc
+
+    def label_dist_to_roots(self):
+        """
+        Label each node with `dist_to_root` attribute.
+        Supposes we are starting from this node, which is the root node
+        Numbers nodes according to order in preorder traversal
+
+        @return number of nodes
+        """
+        assert self.is_root()
+        self.add_feature("dist_to_root", 0)
+        for node in self.get_descendants("preorder"):
+            node.add_feature("dist_to_root", node.dist + node.up.dist_to_root)
 
     def label_node_ids(self, order="preorder"):
         """
@@ -167,6 +190,15 @@ class CellLineageTree(TreeNode):
                 node.detach()
         collapsed_tree._remove_single_child_unobs_nodes(clt_copy)
         return clt_copy
+
+    def copy_single(self):
+        """
+        @return a new CellLienageTree object but no children
+        """
+        copy_of_me = self.copy()
+        for child in copy_of_me.get_children():
+            child.detach()
+        return copy_of_me
 
     @staticmethod
     def convert(node: TreeNode,

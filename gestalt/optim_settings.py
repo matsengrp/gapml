@@ -1,8 +1,6 @@
-from typing import Dict
 from numpy import ndarray
 import numpy as np
 
-from cell_lineage_tree import CellLineageTree
 
 class KnownModelParams:
     """
@@ -11,6 +9,7 @@ class KnownModelParams:
     def __init__(
             self,
             target_lams: bool = False,
+            target_lam_decay_rate: bool = False,
             double_cut_weight: bool = False,
             trim_long_factor: bool = False,
             branch_lens: bool = False,
@@ -20,6 +19,7 @@ class KnownModelParams:
             tot_time: bool = False,
             indel_params: bool = False):
         self.target_lams = target_lams
+        self.target_lam_decay_rate = target_lam_decay_rate or target_lams
         self.double_cut_weight = double_cut_weight or target_lams
         self.trim_long_factor = trim_long_factor or target_lams
         self.cell_lambdas = cell_lambdas

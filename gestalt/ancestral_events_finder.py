@@ -11,11 +11,17 @@ events in the internal nodes.
 """
 
 
-def annotate_ancestral_states(tree: CellLineageTree, bcode_meta: BarcodeMetadata):
+def annotate_ancestral_states(tree: CellLineageTree, bcode_meta: BarcodeMetadata, do_fast: bool=False):
     """
     Find all possible events in the internal nodes.
+    @param do_fast: indicates whether to keep valid ancestral states alone and
+                    only recalculate ancestral states for those that are set to None
     """
+    # TODO: add python unit test for this fast version
     for node in tree.traverse("postorder"):
+        if do_fast and node.anc_state_list is not None:
+            continue
+
         if node.is_leaf():
             node.add_feature("anc_state_list", [
                 AncState.create_for_observed_allele(evts, bcode_meta)
@@ -44,16 +50,23 @@ def get_possible_anc_states(tree: CellLineageTree):
     return parent_anc_state_list
 
 
-def get_parsimony_score(tree: CellLineageTree):
+def get_parsimony_score(tree: CellLineageTree, do_fast: bool=False):
     """
     Call this after calling `annotate_ancestral_states`
     Assigns distance based on max parsimony
+    @param do_fast: indicates whether to keep valid distances untouched and assume they are correct.
+                    only recalculate distance for branches with negative distance
     @return parsimony score
     """
+    # TODO: add python unit test for this fast version
     # The parsimony score is the sum of the number of times a new singleton is introduced
     # in the ancestral state list for each node
     pars_score = 0
     for node in tree.get_descendants("preorder"):
+        if do_fast and node.dist >= 0:
+            pars_score += node.dist
+            continue
+
         branch_pars_score = 0
         for up_anc_state, node_anc_state in zip(node.up.anc_state_list, node.anc_state_list):
             up_sgs = set(up_anc_state.get_singletons())

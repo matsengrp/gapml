@@ -1,0 +1,256 @@
+# Test if we have any sort of consistency
+# This simulates a larger tree and performs a topology search
+
+import os
+
+from os.path import join
+from nestly.scons import SConsWrap
+from nestly import Nest
+from SCons.Script import Environment, Command, AddOption
+import numpy as np
+
+Import('env')
+localenv = env.Clone()
+
+# Set up state
+base = {'nreps': localenv['NREPS'],
+        'output_name': localenv['OUTPUT_NAME']}
+
+nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
+
+USE_AWS = False
+NUM_RANDOM_REARRANGE = 0
+GROWTH_DICT = {
+    "30hpf": {
+        "sampling_rate": 0.05,
+        "birth_sync_rounds": 10,
+        "birth_sync_time": 0.02,
+        "death_lambda": 0.2,
+        "birth_decay": -65,
+        "birth_min": 3,
+        "lambda_sequence": [0.3, 0.3, 0.6, 0.3, 0.2, 0.1, 0.3, 0.2, 1.3, 0.1],
+        "target_decay": .6,
+        "double": 0.1,
+        "min_leaves": 200,
+        "max_leaves": 500,
+    },
+}
+
+nest.add(
+    'model_seed',
+    [100],
+    label_func=lambda c: 'model_seed%d' % c,
+)
+
+nest.add(
+    'seed',
+    [301],
+)
+
+nest.add(
+    'growth_stage',
+    [
+       '30hpf',
+    ])
+
+@nest.add_target_with_env(localenv)
+def generate(env, outdir, c):
+    targ_lambdas = ",".join(map(str,
+        GROWTH_DICT[c['growth_stage']]['lambda_sequence']))
+
+    cmd = [
+        'python boto_run.py 2 2000 generate_data.py' if USE_AWS else 'python generate_data.py',
+        '--sampling-rate',
+        GROWTH_DICT[c['growth_stage']]['sampling_rate'],
+        '--model-seed',
+        c['model_seed'],
+        '--data-seed',
+        c['seed'],
+        '--out-obs-file ${TARGETS[0]}',
+        '--out-model-file ${TARGETS[1]}',
+        '--log-file ${TARGETS[2]}',
+        '--time 1',
+        '--birth-sync-rounds',
+        GROWTH_DICT[c['growth_stage']]['birth_sync_rounds'],
+        '--birth-sync-time',
+        GROWTH_DICT[c['growth_stage']]['birth_sync_time'],
+        '--birth-decay',
+        GROWTH_DICT[c['growth_stage']]['birth_decay'],
+        '--birth-min',
+        GROWTH_DICT[c['growth_stage']]['birth_min'],
+        '--death-lambda',
+        GROWTH_DICT[c['growth_stage']]['death_lambda'],
+        '--max-clt-leaves',
+        int(GROWTH_DICT[c['growth_stage']]['max_leaves']/GROWTH_DICT[c['growth_stage']]['sampling_rate'] * 1.1),
+        '--num-barcodes',
+        1,
+        '--min-uniq-alleles',
+        GROWTH_DICT[c['growth_stage']]['min_leaves'],
+        '--max-uniq-alleles',
+        GROWTH_DICT[c['growth_stage']]['max_leaves'],
+        '--max-abundance 20000',
+        '--double-cut-weight',
+        GROWTH_DICT[c['growth_stage']]['double'],
+        '--target-lambdas',
+        targ_lambdas,
+        '--target-lam-decay',
+        GROWTH_DICT[c['growth_stage']]['target_decay'],
+        '--trim-zero-probs 0.1 0.1',
+        '--trim-poissons 4 4',
+        '--trim-long-factor 0.02 0.02',
+        '--insert-zero-prob 0.1',
+        '--insert-poisson 1',
+        '--perturb-target-lambdas-variance 0',
+        '--max-tries 20',
+    ]
+    return env.Command(
+        [
+            join(outdir, 'obs_data.pkl'),
+            join(outdir, 'true_model.pkl'),
+            join(outdir, 'log.txt')],
+        [],
+        ' '.join(map(str, cmd)))
+
+nest.add(
+    'num_barcodes',
+    [1],
+    label_func=lambda c: "num_barcodes%d" % c,
+)
+
+@nest.add_target_with_env(localenv)
+def restrict_observed_alleles(env, outdir, c):
+    cmd = [
+        'python boto_run.py 2 2000 restrict_observed_barcodes.py' if USE_AWS else 'python restrict_observed_barcodes.py',
+        '--obs-file ${SOURCES[0]}',
+        '--num-barcodes',
+        c['num_barcodes'],
+        '--out-obs-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+    ]
+    return env.Command(
+        [
+            join(outdir, 'obs_data.pkl'),
+            join(outdir, 'log_restrict.txt')],
+        c['generate'],
+        ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def run_topology(env, outdir, c):
+    cmd = [
+        'python boto_run.py 2 6000 get_parsimony_topologies.py' if USE_AWS else 'python get_parsimony_topologies.py',
+        '--obs-file ${SOURCES[0]}',
+        '--out-template-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+        '--max-random',
+        0,
+        '--max-random-multifurc',
+        1,
+        '--num-jumbles 1',
+        '--max-trees 1',
+    ]
+    return env.Command(
+        [
+            join(outdir, 'parsimony_tree0.pkl'),
+            join(outdir, 'log_parsimony.txt')],
+        [
+            c['restrict_observed_alleles'][0]],
+        ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def run_chronos(env, outdir, c):
+    cmd = [
+        'python boto_run.py 2 6000 fit_chronos.py' if USE_AWS else 'python fit_chronos.py',
+        '--seed',
+        c['seed'] + 20,
+        '--lambdas',
+        '0.0001,0.001,0.01,0.1,1',
+        '--obs-file ${SOURCES[0]}',
+        '--topology-file ${SOURCES[1]}',
+        '--out-model-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+        '--true-model-file ${SOURCES[2]}',
+        '--num-init-random-rearrange',
+        NUM_RANDOM_REARRANGE if c['num_barcodes'] == 1 else 0,
+        '--scratch-dir',
+	join('simulation_compare', outdir, 'scratch'),
+    ]
+    return env.Command(
+        [
+            join(outdir, 'chronos_fitted.pkl'),
+            join(outdir, 'chronos_fitted.txt')],
+        [
+            c['restrict_observed_alleles'][0],
+            c['run_topology'][0],
+            c['generate'][1]],
+        ' '.join(map(str, cmd)))
+
+nest.add(
+    'sum_states',
+    [10], # not really different from using 30
+    label_func=lambda c: "sum_states_%d" % c,
+)
+
+nest.add(
+    'extra_steps',
+    [1],
+    label_func=lambda c: "extra_steps_%d" % c,
+)
+
+@nest.add_target_with_env(localenv)
+def run_MLE(env, outdir, c):
+    penalty_params = "1024,256,64,16"
+    target_lam_penalty_params = "10,1"
+
+    # Best pen params something like
+    # RUNNING branch pen param 256.000000 target lam pen param 1.000000
+
+    cmd = [
+        'python boto_run.py 20 30000 tune_topology.py' if USE_AWS else 'python tune_topology.py',
+        '--obs-file ${SOURCES[0]}',
+        '--topology-file ${SOURCES[1]}',
+        '--true-model-file ${SOURCES[2]}',
+        '--out-model-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+        '--seed',
+        c['seed'] + 30,
+        '--branch-pen-params',
+        penalty_params,
+        '--target-lam-pen-params',
+        target_lam_penalty_params,
+        '--num-penalty-tune-iters',
+        1,
+        '--num-penalty-tune-splits',
+        4 if c['num_barcodes'] == 1 else 2,
+        '--max-fit-splits',
+        4 if c['num_barcodes'] == 1 else 2,
+        '--num-chad-tune-iters',
+        15,
+        '--num-chad-stop',
+        10,
+        '--max-chad-tune-search',
+        0,
+        '--max-sum-states',
+        c['sum_states'],
+        '--max-extra-steps',
+        c['extra_steps'],
+        '--max-iters 50000',
+        '--num-inits 1',
+        '--tot-time-known',
+        '--num-processes',
+        2,
+        '--num-init-random-rearrange',
+        0,
+        #'--count-chads',
+        '--scratch-dir',
+        #'_output/scratch',
+	join('simulation_compare', outdir, 'scratch'),
+    ]
+    return env.Command(
+        [
+            join(outdir, 'tune_fitted.pkl'),
+            join(outdir, 'tune_fitted.txt')],
+        [
+            c['restrict_observed_alleles'][0],
+            c['run_topology'][0],
+            c['generate'][1]],
+        ' '.join(map(str, cmd)))

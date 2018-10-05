@@ -22,7 +22,8 @@ class TreeDistanceMeasurerAgg:
             ref_tree: CellLineageTree,
             measurer_classes: List,
             scratch_dir: str,
-            do_expand_abundance: bool = False):
+            do_expand_abundance: bool = False,
+            leaf_key: str = "allele_events_list_str"):
         """
         @param measurer_classes: list of classes (subclasses of TreeDistanceMeasurer)
                                 to instantiate for tree distance measurements
@@ -31,14 +32,16 @@ class TreeDistanceMeasurerAgg:
         @param scratch_dir: a scratch directory used by TreeDistanceMeasurer
         @param do_expand_abundance: for all tree comparisons, create leaves with abundance one
                                 for each multi-abundance leaf
+        @param leaf_key: which attribute to use as the id for comparison between trees
         """
         self.ref_tree = ref_tree
         if len(ref_tree) > 1:
             # must have more than one leaf
-            self.measurers = [meas_cls(ref_tree, scratch_dir) for meas_cls in measurer_classes]
+            self.measurers = [meas_cls(ref_tree, scratch_dir, attr=leaf_key) for meas_cls in measurer_classes]
         else:
             self.measurers = []
         self.do_expand_abundance = do_expand_abundance
+        self.leaf_key = leaf_key
 
     def get_tree_dists(self, trees: List[CellLineageTree]):
         """
@@ -47,7 +50,7 @@ class TreeDistanceMeasurerAgg:
         all_dists = []
         for tree in trees:
             tree_dists = {}
-            compare_tree = TreeDistanceMeasurerAgg.create_single_abundance_tree(tree) if self.do_expand_abundance else tree
+            compare_tree = TreeDistanceMeasurerAgg.create_single_abundance_tree(tree, self.leaf_key) if self.do_expand_abundance else tree
             for measurer in self.measurers:
                 dist = measurer.get_dist(compare_tree)
                 tree_dists[measurer.name] = dist
@@ -58,7 +61,8 @@ class TreeDistanceMeasurerAgg:
     def create_single_abundance_measurer(
             raw_tree: CellLineageTree,
             measurer_classes: List,
-            scratch_dir: str):
+            scratch_dir: str,
+            leaf_key: str = "allele_events_list_str"):
         """
         @param raw_tree: this tree may have more than the requested number of barcodes
                         to restrict to
@@ -67,36 +71,55 @@ class TreeDistanceMeasurerAgg:
         """
         ref_tree = raw_tree.copy()
 
-        # First restrict down to the requested number of barcodes
-        # Rename nodes if they have the same first few barcodes
-        # TODO: better way to ID the tree leaves?
+        # Append leaf ids with an index if there are multiple occurances
+        # Dict mapping leaf key value to number of times observed
+        # Need to keep track of leaf keys that we've seen before becuase homoplasy
+        # might happen
         existing_strs = {}
         for node in ref_tree:
-            if node.allele_events_list_str in existing_strs:
-                count = existing_strs[node.allele_events_list_str]
-                existing_strs[node.allele_events_list_str] += 1
-                node.allele_events_list_str = "%s==%d" % (
-                         node.allele_events_list_str,
-                         count)
+            node_leaf_key = getattr(node, leaf_key)
+            if node_leaf_key in existing_strs:
+                count = existing_strs[node_leaf_key]
+                existing_strs[node_leaf_key] += 1
+                node.add_feature(leaf_key, "%s==%d" % (node_leaf_key, count))
             else:
-                existing_strs[node.allele_events_list_str] = 1
+                existing_strs[node_leaf_key] = 1
 
         return TreeDistanceMeasurerAgg(
             ref_tree,
             measurer_classes,
             scratch_dir,
-            do_expand_abundance=True)
+            do_expand_abundance=True,
+            leaf_key=leaf_key)
 
     @staticmethod
-    def create_single_abundance_tree(tree: CellLineageTree):
+    def create_single_abundance_tree(tree: CellLineageTree, leaf_key: str):
         """
         Create tree with appropriate number of leaves to match abundance
         Just attach with zero distance to the existing leaf node
         Now we can compare it to the tree created in the `create` func
         """
+        # Dict mapping leaf key value to number of times observed
+        # Need to keep track of leaf keys that we've seen before becuase homoplasy
+        # might happen.
+        # Though homoplasy should really not be happening for the trees
+        # that we are estimating... so this code is just from paranoia i guess
+        observed_leaf_keys = dict()
         leaved_tree = tree.copy()
-        for node in leaved_tree:
+        all_leaves = [leaf for leaf in leaved_tree]
+        for node in all_leaves:
             curr_node = node
+            leaf_key_val = getattr(curr_node, leaf_key)
+            if leaf_key_val in observed_leaf_keys:
+                offset = observed_leaf_keys[leaf_key_val]
+            else:
+                observed_leaf_keys[leaf_key_val] = 0
+                offset = 0
+
+            if offset > 0:
+                node.add_feature(leaf_key, "%s==%d" % (leaf_key_val, offset))
+            orig_node_str = getattr(node, leaf_key)
+
             for idx in range(node.abundance - 1):
                 new_child = CellLineageTree(
                     curr_node.allele_list,
@@ -105,9 +128,7 @@ class TreeDistanceMeasurerAgg:
                     dist=0,
                     abundance=1,
                     resolved_multifurcation=True)
-                new_child.allele_events_list_str = "%s==%d" % (
-                    new_child.allele_events_list_str,
-                    idx + 1)
+                new_child.add_feature(leaf_key, "%s==%d" % (leaf_key_val, offset + idx + 1))
                 copy_leaf = CellLineageTree(
                     curr_node.allele_list,
                     curr_node.allele_events_list,
@@ -115,11 +136,12 @@ class TreeDistanceMeasurerAgg:
                     dist=0,
                     abundance=1,
                     resolved_multifurcation=True)
-                copy_leaf.allele_events_list_str = curr_node.allele_events_list_str
+                copy_leaf.add_feature(leaf_key, orig_node_str)
                 curr_node.add_child(new_child)
                 curr_node.add_child(copy_leaf)
-                curr_node = new_child
+                curr_node = copy_leaf
             node.abundance = 1
+            observed_leaf_keys[leaf_key_val] += node.abundance
         return leaved_tree
 
 
@@ -143,23 +165,20 @@ class TreeDistanceMeasurer:
 
     def _rename_nodes(self, tree):
         """
-        Run rspr software from Chris Whidden
-        Chris's software requires that the first tree be bifurcating.
-        Second tree can be multifurcating.
+        Set node name to the attribute
         """
-        # Set node name to the attribute
         _remove_single_child_unobs_nodes(self.ref_tree)
         if len(self.ref_tree.get_children()) == 1:
             child = self.ref_tree.get_children()[0]
             child.delete(prevent_nondicotomic=True, preserve_branch_length=True)
-        for n in self.ref_tree.traverse():
+        for n in self.ref_tree:
             n.name = getattr(n, self.attr)
 
         _remove_single_child_unobs_nodes(tree)
         if len(tree.get_children()) == 1:
             child = tree.get_children()[0]
             child.delete(prevent_nondicotomic=True, preserve_branch_length=True)
-        for n in tree.traverse():
+        for n in tree:
             n.name = getattr(n, self.attr)
 
     def get_dist(self, tree: CellLineageTree):
@@ -261,7 +280,7 @@ class BHVDistanceMeasurer(TreeDistanceMeasurer):
     """
     name = "bhv"
 
-    def get_dist(self, raw_tree, attr="allele_events_list_str"):
+    def get_dist(self, raw_tree):
         """
         http://comet.lehman.cuny.edu/owen/code.html
         """
@@ -270,14 +289,14 @@ class BHVDistanceMeasurer(TreeDistanceMeasurer):
             ref_tree.get_children()[0].delete(prevent_nondicotomic=True, preserve_branch_length=True)
         for leaf in ref_tree:
             #leaf.dist = 0
-            leaf.name = getattr(leaf, attr)
+            leaf.name = getattr(leaf, self.attr)
 
         tree = raw_tree.copy()
         if len(tree.get_children()) == 1:
             tree.get_children()[0].delete(prevent_nondicotomic=True, preserve_branch_length=True)
         for leaf in tree:
             #leaf.dist = 0
-            leaf.name = getattr(leaf, attr)
+            leaf.name = getattr(leaf, self.attr)
 
         self._rename_nodes(tree)
         assert len(ref_tree) == len(tree)
@@ -523,53 +542,52 @@ class InternalCorrMeasurer(MRCADistanceMeasurer):
 
         # Number the leaves because we need to represent each tree by its pairwise
         # MRCA distance matrix
-        leaf_str_sorted = [getattr(leaf, attr) for leaf in ref_tree]
-        self.leaf_dict = {}
-        for idx, leaf_str in enumerate(leaf_str_sorted):
-            self.leaf_dict[leaf_str] = idx
         self.num_leaves = len(ref_tree)
 
-        self.ref_tree_mrca_matrix = self._get_mrca_matrix(ref_tree)
+        #self.ref_tree_mrca_matrix = self._get_mrca_matrix(ref_tree)
+        ref_tree.label_dist_to_roots()
 
-        self.ref_internal_nodes, self.ref_node_val = self.get_ref_node_distances(ref_tree, self.ref_tree_mrca_matrix)
+        self.ref_leaf_groups, self.ref_node_val = self.get_ref_node_distances(ref_tree)
 
-    def get_ref_node_distances(self, tree, tree_mrca_matrix):
-        internal_nodes = [
+    def get_ref_node_distances(self, tree):
+        all_internal_nodes = [
                 node for node in tree.traverse("preorder") if not node.is_root() and not node.is_leaf()]
         node_val = []
-        for node in internal_nodes:
-            leaf_idxs = np.array([self.leaf_dict[getattr(leaf, self.attr)] for leaf in node])
-            node_dist = np.max(tree_mrca_matrix[leaf_idxs, leaf_idxs])
+        leaf_groups = []
+        for node in all_internal_nodes:
+            leaf_idxs = [getattr(leaf, self.attr) for leaf in node]
+            node_dist = node.dist_to_root
+            if node_dist < 1e-10:
+                continue
+            leaf_groups.append(leaf_idxs)
             node_val.append(node_dist)
-        return internal_nodes, node_val
+        return leaf_groups, node_val
 
-    def get_compare_node_distances(self, internal_nodes, tree_mrca_matrix):
+    def get_compare_node_distances(self, tree, leaf_groups):
+        leaf_dict = {}
+        for leaf in tree:
+            leaf_dict[getattr(leaf, self.attr)] = leaf
+
         node_val = []
-        for node in internal_nodes:
-            leaf_idxs = np.array([self.leaf_dict[getattr(leaf, self.attr)] for leaf in node])
-            node_dist = np.max(tree_mrca_matrix[leaf_idxs, leaf_idxs])
-            node_val.append(node_dist)
+        for leaf_idxs in leaf_groups:
+            tree_mrca = tree.get_common_ancestor([
+                leaf_dict[leaf_key_val] for leaf_key_val in leaf_idxs])
+            node_val.append(tree_mrca.dist_to_root)
         return node_val
 
-    def _get_node_val(self, tree):
-        tree_mrca_matrix = self._get_mrca_matrix(tree)
-        return self.get_compare_node_distances(
-                self.ref_internal_nodes,
-                tree_mrca_matrix)
-
     def get_dist(self, tree):
-        tree_mrca_matrix = self._get_mrca_matrix(tree)
-        tree_node_val1 = self.get_compare_node_distances(
-                self.ref_internal_nodes,
-                tree_mrca_matrix)
+        tree.label_dist_to_roots()
+        tree_node_val1 = self.get_compare_node_distances(tree, self.ref_leaf_groups)
         corr1, _ = self.corr_func(self.ref_node_val, tree_node_val1)
+        #logging.info("first set %f, len %d", corr1, len(tree_node_val1))
+        #logging.info("ref=%s", self.ref_node_val)
+        #logging.info("me=%s", tree_node_val1)
 
-        tree_internal_nodes2, tree_node_val2 = self.get_ref_node_distances(
-                tree,
-                tree_mrca_matrix)
-        ref_node_val2 = self.get_compare_node_distances(
-                tree_internal_nodes2,
-                self.ref_tree_mrca_matrix)
+        tree_leaf_groups2, tree_node_val2 = self.get_ref_node_distances(tree)
+        ref_node_val2 = self.get_compare_node_distances(self.ref_tree, tree_leaf_groups2)
         corr2, _ = self.corr_func(ref_node_val2, tree_node_val2)
+        #logging.info("second set %f, len %d", corr2, len(tree_node_val2))
+        #logging.info("ref=%s", ref_node_val2)
+        #logging.info("me=%s", tree_node_val2)
 
         return 1 - (corr1 + corr2)/2

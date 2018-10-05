@@ -109,6 +109,10 @@ def main(args=sys.argv[1:]):
             args.num_barcodes,
             args.min_leaves,
             args.observe_cell_state)
+    print(
+        "Number of uniq obs after restricting to first %d alleles: %d" %
+        (args.num_barcodes,
+        len(obs_data_dict["obs_leaves"])))
     logging.info(
         "Number of uniq obs after restricting to first %d alleles: %d",
         args.num_barcodes,

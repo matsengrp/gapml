@@ -4,6 +4,7 @@ from typing import List, Dict
 import logging
 import random
 import copy
+import time
 
 from allele_events import AlleleEvents
 from cell_lineage_tree import CellLineageTree
@@ -15,7 +16,6 @@ from common import get_randint
 from model_assessor import ModelAssessor
 import collapsed_tree
 import ancestral_events_finder
-from clt_likelihood_penalization import mark_target_status_to_penalize
 from common import assign_rand_tree_lengths
 
 
@@ -146,6 +146,7 @@ class HangingChadTuneResult:
         """
         self.no_chad_res = no_chad_res
         self.new_chad_results = new_chad_results
+        self.num_chad_leaves = len(new_chad_results[0].chad_node)
 
     def get_best_result(self):
         """
@@ -203,6 +204,8 @@ class HangingChad:
                     (same random leaf across all trees). Also returns the original tree.
                     This marks the tree appropriately for the estimation method -- it will mark the
                     hanging chad with `ignore_penalty` so we know that its penalty should be excluded.
+                    `ignore_penalty` will make sure that we have the same penalty for regrafts onto multifurcs and branches.
+                    So all branch penalties should be exactly the same now.
                     It will also mark which node is implicit by adding an `implicit_child` and which
                     node should have its penalty be based on a sum of branch lengths, as specified by
                     the `spine_children` attr.
@@ -285,6 +288,28 @@ class HangingChad:
             self.num_possible_trees,
             chad_parent_strs)
 
+def _mark_nodes_for_recalc(changed_nodes: List[CellLineageTree]):
+    """
+    Mark nodes that need to be recalculated -- see ancestral_events_finder for what the flags are
+        negative distances mean we need to recalc
+        ancestral states set to None means we need to recalc
+
+    @param changed_nodes: a list of nodes where we need to recalc their ancestral state
+                Therefore we need to calculate any ancestral state along their path up
+                to the root.
+                Also we need to mark associated branches that need their parsimony score distance
+                updated. These would be all the nodes that are direct children of any node
+                along the upwards path of the changed_nodes
+    """
+    for changed_node in changed_nodes:
+        up_path_node = changed_node
+        while up_path_node is not None:
+            for child in up_path_node.get_children():
+                child.dist = -1
+            up_path_node.dist = -1
+            up_path_node.anc_state_list = None
+            up_path_node.anc_state_list_str = None
+            up_path_node = up_path_node.up
 
 def _get_chad_possibilities(
         chad_id: int,
@@ -357,11 +382,15 @@ def _get_chad_possibilities(
         if node.is_leaf() or node.node_id == chad_orig_parent.node_id:
             continue
 
+        # The nodes with potentially different ancestral states are the chad and where it was detached
+        nodes_to_update = [chad] + chad.up.get_children()
         chad.detach()
         node.add_child(chad)
 
-        ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
-        new_pars_score = ancestral_events_finder.get_parsimony_score(tree)
+        # mark which nodes need to recalc so we can get the new parsimony score
+        _mark_nodes_for_recalc(nodes_to_update)
+        ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta, do_fast=True)
+        new_pars_score = ancestral_events_finder.get_parsimony_score(tree, do_fast=True)
         if new_pars_score < parsimony_score:
             logging.info("We beat MIX (attach to multifurc): %d< %d", new_pars_score, parsimony_score)
             logging.info(tree.get_ascii(attributes=['anc_state_list_str']))
@@ -380,6 +409,8 @@ def _get_chad_possibilities(
             if node.is_root() or (chad_orig_parent_unifurc and node.node_id == chad_orig_parent.node_id):
                 continue
 
+            # The nodes with potentially different ancestral states are the chad and where it was detached
+            nodes_to_update = [chad] + chad.up.get_children()
             chad.detach()
 
             # Consider adding chad to an edge, so parent -- new_node -- node, chad
@@ -394,8 +425,10 @@ def _get_chad_possibilities(
             new_node.add_child(node)
             new_node.add_child(chad)
 
-            ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
-            new_pars_score = ancestral_events_finder.get_parsimony_score(tree)
+            # mark which nodes need to recalc so we can get the new parsimony score
+            _mark_nodes_for_recalc(nodes_to_update)
+            ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta, do_fast=True)
+            new_pars_score = ancestral_events_finder.get_parsimony_score(tree, do_fast=True)
             if new_pars_score < parsimony_score:
                 logging.info("we beat MIX (attach in middle): %d< %d", new_pars_score, parsimony_score)
                 logging.info(tree.get_ascii(attributes=['anc_state_list_str']))
@@ -445,21 +478,28 @@ def get_random_chad(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
         exclude_chad_func=None,
-        branch_len_attaches: bool = True):
+        branch_len_attaches: bool = True,
+        masking_only: bool = False,
+        print_iter: int = 50):
     """
     @param exclude_chad_func: the function to use to check if chad should be considered
     @return a randomly chosen HangingChad, also a set of the recently seen chads (indexed by psuedo id)
     """
+    st_time = time.time()
     tree, parsimony_score = _preprocess_tree_for_chad_finding(tree, bcode_meta)
 
     descendants = tree.get_descendants()
     random.shuffle(descendants)
-    for node in descendants:
+    for node_idx, node in enumerate(descendants):
+        if node_idx % print_iter == 0:
+            print(node_idx, time.time() - st_time)
+
         if exclude_chad_func is not None and exclude_chad_func(node):
             continue
 
         has_masking_cuts = any([sg.min_target + 1 < sg.max_target for anc_state in node.anc_state_list for sg in anc_state.get_singletons()])
-        if not has_masking_cuts:
+        if node.dist == 0 or (masking_only and has_masking_cuts):
+            # We're assuming that a tree with no parsimony score probably can't be placed anywhere in the tree
             continue
 
         tree_copy = tree.copy()
@@ -480,35 +520,53 @@ def get_random_chad(
             #    logging.info("chad %d %s", chad.node_id, chad.allele_events_list_str)
             #    logging.info(p_tree.get_ascii(attributes=['anc_state_list_str']))
             #    logging.info(p_tree.get_ascii(attributes=['dist']))
-
             return hanging_chad
 
     # We still haven't found our chad friend apparently...
-    if exclude_chad_func is None:
-        # There is no hanging chad at all
-        return None
-    else:
+    if exclude_chad_func is not None:
+        # If we have the exclude criteria, we can't find cahds...
+        # don't use exclude crtieria in that case
         return get_random_chad(
             tree,
             bcode_meta,
             exclude_chad_func=None,
             branch_len_attaches=branch_len_attaches)
+    elif masking_only is True:
+        # If we have the mask criteria, we can't find cahds...
+        # don't mask in that case
+        return get_random_chad(
+            tree,
+            bcode_meta,
+            exclude_chad_func=None,
+            branch_len_attaches=branch_len_attaches,
+            masking_only=False)
+    else:
+        # There is no hanging chad at all
+        return None
 
 
 def get_all_chads(
         tree: CellLineageTree,
         bcode_meta: BarcodeMetadata,
-        max_possible_trees: int = None):
+        max_possible_trees: int = None,
+        print_iter: int = 50,
+        masking_only: bool = False):
     """
     @param max_possible_trees: stop once you find at least `max_possible_trees` in a chad
     @return List[HangingChad] all hanging chads in the tree
     """
+    st_time = time.time()
     tree, parsimony_score = _preprocess_tree_for_chad_finding(tree, bcode_meta)
 
     hanging_chads = []
-    for node in tree.get_descendants():
+    print("get all chads... num descen", len(tree.get_descendants()))
+    for node_idx, node in enumerate(tree.get_descendants()):
+        if node_idx % print_iter == 0:
+            print(node_idx, time.time() - st_time)
+
         has_masking_cuts = any([sg.min_target + 1 < sg.max_target for anc_state in node.anc_state_list for sg in anc_state.get_singletons()])
-        if not has_masking_cuts:
+        if node.dist == 0 or (masking_only and has_masking_cuts):
+            # We're assuming a tree with no parsimony score contribution probably can't be placed anywhere else in tree
             continue
 
         tree_copy = tree.copy()
@@ -574,10 +632,6 @@ def _fit_nochad_result(
         bcode_meta,
         args.max_extra_steps,
         args.max_sum_states)
-    mark_target_status_to_penalize(nochad_tree)
-    pen_anc_state = dict()
-    for node in nochad_tree.get_descendants():
-        pen_anc_state[node.node_id] = node.pen_targ_stat
 
     no_chad_res = LikelihoodScorer(
         get_randint(),
@@ -588,15 +642,17 @@ def _fit_nochad_result(
         trans_wrap_maker,
         fit_param_list=[fit_params],
         known_params=args.known_params,
+        scratch_dir=args.scratch_dir,
         assessor=assessor).run_worker(None)[0]
-    return no_chad_res, pen_anc_state
+    assert no_chad_res is not None
+    return no_chad_res
 
 
 def _create_warm_start_fit_params(
         hanging_chad: HangingChad,
         nochad_res: LikelihoodScorerResult,
         new_chad_tree: CellLineageTree,
-        conv_thres: float = 5 * 1e-7):
+        conv_thres: float = 1e-6):
     """
     @param conv_thres: the convergence threshold for maximizing the partially-penalized log lik
             (this is usually smaller than the one for the nochad
@@ -642,7 +698,7 @@ def tune(
         args,
         full_tree_fit_params: Dict,
         assessor: ModelAssessor = None,
-        print_assess_metric: str = "bhv"):
+        print_assess_metric: str = "full_bhv"):
     """
     Tune the given hanging chad
     @param max_chad_tune_search: maximum number of hanging chad locations to consider
@@ -655,7 +711,7 @@ def tune(
     # If we have valid branch length estimates, then there isn't really a need to train a no chad tree.
     # Hence zero iterations
     nochad_max_iters = 0 if 'branch_len_inners' in full_tree_fit_params else args.max_iters
-    no_chad_res, pen_anc_state = _fit_nochad_result(
+    no_chad_res = _fit_nochad_result(
         hanging_chad,
         bcode_meta,
         args,
@@ -676,19 +732,6 @@ def tune(
             no_chad_res,
             new_chad_tree)
 
-        # Mark the target statuses to penalize -- these are adopted from the nochad tree
-        for node in new_chad_tree.get_descendants():
-            # Recall that we do not penalize the hanging chad
-            if node.nochad_id is not None:
-                node.add_feature('pen_targ_stat',
-                    pen_anc_state[node.nochad_id])
-                if node.up.nochad_id is None:
-                    # If the parent node is the implicit node,
-                    # we should have the implicit node get penalized.
-                    # The child of the implicit node will not be.
-                    node.up.add_feature('pen_targ_stat',
-                        pen_anc_state[node.nochad_id])
-
         trans_wrap_maker = TransitionWrapperMaker(
             new_chad_tree,
             bcode_meta,
@@ -703,6 +746,7 @@ def tune(
             trans_wrap_maker,
             fit_param_list=[warm_start_fit_params],
             known_params=args.known_params,
+            scratch_dir=args.scratch_dir,
             assessor=assessor,
             name="chad-tuning%d" % parent_idx)
         worker_list.append(worker)
@@ -730,14 +774,14 @@ def tune(
         if assessor is not None:
             logging.info("  chad truth: %s", chad_res.true_performance)
 
+    new_chad_results = chad_tune_res.new_chad_results
+    scores = [c.score for c in new_chad_results]
+    selected_idx = np.argmax(scores)
+    selected_chad = new_chad_results[selected_idx]
+    logging.info("Best chad (idx %d) %s", selected_idx, selected_chad)
     if assessor is not None:
-        new_chad_results = chad_tune_res.new_chad_results
         all_tree_dists = [c.true_performance[print_assess_metric] for c in new_chad_results]
         median_tree_dist = np.median(all_tree_dists)
-        scores = [c.score for c in new_chad_results]
-        selected_idx = np.argmax([c.score for c in new_chad_results])
-        selected_chad = new_chad_results[selected_idx]
-        logging.info("Best chad %s", selected_chad)
         selected_tree_dist = all_tree_dists[selected_idx]
         logging.info(
                 "Median %s: %f (%d options) (selected idx %d, better? %s, selected=%f)",
@@ -752,7 +796,7 @@ def tune(
         logging.info("scores = %s", scores)
         logging.info("scores vs. %ss %s", print_assess_metric, scipy.stats.spearmanr(scores, all_tree_dists))
 
-    return chad_tune_res
+    return chad_tune_res, selected_idx == 0
 
 
 def _create_chad_results(
@@ -767,10 +811,13 @@ def _create_chad_results(
     @return HangingChadTuneResult
     """
     assert len(fit_results) == len(single_full_chad_trees)
+    num_failures = sum([r is None for r in fit_results])
+    if any([r is None for r in fit_results]):
+        logging.info("WARNING: there were %d failures. unstable pen param?", num_failures)
 
     new_chad_results = [
         HangingChadResult(
-            fit_res.pen_log_lik[0],
+            fit_res.pen_log_lik[0] if fit_res is not None else -np.inf,
             hanging_chad.node.node_id,
             single_full_chad_tree,
             fit_res)

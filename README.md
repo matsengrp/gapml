@@ -1,5 +1,6 @@
 # Installing things!
 You will need to have PHYLIP mix installed so that you can call `mix` on the command line.
+http://evolution.genetics.washington.edu/phylip/
 
 We use `pip` to install things into a python virtual environment.
 Install the libraries into your virtual environment through the `requirements.txt` file.
@@ -10,6 +11,8 @@ Then run `pip install PyQt5` in your virtual environment.
 We use nestly + SCons to run simulations/analyses.
 You should install scons outside the virtual environment, for a python 2.\* or a 3.5+ environment.
 Then activate the virtual environment and then run `scons ___`.
+
+You need to create a file `constant_paths.py` in the `gestalt` folder that provides the paths to the different executables. (mix and bhv distance calculators)
 
 # Running tests
 To run all the tests:
@@ -33,6 +36,7 @@ python3 -m unittest tests.<test_me>
 
 # Fitting the trees via alternative methods
 `fit_chronos.py`: uses Sanderson 2002, the `chronos` function in R package `ape`
+
 
 # Submitting jobs to AWS Batch
 We rely on the `boto_run.py` script.

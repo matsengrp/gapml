@@ -2,6 +2,7 @@
 A simulation engine to create cell lineage tree and data samples
 """
 import sys
+import random
 import numpy as np
 import argparse
 import time
@@ -53,6 +54,11 @@ def parse_args():
         type=str,
         default=",".join([".4", ".5", ".1", "0.5", "0.3", "0.6"]),
         help='target cut rates -- will get slightly perturbed for the true value')
+    parser.add_argument(
+        '--target-lam-decay-rate',
+        type=float,
+        default=0,
+        help='param for how much the hazard rate decays (right now is a linear decay)')
     parser.add_argument(
         '--perturb-target-lambdas-variance',
         type=float,
@@ -135,7 +141,7 @@ def parse_args():
         help="Seed for generating data")
     parser.add_argument('--min-uniq-alleles', type=int, default=3)
     parser.add_argument('--max-uniq-alleles', type=int, default=10)
-    parser.add_argument('--max-clt-nodes', type=int, default=1000000)
+    parser.add_argument('--max-clt-leaves', type=int, default=1000000)
     parser.add_argument(
         '--max-abundance',
         type=int,
@@ -205,7 +211,8 @@ def create_simulators(args, clt_model):
             args.birth_min,
             args.death_lambda,
             cell_type_simulator,
-            allele_simulator)
+            allele_simulator,
+            scale_hazard_func=lambda t: 1 - (t/args.time) * args.target_lam_decay_rate)
     observer = CLTObserver()
     return clt_simulator, observer
 
@@ -213,7 +220,7 @@ def create_cell_lineage_tree(
         args,
         clt_model: CLTLikelihoodModel,
         max_tries: int = 20,
-        incr: float = 0.02,
+        incr: float = 0.005,
         time_min: float = 1e-3):
     """
     @return original clt, the set of observed leaves, and the true topology for the observed leaves
@@ -224,26 +231,14 @@ def create_cell_lineage_tree(
     birth_sync_time = args.birth_sync_time
     for i in range(max_tries):
         try:
+            np.random.seed(args.model_seed)
             clt_simulator.birth_sync_time = birth_sync_time
-            clt = clt_simulator.simulate(
-                tree_seed = args.model_seed,
-                data_seed = args.data_seed,
-                tot_time = args.time,
-                max_nodes = args.max_clt_nodes)
+            clt = clt_simulator.simulate_full_skeleton(
+                tot_time=args.time,
+                max_leaves=args.max_clt_leaves)
             clt.label_node_ids()
-
             # Now sample the leaves and create the true topology
-            obs_leaves, true_subtree, obs_idx_to_leaves = observer.observe_leaves(
-                    args.sampling_rate,
-                    clt,
-                    seed=args.model_seed)
-
-            logging.info(
-                "birth time %f, num uniq alleles %d, num sampled leaves %d, num tot_leaves %d",
-                birth_sync_time,
-                len(obs_leaves),
-                len(true_subtree),
-                len(clt))
+            true_subtree = CLTObserver.sample_leaves(clt, args.sampling_rate)
             print("le....", len(true_subtree), birth_sync_time)
             if len(true_subtree) < args.min_uniq_alleles:
                 birth_sync_time -= incr * np.random.rand()
@@ -254,14 +249,27 @@ def create_cell_lineage_tree(
                 print("done!")
                 break
         except ValueError as e:
-            logging.info("ValueError warning.... %s", str(e))
+            logging.info("ValueError warning.... %s %f", str(e), birth_sync_time)
+            print("ValueError warning.... %s %f" % (str(e), birth_sync_time))
+            birth_sync_time += incr * np.random.rand()
             continue
-        #except AssertionError as e:
-        #    logging.info("AssertionError warning ... %s", str(e))
-        #    continue
 
     if len(true_subtree) < args.min_uniq_alleles:
         raise Exception("Could not manage to get enough leaves")
+
+    np.random.seed(args.data_seed)
+    clt_simulator.simulate_alleles(true_subtree)
+    clt_simulator.simulate_cell_states(true_subtree)
+    obs_leaves, obs_idx_to_leaves = observer.observe_leaves(
+            true_subtree,
+            seed=args.data_seed)
+
+    logging.info(
+        "birth time %f, num uniq alleles %d, num sampled leaves %d, num tot_leaves %d",
+        birth_sync_time,
+        len(obs_leaves),
+        len(true_subtree),
+        len(clt))
 
     true_subtree.label_tree_with_strs()
     logging.info(true_subtree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
@@ -273,7 +281,8 @@ def create_cell_lineage_tree(
 def main(args=sys.argv[1:]):
     args = parse_args()
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
-    np.random.seed(seed=args.model_seed)
+    np.random.seed(args.model_seed)
+    random.seed(args.model_seed)
 
     # Create the barcode in the embryo cell. Use default sequence if ten targets. Otherwise create a new one.
     barcode_orig = BarcodeMetadata.create_fake_barcode_str(args.num_targets) if args.num_targets != NUM_BARCODE_V7_TARGETS else BARCODE_V7
@@ -299,6 +308,7 @@ def main(args=sys.argv[1:]):
             bcode_meta,
             sess,
             target_lams = np.array(args.target_lambdas),
+            target_lam_decay_rate = np.array([args.target_lam_decay_rate]),
             known_params = known_params,
             double_cut_weight = [args.double_cut_weight],
             trim_long_factor = np.array(args.trim_long_factor),

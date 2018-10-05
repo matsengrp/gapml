@@ -71,10 +71,7 @@ def collapse_ultrametric(raw_tree: CellLineageTree):
     sorted_branches = sorted(branches, key=lambda x: x["dist_to_root"])
 
     # Begin creating the collapsed tree
-    collapsed_tree = CellLineageTree(
-            allele_list = tree.allele_list,
-            allele_events_list = tree.allele_events_list,
-            cell_state = tree.cell_state)
+    collapsed_tree = tree.copy_single()
     node_to_collapsed_node_dict = {tree.node_id: collapsed_tree}
     latest_node_dict = {tree.earliest_ancestor_node_id: (collapsed_tree, 0)}
     for branch in sorted_branches:
@@ -86,11 +83,7 @@ def collapse_ultrametric(raw_tree: CellLineageTree):
             # If child allele differs from parent, attach the new collapsed child to the matching
             # collapsed parent
             parent_collapsed_node = node_to_collapsed_node_dict[parent.node_id]
-            new_child_collapsed_node = CellLineageTree(
-                allele_list = child.allele_list,
-                allele_events_list = child.allele_events_list,
-                cell_state = child.cell_state,
-                dist = child.dist)
+            new_child_collapsed_node = child.copy_single()
         else:
             # If the child allele same as parent, attach the new collapsed child
             # to the latest node with that same allele
@@ -99,12 +92,9 @@ def collapse_ultrametric(raw_tree: CellLineageTree):
             collapsed_child_dist = child.dist_to_root - parent_dist_to_root
             if np.isclose(0, collapsed_child_dist):
                 abund = parent_collapsed_node.abundance + 1
-            new_child_collapsed_node = CellLineageTree(
-                allele_list = child.allele_list,
-                allele_events_list = child.allele_events_list,
-                cell_state = child.cell_state,
-                dist = collapsed_child_dist,
-                abundance = abund)
+            new_child_collapsed_node = child.copy_single()
+            new_child_collapsed_node.dist = collapsed_child_dist
+            new_child_collapsed_node.abundance = abund
         parent_collapsed_node.add_child(new_child_collapsed_node)
         node_to_collapsed_node_dict[child.node_id] = new_child_collapsed_node
         latest_node_dict[child.earliest_ancestor_node_id] = (new_child_collapsed_node, child.dist_to_root)

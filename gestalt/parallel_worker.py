@@ -91,7 +91,7 @@ class ParallelWorkerManager:
                     cmd_input_file,
                     protocol=2,
                 )
-                cmd_str = "python run_worker.py --input-file %s --output-file %s --log-file %s" % (input_file_name, output_file_name, log_file_name)
+                cmd_str = "python3 run_worker.py --input-file %s --output-file %s --log-file %s" % (input_file_name, output_file_name, log_file_name)
                 print(cmd_str)
                 batch_cmd = CustomCommand(
                     cmd_str,

@@ -1,13 +1,13 @@
 from numpy import ndarray
 from typing import List
 import numpy as np
-from numpy import ndarray
 from scipy.stats import expon
 from numpy.random import choice, random
 from scipy.stats import poisson
 
 from allele import Allele, AlleleList
 from indel_sets import TargetTract
+from cell_lineage_tree import CellLineageTree
 from target_status import TargetStatus
 from allele_simulator import AlleleSimulator
 from barcode_metadata import BarcodeMetadata
@@ -87,7 +87,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             dstns.append(long_short_dstns)
         return dstns
 
-    def _race_target_tracts(self, allele: Allele):
+    def _race_target_tracts(self, allele: Allele, scale_hazard: float):
         """
         Race cutting (with no regard to time limits)
         @return race_winner: target tract if event occurs
@@ -99,7 +99,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         target_tracts = targ_stat.get_possible_target_tracts(self.bcode_meta)
         if len(target_tracts):
             all_hazards = [
-                self.all_target_tract_hazards[self.model.target_tract_dict[tt]]
+                self.all_target_tract_hazards[self.model.target_tract_dict[tt]] * scale_hazard
                 for tt in target_tracts]
             all_haz_sum = np.sum(all_hazards)
             min_time = expon.rvs(scale=1.0/all_haz_sum)
@@ -109,25 +109,36 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         else:
             return None, None
 
-    def simulate(self, init_allele: Allele, time: float):
+    def simulate(self,
+            init_allele: Allele,
+            node: CellLineageTree,
+            scale_hazard_func,
+            time_incr: float = 0.025):
         """
         @param init_allele: the initial state of the allele
-        @param time: the amount of time to simulate the allele modification process
+        @param scale_hazard_func: a function that takes in the current time in the tree
+                        and returns how much to scale the cut rates
 
         @return allele after the simulation procedure
         """
         allele = Allele(init_allele.allele, init_allele.bcode_meta)
 
-        time_remain = time
+        # TODO: this is currently the stupidest and slowest implementation of changing target cut rates
+        # try to make this faster please.
+        time_remain = node.dist
         while time_remain > 0:
-            target_tract, event_time = self._race_target_tracts(allele)
+            scale_hazard = scale_hazard_func(node.up.dist_to_root + node.dist - time_remain)
+            target_tract, event_time = self._race_target_tracts(allele, scale_hazard)
             if event_time is None:
                 break
-            time_remain = max(time_remain - event_time, 0)
 
-            if time_remain > 0:
+            if event_time < min(time_remain, time_incr):
                 # Target(s) got cut
                 self._do_repair(allele, target_tract)
+                time_remain -= event_time
+            else:
+                time_remain -= time_incr
+
         return allele
 
     def _do_repair(self, allele: Allele, target_tract: TargetTract):

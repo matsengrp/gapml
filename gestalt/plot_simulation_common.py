@@ -11,6 +11,7 @@ import seaborn as sns
 from tree_distance import *
 from cell_lineage_tree import CellLineageTree
 from common import assign_rand_tree_lengths
+from tree_distance import TreeDistanceMeasurerAgg
 #from plot_mrca_matrices import plot_tree
 
 def get_result(res_file):
@@ -18,12 +19,11 @@ def get_result(res_file):
     Read fitted model
     """
     with open(res_file, "rb") as f:
-        result = six.moves.cPickle.load(f)["refit"]
-        #print(res_file)
-        #print(result.pen_log_lik, result.log_lik)
+        result = six.moves.cPickle.load(f)["final_fit"]
 
     # Create appropriate number of leaves to match abundance
-    leaved_bifurc_tree = _get_leaved_result(result.fitted_bifurc_tree)
+    leaved_bifurc_tree = TreeDistanceMeasurerAgg.create_single_abundance_tree(
+            result.fitted_bifurc_tree)
     return (result.model_params_dict, leaved_bifurc_tree, result.fitted_bifurc_tree)
 
 def get_rand_tree(res_file):
@@ -179,6 +179,7 @@ def gather_results(
                     print(e)
                     continue
                 true_model_val = get_param_func(true_model)
+
                 try:
                     result = get_result_fnc(seed, setting, n_bcode)
                 except FileNotFoundError as e:
@@ -197,9 +198,6 @@ def gather_results(
             except FileNotFoundError as e:
                 print(e)
                 continue
-            true_internal_meas = InternalCorrMeasurer(true_model[tree_idx], "_output/scratch")
-            true_mrca_meas = MRCADistanceMeasurer(true_model[tree_idx], "_output/scratch")
-            true_bhv_meas = BHVDistanceMeasurer(true_model[tree_idx], "_output/scratch")
 
             if seed_idx == 0 and do_plots:
                 #plot_mrca_matrix(
@@ -209,6 +207,10 @@ def gather_results(
                     true_model[tree_idx],
                     true_model[tree_idx],
                     out_true_tree_plot)
+
+            true_internal_meas = InternalCorrMeasurer(true_model[tree_idx], "_output/scratch")
+            true_mrca_meas = MRCADistanceMeasurer(true_model[tree_idx], "_output/scratch")
+            true_bhv_meas = BHVDistanceMeasurer(true_model[tree_idx], "_output/scratch")
 
             try:
                 result = get_result_fnc(seed, setting, n_bcode)
