@@ -23,10 +23,47 @@ FISH_DATA = {
         "bcode_min_pos": 122,
         "format": 0,
     },
-    "30hpf": {
-        "path": "/fh/fast/matsen_e/gestalt/GSE81713_embryos_1_7/GSE81713_embryos_1_7.annotations.txt",
+    "30hpf1": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171798_embryos_1_1_v6.stats.txt",
         "bcode_min_pos": 126,
-        "format": 1,
+        "format": 2,
+        "abund": 2,
+    },
+    "30hpf2": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171799_embryos_1_2_v6.stats.txt",
+        "bcode_min_pos": 126,
+        "format": 2,
+        "abund": 1,
+    },
+    "30hpf3": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171800_embryos_1_3_v6.stats.txt",
+        "bcode_min_pos": 126,
+        "format": 2,
+        "abund": 2,
+    },
+    "30hpf4": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171801_embryos_1_4_v6.stats.txt",
+        "bcode_min_pos": 126,
+        "format": 2,
+        "abund": 1,
+    },
+    "30hpf5": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171802_embryos_1_5_v6.stats.txt",
+        "bcode_min_pos": 126,
+        "format": 2,
+        "abund": 1,
+    },
+    "30hpf6": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171803_embryos_1_6_v6.stats.txt",
+        "bcode_min_pos": 126,
+        "format": 2,
+        "abund": 1,
+    },
+    "30hpf7": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171804_embryos_1_7_v6.stats.txt",
+        "bcode_min_pos": 126,
+        "format": 2,
+        "abund": 2,
     }
 }
 
@@ -34,17 +71,24 @@ nest.add(
     'data',
     [
         #"ADR1",
-        "30hpf"],
+        "30hpf1",
+        "30hpf2",
+        "30hpf3",
+        "30hpf4",
+        "30hpf5",
+        "30hpf6",
+        "30hpf7",
+    ],
+    label_func=lambda c: "%s_abund%d" % (c, FISH_DATA[c]['abund']),
 )
 
-nest.add(
-    'abundance_thres',
-    [
-        2,
-        #5,
-    ],
-    label_func=lambda c: "min_abund_%d" % c,
-)
+#nest.add(
+#    'abundance_thres',
+#    [
+#        FISH_DATA[c['data']]['abund'],
+#    ],
+#    label_func=lambda c: "min_abund_%d" % c,
+#)
 
 @nest.add_target_with_env(localenv)
 def read_gestalt(env, outdir, c):
@@ -59,7 +103,7 @@ def read_gestalt(env, outdir, c):
         '--out-obs-data ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
         '--abundance-thres',
-	c['abundance_thres'],
+        FISH_DATA[c['data']]['abund'],
 	'--time 1',
     ]
     return env.Command(
