@@ -6,6 +6,7 @@ import argparse
 import logging
 import six
 import numpy as np
+import random
 from typing import List
 
 from anc_state import AncState
@@ -21,6 +22,11 @@ def parse_args():
         default="_output/obs_data.pkl",
         help='pkl file with observed sequence data, should be a dict with ObservedAlignSeq')
     parser.add_argument(
+        '--seed',
+        type=int,
+        default=0,
+        help='seed')
+    parser.add_argument(
         '--log-file',
         type=str,
         default="_output/restrict_log.txt",
@@ -34,6 +40,14 @@ def parse_args():
         '--observe-cell-state',
         action='store_true',
         help='Do we observe cell state?')
+    parser.add_argument(
+        '--max-leaves',
+        type=int,
+        default=100000,
+        help="""
+        Maximum number of leaves to return. If there are more leaves,
+        return a random subset
+        """)
     parser.add_argument(
         '--min-leaves',
         type=int,
@@ -93,7 +107,8 @@ def main(args=sys.argv[1:]):
     args = parse_args()
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
-
+    random.seed(args.seed)
+    np.random.seed(args.seed)
     with open(args.obs_file, "rb") as f:
         obs_data_dict = six.moves.cPickle.load(f)
 
@@ -106,18 +121,23 @@ def main(args=sys.argv[1:]):
 
     # Now start collapsing the observations by first n alleles
     raw_obs_leaves = obs_data_dict["obs_leaves"]
-    obs_data_dict["obs_leaves"] = collapse_obs_leaves_by_first_alleles(
+    restricted_obs_leaves = collapse_obs_leaves_by_first_alleles(
             raw_obs_leaves,
             args.num_barcodes,
             args.min_leaves,
             args.observe_cell_state)
-    print(
-        "Number of uniq obs after restricting to first %d alleles: %d" %
-        (args.num_barcodes,
-        len(obs_data_dict["obs_leaves"])))
     logging.info(
         "Number of uniq obs after restricting to first %d alleles: %d",
         args.num_barcodes,
+        len(restricted_obs_leaves))
+    random.shuffle(restricted_obs_leaves)
+    obs_data_dict["obs_leaves"] = restricted_obs_leaves[:args.max_leaves]
+    print(
+        "Number of uniq obs after random selection to first %d alleles: %d" %
+        (args.num_barcodes,
+        len(obs_data_dict["obs_leaves"])))
+    logging.info(
+        "Number of uniq obs after random selection: %d",
         len(obs_data_dict["obs_leaves"]))
 
     # This section just prints interesting things...

@@ -17,6 +17,7 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
+MAX_LEAVES = 250
 FISH_DATA = {
     "ADR1": {
         "path": "/fh/fast/matsen_e/gestalt/fish_7B_UMI_collapsed_reads/fish_7B_UMI_collapsed_reads.txt",
@@ -65,6 +66,27 @@ FISH_DATA = {
         "bcode_min_pos": 126,
         "format": 2,
         "abund": 2,
+    },
+    "dome1": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171788_Dome_1_1x.stats.txt",
+        "bcode_min_pos": 122,
+        "format": 2,
+        "abund": 1,
+        "max_leaves": MAX_LEAVES,
+    },
+    "dome3": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171791_Dome_3_1x.stats.txt",
+        "bcode_min_pos": 122,
+        "format": 2,
+        "abund": 1,
+        "max_leaves": MAX_LEAVES,
+    },
+    "dome5": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171793_Dome_5_1x.stats.txt",
+        "bcode_min_pos": 122,
+        "format": 2,
+        "abund": 1,
+        "max_leaves": MAX_LEAVES,
     }
 }
 
@@ -72,13 +94,16 @@ nest.add(
     'data',
     [
         #"ADR1",
-        "30hpf1",
-        "30hpf2",
-        "30hpf3",
-        "30hpf4",
-        "30hpf5",
-        "30hpf6",
-        "30hpf7",
+        #"30hpf1",
+        #"30hpf2",
+        #"30hpf3",
+        #"30hpf4",
+        #"30hpf5",
+        #"30hpf6",
+        #"30hpf7",
+        #"dome1",
+        #"dome3",
+        "dome5",
     ],
     label_func=lambda c: "%s_abund%d" % (c, FISH_DATA[c]['abund']),
 )
@@ -114,6 +139,8 @@ def restrict_observed_alleles(env, outdir, c):
         '--num-barcodes 1',
         '--out-obs-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
+        '--max-leaves',
+        FISH_DATA[c['data']]['max_leaves'],
     ]
     return env.Command(
         [
@@ -205,9 +232,9 @@ def run_MLE(env, outdir, c):
         '--max-fit-splits',
         4,
         '--num-chad-tune-iters',
-        50,
+        1,
         '--max-chad-tune-search',
-        10,
+        0,
         '--max-sum-states',
         c['sum_states'],
         '--max-extra-steps',
@@ -215,13 +242,15 @@ def run_MLE(env, outdir, c):
         '--max-iters 50000',
         '--num-inits 1',
         '--tot-time-known',
-        '--num-processes 4',
+        '--num-processes 2',
         '--num-init-random-rearrange 5',
+        '--scratch-dir',
+	join('analyze_gestalt', outdir, 'scratch'),
     ]
     return env.Command(
         [
             join(outdir, 'tune_pen.pkl'),
-            join(outdir, 'tune_pen_log.txt'),
+            join(outdir, 'tune_pen.txt'),
 	],
         [
             c['restrict_observed_alleles'][0],
