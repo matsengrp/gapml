@@ -47,7 +47,7 @@ def parse_args():
     parser.add_argument(
         '--abundance-thres',
         type=int,
-        default=5,
+        default=0,
         help='Only include the alleles that have appeared at least this number of times')
     parser.add_argument(
         '--time',
@@ -210,6 +210,54 @@ def parse_reads_file_format_GSE(file_name,
         organ_dict[str(cell_type)] = organ_str
     return obs_alleles_list, organ_dict
 
+def parse_reads_file_format_GSM(file_name,
+                              bcode_meta: BarcodeMetadata,
+                              bcode_min_pos: int,
+                              target_hdr_fmt: str="target%d",
+                              max_read: int = None):
+    """
+    @param max_read: maximum number of alleles to read (for debugging purposes)
+
+    Right now, Aaron's file outputs all the events associated with a target.
+    This means for inter-target events, it will appear multiple times on that row.
+    e.g. target1 33D+234, target2 33E+234
+    """
+    cell_state = CellState(categorical=CellTypeTree(0, rate=None))
+    cell_states_dict = {"single_state": cell_state}
+    all_alleles = []
+    observed_alleles = dict()
+    with open(file_name, "r") as f:
+        reader = csv.reader(f, delimiter='\t')
+        header = next(reader)
+        target_start_idx = header.index(target_hdr_fmt % 1)
+        for i, row in enumerate(reader):
+            if row[1] != "PASS":
+                continue
+
+            # Now create allele representation
+            obs_aligned_seq = process_observed_seq_format7B(
+                [
+                    row[target_start_idx + i]
+                    for i in range(NUM_BARCODE_V6_TARGETS)
+                ],
+                cell_state,
+                bcode_meta,
+                bcode_min_pos)
+            obs_key = str(obs_aligned_seq)
+            if obs_key not in observed_alleles:
+                observed_alleles[obs_key] = obs_aligned_seq
+            else:
+                obs = observed_alleles[obs_key]
+                obs.abundance += 1
+            if max_read is not None and len(all_alleles) == max_read:
+                break
+
+    obs_alleles_list = list(observed_alleles.values())
+    organ_dict = {}
+    for organ_str, cell_type in cell_states_dict.items():
+        organ_dict[str(cell_type)] = organ_str
+    return obs_alleles_list, organ_dict
+
 def parse_reads_file_format7B(file_name,
                               bcode_meta: BarcodeMetadata,
                               bcode_min_pos: int,
@@ -311,13 +359,21 @@ def main():
             args.reads_file,
             bcode_meta,
             args.bcode_min_pos - args.bcode_pad_length)
-    else:
+    elif args.reads_format == 1:
         obs_leaves_cell_state, organ_dict = parse_reads_file_format_GSE(
             args.reads_file,
             bcode_meta,
             args.bcode_min_pos - args.bcode_pad_length)
+    elif args.reads_format == 2:
+        obs_leaves_cell_state, organ_dict = parse_reads_file_format_GSM(
+            args.reads_file,
+            bcode_meta,
+            args.bcode_min_pos - args.bcode_pad_length)
+    else:
+        raise ValueError("huh")
     obs_leaves_cell_state = [obs for obs in obs_leaves_cell_state if obs.abundance >= args.abundance_thres]
     logging.info("Number of uniq allele cell state pairs %d", len(obs_leaves_cell_state))
+    print("Number of uniq allele cell state pairs", len(obs_leaves_cell_state))
 
     obs_leaves = merge_by_allele(obs_leaves_cell_state)
 
