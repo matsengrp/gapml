@@ -90,22 +90,23 @@ def plot_distance_to_abundance(
             continue
         dist = node.get_distance(fitted_bifurc_tree)
         X_dists.append(dist)
-        tot_abundance = sum([leaf.abundance for leaf in node])
+        tot_abundance = float(sum([leaf.abundance for leaf in node]))
         Y_abundance.append(tot_abundance)
 
     if out_plot_file:
         pyplot.clf()
         sns.regplot(
-                X_dists,
+                np.array(X_dists),
                 np.log2(Y_abundance) - np.log2(np.max(Y_abundance)),
-                x_jitter=0.01,
-                y_jitter=0.01,
-                robust=True,
-                lowess=False)
+                #x_jitter=0.01,
+                #y_jitter=0.01,
+                #robust=True,
+                lowess=True,
+                )
         pyplot.xlabel("dist to root")
         pyplot.ylabel("log_2(abundance)")
-        pyplot.ylim(-11,1)
-        pyplot.xlim(-0.05,0.85)
+        #pyplot.ylim(-1,1)
+        #pyplot.xlim(-0.05,0.85)
         pyplot.savefig(out_plot_file)
     fitted_slope, _, fitted_corr, pval, _ = stats.linregress(X_dists, np.log2(Y_abundance))
     print("mle tree", stats.linregress(X_dists, np.log2(Y_abundance)))
@@ -147,7 +148,6 @@ def plot_distance_to_num_cell_states(
     colors = []
     for node in fitted_bifurc_tree.traverse('postorder'):
         dist = node.get_distance(fitted_bifurc_tree)
-        X_dists.append(dist)
         if node.is_leaf():
             allele_str = node.allele_events_list_str
             node.add_feature("cell_types", set(list(allele_to_cell_state[allele_str].keys())))
@@ -156,6 +156,11 @@ def plot_distance_to_num_cell_states(
             for child in node.children:
                 node.cell_types.update(child.cell_types)
 
+    for node in fitted_bifurc_tree.traverse('postorder'):
+        if node.is_leaf():
+            continue
+        dist = node.get_distance(fitted_bifurc_tree)
+        X_dists.append(dist)
         n_cell_states = len(node.cell_types)
         Y_n_cell_states.append(n_cell_states)
         for c_state_str in node.cell_types:
@@ -164,14 +169,11 @@ def plot_distance_to_num_cell_states(
     if out_plot_file:
         pyplot.clf()
         sns.regplot(
-                X_dists,
-                Y_n_cell_states,
-                x_jitter=0.01,
-                y_jitter=0.01,
-                robust=True,
-                lowess=False)
-        pyplot.ylim(-11,1)
-        pyplot.xlim(-0.05,0.85)
+                np.array(X_dists),
+                np.array(Y_n_cell_states),
+                #x_jitter=0.01,
+                y_jitter=0.1,
+                lowess=True)
         pyplot.ylabel("Number of cell types")
         pyplot.xlabel("Distance from root")
         pyplot.savefig(out_plot_file)
@@ -488,10 +490,10 @@ def plot_branch_len_time(
 
     if out_plot_file:
         pyplot.clf()
-        pyplot.scatter(
-                rand_jitter(X_dist, scaling_factor=0.002),
-                rand_jitter(Y_branch_len, scaling_factor=0.002),
-                s=10)
+        sns.regplot(
+                np.array(X_dist),
+                np.array(Y_branch_len),
+                lowess=True)
         pyplot.savefig(out_plot_file)
     fitted_slope = stats.linregress(X_dist, Y_branch_len)[0]
     print("mle tree", stats.linregress(X_dist, Y_branch_len))
@@ -696,8 +698,14 @@ plot_distance_to_abundance(
 #    res.fitted_bifurc_tree,
 #    rand_tree,
 #    tot_time,
-#    out_plot_file=None, #"/Users/jeanfeng/Desktop/scatter_dist_to_branch_len.png",
+#    out_plot_file="/Users/jeanfeng/Desktop/scatter_dist_to_branch_len.png",
 #    num_rands = 2000)
+plot_branch_len_time(
+    chronos_tree,
+    rand_tree,
+    tot_time,
+    out_plot_file="/Users/jeanfeng/Desktop/scatter_dist_to_branch_len_chronos.png",
+    num_rands = 2000)
 #plot_gestalt_tree(
 #    chronos_tree,
 #    organ_dict,
