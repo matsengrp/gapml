@@ -6,6 +6,7 @@ from scipy import stats
 import numpy as np
 from sklearn.manifold import MDS, TSNE
 import itertools
+import seaborn as sns
 
 import collapsed_tree
 from cell_lineage_tree import CellLineageTree
@@ -45,9 +46,13 @@ ORGAN_TRANSLATION = {
 THRES = 5
 COLLAPSE_DIST = 0.001
 
-fitted_tree_file = "tmp_mount/analyze_gestalt/_output/min_abund_5/sum_states_10/extra_steps_0/tune_topology_pretuned.pkl"
-rand_tree_file = "tmp_mount/analyze_gestalt/_output/min_abund_5/parsimony_tree1.pkl"
-obs_file = "tmp_mount/analyze_gestalt/_output/min_abund_0/fish_data.pkl"
+#fitted_tree_file = "tmp_mount/analyze_gestalt/_output/min_abund_5/sum_states_10/extra_steps_0/tune_topology_pretuned.pkl"
+fitted_tree_file = "_output/gestalt_aws/ADR1_fitted.pkl"
+chronos_tree_file = "_output/gestalt_aws/ADR1_chronos_fitted.pkl"
+#rand_tree_file = "tmp_mount/analyze_gestalt/_output/min_abund_5/parsimony_tree1.pkl"
+rand_tree_file = "_output/gestalt_aws/ADR1_parsimony_tree0.pkl"
+#obs_file = "tmp_mount/analyze_gestalt/_output/min_abund_0/fish_data.pkl"
+obs_file = "_output/gestalt_aws/ADR1_fish_data.pkl"
 
 def get_allele_to_cell_states(obs_dict):
     # Create allele string to cell state
@@ -151,20 +156,19 @@ def plot_distance_to_num_cell_states(
         for c_state_str in node.cell_types:
             colors.append(ORGAN_COLORS[organ_dict[c_state_str]])
 
-        jitter = (np.random.rand() - 0.5) * 0.1
-        scatter_X_dists += [dist + jitter] * n_cell_states
-        jitter = (np.random.rand() - 0.5) * 0.5
-        scatter_Y_n_cell_states += [n_cell_states + jitter] * n_cell_states
+        jitter = (np.random.rand() - 0.5)  * 0.1
+        scatter_X_dists += [dist + jitter] #* n_cell_states
+        jitter = (np.random.rand() - 0.5) * 0.2
+        scatter_Y_n_cell_states += [n_cell_states + jitter] #* n_cell_states
 
     if out_plot_file:
         pyplot.clf()
-        pyplot.scatter(
-                rand_jitter(scatter_X_dists, scaling_factor=0.002),
-                rand_jitter(scatter_Y_n_cell_states, scaling_factor=0.002),
-                c=colors,
-                alpha=0.25,
-                marker="o",
-                s=10)
+        sns.regplot(
+                rand_jitter(scatter_X_dists, scaling_factor=0.001),
+                rand_jitter(scatter_Y_n_cell_states, scaling_factor=0.001),
+                lowess=True)
+        pyplot.ylabel("Number of cell types")
+        pyplot.xlabel("Distance from root")
         pyplot.savefig(out_plot_file)
     fitted_slope = stats.linregress(X_dists, Y_n_cell_states)[0]
     print("mle tree", stats.linregress(X_dists, Y_n_cell_states))
@@ -636,19 +640,16 @@ organ_dict = obs_dict["organ_dict"]
 allele_to_cell_state, cell_state_dict = get_allele_to_cell_states(obs_dict)
 
 with open(fitted_tree_file, "rb") as f:
-    res = six.moves.cPickle.load(f)["refit"]
+    res = six.moves.cPickle.load(f)[0]["best_res"]
+    print(res)
+
+with open(chronos_tree_file, "rb") as f:
+    chronos_tree = six.moves.cPickle.load(f)[0]["fitted_tree"]
+    print(chronos_tree)
 
 with open(rand_tree_file, "rb") as f:
     rand_tree = six.moves.cPickle.load(f)["tree"]
 
-print("plot mds taxon")
-plot_tsne_by_taxon(
-    res.fitted_bifurc_tree,
-    rand_tree,
-    allele_to_cell_state,
-    organ_dict,
-    tot_time,
-    out_plot_prefix = "/Users/jeanfeng/Desktop/tsne")
 print("plot mds")
 plot_mds_by_cell_type(
     res.fitted_bifurc_tree,
@@ -657,31 +658,47 @@ plot_mds_by_cell_type(
     organ_dict,
     tot_time,
     out_plot_prefix = "/Users/jeanfeng/Desktop/mds")
-print("distance to abundance")
-plot_distance_to_abundance(
-    res.fitted_bifurc_tree,
-    rand_tree,
-    tot_time,
-    out_plot_file = None, # "/Users/jeanfeng/Desktop/scatter_dist_to_abundance.png",
-    num_rands = 2000)
-print("distance to number of descendant cell states")
+plot_mds_by_cell_type_for_tree(
+    chronos_tree,
+    allele_to_cell_state,
+    organ_dict,
+    out_plot_file = "/Users/jeanfeng/Desktop/mds_chronos_fitted.png")
+#print("distance to abundance")
+#plot_distance_to_abundance(
+#    res.fitted_bifurc_tree,
+#    rand_tree,
+#    tot_time,
+#    out_plot_file = None, # "/Users/jeanfeng/Desktop/scatter_dist_to_abundance.png",
+#    num_rands = 2000)
+#print("distance to number of descendant cell states")
 plot_distance_to_num_cell_states(
     res.fitted_bifurc_tree,
     organ_dict,
     rand_tree,
     tot_time,
-    out_plot_file = None, #"/Users/jeanfeng/Desktop/scatter_dist_to_cell_state.png",
-    num_rands = 2000)
-print("plot branch length distribution")
-plot_branch_len_time(
-    res.fitted_bifurc_tree,
+    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_cell_state_mle.png")
+plot_distance_to_num_cell_states(
+    chronos_tree,
+    organ_dict,
     rand_tree,
     tot_time,
-    out_plot_file=None, #"/Users/jeanfeng/Desktop/scatter_dist_to_branch_len.png",
-    num_rands = 2000)
-plot_gestalt_tree(
-    res.fitted_bifurc_tree,
-    organ_dict,
-    allele_to_cell_state,
-    cell_state_dict,
-    "/Users/jeanfeng/Desktop/gestalt_fitted5.png")
+    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_cell_state_chronos.png")
+#print("plot branch length distribution")
+#plot_branch_len_time(
+#    res.fitted_bifurc_tree,
+#    rand_tree,
+#    tot_time,
+#    out_plot_file=None, #"/Users/jeanfeng/Desktop/scatter_dist_to_branch_len.png",
+#    num_rands = 2000)
+#plot_gestalt_tree(
+#    chronos_tree,
+#    organ_dict,
+#    allele_to_cell_state,
+#    cell_state_dict,
+#    "/Users/jeanfeng/Desktop/ADR1_chronos_fitted.png")
+#plot_gestalt_tree(
+#    res.fitted_bifurc_tree,
+#    organ_dict,
+#    allele_to_cell_state,
+#    cell_state_dict,
+#    "/Users/jeanfeng/Desktop/ADR1_fitted.png")
