@@ -22,6 +22,7 @@ FISH_DATA = {
         "path": "/fh/fast/matsen_e/gestalt/fish_7B_UMI_collapsed_reads/fish_7B_UMI_collapsed_reads.txt",
         "bcode_min_pos": 122,
         "format": 0,
+        "abund": 5,
     },
     "30hpf1": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171798_embryos_1_1_v6.stats.txt",
@@ -81,14 +82,6 @@ nest.add(
     ],
     label_func=lambda c: "%s_abund%d" % (c, FISH_DATA[c]['abund']),
 )
-
-#nest.add(
-#    'abundance_thres',
-#    [
-#        FISH_DATA[c['data']]['abund'],
-#    ],
-#    label_func=lambda c: "min_abund_%d" % c,
-#)
 
 @nest.add_target_with_env(localenv)
 def read_gestalt(env, outdir, c):
