@@ -49,7 +49,7 @@ nest.add(
 @nest.add_target_with_env(localenv)
 def read_gestalt(env, outdir, c):
     cmd = [
-        'python read_gestalt_data.py',
+        'python3 read_gestalt_data.py',
         '--reads-file',
         FISH_DATA[c['data']]['path'],
         '--reads-format',
@@ -72,7 +72,7 @@ def read_gestalt(env, outdir, c):
 @nest.add_target_with_env(localenv)
 def restrict_observed_alleles(env, outdir, c):
     cmd = [
-        'python restrict_observed_barcodes.py',
+        'python3 restrict_observed_barcodes.py',
         '--obs-file ${SOURCES[0]}',
         '--num-barcodes 1',
         '--out-obs-file ${TARGETS[0]}',
@@ -89,7 +89,7 @@ def restrict_observed_alleles(env, outdir, c):
 @nest.add_target_with_env(localenv)
 def run_parsimony(env, outdir, c):
     cmd = [
-        'python get_parsimony_topologies.py',
+        'python3 get_parsimony_topologies.py',
         '--obs-file ${SOURCES[0]}',
         '--out-template-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
@@ -110,6 +110,30 @@ def run_parsimony(env, outdir, c):
         c['restrict_observed_alleles'],
         ' '.join(map(str, cmd)))
 
+@nest.add_target_with_env(localenv)
+def run_chronos(env, outdir, c):
+    cmd = [
+        'python3 fit_chronos.py',
+        '--seed 1',
+        '--lambdas',
+        '0.0001,0.001,0.01,0.1,1',
+        '--obs-file ${SOURCES[0]}',
+        '--topology-file ${SOURCES[1]}',
+        '--out-model-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+        '--num-init-random-rearrange 0',
+        '--scratch-dir',
+	join('analyze_gestalt', outdir, 'scratch'),
+    ]
+    return env.Command(
+        [
+            join(outdir, 'chronos_fitted.pkl'),
+            join(outdir, 'chronos_fitted.txt')],
+        [
+            c['restrict_observed_alleles'][0],
+            c['run_parsimony'][0]],
+        ' '.join(map(str, cmd)))
+
 nest.add(
     'sum_states',
     [10],
@@ -127,7 +151,7 @@ def run_MLE(env, outdir, c):
     penalty_params = "512,128,32,8"
     targ_lam_penalty_params = "10,1"
     cmd = [
-        'python tune_topology.py',
+        'python3 tune_topology.py',
         '--obs-file ${SOURCES[0]}',
         '--topology-file ${SOURCES[1]}',
         '--out-model-file ${TARGETS[0]}',
