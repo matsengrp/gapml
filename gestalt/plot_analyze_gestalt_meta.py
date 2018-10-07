@@ -105,6 +105,8 @@ for node in fitted_bifurc_tree.traverse('postorder'):
 X_matrix = np.zeros((NUM_ORGANS,NUM_ORGANS))
 tot_path_abundances = np.zeros((NUM_ORGANS, NUM_ORGANS))
 for leaf in fitted_bifurc_tree:
+    if leaf.dist > 0.5 and len(leaf.cell_types) > 1:
+        continue
     allele_str = leaf.allele_events_list_str
     cell_type_abund_dict = allele_to_cell_state[allele_str]
     observed_cell_types = set()
@@ -112,22 +114,28 @@ for leaf in fitted_bifurc_tree:
     for cell_type, abund in cell_type_abund_dict.items():
         node_cell_type = ORGAN_ORDER[organ_dict[cell_type].replace("7B_", "")]
         node_abund_dict[node_cell_type] = abund
-        observed_cell_types.add(node_cell_type)
+        #observed_cell_types.add(node_cell_type)
     print(node_abund_dict)
 
-    up_node = leaf.up
+    up_node = leaf
     while not up_node.is_root() and len(observed_cell_types) < NUM_ORGANS:
         diff_cell_types = up_node.cell_types - observed_cell_types
         for up_cell_type in diff_cell_types:
             for leaf_cell_type, abund in node_abund_dict.items():
-                X_matrix[leaf_cell_type, up_cell_type] += (1 - up_node.dist_to_root) * abund
+                if leaf_cell_type == up_cell_type:
+                    continue
+                if up_node.is_leaf():
+                    dist_to_root = 1 - up_node.dist/2
+                else:
+                    dist_to_root = up_node.dist_to_root
+                X_matrix[leaf_cell_type, up_cell_type] += (1 - dist_to_root) * abund
                 tot_path_abundances[leaf_cell_type, up_cell_type] += abund
         observed_cell_types.update(diff_cell_types)
         up_node = up_node.up
 
 X_matrix = X_matrix/tot_path_abundances
 print(X_matrix)
-sym_X_matrix = np.minimum(X_matrix, X_matrix.T)
+sym_X_matrix = (X_matrix + X_matrix.T)/2
 
 # HEATMAP
 mask = tot_path_abundances < 50
