@@ -1,13 +1,8 @@
-import networkx as nx
 import seaborn as sns
 import numpy as np
 import six
 from cell_lineage_tree import CellLineageTree
 from matplotlib import pyplot as plt
-from sklearn.manifold import MDS
-from skbio import DistanceMatrix
-from skbio.tree import nj
-from ete3 import Tree, NodeStyle
 
 def get_allele_to_cell_states(obs_dict):
     # Create allele string to cell state
@@ -31,8 +26,8 @@ if FISH == "ADR1":
     fitted_tree_file = "_output/gestalt_aws/ADR1_fitted.pkl"
     obs_file = "_output/gestalt_aws/ADR1_fish_data.pkl"
 elif FISH == "ADR2":
-    fitted_tree_file = "tmp_mount/analyze_gestalt/_output/ADR2_abund1/sum_states_10/extra_steps_0/tune_pen_hanging.pkl"
-    obs_file = "tmp_mount/analyze_gestalt/_output/ADR2_abund1/fish_data_restrict_with_cell_types.pkl"
+    fitted_tree_file = "analyze_gestalt/_output/ADR2_abund1/sum_states_10/extra_steps_0/tune_pen_hanging.pkl"
+    obs_file = "analyze_gestalt/_output/ADR2_abund1/fish_data_restrict_with_cell_types.pkl"
 
 ORGAN_TRANSLATION = {
     "Brain": "Brain",
@@ -83,7 +78,7 @@ with open(fitted_tree_file, "rb") as f:
     if FISH == "ADR1":
         fitted_bifurc_tree = six.moves.cPickle.load(f)[0]["best_res"].fitted_bifurc_tree
     else:
-        res = six.moves.cPickle.load(f)["final_fit"]
+        fitted_bifurc_tree = six.moves.cPickle.load(f)["final_fit"].fitted_bifurc_tree
 with open(obs_file, "rb") as f:
     obs_dict = six.moves.cPickle.load(f)
 
@@ -108,35 +103,35 @@ for node in fitted_bifurc_tree.traverse('postorder'):
             node.cell_types.update(child.cell_types)
 
 X_matrix = np.zeros((NUM_ORGANS,NUM_ORGANS))
-tot_cell_type_abundances = np.zeros(NUM_ORGANS)
-for node in fitted_bifurc_tree:
-    if not node.is_leaf() and len(node.cell_types) > 1:
-        continue
-    node_cell_type = list(node.cell_types)[0]
-    tot_cell_type_abundances[node_cell_type] += node.abundance
+tot_path_abundances = np.zeros((NUM_ORGANS, NUM_ORGANS))
+for leaf in fitted_bifurc_tree:
+    allele_str = leaf.allele_events_list_str
+    cell_type_abund_dict = allele_to_cell_state[allele_str]
+    observed_cell_types = set()
+    node_abund_dict = dict()
+    for cell_type, abund in cell_type_abund_dict.items():
+        node_cell_type = ORGAN_ORDER[organ_dict[cell_type].replace("7B_", "")]
+        node_abund_dict[node_cell_type] = abund
+        observed_cell_types.add(node_cell_type)
+    print(node_abund_dict)
 
-    observed_cell_types = set([node_cell_type])
-    up_node = node.up
+    up_node = leaf.up
     while not up_node.is_root() and len(observed_cell_types) < NUM_ORGANS:
         diff_cell_types = up_node.cell_types - observed_cell_types
         for up_cell_type in diff_cell_types:
-            X_matrix[node_cell_type, up_cell_type] += (1 - up_node.dist_to_root) * node.abundance
+            for leaf_cell_type, abund in node_abund_dict.items():
+                X_matrix[leaf_cell_type, up_cell_type] += (1 - up_node.dist_to_root) * abund
+                tot_path_abundances[leaf_cell_type, up_cell_type] += abund
         observed_cell_types.update(diff_cell_types)
         up_node = up_node.up
 
-for i in range(NUM_ORGANS):
-    print(tot_cell_type_abundances[i])
-    print(ORGAN_LABELS[i])
-    X_matrix[i,:] = X_matrix[i,:]/tot_cell_type_abundances[i]
+X_matrix = X_matrix/tot_path_abundances
 print(X_matrix)
-sym_X_matrix = (X_matrix+ X_matrix.T)/2
+sym_X_matrix = np.minimum(X_matrix, X_matrix.T)
 
 # HEATMAP
-mask = np.zeros(X_matrix.shape, dtype=bool)
-for i in range(NUM_ORGANS):
-    if tot_cell_type_abundances[i] < 50:
-        mask[i,:] = True
-        mask[:,i] = True
+mask = tot_path_abundances < 50
+print("num to mask", np.sum(mask))
 plt.clf()
 sns.heatmap(sym_X_matrix,
         xticklabels=ORGAN_LABELS,
@@ -151,7 +146,7 @@ print("matrix PLOT", out_plot_file)
 #dm = DistanceMatrix(sym_X_matrix, ORGAN_LABELS)
 #tree = nj(dm, disallow_negative_branch_length=True)
 #print(tree.ascii_art())
-#out_newick = "_output/newick.txt" 
+#out_newick = "_output/newick.txt"
 #with open(out_newick, "w") as f:
 #    tree.write(f)
 #
