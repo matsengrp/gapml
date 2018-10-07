@@ -131,7 +131,7 @@ for i in range(11):
 THRES = 5
 COLLAPSE_DIST = 0.001
 
-FISH = "ADR2"
+FISH = "ADR1"
 
 if FISH == "ADR1":
     fitted_tree_file = "_output/gestalt_aws/ADR1_fitted.pkl"
@@ -140,7 +140,7 @@ if FISH == "ADR1":
 elif FISH == "ADR2":
 #fitted_tree_file = "analyze_gestalt/_output/dome1_abund1/sum_states_10/extra_steps_0/tune_pen.pkl"
 #fitted_tree_file = "analyze_gestalt/_output/dome3_abund1/sum_states_10/extra_steps_0/tune_pen.pkl"
-    fitted_tree_file = "tmp_mount/analyze_gestalt/_output/ADR2_abund1/sum_states_10/extra_steps_0/tune_pen.pkl"
+    fitted_tree_file = "tmp_mount/analyze_gestalt/_output/ADR2_abund1/sum_states_10/extra_steps_0/tune_pen_hanging.pkl"
     chronos_tree_file = "tmp_mount/analyze_gestalt/_output/ADR2_abund1/chronos_fitted.pkl"
     obs_file = "tmp_mount/analyze_gestalt/_output/ADR2_abund1/fish_data_restrict_with_cell_types.pkl"
 #chronos_tree_file = "analyze_gestalt/_output/dome1_abund1/chronos_fitted.pkl"
@@ -248,7 +248,9 @@ def plot_distance_to_num_germ_layers(
                 node.germ_layers.update(child.germ_layers)
 
     for node in fitted_bifurc_tree.traverse('postorder'):
-        if node.is_leaf():
+        #if node.is_leaf():
+        #    continue
+        if min([len(leaf.germ_layers) for leaf in node]) > 1:
             continue
         dist = node.get_distance(fitted_bifurc_tree)
         X_dists.append(dist)
@@ -300,7 +302,9 @@ def plot_distance_to_num_cell_states(
     X_dists = []
     Y_n_cell_states = []
     for node in fitted_bifurc_tree.traverse('postorder'):
-        if node.is_leaf():
+        #if node.is_leaf():
+        #    continue
+        if min([len(leaf.cell_types) for leaf in node]) > 1:
             continue
         dist = node.get_distance(fitted_bifurc_tree)
         X_dists.append(dist)
