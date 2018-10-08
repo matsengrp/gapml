@@ -12,7 +12,7 @@ import numpy as np
 from clt_neighbor_joining_estimator import CLTNeighborJoiningEstimator
 from common import create_directory
 from tune_topology import read_data, read_true_model_files, _do_random_rearrange
-from tree_distance import RootRFDistanceMeasurer
+from tree_distance import UnrootRFDistanceMeasurer
 
 def parse_args(args):
     parser = argparse.ArgumentParser(
@@ -72,7 +72,7 @@ def main(args=sys.argv[1:]):
     true_model_dict, assessor = read_true_model_files(
                                     args,
                                     bcode_meta.num_barcodes,
-                                    measurer_classes=[RootRFDistanceMeasurer])
+                                    measurer_classes=[UnrootRFDistanceMeasurer])
 
     assert len(root_clt) == len(obs_data_dict['obs_leaves'])
 
