@@ -8,6 +8,11 @@ from cell_lineage_tree import CellLineageTree
 from matplotlib import pyplot as plt
 from scipy.stats import rankdata
 
+
+"""
+Create distance matrices between cell types in adult fish 1 and 2
+Also calculates the correlation between the distance matrices
+"""
 def get_allele_to_cell_states(obs_dict):
     # Create allele string to cell state
     allele_to_cell_state = {}
@@ -50,9 +55,6 @@ ORGAN_ORDER = {
     "Heart_chunk": 8,
     "Heart_GFP-": 9,
     "Heart_diss": 10,
-    #"Heart_chunk": 7,
-    #"Heart_GFP-": 7,
-    #"Heart_diss": 7,
 }
 ORGAN_LABELS = [
     "Brain",
@@ -62,7 +64,6 @@ ORGAN_LABELS = [
     "Intestine",
     "Upper_GI",
     "Blood",
-#    "Heart"]
     "Heart_GFP+",
     "Heart_chunk",
     "Heart_GFP-",
@@ -71,14 +72,11 @@ ORGAN_LABELS = [
 NUM_ORGANS = len(ORGAN_LABELS)
 
 def create_distance_matrix(fitted_bifurc_tree, obs_dict):
-    tot_time = obs_dict["time"]
-    bcode_meta = obs_dict["bcode_meta"]
     organ_dict = obs_dict["organ_dict"]
     allele_to_cell_state, cell_state_dict = get_allele_to_cell_states(obs_dict)
 
     fitted_bifurc_tree.label_dist_to_roots()
     for node in fitted_bifurc_tree.traverse('postorder'):
-        dist = node.get_distance(fitted_bifurc_tree)
         if node.is_leaf():
             allele_str = node.allele_events_list_str
             cell_types = allele_to_cell_state[allele_str].keys()
@@ -91,7 +89,6 @@ def create_distance_matrix(fitted_bifurc_tree, obs_dict):
             for child in node.children:
                 node.cell_types.update(child.cell_types)
 
-    leaf_dist_cutoff = np.median([leaf.dist for leaf in fitted_bifurc_tree])
     X_matrix = np.zeros((NUM_ORGANS,NUM_ORGANS))
     tot_path_abundances = np.zeros((NUM_ORGANS, NUM_ORGANS))
     for leaf in fitted_bifurc_tree:
