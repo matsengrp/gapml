@@ -80,10 +80,12 @@ def main(args=sys.argv[1:]):
     dist_dict = None
     if assessor is not None:
         dist_dict = assessor.assess(root_clt)
-        logging.info("fitted tree: %s", dist_dict)
-        results = {"fitted_tree": root_clt, "performance": dist_dict}
-        with open(args.out_model_file, "wb") as f:
-            six.moves.cPickle.dump(results, f, protocol=2)
+    else:
+        dist_dict = None
+    results = {"fitted_tree": root_clt, "performance": dist_dict}
+    logging.info("fitted tree: %s", dist_dict)
+    with open(args.out_model_file, "wb") as f:
+        six.moves.cPickle.dump(results, f, protocol=2)
     logging.info("Complete!!!")
 
 
