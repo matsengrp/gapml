@@ -25,6 +25,13 @@ FISH_DATA = {
         "format": 0,
         "abund": 5,
     },
+    "ADR2": {
+        "path": "/fh/fast/matsen_e/gestalt/GSE81713_fish_ADR2_PHYLIP_MIX_gte5_input.annotations.txt",
+        "bcode_min_pos": 122,
+        "format": 1,
+        "abund": 1,
+        "max_leaves": 1000,
+    },
     "30hpf1": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171798_embryos_1_1_v6.stats.txt",
         "bcode_min_pos": 126,
@@ -48,24 +55,35 @@ FISH_DATA = {
         "bcode_min_pos": 126,
         "format": 2,
         "abund": 1,
+        "max_leaves": None,
     },
     "30hpf5": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171802_embryos_1_5_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
         "abund": 1,
+        "max_leaves": None,
     },
     "30hpf6": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171803_embryos_1_6_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
         "abund": 1,
+        "max_leaves": None,
     },
     "30hpf7": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171804_embryos_1_7_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
-        "abund": 2,
+        "abund": 1,
+        "max_leaves": MAX_LEAVES,
+    },
+    "30hpf8": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171805_embryos_1_8_v6.stats.txt",
+        "bcode_min_pos": 126,
+        "format": 2,
+        "abund": 1,
+        "max_leaves": MAX_LEAVES,
     },
     "dome1": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171788_Dome_1_1x.stats.txt",
@@ -87,13 +105,28 @@ FISH_DATA = {
         "format": 2,
         "abund": 1,
         "max_leaves": MAX_LEAVES,
-    }
+    },
+    "dome8": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171796_Dome_8_1x.stats.txt",
+        "bcode_min_pos": 122,
+        "format": 2,
+        "abund": 1,
+        "max_leaves": MAX_LEAVES,
+    },
+    "dome9": {
+        # There are WAY too few alleles from dome9
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171797_Dome_9_1x.stats.txt",
+        "bcode_min_pos": 122,
+        "format": 2,
+        "abund": 1,
+        "max_leaves": MAX_LEAVES,
+    },
 }
 
 nest.add(
     'data',
     [
-        #"ADR1",
+        #"ADR2",
         #"30hpf1",
         #"30hpf2",
         #"30hpf3",
@@ -101,9 +134,11 @@ nest.add(
         #"30hpf5",
         #"30hpf6",
         #"30hpf7",
+        #"30hpf8",
         #"dome1",
         #"dome3",
         "dome5",
+        "dome8",
     ],
     label_func=lambda c: "%s_abund%d" % (c, FISH_DATA[c]['abund']),
 )
@@ -139,8 +174,7 @@ def restrict_observed_alleles(env, outdir, c):
         '--num-barcodes 1',
         '--out-obs-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
-        '--max-leaves',
-        FISH_DATA[c['data']]['max_leaves'],
+        '--max-leaves %d' % FISH_DATA[c['data']]['max_leaves'] if FISH_DATA[c['data']]['max_leaves'] is not None else '',
     ]
     return env.Command(
         [
@@ -232,6 +266,8 @@ def run_MLE(env, outdir, c):
         '--max-fit-splits',
         4,
         '--num-chad-tune-iters',
+        1,
+        '--num-chad-stop',
         1,
         '--max-chad-tune-search',
         0,
