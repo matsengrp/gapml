@@ -7,22 +7,12 @@ import os
 import argparse
 import logging
 import random
-import subprocess
-import time
 import numpy as np
 
-from ete3 import Tree
-
-from cell_lineage_tree import CellLineageTree
-from common import create_directory, get_randint, save_data, get_init_target_lams
-from clt_likelihood_penalization import mark_target_status_to_penalize
-from tune_topology import read_data, read_true_model_files
-
-from Bio.Phylo import draw_ascii, write
-from Bio.Phylo.TreeConstruction import _DistanceMatrix, DistanceTreeConstructor
-
-from tree_distance import BHVDistanceMeasurer
-from fit_chronos import _do_convert
+from clt_neighbor_joining_estimator import CLTNeighborJoiningEstimator
+from common import create_directory
+from tune_topology import read_data, read_true_model_files, _do_random_rearrange
+from tree_distance import RootRFDistanceMeasurer
 
 def parse_args(args):
     parser = argparse.ArgumentParser(
@@ -67,74 +57,35 @@ def parse_args(args):
 
 def main(args=sys.argv[1:]):
     args = parse_args(args)
+    np.random.seed(args.seed)
+    random.seed(args.seed)
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
 
     # Load data
     bcode_meta, _, obs_data_dict = read_data(args)
-    true_model_dict, assessor = read_true_model_files(args, bcode_meta.num_barcodes, measurer_classes=[BHVDistanceMeasurer])
+    neighbor_joining_est = CLTNeighborJoiningEstimator(bcode_meta,
+                                                       args.scratch_dir,
+                                                       obs_data_dict["obs_leaves"])
+    root_clt = neighbor_joining_est.estimate()
 
-    # construct a right-triangular distance matrix using the cardinality of the
-    # symmetric difference of the sets of events in each barcode in two leaves
-    distance_matrix = []
-    for row, row_leaf in enumerate(obs_data_dict['obs_leaves']):
-        distance_matrix_row = []
-        for col_leaf in obs_data_dict['obs_leaves'][:(row + 1)]:
-            distance_matrix_row.append(sum(len(set(row_allele_events.events) ^ set(col_allele_events.events))
-                                           for row_allele_events, col_allele_events in zip(row_leaf.allele_events_list,
-                                                                                           col_leaf.allele_events_list)))
-        distance_matrix.append(distance_matrix_row)
-    distance_matrix = _DistanceMatrix(names=[str(i) for i in range(len(obs_data_dict['obs_leaves']))],
-                                      matrix=distance_matrix)
-    constructor = DistanceTreeConstructor()
-    fitted_tree = constructor.nj(distance_matrix)
-    newick_tree_file = '{}/tmp.nk'.format(args.scratch_dir)
-    write(fitted_tree, newick_tree_file, 'newick')
+    true_model_dict, assessor = read_true_model_files(
+                                    args,
+                                    bcode_meta.num_barcodes,
+                                    measurer_classes=[RootRFDistanceMeasurer])
 
-    # Read fitted tree into ETE tree
-    fitted_tree = Tree(newick_tree_file, format=1)
-    # Convert the fitted tree back to a cell lineage tree
-    # NOTE: arbitrarily using the first allele in observed leaves to initialize
-    #       barcode states. We will later update the leaf states only
-    root_clt = CellLineageTree(
-            obs_data_dict['obs_leaves'][0].allele_list,
-            obs_data_dict['obs_leaves'][0].allele_events_list,
-            obs_data_dict['obs_leaves'][0].cell_state,
-            dist=0)
-    _do_convert(fitted_tree, root_clt)
-    # update the leaves to have the correct barcode states
-    for leaf in root_clt:
-        leaf_parent = leaf.up
-        leaf.detach()
-        leaf_parent.add_child(CellLineageTree(
-                obs_data_dict['obs_leaves'][int(leaf.name)].allele_list,
-                obs_data_dict['obs_leaves'][int(leaf.name)].allele_events_list,
-                obs_data_dict['obs_leaves'][int(leaf.name)].cell_state,
-                dist=leaf.dist,
-                abundance=obs_data_dict['obs_leaves'][int(leaf.name)].abundance))
-    logging.info("Done with fitting tree using neighbor joining")
-    logging.info(fitted_tree.get_ascii(attributes=["dist"]))
-
-    print(root_clt)
-    print(len(obs_data_dict['obs_leaves']))
-    print(len(root_clt))
-    print(len(assessor.ref_tree))
-
+    assert len(root_clt) == len(obs_data_dict['obs_leaves'])
 
     # Assess the tree if true tree supplied
     dist_dict = None
     if assessor is not None:
-        dist_dict = assessor.assess(None, root_clt)
+        dist_dict = assessor.assess(root_clt)
         logging.info("fitted tree: %s", dist_dict)
-    results = {
-        "fitted_tree": root_clt,
-        "performance": dist_dict
-    }
-
-    # Save results
-    with open(args.out_model_file, "wb") as f:
-        six.moves.cPickle.dump(results, f, protocol=2)
+        results = {"fitted_tree": root_clt, "performance": dist_dict}
+        with open(args.out_model_file, "wb") as f:
+            six.moves.cPickle.dump(results, f, protocol=2)
     logging.info("Complete!!!")
+
 
 
 if __name__ == "__main__":
