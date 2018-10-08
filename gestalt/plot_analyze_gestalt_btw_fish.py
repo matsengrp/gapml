@@ -14,7 +14,7 @@ from common import parse_comma_str
 
 def parse_args(args):
     parser = argparse.ArgumentParser(
-            description='tune over topologies and fit model parameters')
+            description='compare and plot mutation params for different fish')
     parser.add_argument(
         '--obs-file-template',
         type=str,
@@ -78,7 +78,7 @@ def main(args=sys.argv[1:]):
                 targ_used[evt.min_target] += 1
         fitted_params["simple"].append(_get_normalized_params(targ_used))
 
-    
+
     for key, param_vals in fitted_params.items():
         all_corrs = []
         for idx1, fit_param1 in enumerate(param_vals):
