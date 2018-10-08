@@ -5,8 +5,11 @@ import sys
 import argparse
 import logging
 import six
+import numpy as np
+import random
 from typing import List
 
+from anc_state import AncState
 from clt_observer import ObservedAlignedSeq
 from common import create_directory, save_data
 
@@ -18,6 +21,11 @@ def parse_args():
         type=str,
         default="_output/obs_data.pkl",
         help='pkl file with observed sequence data, should be a dict with ObservedAlignSeq')
+    parser.add_argument(
+        '--seed',
+        type=int,
+        default=0,
+        help='seed')
     parser.add_argument(
         '--log-file',
         type=str,
@@ -32,6 +40,14 @@ def parse_args():
         '--observe-cell-state',
         action='store_true',
         help='Do we observe cell state?')
+    parser.add_argument(
+        '--max-leaves',
+        type=int,
+        default=100000,
+        help="""
+        Maximum number of leaves to return. If there are more leaves,
+        return a random subset
+        """)
     parser.add_argument(
         '--min-leaves',
         type=int,
@@ -91,7 +107,8 @@ def main(args=sys.argv[1:]):
     args = parse_args()
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
-
+    random.seed(args.seed)
+    np.random.seed(args.seed)
     with open(args.obs_file, "rb") as f:
         obs_data_dict = six.moves.cPickle.load(f)
 
@@ -104,19 +121,48 @@ def main(args=sys.argv[1:]):
 
     # Now start collapsing the observations by first n alleles
     raw_obs_leaves = obs_data_dict["obs_leaves"]
-    obs_data_dict["obs_leaves"] = collapse_obs_leaves_by_first_alleles(
+    restricted_obs_leaves = collapse_obs_leaves_by_first_alleles(
             raw_obs_leaves,
             args.num_barcodes,
             args.min_leaves,
             args.observe_cell_state)
-    print(
-        "Number of uniq obs after restricting to first %d alleles: %d" %
-        (args.num_barcodes,
-        len(obs_data_dict["obs_leaves"])))
     logging.info(
         "Number of uniq obs after restricting to first %d alleles: %d",
         args.num_barcodes,
+        len(restricted_obs_leaves))
+    random.shuffle(restricted_obs_leaves)
+    obs_data_dict["obs_leaves"] = restricted_obs_leaves[:args.max_leaves]
+    print(
+        "Number of uniq obs after random selection to first %d alleles: %d" %
+        (args.num_barcodes,
+        len(obs_data_dict["obs_leaves"])))
+    logging.info(
+        "Number of uniq obs after random selection: %d",
         len(obs_data_dict["obs_leaves"]))
+
+    # This section just prints interesting things...
+    # Look at barcode usage
+    n_target_used_count = np.zeros(bcode_meta.n_targets + 1)
+    for i in range(bcode_meta.num_barcodes):
+        anc_states = [AncState.create_for_observed_allele(obs.allele_events_list[i], bcode_meta) for obs in obs_data_dict["obs_leaves"]]
+        targ_statuses = [anc_state.to_max_target_status() for anc_state in anc_states]
+        num_deacts = [targ_stat.num_deact_targets for targ_stat in targ_statuses]
+        logging.info("bcode %d, Avg num deacts %d", i, np.mean(num_deacts))
+        for n_deacts in num_deacts:
+            n_target_used_count[n_deacts] += 1
+    logging.info("deact bin weights %s", n_target_used_count/np.sum(n_target_used_count))
+
+    # Look at double cut propotion
+    evt_set = set()
+    for obs in obs_data_dict["obs_leaves"]:
+        for evts_list in obs.allele_events_list:
+            for evt in evts_list.events:
+                evt_set.add(evt)
+    logging.info("Num uniq events %d", len(evt_set))
+    logging.info("Proportion of double cuts %f", np.mean([e.min_target != e.max_target for e in evt_set]))
+    abundances = [obs.abundance for obs in obs_data_dict["obs_leaves"]]
+    logging.info("Range of abundance vals %d %d (mean %f)", np.min(abundances), np.max(abundances), np.mean(abundances))
+
     save_data(obs_data_dict, args.out_obs_file)
 
 

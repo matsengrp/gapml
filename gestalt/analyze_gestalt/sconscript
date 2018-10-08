@@ -17,16 +17,76 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
+MAX_LEAVES = 250
 FISH_DATA = {
     "ADR1": {
         "path": "/fh/fast/matsen_e/gestalt/fish_7B_UMI_collapsed_reads/fish_7B_UMI_collapsed_reads.txt",
         "bcode_min_pos": 122,
         "format": 0,
+        "abund": 5,
     },
-    "30hpf": {
-        "path": "/fh/fast/matsen_e/gestalt/GSE81713_embryos_1_7/GSE81713_embryos_1_7.annotations.txt",
+    "30hpf1": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171798_embryos_1_1_v6.stats.txt",
         "bcode_min_pos": 126,
-        "format": 1,
+        "format": 2,
+        "abund": 2,
+    },
+    "30hpf2": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171799_embryos_1_2_v6.stats.txt",
+        "bcode_min_pos": 126,
+        "format": 2,
+        "abund": 1,
+    },
+    "30hpf3": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171800_embryos_1_3_v6.stats.txt",
+        "bcode_min_pos": 126,
+        "format": 2,
+        "abund": 2,
+    },
+    "30hpf4": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171801_embryos_1_4_v6.stats.txt",
+        "bcode_min_pos": 126,
+        "format": 2,
+        "abund": 1,
+    },
+    "30hpf5": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171802_embryos_1_5_v6.stats.txt",
+        "bcode_min_pos": 126,
+        "format": 2,
+        "abund": 1,
+    },
+    "30hpf6": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171803_embryos_1_6_v6.stats.txt",
+        "bcode_min_pos": 126,
+        "format": 2,
+        "abund": 1,
+    },
+    "30hpf7": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171804_embryos_1_7_v6.stats.txt",
+        "bcode_min_pos": 126,
+        "format": 2,
+        "abund": 2,
+    },
+    "dome1": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171788_Dome_1_1x.stats.txt",
+        "bcode_min_pos": 122,
+        "format": 2,
+        "abund": 1,
+        "max_leaves": MAX_LEAVES,
+    },
+    "dome3": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171791_Dome_3_1x.stats.txt",
+        "bcode_min_pos": 122,
+        "format": 2,
+        "abund": 1,
+        "max_leaves": MAX_LEAVES,
+    },
+    "dome5": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171793_Dome_5_1x.stats.txt",
+        "bcode_min_pos": 122,
+        "format": 2,
+        "abund": 1,
+        "max_leaves": MAX_LEAVES,
     }
 }
 
@@ -34,22 +94,24 @@ nest.add(
     'data',
     [
         #"ADR1",
-        "30hpf"],
-)
-
-nest.add(
-    'abundance_thres',
-    [
-        2,
-        #5,
+        #"30hpf1",
+        #"30hpf2",
+        #"30hpf3",
+        #"30hpf4",
+        #"30hpf5",
+        #"30hpf6",
+        #"30hpf7",
+        #"dome1",
+        #"dome3",
+        "dome5",
     ],
-    label_func=lambda c: "min_abund_%d" % c,
+    label_func=lambda c: "%s_abund%d" % (c, FISH_DATA[c]['abund']),
 )
 
 @nest.add_target_with_env(localenv)
 def read_gestalt(env, outdir, c):
     cmd = [
-        'python read_gestalt_data.py',
+        'python3 read_gestalt_data.py',
         '--reads-file',
         FISH_DATA[c['data']]['path'],
         '--reads-format',
@@ -59,7 +121,7 @@ def read_gestalt(env, outdir, c):
         '--out-obs-data ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
         '--abundance-thres',
-	c['abundance_thres'],
+        FISH_DATA[c['data']]['abund'],
 	'--time 1',
     ]
     return env.Command(
@@ -72,11 +134,13 @@ def read_gestalt(env, outdir, c):
 @nest.add_target_with_env(localenv)
 def restrict_observed_alleles(env, outdir, c):
     cmd = [
-        'python restrict_observed_barcodes.py',
+        'python3 restrict_observed_barcodes.py',
         '--obs-file ${SOURCES[0]}',
         '--num-barcodes 1',
         '--out-obs-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
+        '--max-leaves',
+        FISH_DATA[c['data']]['max_leaves'],
     ]
     return env.Command(
         [
@@ -89,7 +153,7 @@ def restrict_observed_alleles(env, outdir, c):
 @nest.add_target_with_env(localenv)
 def run_parsimony(env, outdir, c):
     cmd = [
-        'python get_parsimony_topologies.py',
+        'python3 get_parsimony_topologies.py',
         '--obs-file ${SOURCES[0]}',
         '--out-template-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
@@ -110,6 +174,30 @@ def run_parsimony(env, outdir, c):
         c['restrict_observed_alleles'],
         ' '.join(map(str, cmd)))
 
+@nest.add_target_with_env(localenv)
+def run_chronos(env, outdir, c):
+    cmd = [
+        'python3 fit_chronos.py',
+        '--seed 1',
+        '--lambdas',
+        '0.0001,0.001,0.01,0.1,1',
+        '--obs-file ${SOURCES[0]}',
+        '--topology-file ${SOURCES[1]}',
+        '--out-model-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+        '--num-init-random-rearrange 0',
+        '--scratch-dir',
+	join('analyze_gestalt', outdir, 'scratch'),
+    ]
+    return env.Command(
+        [
+            join(outdir, 'chronos_fitted.pkl'),
+            join(outdir, 'chronos_fitted.txt')],
+        [
+            c['restrict_observed_alleles'][0],
+            c['run_parsimony'][0]],
+        ' '.join(map(str, cmd)))
+
 nest.add(
     'sum_states',
     [10],
@@ -127,7 +215,7 @@ def run_MLE(env, outdir, c):
     penalty_params = "512,128,32,8"
     targ_lam_penalty_params = "10,1"
     cmd = [
-        'python tune_topology.py',
+        'python3 tune_topology.py',
         '--obs-file ${SOURCES[0]}',
         '--topology-file ${SOURCES[1]}',
         '--out-model-file ${TARGETS[0]}',
@@ -144,9 +232,9 @@ def run_MLE(env, outdir, c):
         '--max-fit-splits',
         4,
         '--num-chad-tune-iters',
-        50,
+        1,
         '--max-chad-tune-search',
-        10,
+        0,
         '--max-sum-states',
         c['sum_states'],
         '--max-extra-steps',
@@ -154,13 +242,15 @@ def run_MLE(env, outdir, c):
         '--max-iters 50000',
         '--num-inits 1',
         '--tot-time-known',
-        '--num-processes 4',
+        '--num-processes 2',
         '--num-init-random-rearrange 5',
+        '--scratch-dir',
+	join('analyze_gestalt', outdir, 'scratch'),
     ]
     return env.Command(
         [
             join(outdir, 'tune_pen.pkl'),
-            join(outdir, 'tune_pen_log.txt'),
+            join(outdir, 'tune_pen.txt'),
 	],
         [
             c['restrict_observed_alleles'][0],

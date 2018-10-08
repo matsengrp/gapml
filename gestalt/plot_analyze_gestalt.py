@@ -1,14 +1,16 @@
 import six
-from ete3 import NodeStyle, SeqMotifFace
 from plot_mrca_matrices import plot_tree
 from matplotlib import pyplot
 from scipy import stats
 import numpy as np
 from sklearn.manifold import MDS, TSNE
+import pandas as pd
+from scipy.stats import spearmanr, kendalltau
 import itertools
 import seaborn as sns
 
 import collapsed_tree
+from cell_state import CellTypeTree
 from cell_lineage_tree import CellLineageTree
 from common import assign_rand_tree_lengths
 
@@ -30,29 +32,123 @@ ORGAN_COLORS = {
     "7B_Heart_GFP+": "Pink", # cardiomyocytes
 }
 ORGAN_TRANSLATION = {
-    "7B_Brain": "Brain",
-    "7B_Eye1": "Left eye",
-    "7B_Eye2": "Right eye",
-    "7B_Gills": "Gills",
-    "7B_Intestine": "Intestinal bulb",
-    "7B_Upper_GI": "Post intestine",
-    "7B_Blood": "Blood",
-    "7B_Heart_chunk": "Heart",
-    "7B_Heart_diss": "DHC",
-    "7B_Heart_GFP-": "NC",
-    "7B_Heart_GFP+": "Cardiomyocytes",
+    "Brain": "Brain",
+    "Eye1": "Left eye",
+    "Eye2": "Right eye",
+    "Gills": "Gills",
+    "Intestine": "Intestinal bulb",
+    "Upper_GI": "Post intestine",
+    "Blood": "Blood",
+    "Heart_chunk": "Heart",
+    "Heart_diss": "DHC",
+    "Heart_GFP-": "NC",
+    "Heart_GFP+": "Cardiomyocytes",
 }
+ORGAN_ORDER = {
+    "Brain": 0,
+    "Eye1": 1,
+    "Eye2": 2,
+    "Gills": 3,
+    "Intestine": 4,
+    "Upper_GI": 5,
+    "Blood": 6,
+    "Heart_GFP-": 7,
+    "Heart_diss": 8,
+    "Heart_GFP+": 9,
+    "Heart_chunk": 10,
+}
+ECTO = 0
+NEURAL_CREST = 1
+ENDO = 2
+MESO = 3
+ORGAN_GERM_LAYERS = {
+    "Brain": ECTO,
+    "Eye1": ECTO,
+    "Eye2": ECTO,
+    "Gills": NEURAL_CREST,
+    "Intestine": ENDO,
+    "Upper_GI": ENDO,
+    "Blood": MESO,
+    "Heart_GFP-": MESO,
+    "Heart_diss": MESO,
+    "Heart_GFP+": MESO,
+    "Heart_chunk": MESO,
+}
+
+root_cell_type = CellTypeTree(11)
+ecto_cell_type = CellTypeTree(12)
+root_cell_type.add_child(ecto_cell_type)
+brain_cell_type = CellTypeTree(0)
+left_eye_cell_type = CellTypeTree(1)
+right_eye_cell_type = CellTypeTree(2)
+ecto_cell_type.add_child(brain_cell_type)
+ecto_cell_type.add_child(left_eye_cell_type)
+ecto_cell_type.add_child(right_eye_cell_type)
+gills_cell_type = CellTypeTree(3)
+root_cell_type.add_child(gills_cell_type)
+endo_cell_type = CellTypeTree(13)
+root_cell_type.add_child(endo_cell_type)
+intestine_bulb_cell_type = CellTypeTree(4)
+post_intestine_cell_type = CellTypeTree(5)
+endo_cell_type.add_child(intestine_bulb_cell_type)
+endo_cell_type.add_child(post_intestine_cell_type)
+meso_cell_type = CellTypeTree(14)
+root_cell_type.add_child(meso_cell_type)
+blood_cell_type = CellTypeTree(6)
+h1_cell_type = CellTypeTree(7)
+h2_cell_type = CellTypeTree(8)
+h3_cell_type = CellTypeTree(9)
+h4_cell_type = CellTypeTree(10)
+endo_cell_type.add_child(blood_cell_type)
+endo_cell_type.add_child(h1_cell_type)
+endo_cell_type.add_child(h2_cell_type)
+endo_cell_type.add_child(h3_cell_type)
+endo_cell_type.add_child(h4_cell_type)
+
+for c in root_cell_type.get_descendants():
+    c.dist = 1
+gills_cell_type.dist = 2
+
+cell_type_leaves = [
+brain_cell_type,
+left_eye_cell_type,
+right_eye_cell_type,
+gills_cell_type,
+intestine_bulb_cell_type,
+post_intestine_cell_type,
+blood_cell_type,
+h1_cell_type,
+h2_cell_type,
+h3_cell_type,
+h4_cell_type,
+]
+cell_dist_mat = np.zeros((11,11))
+for i in range(11):
+    for j in range(11):
+        if i != j:
+            cell_dist_mat[i,j] = cell_type_leaves[i].get_distance(cell_type_leaves[j])
 
 THRES = 5
 COLLAPSE_DIST = 0.001
 
-#fitted_tree_file = "tmp_mount/analyze_gestalt/_output/min_abund_5/sum_states_10/extra_steps_0/tune_topology_pretuned.pkl"
-fitted_tree_file = "_output/gestalt_aws/ADR1_fitted.pkl"
-chronos_tree_file = "_output/gestalt_aws/ADR1_chronos_fitted.pkl"
+FISH = "ADR1"
+
+if FISH == "ADR1":
+    fitted_tree_file = "_output/gestalt_aws/ADR1_fitted.pkl"
+    chronos_tree_file = "_output/gestalt_aws/ADR1_chronos_fitted.pkl"
+    obs_file = "_output/gestalt_aws/ADR1_fish_data.pkl"
+elif FISH == "ADR2":
+#fitted_tree_file = "analyze_gestalt/_output/dome1_abund1/sum_states_10/extra_steps_0/tune_pen.pkl"
+#fitted_tree_file = "analyze_gestalt/_output/dome3_abund1/sum_states_10/extra_steps_0/tune_pen.pkl"
+    fitted_tree_file = "tmp_mount/analyze_gestalt/_output/ADR2_abund1/sum_states_10/extra_steps_0/tune_pen_hanging.pkl"
+    chronos_tree_file = "tmp_mount/analyze_gestalt/_output/ADR2_abund1/chronos_fitted.pkl"
+    obs_file = "tmp_mount/analyze_gestalt/_output/ADR2_abund1/fish_data_restrict_with_cell_types.pkl"
+#chronos_tree_file = "analyze_gestalt/_output/dome1_abund1/chronos_fitted.pkl"
+#chronos_tree_file = "analyze_gestalt/_output/dome3_abund1/chronos_fitted.pkl"
 #rand_tree_file = "tmp_mount/analyze_gestalt/_output/min_abund_5/parsimony_tree1.pkl"
-rand_tree_file = "_output/gestalt_aws/ADR1_parsimony_tree0.pkl"
-#obs_file = "tmp_mount/analyze_gestalt/_output/min_abund_0/fish_data.pkl"
-obs_file = "_output/gestalt_aws/ADR1_fish_data.pkl"
+#rand_tree_file = "_output/gestalt_aws/ADR1_parsimony_tree0.pkl"
+#obs_file = "analyze_gestalt/_output/dome1_abund1/fish_data_restrict.pkl"
+#obs_file = "analyze_gestalt/_output/dome3_abund1/fish_data_restrict.pkl"
 
 def get_allele_to_cell_states(obs_dict):
     # Create allele string to cell state
@@ -82,26 +178,31 @@ def plot_distance_to_abundance(
     """
     X_dists = []
     Y_abundance = []
-    scatter_X_dists = []
-    scatter_Y_abundance = []
-    for node in fitted_bifurc_tree.traverse():
-        dist = node.get_distance(res.fitted_bifurc_tree)
+    for node in fitted_bifurc_tree.traverse("preorder"):
+        if node.is_leaf():
+            continue
+        dist = node.get_distance(fitted_bifurc_tree)
         X_dists.append(dist)
-        tot_abundance = sum([leaf.abundance for leaf in node])
+        tot_abundance = float(sum([leaf.abundance for leaf in node]))
         Y_abundance.append(tot_abundance)
-        jitter = (np.random.rand() - 0.5) * 0.1
-        scatter_X_dists += [dist + jitter] * tot_abundance
-        jitter = (np.random.rand() - 0.5) * 0.5
-        scatter_Y_abundance += [tot_abundance + jitter] * tot_abundance
 
     if out_plot_file:
         pyplot.clf()
-        pyplot.scatter(
-                rand_jitter(scatter_X_dists, scaling_factor=0.002),
-                rand_jitter(np.log10(scatter_Y_abundance), scaling_factor=0.002))
+        sns.regplot(
+                np.array(X_dists),
+                np.log2(Y_abundance) - np.log2(np.max(Y_abundance)),
+                #x_jitter=0.01,
+                #y_jitter=0.01,
+                #robust=True,
+                lowess=True,
+                )
+        pyplot.xlabel("dist to root")
+        pyplot.ylabel("log_2(abundance)")
+        #pyplot.ylim(-1,1)
+        #pyplot.xlim(-0.05,0.85)
         pyplot.savefig(out_plot_file)
-    fitted_slope, _, fitted_corr, pval, _ = stats.linregress(X_dists, np.log10(Y_abundance))
-    print("mle tree", stats.linregress(X_dists, np.log10(Y_abundance)))
+    fitted_slope, _, fitted_corr, pval, _ = stats.linregress(X_dists, np.log2(Y_abundance))
+    print("mle tree", stats.linregress(X_dists, np.log2(Y_abundance)))
 
     rand_slopes = []
     rand_corr = []
@@ -124,6 +225,59 @@ def plot_distance_to_abundance(
     mean_rand_slope = np.mean(rand_slopes)
     print("p value away from random", np.mean([np.abs(s - mean_rand_slope) > np.abs(fitted_slope - mean_rand_slope) for s in rand_slopes]))
 
+def plot_distance_to_num_germ_layers(
+        fitted_bifurc_tree,
+        organ_dict,
+        rand_tree,
+        tot_time,
+        out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_cell_state.png"):
+    """
+    """
+    X_dists = []
+    Y_n_germ_layers = []
+    for node in fitted_bifurc_tree.traverse('postorder'):
+        dist = node.get_distance(fitted_bifurc_tree)
+        if node.is_leaf():
+            allele_str = node.allele_events_list_str
+            germ_layers = list(allele_to_cell_state[allele_str].keys())
+            node.add_feature("germ_layers", set([
+                ORGAN_GERM_LAYERS[organ_dict[c_state].replace("7B_", "")] for c_state in germ_layers]))
+        else:
+            node.add_feature("germ_layers", set())
+            for child in node.children:
+                node.germ_layers.update(child.germ_layers)
+
+    for node in fitted_bifurc_tree.traverse('postorder'):
+        #if node.is_leaf():
+        #    continue
+        if min([len(leaf.germ_layers) for leaf in node]) > 1:
+            continue
+        dist = node.get_distance(fitted_bifurc_tree)
+        X_dists.append(dist)
+        n_germ_layers = len(node.germ_layers)
+        Y_n_germ_layers.append(n_germ_layers)
+
+    if out_plot_file:
+        pyplot.clf()
+        data = pd.DataFrame.from_dict({
+            "x":np.array(X_dists),
+            "y":np.array(Y_n_germ_layers)})
+        sns.boxplot(
+                x="x", y="y", data=data,
+                order=[4,3,2,1],
+                orient='h',
+                linewidth=2.5)
+        sns.swarmplot(x="x", y="y", data=data,
+                order=[4,3,2,1],
+                orient='h',
+                color=".25")
+        pyplot.xlim(0,1)
+        pyplot.ylabel("Number of germ layers")
+        pyplot.xlabel("Distance from root")
+        pyplot.savefig(out_plot_file)
+    fitted_slope = stats.linregress(X_dists, Y_n_germ_layers)[0]
+    print("mle tree", stats.linregress(X_dists, Y_n_germ_layers))
+
 def plot_distance_to_num_cell_states(
         fitted_bifurc_tree,
         organ_dict,
@@ -135,14 +289,8 @@ def plot_distance_to_num_cell_states(
     Understand if distance to root is inversely related to number of
     different cell states in leaves
     """
-    X_dists = []
-    Y_n_cell_states = []
-    scatter_X_dists = []
-    scatter_Y_n_cell_states = []
-    colors = []
     for node in fitted_bifurc_tree.traverse('postorder'):
         dist = node.get_distance(fitted_bifurc_tree)
-        X_dists.append(dist)
         if node.is_leaf():
             allele_str = node.allele_events_list_str
             node.add_feature("cell_types", set(list(allele_to_cell_state[allele_str].keys())))
@@ -151,56 +299,38 @@ def plot_distance_to_num_cell_states(
             for child in node.children:
                 node.cell_types.update(child.cell_types)
 
-        n_cell_states = len(node.cell_types)
-        Y_n_cell_states.append(n_cell_states)
-        for c_state_str in node.cell_types:
-            colors.append(ORGAN_COLORS[organ_dict[c_state_str]])
-
-        jitter = (np.random.rand() - 0.5)  * 0.1
-        scatter_X_dists += [dist + jitter] #* n_cell_states
-        jitter = (np.random.rand() - 0.5) * 0.2
-        scatter_Y_n_cell_states += [n_cell_states + jitter] #* n_cell_states
+    X_dists = []
+    Y_n_cell_states = []
+    for node in fitted_bifurc_tree.traverse('postorder'):
+        #if node.is_leaf():
+        #    continue
+        if min([len(leaf.cell_types) for leaf in node]) > 1:
+            continue
+        dist = node.get_distance(fitted_bifurc_tree)
+        X_dists.append(dist)
+        Y_n_cell_states.append(len(node.cell_types))
 
     if out_plot_file:
+        print(out_plot_file)
         pyplot.clf()
-        sns.regplot(
-                rand_jitter(scatter_X_dists, scaling_factor=0.001),
-                rand_jitter(scatter_Y_n_cell_states, scaling_factor=0.001),
-                lowess=True)
-        pyplot.ylabel("Number of cell types")
+        data = pd.DataFrame.from_dict({
+            "x":np.array(X_dists),
+            "y":np.array(Y_n_cell_states)})
+        sns.boxplot(
+                x="x", y="y", data=data,
+                order=np.arange(11,0,-1),
+                orient='h',
+                linewidth=2.5)
+        sns.swarmplot(x="x", y="y", data=data,
+                order=np.arange(11,0,-1),
+                orient='h',
+                color=".25")
+        pyplot.xlim(0,1)
+        pyplot.ylabel("Number of descendant cell types")
         pyplot.xlabel("Distance from root")
         pyplot.savefig(out_plot_file)
     fitted_slope = stats.linregress(X_dists, Y_n_cell_states)[0]
     print("mle tree", stats.linregress(X_dists, Y_n_cell_states))
-
-    rand_slopes = []
-    rand_corr = []
-    rand_pvals = []
-    for _ in range(num_rands):
-        assign_rand_tree_lengths(rand_tree, tot_time)
-
-        X_dists = []
-        Y_n_cell_states = []
-        for node in rand_tree.traverse('postorder'):
-            dist = node.get_distance(rand_tree)
-            X_dists.append(dist)
-            if node.is_leaf():
-                allele_str = node.allele_events_list_str
-                node.add_feature("cell_types", set(list(allele_to_cell_state[allele_str].keys())))
-            else:
-                node.add_feature("cell_types", set())
-                for child in node.children:
-                    node.cell_types.update(child.cell_types)
-
-            n_cell_states = len(node.cell_types)
-            Y_n_cell_states.append(n_cell_states)
-        slope, _, corr, pval, _ = stats.linregress(X_dists, Y_n_cell_states)
-        rand_slopes.append(slope)
-        rand_corr.append(corr)
-        rand_pvals.append(pval)
-    print("rand tree", np.mean(rand_slopes), np.power(np.mean(rand_corr),2), np.mean(rand_pvals))
-    mean_rand_slope = np.mean(rand_slopes)
-    print("p value away from random", np.mean([np.abs(s - mean_rand_slope) > np.abs(fitted_slope - mean_rand_slope) for s in rand_slopes]))
 
 def plot_majority_cell_appearance_time(
         fitted_bifurc_tree,
@@ -267,7 +397,7 @@ def plot_majority_cell_appearance_time(
     for organ_time in sorted_organ_times:
         if organ_time[-1] > 50:
             print(
-                ORGAN_TRANSLATION[organ_dict[organ_time[0]]],
+                ORGAN_TRANSLATION[organ_dict[organ_time[0]].replace("7B_", "")],
                 organ_dict[organ_time[0]],
                 organ_time)
 
@@ -300,9 +430,10 @@ def plot_mds_by_cell_type_for_tree(
     cell_type_list = [
             cell_type for cell_type in cell_type_list
             if sum([m[1] for m in leaves_by_cell_type[cell_type]]) > min_abund]
+    cell_type_list = sorted(cell_type_list, key=lambda x: ORGAN_ORDER[x.replace("7B_", "")])
     if len(cell_type_list) <= min_cell_types:
-        print("NOPE")
-        return
+        #print("NOPE -- didnt find cell types")
+        return None, None
 
     X_matrix = np.zeros((len(cell_type_list), len(cell_type_list)))
     for idx0, cell_type0 in enumerate(cell_type_list):
@@ -317,22 +448,43 @@ def plot_mds_by_cell_type_for_tree(
                         if dist == 0:
                             dist = leaf0.dist
                         tot_dists += dist * abund0 * abund1
-                print(cell_type0, cell_type1, tot_dists/(tot_abund0 * tot_abund1), tot_abund0, tot_abund1)
+                #print(cell_type0, cell_type1, tot_dists/(tot_abund0 * tot_abund1), tot_abund0, tot_abund1)
                 X_matrix[idx0, idx1] = tot_dists/(tot_abund0 * tot_abund1)
                 X_matrix[idx1, idx0] = tot_dists/(tot_abund0 * tot_abund1)
 
-    mds = MDS(n_components=2, metric=False, max_iter=3000, eps=1e-9, dissimilarity="precomputed")
-    noise = np.random.rand(X_matrix.shape[0], X_matrix.shape[1]) * 0.02
-    X_matrix += (noise + noise.T)/2
-    pos = mds.fit(X_matrix).embedding_
-    pyplot.clf()
-    fig, ax = pyplot.subplots()
-    ax.scatter(pos[:, 0], pos[:, 1], color='turquoise', lw=0, label='MDS')
-    for i, cell_type in enumerate(cell_type_list):
-        ax.annotate(ORGAN_TRANSLATION[cell_type], (pos[i, 0], pos[i, 1]))
+    match_indices = [
+            ORGAN_ORDER[cell_type.replace("7B_", "")]
+            for cell_type in cell_type_list]
+    matching_cell_dist_mat = cell_dist_mat[match_indices,:][:,match_indices]
+    if (np.unique(matching_cell_dist_mat.flatten())).size > 1 and (np.unique(X_matrix.flatten())).size > 1:
+        print(spearmanr(matching_cell_dist_mat.flatten(), X_matrix.flatten()))
+        print(kendalltau(matching_cell_dist_mat.flatten(), X_matrix.flatten()))
+        return (kendalltau(matching_cell_dist_mat.flatten(), X_matrix.flatten()))
+    else:
+        return None, None
 
-    pyplot.savefig(out_plot_file)
-    print("MDS PLOT", out_plot_file)
+    #pyplot.clf()
+    #mask = np.ones(X_matrix.shape, dtype=bool)
+    #mask[np.triu_indices_from(mask)] = False
+    #cell_type_labels = [
+    #        ORGAN_TRANSLATION[cell_type.replace("7B_", "")]
+    #        for cell_type in cell_type_list]
+    #sns.heatmap(X_matrix, xticklabels=cell_type_labels, yticklabels=cell_type_labels, mask=mask)
+    #pyplot.savefig(out_plot_file)
+    #print("matrix PLOT", out_plot_file)
+
+    #mds = MDS(n_components=2, metric=False, max_iter=3000, eps=1e-9, dissimilarity="precomputed")
+    #noise = np.random.rand(X_matrix.shape[0], X_matrix.shape[1]) * 0.02
+    #X_matrix += (noise + noise.T)/2
+    #pos = mds.fit(X_matrix).embedding_
+    #pyplot.clf()
+    #fig, ax = pyplot.subplots()
+    #ax.scatter(pos[:, 0], pos[:, 1], color='turquoise', lw=0, label='MDS')
+    #for i, cell_type in enumerate(cell_type_list):
+    #    ax.annotate(ORGAN_TRANSLATION[cell_type.replace("7B_", "")], (pos[i, 0], pos[i, 1]))
+
+    #pyplot.savefig(out_plot_file)
+    #print("MDS PLOT", out_plot_file)
 
 def plot_mds_by_cell_type(
     fitted_bifurc_tree,
@@ -340,12 +492,11 @@ def plot_mds_by_cell_type(
     allele_to_cell_state,
     organ_dict,
     tot_time,
+    min_abund = 0,
     out_plot_prefix = "/Users/jeanfeng/Desktop/mds"):
     """
     plot mds with cell types based on MRCA distance
     """
-    assign_rand_tree_lengths(rand_tree, tot_time)
-
     ## MDS for fitted tree -- subtrees
     #for idx, node in enumerate(fitted_bifurc_tree.get_descendants()):
     #    node_dist = node.get_distance(fitted_bifurc_tree)
@@ -376,9 +527,12 @@ def plot_mds_by_cell_type(
         fitted_bifurc_tree,
         allele_to_cell_state,
         organ_dict,
+        min_abund=min_abund,
         out_plot_file = "%s_fitted.png" % out_plot_prefix)
 
     # Overall MDS for rand tree
+    assign_rand_tree_lengths(rand_tree, tot_time)
+
     plot_mds_by_cell_type_for_tree(
         rand_tree,
         allele_to_cell_state,
@@ -483,10 +637,10 @@ def plot_branch_len_time(
 
     if out_plot_file:
         pyplot.clf()
-        pyplot.scatter(
-                rand_jitter(X_dist, scaling_factor=0.002),
-                rand_jitter(Y_branch_len, scaling_factor=0.002),
-                s=10)
+        sns.regplot(
+                np.array(X_dist),
+                np.array(Y_branch_len),
+                lowess=True)
         pyplot.savefig(out_plot_file)
     fitted_slope = stats.linregress(X_dist, Y_branch_len)[0]
     print("mle tree", stats.linregress(X_dist, Y_branch_len))
@@ -559,6 +713,7 @@ def plot_gestalt_tree(
         allele_to_cell_state,
         cell_state_dict,
         out_plot_file):
+    from ete3 import NodeStyle, SeqMotifFace
     fitted_bifurc_tree = _expand_leaved_tree(fitted_bifurc_tree, allele_to_cell_state)
 
     for l in fitted_bifurc_tree:
@@ -613,7 +768,7 @@ def plot_gestalt_tree(
 
     legend_colors = {}
     for organ_key, color in ORGAN_COLORS.items():
-        text = ORGAN_TRANSLATION[organ_key]
+        text = ORGAN_TRANSLATION[organ_key.replace("7B_", "")]
         label_dict = {
             "text": text,
             "color": "gray",
@@ -640,55 +795,110 @@ organ_dict = obs_dict["organ_dict"]
 allele_to_cell_state, cell_state_dict = get_allele_to_cell_states(obs_dict)
 
 with open(fitted_tree_file, "rb") as f:
-    res = six.moves.cPickle.load(f)[0]["best_res"]
-    print(res)
+    if FISH == "ADR1":
+        res = six.moves.cPickle.load(f)[0]["best_res"]
+    elif FISH == "ADR2":
+        res = six.moves.cPickle.load(f)["final_fit"]
 
 with open(chronos_tree_file, "rb") as f:
     chronos_tree = six.moves.cPickle.load(f)[0]["fitted_tree"]
-    print(chronos_tree)
+    #print(chronos_tree)
 
-with open(rand_tree_file, "rb") as f:
-    rand_tree = six.moves.cPickle.load(f)["tree"]
+rand_tree = None
+#with open(rand_tree_file, "rb") as f:
+#    rand_tree = six.moves.cPickle.load(f)["tree"]
 
 print("plot mds")
-plot_mds_by_cell_type(
-    res.fitted_bifurc_tree,
-    rand_tree,
-    allele_to_cell_state,
-    organ_dict,
-    tot_time,
-    out_plot_prefix = "/Users/jeanfeng/Desktop/mds")
-plot_mds_by_cell_type_for_tree(
-    chronos_tree,
-    allele_to_cell_state,
-    organ_dict,
-    out_plot_file = "/Users/jeanfeng/Desktop/mds_chronos_fitted.png")
+#plot_mds_by_cell_type(
+#    res.fitted_bifurc_tree,
+#    rand_tree,
+#    allele_to_cell_state,
+#    organ_dict,
+#    tot_time,
+#    min_abund=5,
+#    out_plot_prefix = "/Users/jeanfeng/Desktop/dist_matrix_ADR2")
+#print(len(res.fitted_bifurc_tree))
+#tot_leaves = 0
+#spine_children_ids = res.fitted_bifurc_tree.spine_children
+#print(spine_children_ids)
+#idx = 0
+#all_corrs = []
+#for i, spine_id in enumerate(res.fitted_bifurc_tree.spine_children[1:]):
+#    spine_node = res.fitted_bifurc_tree.search_nodes(node_id=spine_id)[0]
+#    nonspine_children = [c for c in spine_node.get_children() if c.node_id not in spine_children_ids]
+#    for nonspine_child in nonspine_children:
+#        tot_leaves += len(nonspine_child)
+#        #print("NON SPINE CHILD", nonspine_child.node_id)
+#        #print([c.node_id for c in nonspine_child.get_children()])
+#        corr = plot_mds_by_cell_type_for_tree(
+#            nonspine_child,
+#            allele_to_cell_state,
+#            organ_dict,
+#            min_abund=10,
+#            min_cell_types=5,
+#            out_plot_file= "/Users/jeanfeng/Desktop/dist_matrix_ADR2_%d.png" % idx)
+#        if corr[0] is not None:
+#            all_corrs.append(corr[0])
+#        idx += 1
+#print(tot_leaves)
+#print("mle", np.mean(all_corrs))
+#
+#all_corrs = []
+#for i, chronos_child in enumerate(chronos_tree.get_children()):
+#    corr = plot_mds_by_cell_type_for_tree(
+#        chronos_child,
+#        allele_to_cell_state,
+#        organ_dict,
+#        min_abund=5,
+#        min_cell_types=3,
+#        out_plot_file = "/Users/jeanfeng/Desktop/dist_matrix_chronos_ADR2_%d.png" % i)
+#    if corr[0] is not None:
+#        all_corrs.append(corr[0])
+#print("chrono", np.mean(all_corrs))
 #print("distance to abundance")
 #plot_distance_to_abundance(
 #    res.fitted_bifurc_tree,
 #    rand_tree,
 #    tot_time,
-#    out_plot_file = None, # "/Users/jeanfeng/Desktop/scatter_dist_to_abundance.png",
+#    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_abundance.png",
 #    num_rands = 2000)
 #print("distance to number of descendant cell states")
+plot_distance_to_num_germ_layers(
+    res.fitted_bifurc_tree,
+    organ_dict,
+    rand_tree,
+    tot_time,
+    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_germ_%s.png" % FISH)
+plot_distance_to_num_germ_layers(
+    chronos_tree,
+    organ_dict,
+    rand_tree,
+    tot_time,
+    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_germ_chronos_%s.png" % FISH)
 plot_distance_to_num_cell_states(
     res.fitted_bifurc_tree,
     organ_dict,
     rand_tree,
     tot_time,
-    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_cell_state_mle.png")
+    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_cell_state_%s.png" % FISH)
 plot_distance_to_num_cell_states(
     chronos_tree,
     organ_dict,
     rand_tree,
     tot_time,
-    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_cell_state_chronos.png")
+    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_cell_state_chronos_%s.png" % FISH)
 #print("plot branch length distribution")
 #plot_branch_len_time(
 #    res.fitted_bifurc_tree,
 #    rand_tree,
 #    tot_time,
-#    out_plot_file=None, #"/Users/jeanfeng/Desktop/scatter_dist_to_branch_len.png",
+#    out_plot_file="/Users/jeanfeng/Desktop/scatter_dist_to_branch_len.png",
+#    num_rands = 2000)
+#plot_branch_len_time(
+#    chronos_tree,
+#    rand_tree,
+#    tot_time,
+#    out_plot_file="/Users/jeanfeng/Desktop/scatter_dist_to_branch_len_chronos.png",
 #    num_rands = 2000)
 #plot_gestalt_tree(
 #    chronos_tree,
