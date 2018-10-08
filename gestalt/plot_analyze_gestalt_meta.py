@@ -13,6 +13,7 @@ from scipy.stats import rankdata
 Create distance matrices between cell types in adult fish 1 and 2
 Also calculates the correlation between the distance matrices
 """
+
 def get_allele_to_cell_states(obs_dict):
     # Create allele string to cell state
     allele_to_cell_state = {}
@@ -30,19 +31,6 @@ def get_allele_to_cell_states(obs_dict):
 
     return allele_to_cell_state, cell_state_dict
 
-ORGAN_TRANSLATION = {
-    "Brain": "Brain",
-    "Eye1": "Left eye",
-    "Eye2": "Right eye",
-    "Gills": "Gills",
-    "Intestine": "Intestinal bulb",
-    "Upper_GI": "Post intestine",
-    "Blood": "Blood",
-    "Heart_chunk": "Heart",
-    "Heart_diss": "DHC",
-    "Heart_GFP-": "NC",
-    "Heart_GFP+": "Cardiomyocytes",
-}
 ORGAN_ORDER = {
     "Brain": 0,
     "Eye1": 1,
@@ -172,18 +160,22 @@ def load_fish(FISH, do_chronos=False):
     return fitted_bifurc_tree, obs_dict
 
 
-fishies = ["ADR1", "ADR2"]
-do_chronoses = [True, False]
-for do_chronos in do_chronoses:
-    sym_X_matrices = []
-    for fish in fishies:
-        tree, obs_dict = load_fish(fish, do_chronos=do_chronos)
-        _, sym_X_matrix = create_distance_matrix(tree, obs_dict)
-        out_plot_file = "_output/sym_heat_%s%s.png" % (fish, "_chronos" if do_chronos else "")
-        plot_distance_matrix(sym_X_matrix, out_plot_file)
-        print(sym_X_matrix)
-        sym_X_matrices.append(sym_X_matrix)
+def main(args=sys.argv[1:]):
+    fishies = ["ADR1", "ADR2"]
+    do_chronoses = [True, False]
+    for do_chronos in do_chronoses:
+        sym_X_matrices = []
+        for fish in fishies:
+            tree, obs_dict = load_fish(fish, do_chronos=do_chronos)
+            _, sym_X_matrix = create_distance_matrix(tree, obs_dict)
+            out_plot_file = "_output/sym_heat_%s%s.png" % (fish, "_chronos" if do_chronos else "")
+            plot_distance_matrix(sym_X_matrix, out_plot_file)
+            print(sym_X_matrix)
+            sym_X_matrices.append(sym_X_matrix)
+    
+        triu_indices = np.triu_indices(NUM_ORGANS, k=1)
+        print("DO CHRON", do_chronos)
+        print(scipy.stats.pearsonr(sym_X_matrices[0][triu_indices], sym_X_matrices[1][triu_indices]))
 
-    triu_indices = np.triu_indices(NUM_ORGANS, k=1)
-    print("DO CHRON", do_chronos)
-    print(scipy.stats.pearsonr(sym_X_matrices[0][triu_indices], sym_X_matrices[1][triu_indices]))
+if __name__ == "__main__":
+    main()
