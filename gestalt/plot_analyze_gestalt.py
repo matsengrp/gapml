@@ -138,17 +138,13 @@ if FISH == "ADR1":
     chronos_tree_file = "_output/gestalt_aws/ADR1_chronos_fitted.pkl"
     obs_file = "_output/gestalt_aws/ADR1_fish_data.pkl"
 elif FISH == "ADR2":
-#fitted_tree_file = "analyze_gestalt/_output/dome1_abund1/sum_states_10/extra_steps_0/tune_pen.pkl"
-#fitted_tree_file = "analyze_gestalt/_output/dome3_abund1/sum_states_10/extra_steps_0/tune_pen.pkl"
     fitted_tree_file = "tmp_mount/analyze_gestalt/_output/ADR2_abund1/sum_states_10/extra_steps_0/tune_pen_hanging.pkl"
     chronos_tree_file = "tmp_mount/analyze_gestalt/_output/ADR2_abund1/chronos_fitted.pkl"
     obs_file = "tmp_mount/analyze_gestalt/_output/ADR2_abund1/fish_data_restrict_with_cell_types.pkl"
-#chronos_tree_file = "analyze_gestalt/_output/dome1_abund1/chronos_fitted.pkl"
-#chronos_tree_file = "analyze_gestalt/_output/dome3_abund1/chronos_fitted.pkl"
-#rand_tree_file = "tmp_mount/analyze_gestalt/_output/min_abund_5/parsimony_tree1.pkl"
-#rand_tree_file = "_output/gestalt_aws/ADR1_parsimony_tree0.pkl"
-#obs_file = "analyze_gestalt/_output/dome1_abund1/fish_data_restrict.pkl"
-#obs_file = "analyze_gestalt/_output/dome3_abund1/fish_data_restrict.pkl"
+elif FISH.startswith("dome"):
+    fitted_tree_file = "tmp_mount/analyze_gestalt/_output/%s_abund1/sum_states_10/extra_steps_0/tune_pen.pkl" % FISH
+    chronos_tree_file = "tmp_mount/analyze_gestalt/_output/%s_abund1/chronos_fitted.pkl" % FISH
+    obs_file = "tmp_mount/analyze_gestalt/_output/%s_abund1/fish_data_restrict.pkl" % FISH
 
 def get_allele_to_cell_states(obs_dict):
     # Create allele string to cell state
@@ -169,10 +165,8 @@ def get_allele_to_cell_states(obs_dict):
 
 def plot_distance_to_abundance(
         fitted_bifurc_tree,
-        rand_tree,
         tot_time,
-        out_plot_file="/Users/jeanfeng/Desktop/scatter_dist_to_abundance.png",
-        num_rands = 5):
+        out_plot_file="/Users/jeanfeng/Desktop/scatter_dist_to_abundance.png"):
     """
     Understand if distance to root is inversely related to total abundance
     """
@@ -181,49 +175,27 @@ def plot_distance_to_abundance(
     for node in fitted_bifurc_tree.traverse("preorder"):
         if node.is_leaf():
             continue
+        if min([leaf.abundance for leaf in node]) > 1:
+            continue
         dist = node.get_distance(fitted_bifurc_tree)
         X_dists.append(dist)
         tot_abundance = float(sum([leaf.abundance for leaf in node]))
         Y_abundance.append(tot_abundance)
 
     if out_plot_file:
+        print(out_plot_file)
         pyplot.clf()
         sns.regplot(
                 np.array(X_dists),
                 np.log2(Y_abundance) - np.log2(np.max(Y_abundance)),
-                #x_jitter=0.01,
-                #y_jitter=0.01,
-                #robust=True,
-                lowess=True,
+                robust=True,
                 )
         pyplot.xlabel("dist to root")
-        pyplot.ylabel("log_2(abundance)")
-        #pyplot.ylim(-1,1)
-        #pyplot.xlim(-0.05,0.85)
+        pyplot.ylabel("log_2(abundance/max_abundance)")
+        pyplot.xlim(-0.05,1)
         pyplot.savefig(out_plot_file)
     fitted_slope, _, fitted_corr, pval, _ = stats.linregress(X_dists, np.log2(Y_abundance))
     print("mle tree", stats.linregress(X_dists, np.log2(Y_abundance)))
-
-    rand_slopes = []
-    rand_corr = []
-    rand_pvals = []
-    for _ in range(num_rands):
-        assign_rand_tree_lengths(rand_tree, tot_time)
-
-        X_dists = []
-        Y_abundance = []
-        for node in rand_tree.traverse():
-            dist = node.get_distance(rand_tree)
-            X_dists.append(dist)
-            tot_abundance = sum([leaf.abundance for leaf in node])
-            Y_abundance.append(tot_abundance)
-        slope, _, corr, pval, _ = stats.linregress(X_dists, np.log10(Y_abundance))
-        rand_slopes.append(slope)
-        rand_corr.append(corr)
-        rand_pvals.append(pval)
-    print("rand tree", np.mean(rand_slopes), np.power(np.mean(rand_corr),2), np.mean(rand_pvals))
-    mean_rand_slope = np.mean(rand_slopes)
-    print("p value away from random", np.mean([np.abs(s - mean_rand_slope) > np.abs(fitted_slope - mean_rand_slope) for s in rand_slopes]))
 
 def plot_distance_to_num_germ_layers(
         fitted_bifurc_tree,
@@ -248,8 +220,8 @@ def plot_distance_to_num_germ_layers(
                 node.germ_layers.update(child.germ_layers)
 
     for node in fitted_bifurc_tree.traverse('postorder'):
-        #if node.is_leaf():
-        #    continue
+        if node.is_leaf():
+            continue
         if min([len(leaf.germ_layers) for leaf in node]) > 1:
             continue
         dist = node.get_distance(fitted_bifurc_tree)
@@ -258,6 +230,7 @@ def plot_distance_to_num_germ_layers(
         Y_n_germ_layers.append(n_germ_layers)
 
     if out_plot_file:
+        print(out_plot_file)
         pyplot.clf()
         data = pd.DataFrame.from_dict({
             "x":np.array(X_dists),
@@ -275,8 +248,7 @@ def plot_distance_to_num_germ_layers(
         pyplot.ylabel("Number of germ layers")
         pyplot.xlabel("Distance from root")
         pyplot.savefig(out_plot_file)
-    fitted_slope = stats.linregress(X_dists, Y_n_germ_layers)[0]
-    print("mle tree", stats.linregress(X_dists, Y_n_germ_layers))
+    print(stats.linregress(X_dists, Y_n_germ_layers))
 
 def plot_distance_to_num_cell_states(
         fitted_bifurc_tree,
@@ -302,8 +274,8 @@ def plot_distance_to_num_cell_states(
     X_dists = []
     Y_n_cell_states = []
     for node in fitted_bifurc_tree.traverse('postorder'):
-        #if node.is_leaf():
-        #    continue
+        if node.is_leaf():
+            continue
         if min([len(leaf.cell_types) for leaf in node]) > 1:
             continue
         dist = node.get_distance(fitted_bifurc_tree)
@@ -329,8 +301,7 @@ def plot_distance_to_num_cell_states(
         pyplot.ylabel("Number of descendant cell types")
         pyplot.xlabel("Distance from root")
         pyplot.savefig(out_plot_file)
-    fitted_slope = stats.linregress(X_dists, Y_n_cell_states)[0]
-    print("mle tree", stats.linregress(X_dists, Y_n_cell_states))
+    print(stats.linregress(X_dists, Y_n_cell_states))
 
 def plot_majority_cell_appearance_time(
         fitted_bifurc_tree,
@@ -620,51 +591,32 @@ def plot_tsne_by_taxon(
 
 def plot_branch_len_time(
     fitted_bifurc_tree,
-    rand_tree,
     tot_time,
-    out_plot_file,
-    num_rands = 5):
+    out_plot_file):
     """
     Plot fitted time vs branch length
     """
     X_dist = []
     Y_branch_len = []
+    leaf_branch_lens = []
     for node in fitted_bifurc_tree.get_descendants():
         if not node.is_leaf():
             node_dist = node.get_distance(fitted_bifurc_tree)
             X_dist.append(node_dist)
             Y_branch_len.append(node.dist)
+        else:
+            leaf_branch_lens.append(node.dist)
 
     if out_plot_file:
+        print(out_plot_file)
         pyplot.clf()
         sns.regplot(
                 np.array(X_dist),
                 np.array(Y_branch_len),
                 lowess=True)
         pyplot.savefig(out_plot_file)
-    fitted_slope = stats.linregress(X_dist, Y_branch_len)[0]
-    print("mle tree", stats.linregress(X_dist, Y_branch_len))
-
-    rand_slopes = []
-    rand_corr = []
-    rand_pvals = []
-    for _ in range(num_rands):
-        assign_rand_tree_lengths(rand_tree, tot_time)
-
-        X_dist = []
-        Y_branch_len = []
-        for node in rand_tree.get_descendants():
-            if not node.is_leaf():
-                dist = node.get_distance(rand_tree)
-                X_dist.append(dist)
-                Y_branch_len.append(node.dist)
-        slope, _, corr, pval, _ = stats.linregress(X_dist, Y_branch_len)
-        rand_slopes.append(slope)
-        rand_corr.append(corr)
-        rand_pvals.append(pval)
-    print("rand tree", np.mean(rand_slopes), np.power(np.mean(rand_corr),2), np.mean(rand_pvals))
-    mean_rand_slope = np.mean(rand_slopes)
-    print("p value away from random", np.mean([np.abs(s - mean_rand_slope) > np.abs(fitted_slope - mean_rand_slope) for s in rand_slopes]))
+    print("branch len vs node time", stats.linregress(X_dist, Y_branch_len))
+    print("leaf branch lens mean", np.mean(leaf_branch_lens), np.min(leaf_branch_lens), np.max(leaf_branch_lens))
 
 def _expand_leaved_tree(fitted_bifurc_tree, allele_to_cell_state, default_dist_scale = 0, min_abund_thres = 0):
     """
@@ -797,16 +749,11 @@ allele_to_cell_state, cell_state_dict = get_allele_to_cell_states(obs_dict)
 with open(fitted_tree_file, "rb") as f:
     if FISH == "ADR1":
         res = six.moves.cPickle.load(f)[0]["best_res"]
-    elif FISH == "ADR2":
+    elif FISH == "ADR2" or FISH.startswith("dome"):
         res = six.moves.cPickle.load(f)["final_fit"]
 
 with open(chronos_tree_file, "rb") as f:
     chronos_tree = six.moves.cPickle.load(f)[0]["fitted_tree"]
-    #print(chronos_tree)
-
-rand_tree = None
-#with open(rand_tree_file, "rb") as f:
-#    rand_tree = six.moves.cPickle.load(f)["tree"]
 
 print("plot mds")
 #plot_mds_by_cell_type(
@@ -858,42 +805,42 @@ print("plot mds")
 #print("distance to abundance")
 #plot_distance_to_abundance(
 #    res.fitted_bifurc_tree,
-#    rand_tree,
 #    tot_time,
-#    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_abundance.png",
-#    num_rands = 2000)
+#    out_plot_file = "/Users/jeanfeng/Documents/Research/gestalt/gestaltamania-tex/manuscript/images/scatter_dist_to_abundance_%s.png" % FISH)
+#plot_distance_to_abundance(
+#    chronos_tree,
+#    tot_time,
+#    out_plot_file = "/Users/jeanfeng/Documents/Research/gestalt/gestaltamania-tex/manuscript/images/scatter_dist_to_abundance_chronos_%s.png" % FISH)
 #print("distance to number of descendant cell states")
-plot_distance_to_num_germ_layers(
-    res.fitted_bifurc_tree,
-    organ_dict,
-    rand_tree,
-    tot_time,
-    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_germ_%s.png" % FISH)
-plot_distance_to_num_germ_layers(
-    chronos_tree,
-    organ_dict,
-    rand_tree,
-    tot_time,
-    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_germ_chronos_%s.png" % FISH)
-plot_distance_to_num_cell_states(
-    res.fitted_bifurc_tree,
-    organ_dict,
-    rand_tree,
-    tot_time,
-    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_cell_state_%s.png" % FISH)
-plot_distance_to_num_cell_states(
-    chronos_tree,
-    organ_dict,
-    rand_tree,
-    tot_time,
-    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_cell_state_chronos_%s.png" % FISH)
-#print("plot branch length distribution")
-#plot_branch_len_time(
+#plot_distance_to_num_germ_layers(
 #    res.fitted_bifurc_tree,
+#    organ_dict,
 #    rand_tree,
 #    tot_time,
-#    out_plot_file="/Users/jeanfeng/Desktop/scatter_dist_to_branch_len.png",
-#    num_rands = 2000)
+#    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_germ_%s.png" % FISH)
+#plot_distance_to_num_germ_layers(
+#    chronos_tree,
+#    organ_dict,
+#    rand_tree,
+#    tot_time,
+#    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_germ_chronos_%s.png" % FISH)
+#plot_distance_to_num_cell_states(
+#    res.fitted_bifurc_tree,
+#    organ_dict,
+#    rand_tree,
+#    tot_time,
+#    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_cell_state_%s.png" % FISH)
+#plot_distance_to_num_cell_states(
+#    chronos_tree,
+#    organ_dict,
+#    rand_tree,
+#    tot_time,
+#    out_plot_file = "/Users/jeanfeng/Desktop/scatter_dist_to_cell_state_chronos_%s.png" % FISH)
+#print("plot branch length distribution")
+plot_branch_len_time(
+    res.fitted_bifurc_tree,
+    tot_time,
+    out_plot_file="/Users/jeanfeng/Desktop/scatter_dist_to_branch_len.png")
 #plot_branch_len_time(
 #    chronos_tree,
 #    rand_tree,
