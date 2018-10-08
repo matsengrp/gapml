@@ -33,7 +33,7 @@ def parse_args(args):
     parser.add_argument(
         '--fishies',
         type=str,
-        default="dome1_abund1,dome3_abund1")
+        default="dome1_abund1,dome3_abund1,dome5_abund1,dome8_abund1")
     parser.add_argument(
         '--out-plot-template',
         type=str,
@@ -82,8 +82,7 @@ def plot_distance_to_abundance(
         sns.regplot(
                 np.array(X_dists),
                 np.log2(Y_abundance) - np.log2(np.max(Y_abundance)),
-                robust=True,
-                )
+                robust=True)
         pyplot.xlabel("dist to root")
         pyplot.ylabel("log_2(abundance/max_abundance)")
         pyplot.xlim(-0.05,1)
@@ -93,7 +92,7 @@ def plot_distance_to_abundance(
 
 def main(args=sys.argv[1:]):
     args = parse_args(args)
-    do_chronoses = [True, False]
+    do_chronoses = [False]
     for do_chronos in do_chronoses:
         print("DO CHRON", do_chronos)
         for fish in args.fishies:

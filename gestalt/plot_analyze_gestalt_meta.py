@@ -1,3 +1,4 @@
+import sys
 import matplotlib
 matplotlib.use('Agg')
 import seaborn as sns
@@ -172,7 +173,7 @@ def main(args=sys.argv[1:]):
             plot_distance_matrix(sym_X_matrix, out_plot_file)
             print(sym_X_matrix)
             sym_X_matrices.append(sym_X_matrix)
-    
+
         triu_indices = np.triu_indices(NUM_ORGANS, k=1)
         print("DO CHRON", do_chronos)
         print(scipy.stats.pearsonr(sym_X_matrices[0][triu_indices], sym_X_matrices[1][triu_indices]))
