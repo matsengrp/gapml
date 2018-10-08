@@ -208,7 +208,7 @@ def read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
             "trim_long_poissons": 2.5 * np.ones(2),
             "insert_zero_prob": np.array([0.5]),
             "insert_poisson": np.array([0.5]),
-            "double_cut_weight": np.array([0.1]),
+            "double_cut_weight": np.array([0.4]),
             "tot_time": 1,
             "tot_time_extra": 1.3}
     # Use warm-start info if available

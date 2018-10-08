@@ -26,15 +26,17 @@ def parse_args(args):
     parser.add_argument(
         '--folder',
         type=str,
-        default="tmp_mount/analyze_gestalt")
+        default="analyze_gestalt")
     parser.add_argument(
         '--fishies',
         type=str,
-        default="30hpf1_abund2,30hpf2_abund1,30hpf3_abund2,30hpf4_abund1,30hpf5_abund1")
+        default="30hpf1_abund2,30hpf2_abund1,30hpf3_abund2,30hpf4_abund1,30hpf5_abund1,30hpf6_abund1,30hpf7_abund1,30hpf8_abund1")
+        #default="dome1_abund1,dome3_abund1,dome5_abund1,dome8_abund1")
     parser.add_argument(
         '--out-plot-file',
         type=str,
-        default="_output/target_lam_compare.png")
+        default="_output/target_lam_compare_30hpf.png")
+        #default="_output/target_lam_compare_dome.png")
     parser.set_defaults()
     args = parser.parse_args(args)
     args.fishies = parse_comma_str(args.fishies, str)
@@ -80,6 +82,7 @@ def main(args=sys.argv[1:]):
 
 
     for key, param_vals in fitted_params.items():
+        print("fitting method", key)
         all_corrs = []
         for idx1, fit_param1 in enumerate(param_vals):
             for fit_param2 in param_vals[idx1 + 1:]:

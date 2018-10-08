@@ -87,7 +87,11 @@ def plot_distance_to_abundance(
         pyplot.ylabel("log_2(abundance/max_abundance)")
         pyplot.xlim(-0.05,1)
         pyplot.savefig(out_plot_file)
-    print(stats.linregress(X_dists, np.log2(Y_abundance)))
+    slope, _, _, pval, se = stats.linregress(X_dists, np.log2(Y_abundance))
+    print("estimated slope", slope, "pval", pval)
+    print("95 CI", slope - 1.96 * se, slope + 1.96 * se)
+    print("estimated percent drop in 1/12 time units", np.power(2., slope/12))
+    print("95 CI", np.power(2.0, (slope - 1.96 * se)/12), np.power(2., (slope + 1.96 * se)/12))
 
 
 def main(args=sys.argv[1:]):
@@ -96,6 +100,7 @@ def main(args=sys.argv[1:]):
     for do_chronos in do_chronoses:
         print("DO CHRON", do_chronos)
         for fish in args.fishies:
+            print(fish)
             fitted_bifurc_tree, obs_data_dict = load_data(args, fish, do_chronos)
             plot_distance_to_abundance(
                 fitted_bifurc_tree,
