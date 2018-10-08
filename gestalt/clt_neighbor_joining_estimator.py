@@ -63,12 +63,14 @@ class CLTNeighborJoiningEstimator(CLTEstimator):
         for leaf in root_clt:
             leaf_parent = leaf.up
             leaf.detach()
-            leaf_parent.add_child(CellLineageTree(
+            new_leaf = CellLineageTree(
                     self.obs_leaves[int(leaf.name)].allele_list,
                     self.obs_leaves[int(leaf.name)].allele_events_list,
                     self.obs_leaves[int(leaf.name)].cell_state,
                     dist=leaf.dist,
-                    abundance=self.obs_leaves[int(leaf.name)].abundance))
+                    abundance=self.obs_leaves[int(leaf.name)].abundance)
+            new_leaf.add_feature('leaf_key', new_leaf.allele_events_list_str)
+            leaf_parent.add_child(new_leaf)
         logging.info("Done with fitting tree using neighbor joining")
         logging.info(fitted_tree.get_ascii(attributes=["dist"]))
 
