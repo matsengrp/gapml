@@ -169,7 +169,7 @@ def process_observed_seq_format7B(
             abundance=abundance)
     return obs
 
-def parse_reads_file_format_GSE(file_name,
+def parse_reads_file_format_GSE17(file_name,
                               bcode_meta: BarcodeMetadata,
                               bcode_min_pos: int,
                               max_read: int = None):
@@ -180,29 +180,37 @@ def parse_reads_file_format_GSE(file_name,
     This means for inter-target events, it will appear multiple times on that row.
     e.g. target1 33D+234, target2 33E+234
     """
-    cell_state = CellState(categorical=CellTypeTree(0, rate=None))
-    cell_states_dict = {"single_state": cell_state}
+    num_organs = 0
+    cell_states_dict = dict()
     all_alleles = []
     observed_alleles = dict()
     with open(file_name, "r") as f:
         reader = csv.reader(f, delimiter='\t')
         header = next(reader)
         for i, row in enumerate(reader):
-            abundance = int(row[2])
-            obs_aligned_seq = process_observed_seq_format7B(
-                row[-1].split("_"),
-                cell_state,
-                bcode_meta,
-                bcode_min_pos,
-                abundance=abundance)
-            obs_key = str(obs_aligned_seq)
-            if obs_key not in observed_alleles:
-                observed_alleles[obs_key] = obs_aligned_seq
-            else:
-                obs = observed_alleles[obs_key]
-                obs.abundance += abundance
-            if max_read is not None and len(all_alleles) == max_read:
-                break
+            organ_str = row[1].replace("17_", "")
+            if organ_str not in CONTROL_ORGANS:
+                # First process the organ
+                if organ_str not in cell_states_dict:
+                    cell_state = CellState(categorical=CellTypeTree(num_organs, rate=None))
+                    cell_states_dict[organ_str] = cell_state
+                    num_organs += 1
+                cell_state = cell_states_dict[organ_str]
+                abundance = int(row[2])
+                obs_aligned_seq = process_observed_seq_format7B(
+                    row[-1].split("_"),
+                    cell_state,
+                    bcode_meta,
+                    bcode_min_pos,
+                    abundance=abundance)
+                obs_key = str(obs_aligned_seq)
+                if obs_key not in observed_alleles:
+                    observed_alleles[obs_key] = obs_aligned_seq
+                else:
+                    obs = observed_alleles[obs_key]
+                    obs.abundance += abundance
+                if max_read is not None and len(all_alleles) == max_read:
+                    break
 
     obs_alleles_list = list(observed_alleles.values())
     organ_dict = {}
@@ -360,7 +368,7 @@ def main():
             bcode_meta,
             args.bcode_min_pos - args.bcode_pad_length)
     elif args.reads_format == 1:
-        obs_leaves_cell_state, organ_dict = parse_reads_file_format_GSE(
+        obs_leaves_cell_state, organ_dict = parse_reads_file_format_GSE17(
             args.reads_file,
             bcode_meta,
             args.bcode_min_pos - args.bcode_pad_length)
