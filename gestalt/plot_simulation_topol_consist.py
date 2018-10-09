@@ -19,19 +19,19 @@ def parse_args(args):
     parser.add_argument(
         '--true-model-file-template',
         type=str,
-        default="%s/_output/model_seed%d/%d/%s/true_model.pkl")
+        default="_output/model_seed%d/%d/%s/true_model.pkl")
     parser.add_argument(
         '--mle-file-template',
         type=str,
-        default="%s/_output/model_seed%d/%d/%s/num_barcodes%d/sum_states_10/extra_steps_1/tune_fitted.pkl")
+        default="_output/model_seed%d/%d/%s/num_barcodes%d/sum_states_10/extra_steps_1/tune_fitted.pkl")
     parser.add_argument(
         '--chronos-file-template',
         type=str,
-        default="%s/_output/model_seed%d/%d/%s/num_barcodes%d/chronos_fitted.pkl")
+        default="_output/model_seed%d/%d/%s/num_barcodes%d/chronos_fitted.pkl")
     parser.add_argument(
         '--nj-file-template',
         type=str,
-        default="%s/_output/model_seed%d/%d/%s/num_barcodes%d/nj_fitted.pkl")
+        default="_output/model_seed%d/%d/%s/num_barcodes%d/nj_fitted.pkl")
     parser.add_argument(
         '--simulation-folder',
         type=str,
@@ -76,11 +76,11 @@ def get_true_model(
         seed,
         n_bcodes,
         measurer_classes=[BHVDistanceMeasurer, InternalCorrMeasurer]):
-    file_name = args.true_model_file_template % (
-            args.simulation_folder,
-            args.model_seed,
-            seed,
-            args.growth_stage)
+    file_name = os.path.join(args.simulation_folder,
+            args.true_model_file_template % (
+                args.model_seed,
+                seed,
+                args.growth_stage))
     model_params, assessor = file_readers.read_true_model(
             file_name,
             n_bcodes,
@@ -89,12 +89,13 @@ def get_true_model(
     return model_params, assessor
 
 def get_mle_result(args, seed, n_bcodes):
-    file_name = args.mle_file_template % (
+    file_name = os.path.join(
             args.simulation_folder,
-            args.model_seed,
-            seed,
-            args.growth_stage,
-            n_bcodes)
+            args.mle_file_template % (
+                args.model_seed,
+                seed,
+                args.growth_stage,
+                n_bcodes))
     print(file_name)
     try:
         with open(file_name, "rb") as f:
@@ -104,12 +105,13 @@ def get_mle_result(args, seed, n_bcodes):
     return mle_model.model_params_dict, mle_model.fitted_bifurc_tree
 
 def get_neighbor_joining_result(args, seed, n_bcodes, assessor, perf_measure="full_bhv"):
-    file_name = args.nj_file_template % (
+    file_name = os.path.join(
             args.simulation_folder,
-            args.model_seed,
-            seed,
-            args.growth_stage,
-            n_bcodes)
+            args.nj_file_template % (
+                args.model_seed,
+                seed,
+                args.growth_stage,
+                n_bcodes))
     with open(file_name, "rb") as f:
         fitted_models = six.moves.cPickle.load(f)
 
@@ -121,12 +123,13 @@ def get_neighbor_joining_result(args, seed, n_bcodes, assessor, perf_measure="fu
     return None, fitted_models[best_perf_idx]["fitted_tree"]
 
 def get_chronos_result(args, seed, n_bcodes, assessor, perf_measure="full_bhv"):
-    file_name = args.chronos_file_template % (
+    file_name = os.path.join(
             args.simulation_folder,
-            args.model_seed,
-            seed,
-            args.growth_stage,
-            n_bcodes)
+            args.chronos_file_template % (
+                args.model_seed,
+                seed,
+                args.growth_stage,
+                n_bcodes))
     with open(file_name, "rb") as f:
         fitted_models = six.moves.cPickle.load(f)
 

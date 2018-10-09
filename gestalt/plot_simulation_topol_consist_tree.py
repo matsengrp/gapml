@@ -20,15 +20,20 @@ def parse_args(args):
     parser.add_argument(
         '--true-model-file-template',
         type=str,
-        default="tmp_mount/%s/_output/model_seed%d/%d/%s/true_model.pkl")
+        default="_output/model_seed%d/%d/%s/true_model.pkl")
     parser.add_argument(
         '--mle-file-template',
         type=str,
-        default="tmp_mount/%s/_output/model_seed%d/%d/%s/num_barcodes%d/sum_states_10/extra_steps_1/tune_fitted_pretuned.pkl")
+        #default="_output/model_seed%d/%d/%s/num_barcodes%d/sum_states_10/extra_steps_1/tune_fitted_pretuned.pkl")
+        default="_output/model_seed%d/%d/%s/num_barcodes%d/sum_states_10/extra_steps_1/tune_fitted.pkl")
     parser.add_argument(
         '--chronos-file-template',
         type=str,
-        default="tmp_mount/%s/_output/model_seed%d/%d/%s/num_barcodes%d/chronos_fitted.pkl")
+        default="_output/model_seed%d/%d/%s/num_barcodes%d/chronos_fitted.pkl")
+    parser.add_argument(
+        '--nj-file-template',
+        type=str,
+        default="_output/model_seed%d/%d/%s/num_barcodes%d/nj_fitted.pkl")
     parser.add_argument(
         '--model-seed',
         type=int,
@@ -119,7 +124,7 @@ def plot_internal_node_heights(internal_node_heights, file_name):
             x_jitter=0.01,
             y_jitter=0.02,
             fit_reg=False,
-            markers=["o", "x"])
+            markers=["o", "x", "^"])
     sns_plot.savefig(file_name)
 
 def main(args=sys.argv[1:]):
