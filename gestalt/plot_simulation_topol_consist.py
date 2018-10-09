@@ -29,6 +29,10 @@ def parse_args(args):
         type=str,
         default="%s/_output/model_seed%d/%d/%s/num_barcodes%d/chronos_fitted.pkl")
     parser.add_argument(
+        '--nj-file-template',
+        type=str,
+        default="%s/_output/model_seed%d/%d/%s/num_barcodes%d/nj_fitted.pkl")
+    parser.add_argument(
         '--simulation-folder',
         type=str,
         default="simulation_topol_consist")
@@ -39,7 +43,7 @@ def parse_args(args):
     parser.add_argument(
         '--data-seeds',
         type=str,
-        default="200")
+        default=",".join(map(str, range(400,410))))
     parser.add_argument(
         '--n-bcodes-list',
         type=str,
@@ -99,6 +103,23 @@ def get_mle_result(args, seed, n_bcodes):
         raise FileNotFoundError("nope %s" % file_name)
     return mle_model.model_params_dict, mle_model.fitted_bifurc_tree
 
+def get_neighbor_joining_result(args, seed, n_bcodes, assessor, perf_measure="full_bhv"):
+    file_name = args.nj_file_template % (
+            args.simulation_folder,
+            args.model_seed,
+            seed,
+            args.growth_stage,
+            n_bcodes)
+    with open(file_name, "rb") as f:
+        fitted_models = six.moves.cPickle.load(f)
+
+    perfs = []
+    for neighbor_joining_model in fitted_models:
+        perf_dict = assessor.assess(neighbor_joining_model["fitted_tree"])
+        perfs.append(perf_dict[perf_measure])
+    best_perf_idx = np.argmin(perfs)
+    return None, fitted_models[best_perf_idx]["fitted_tree"]
+
 def get_chronos_result(args, seed, n_bcodes, assessor, perf_measure="full_bhv"):
     file_name = args.chronos_file_template % (
             args.simulation_folder,
@@ -107,7 +128,7 @@ def get_chronos_result(args, seed, n_bcodes, assessor, perf_measure="full_bhv"):
             args.growth_stage,
             n_bcodes)
     with open(file_name, "rb") as f:
-        fitted_models = six.moves.cPickle.load(f)[:1]
+        fitted_models = six.moves.cPickle.load(f)
 
     perfs = []
     for chronos_model in fitted_models:
@@ -160,7 +181,22 @@ def main(args=sys.argv[1:]):
                                 'value': v}
                         all_perfs.append(small_dict)
             except FileNotFoundError:
-                print("not found mle", n_bcodes, seed)
+                print("not found chronos", n_bcodes, seed)
+
+            try:
+                _, nj_tree = get_neighbor_joining_result(args, seed, n_bcodes, assessor)
+                nj_perf_dict = assessor.assess(nj_tree)
+                for k, v in nj_perf_dict.items():
+                    if k in plot_perf_measures_set:
+                        small_dict = {
+                                'method': 'nj',
+                                'n_bcodes': n_bcodes,
+                                'seed': seed,
+                                'perf_meas': k,
+                                'value': v}
+                        all_perfs.append(small_dict)
+            except FileNotFoundError:
+                print("not found nj", n_bcodes, seed)
 
     method_perfs = pd.DataFrame(all_perfs)
     print(method_perfs)
