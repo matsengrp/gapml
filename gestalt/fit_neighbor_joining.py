@@ -10,9 +10,9 @@ import random
 import numpy as np
 
 from clt_neighbor_joining_estimator import CLTNeighborJoiningEstimator
+from clt_chronos_estimator import CLTChronosEstimator
 from common import create_directory
 from tune_topology import read_data, read_true_model_files
-from tree_distance import UnrootRFDistanceMeasurer
 
 def parse_args(args):
     parser = argparse.ArgumentParser(
@@ -26,6 +26,11 @@ def parse_args(args):
         type=str,
         default="_output/obs_data_b1.pkl",
         help='pkl file with observed sequence data, should be a dict with ObservedAlignSeq')
+    parser.add_argument(
+        '--lambdas',
+        type=str,
+        default='0.01,0.1,1,10,100',
+        help='lambdas to use when fitting chronos')
     parser.add_argument(
         '--out-model-file',
         type=str,
@@ -47,6 +52,7 @@ def parse_args(args):
     parser.set_defaults()
     args = parser.parse_args(args)
 
+    args.lambdas = [float(lam) for lam in args.lambdas.split(",")]
     # we don't have parsimony trees to choose from for NJ, so no topology file
     args.topology_file = None
 
@@ -65,26 +71,49 @@ def main(args=sys.argv[1:]):
 
     # Load data
     bcode_meta, _, obs_data_dict = read_data(args)
+    orig_num_leaves = len(obs_data_dict['obs_leaves'])
+    true_model_dict, assessor = read_true_model_files(
+                                    args,
+                                    bcode_meta.num_barcodes)
+
     neighbor_joining_est = CLTNeighborJoiningEstimator(bcode_meta,
                                                        args.scratch_dir,
                                                        obs_data_dict["obs_leaves"])
-    root_clt = neighbor_joining_est.estimate()
+    nj_clt = neighbor_joining_est.estimate()
+    nj_clt.label_node_ids()
+    assert len(nj_clt) == orig_num_leaves
 
-    true_model_dict, assessor = read_true_model_files(
-                                    args,
-                                    bcode_meta.num_barcodes,
-                                    measurer_classes=[UnrootRFDistanceMeasurer])
-
-    assert len(root_clt) == len(obs_data_dict['obs_leaves'])
-
+    chronos_est = CLTChronosEstimator(
+        nj_clt,
+        bcode_meta,
+        args.scratch_dir,
+        obs_data_dict["time"])
     # Assess the tree if true tree supplied
     dist_dict = None
     if assessor is not None:
-        dist_dict = assessor.assess(root_clt)
+        dist_dict = assessor.assess(nj_clt)
     else:
         dist_dict = None
-    results = {"fitted_tree": root_clt, "performance": dist_dict}
     logging.info("fitted tree: %s", dist_dict)
+    results = [{"lambda": None, "fitted_tree": nj_clt, "performance": dist_dict}]
+
+    for lam in args.lambdas:
+        nj_clt = chronos_est.estimate(lam)
+        assert(len(nj_clt) == orig_num_leaves)
+
+        # Assess the tree if true tree supplied
+        dist_dict = None
+        if assessor is not None:
+            dist_dict = assessor.assess(nj_clt)
+            logging.info("fitted tree: lambda %f, %s", lam, dist_dict)
+
+        res = {
+            "lambda": lam,
+            "fitted_tree": nj_clt,
+            "performance": dist_dict
+        }
+        results.append(res)
+
     with open(args.out_model_file, "wb") as f:
         six.moves.cPickle.dump(results, f, protocol=2)
     logging.info("Complete!!!")
