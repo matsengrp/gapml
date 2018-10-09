@@ -251,22 +251,26 @@ def read_data(args):
     logging.info("Proportion of double cuts %f", np.mean([e.min_target != e.max_target for e in evt_set]))
     abundances = [obs.abundance for obs in obs_data_dict["obs_leaves"]]
     logging.info("Range of abundance vals %d %d (mean %f)", np.min(abundances), np.max(abundances), np.mean(abundances))
-    logging.info("Number of leaves %d", len(tree))
+    if tree is not None:
+        logging.info("Number of leaves %d", len(tree))
 
     return bcode_meta, tree, obs_data_dict
 
 
-def read_true_model_files(args, num_barcodes):
+def read_true_model_files(args, num_barcodes, measurer_classes=None):
     """
     If true model files available, read them
     """
     if args.true_model_file is None:
         return None, None
 
+    if measurer_classes == None:
+        measurer_classes = [BHVDistanceMeasurer, InternalCorrMeasurer]
+
     true_model_dict, assessor = file_readers.read_true_model(
             args.true_model_file,
             num_barcodes,
-            measurer_classes=[BHVDistanceMeasurer, InternalCorrMeasurer],
+            measurer_classes=measurer_classes,
             scratch_dir=args.scratch_dir)
 
     return true_model_dict, assessor
