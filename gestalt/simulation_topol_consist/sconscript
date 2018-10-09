@@ -57,7 +57,7 @@ nest.add(
 
 nest.add(
     'seed',
-    [400],
+    range(400,410),
 )
 
 nest.add(
@@ -150,7 +150,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [1],
+    [1,2,4],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -296,6 +296,54 @@ def run_chronos(env, outdir, c):
             '"%s"' % cmd_str_arg]
         return env.Command(
             targets + [join(outdir, 'job_id_chronos.txt')],
+            sources,
+            ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def run_neighbor_joining(env, outdir, c):
+    cmd_template = [
+        '--seed',
+        c['seed'] + 20,
+        '--scratch-dir',
+	join('simulation_topol_consist', outdir, 'scratch'),
+    ]
+    targets = [
+            join(outdir, 'nj_fitted.pkl'),
+            join(outdir, 'nj_fitted.txt')]
+    sources = [
+            c['restrict_observed_alleles'][0],
+            c['generate'][1]] + c['run_chronos']
+    sources = [str(s) for s in sources]
+    if not USE_AWS:
+        cmd = [
+            'python3 fit_neighbor_joining.py',
+            '--obs-file ${SOURCES[0]}',
+            '--true-model-file ${SOURCES[1]}',
+            '--out-model-file ${TARGETS[0]}',
+            '--log-file ${TARGETS[1]}',
+        ]
+        return env.Command(targets, sources, ' '.join(map(str, cmd)))
+    else:
+        cmd_arg = [
+            'fit_neighbor_joining.py',
+            '--obs-file',
+            join('simulation_topol_consist', sources[0]),
+            '--true-model-file',
+            join('simulation_topol_consist', sources[1]),
+            '--out-model-file',
+            join('simulation_topol_consist', targets[0]),
+            '--log-file',
+            join('simulation_topol_consist', targets[1]),
+        ] + cmd_template
+        cmd_str_arg = ' '.join(map(str, cmd_arg))
+        cmd = [
+            'python boto_run.py',
+            '--out-job-id ${TARGETS[-1]}',
+            '--in-job-dependency ${SOURCES[-1]}',
+            '--cmd',
+            '"%s"' % cmd_str_arg]
+        return env.Command(
+            targets + [join(outdir, 'job_id_nj.txt')],
             sources,
             ' '.join(map(str, cmd)))
 
