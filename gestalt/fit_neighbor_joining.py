@@ -11,7 +11,7 @@ import numpy as np
 
 from clt_neighbor_joining_estimator import CLTNeighborJoiningEstimator
 from common import create_directory
-from tune_topology import read_data, read_true_model_files, _do_random_rearrange
+from tune_topology import read_data, read_true_model_files
 from tree_distance import UnrootRFDistanceMeasurer
 
 def parse_args(args):
@@ -51,6 +51,7 @@ def parse_args(args):
     args.topology_file = None
 
     create_directory(args.out_model_file)
+    create_directory(args.scratch_dir)
 
     return args
 

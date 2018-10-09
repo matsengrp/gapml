@@ -133,28 +133,38 @@ def plot_distance_matrix(sym_X_matrix, out_plot_file):
     plt.savefig(out_plot_file)
     print("matrix PLOT", out_plot_file)
 
-def load_fish(FISH, do_chronos=False):
-    if FISH == "ADR1":
+def load_fish(fish, method):
+    if fish == "ADR1":
         obs_file = "_output/gestalt_aws/ADR1_fish_data.pkl"
-    elif FISH == "ADR2":
+    elif fish == "ADR2":
         obs_file = "analyze_gestalt/_output/ADR2_abund1/fish_data_restrict_with_cell_types.pkl"
-    if not do_chronos:
-        if FISH == "ADR1":
-            fitted_tree_file = "_output/gestalt_aws/ADR1_fitted.pkl"
-        elif FISH == "ADR2":
+
+    if method == "PMLE":
+        if fish == "ADR1":
+            fitted_tree_file = "analyze_gestalt/_output/ADR1_abund5/sum_states_10/extra_steps_0/tune_pen.pkl"
+        elif fish == "ADR2":
             fitted_tree_file = "analyze_gestalt/_output/ADR2_abund1/sum_states_10/extra_steps_0/tune_pen_hanging.pkl"
         with open(fitted_tree_file, "rb") as f:
-            if FISH == "ADR1":
+            if fish == "ADR1":
                 fitted_bifurc_tree = six.moves.cPickle.load(f)[0]["best_res"].fitted_bifurc_tree
             else:
                 fitted_bifurc_tree = six.moves.cPickle.load(f)["final_fit"].fitted_bifurc_tree
-    else:
-        if FISH == "ADR1":
-            fitted_tree_file = "_output/gestalt_aws/ADR1_chronos_fitted.pkl"
-        elif FISH == "ADR2":
+    elif method == "chronos":
+        if fish == "ADR1":
+            fitted_tree_file = "analyze_gestalt/_output/ADR1_abund5/chronos_fitted.pkl"
+        elif fish == "ADR2":
             fitted_tree_file = "analyze_gestalt/_output/ADR2_abund1/chronos_fitted.pkl"
         with open(fitted_tree_file, "rb") as f:
             fitted_bifurc_tree = six.moves.cPickle.load(f)[0]["fitted_tree"]
+    elif method == "nj":
+        if fish == "ADR1":
+            fitted_tree_file = "analyze_gestalt/_output/ADR1_abund5/nj_fitted.pkl"
+        elif fish == "ADR2":
+            fitted_tree_file = "analyze_gestalt/_output/ADR2_abund1/nj_fitted.pkl"
+        with open(fitted_tree_file, "rb") as f:
+            fitted_bifurc_tree = six.moves.cPickle.load(f)["fitted_tree"]
+    else:
+        raise ValueError("method not known")
 
     with open(obs_file, "rb") as f:
         obs_dict = six.moves.cPickle.load(f)
@@ -163,19 +173,18 @@ def load_fish(FISH, do_chronos=False):
 
 def main(args=sys.argv[1:]):
     fishies = ["ADR1", "ADR2"]
-    do_chronoses = [True, False]
-    for do_chronos in do_chronoses:
+    methods = ["PMLE", "chronos", "nj"]
+    for method in methods:
         sym_X_matrices = []
         for fish in fishies:
-            tree, obs_dict = load_fish(fish, do_chronos=do_chronos)
+            tree, obs_dict = load_fish(fish, method)
             _, sym_X_matrix = create_distance_matrix(tree, obs_dict)
-            out_plot_file = "_output/sym_heat_%s%s.png" % (fish, "_chronos" if do_chronos else "")
+            out_plot_file = "_output/sym_heat_%s_%s.png" % (fish, method)
             plot_distance_matrix(sym_X_matrix, out_plot_file)
-            print(sym_X_matrix)
             sym_X_matrices.append(sym_X_matrix)
 
         triu_indices = np.triu_indices(NUM_ORGANS, k=1)
-        print("DO CHRON", do_chronos)
+        print(method)
         print(scipy.stats.pearsonr(sym_X_matrices[0][triu_indices], sym_X_matrices[1][triu_indices]))
 
 if __name__ == "__main__":
