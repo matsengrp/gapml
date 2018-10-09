@@ -10,14 +10,13 @@ import seaborn as sns
 
 from cell_lineage_tree import CellLineageTree
 from common import parse_comma_str
-import file_readers
 from tree_distance import TreeDistanceMeasurerAgg, InternalCorrMeasurer, BHVDistanceMeasurer
-from plot_simulation_topol_consist import get_true_model, get_mle_result, get_chronos_result
+from plot_simulation_topol_consist import get_true_model, get_mle_result, get_chronos_result, get_neighbor_joining_result
 
 
 def parse_args(args):
     parser = argparse.ArgumentParser(
-            description='tune over topologies and fit model parameters')
+            description='plot individual trees and internal node heights')
     parser.add_argument(
         '--true-model-file-template',
         type=str,
@@ -37,7 +36,7 @@ def parse_args(args):
     parser.add_argument(
         '--data-seed',
         type=int,
-        default=200)
+        default=400)
     parser.add_argument(
         '--n-bcodes-list',
         type=str,
@@ -143,6 +142,10 @@ def main(args=sys.argv[1:]):
         full_chronos_tree = TreeDistanceMeasurerAgg.create_single_abundance_tree(chronos_tree, "leaf_key")
         _, collapse_chronos_tree_raw = assessor._get_collapse_tree_assessor(chronos_tree)
         collapse_chronos_tree = TreeDistanceMeasurerAgg.create_single_abundance_tree(collapse_chronos_tree_raw, "leaf_key")
+        _, neighbor_joining_tree = get_neighbor_joining_result(args, args.data_seed, n_bcodes, assessor)
+        full_neighbor_joining_tree = TreeDistanceMeasurerAgg.create_single_abundance_tree(neighbor_joining_tree, "leaf_key")
+        _, collapse_neighbor_joining_tree_raw = assessor._get_collapse_tree_assessor(neighbor_joining_tree)
+        collapse_neighbor_joining_tree = TreeDistanceMeasurerAgg.create_single_abundance_tree(collapse_neighbor_joining_tree_raw, "leaf_key")
 
         #if n_bcodes == args.n_bcodes_list[0]:
         #    plot_tree(
@@ -160,10 +163,15 @@ def main(args=sys.argv[1:]):
         #    full_tree_assessor.ref_tree,
         #    args.out_plot_template % (n_bcodes, args.data_seed, "chronos"))
 
+        #plot_tree(
+        #    full_neighbor_joining_tree,
+        #    full_tree_assessor.ref_tree,
+        #    args.out_plot_template % (n_bcodes, args.data_seed, "neighbor_joining"))
+
         tree_assessor_dict = {
-                "full": (full_tree_assessor, full_mle_tree, full_chronos_tree),
-                "collapse": (collapse_tree_assessor, collapse_mle_tree, collapse_chronos_tree)}
-        for assessor_name, (tree_assessor, m_tree, c_tree) in tree_assessor_dict.items():
+                "full": (full_tree_assessor, full_mle_tree, full_chronos_tree, full_neighbor_joining_tree),
+                "collapse": (collapse_tree_assessor, collapse_mle_tree, collapse_chronos_tree, collapse_neighbor_joining_tree)}
+        for assessor_name, (tree_assessor, m_tree, c_tree, nj_tree) in tree_assessor_dict.items():
             print(assessor_name)
             intern_measurer = tree_assessor.measurers[0]
             m_tree.label_dist_to_roots()
@@ -182,6 +190,16 @@ def main(args=sys.argv[1:]):
                 intern_measurer.ref_leaf_groups)
             internal_node_heights.append(pd.DataFrame.from_dict({
                 "method": "chronos",
+                "assess": assessor_name,
+                "n_bcodes": n_bcodes,
+                "true": intern_measurer.ref_node_val,
+                "fitted": chronos_heights}))
+            nj_tree.label_dist_to_roots()
+            chronos_heights = intern_measurer.get_compare_node_distances(
+                nj_tree,
+                intern_measurer.ref_leaf_groups)
+            internal_node_heights.append(pd.DataFrame.from_dict({
+                "method": "nj",
                 "assess": assessor_name,
                 "n_bcodes": n_bcodes,
                 "true": intern_measurer.ref_node_val,
