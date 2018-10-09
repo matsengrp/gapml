@@ -60,10 +60,7 @@ ORGAN_LABELS = [
 ]
 NUM_ORGANS = len(ORGAN_LABELS)
 
-def create_distance_matrix(fitted_bifurc_tree, obs_dict):
-    organ_dict = obs_dict["organ_dict"]
-    allele_to_cell_state, cell_state_dict = get_allele_to_cell_states(obs_dict)
-
+def create_distance_matrix(fitted_bifurc_tree, organ_dict, allele_to_cell_state):
     fitted_bifurc_tree.label_dist_to_roots()
     for node in fitted_bifurc_tree.traverse('postorder'):
         if node.is_leaf():
@@ -162,7 +159,7 @@ def load_fish(fish, method):
         elif fish == "ADR2":
             fitted_tree_file = "analyze_gestalt/_output/ADR2_abund1/nj_fitted.pkl"
         with open(fitted_tree_file, "rb") as f:
-            fitted_bifurc_tree = six.moves.cPickle.load(f)["fitted_tree"]
+            fitted_bifurc_tree = six.moves.cPickle.load(f)[1]["fitted_tree"]
     else:
         raise ValueError("method not known")
 
@@ -170,22 +167,67 @@ def load_fish(fish, method):
         obs_dict = six.moves.cPickle.load(f)
     return fitted_bifurc_tree, obs_dict
 
+def do_hypothesis_test(estimated_matrices, random_matrices):
+    """
+    Formally, the null hypothesis is the cell types and abundances are completely
+    randomly assigned to the leaves of the two trees.
+    """
+    triu_indices = np.triu_indices(estimated_matrices[0].shape[0], k=1)
+    # We cannot use the pvalue from the usual pearson correlation calculation since
+    # it assumes the observations are independent.
+    corr, stupid_pval = scipy.stats.pearsonr(
+            estimated_matrices[0][triu_indices],
+            estimated_matrices[1][triu_indices])
+    all_rand_corrs = []
+    for rand_mat1, rand_mat2 in zip(random_matrices[0], random_matrices[1]):
+        rand_corr, _ = scipy.stats.pearsonr(rand_mat1[triu_indices], rand_mat2[triu_indices])
+        all_rand_corrs.append(rand_corr)
+    print('correlation', corr, 'stupid pval', stupid_pval)
+    print("random mean corr", np.mean(all_rand_corrs))
+    print('p-val', np.mean(np.abs(corr) < np.abs(all_rand_corrs)))
 
 def main(args=sys.argv[1:]):
+    num_rand_permute = 5000
     fishies = ["ADR1", "ADR2"]
     methods = ["PMLE", "chronos", "nj"]
     for method in methods:
         sym_X_matrices = []
-        for fish in fishies:
+        random_permute_X_matrices = [[],[]]
+        for fish_idx, fish in enumerate(fishies):
             tree, obs_dict = load_fish(fish, method)
-            _, sym_X_matrix = create_distance_matrix(tree, obs_dict)
+            organ_dict = obs_dict["organ_dict"]
+            allele_to_cell_state, _ = get_allele_to_cell_states(obs_dict)
+            _, sym_X_matrix = create_distance_matrix(tree, organ_dict, allele_to_cell_state)
             out_plot_file = "_output/sym_heat_%s_%s.png" % (fish, method)
             plot_distance_matrix(sym_X_matrix, out_plot_file)
             sym_X_matrices.append(sym_X_matrix)
 
-        triu_indices = np.triu_indices(NUM_ORGANS, k=1)
+            # Now compare against the "null distribution" where the cell type and abundance
+            # labels are both shuffled.
+            # In particular, shuffle the cell type labels (keeping them grouped) across the leaves.
+            # Then shuffle the abundances within that cell type label group.
+            num_leaves = len(allele_to_cell_state)
+            key_list = list(allele_to_cell_state.keys())
+            for _ in range(num_rand_permute):
+                allele_to_cell_state_random = {}
+                shuffled_leaves = np.random.choice(num_leaves, num_leaves, replace=False)
+                for rand_idx, allele_key in zip(shuffled_leaves, key_list):
+                    orig_leaf_dict = allele_to_cell_state[key_list[rand_idx]]
+                    shuffled_abunds = np.random.choice(
+                            list(orig_leaf_dict.values()),
+                            len(orig_leaf_dict),
+                            replace=False)
+                    allele_to_cell_state_random[allele_key] = {
+                        key: val for key, val in zip(orig_leaf_dict.keys(), shuffled_abunds)}
+
+                _, rand_permut_X_matrix = create_distance_matrix(
+                        tree.copy(),
+                        organ_dict,
+                        allele_to_cell_state_random)
+                random_permute_X_matrices[fish_idx].append(rand_permut_X_matrix)
+
         print(method)
-        print(scipy.stats.pearsonr(sym_X_matrices[0][triu_indices], sym_X_matrices[1][triu_indices]))
+        do_hypothesis_test(sym_X_matrices, random_permute_X_matrices)
 
 if __name__ == "__main__":
     main()

@@ -1,8 +1,6 @@
-import numpy as np
 import sys
 import argparse
 import os
-import six
 import pandas as pd
 import matplotlib
 matplotlib.use('Agg')
