@@ -120,16 +120,17 @@ def plot_distance_matrix(sym_X_matrix, out_plot_file):
     for i in range(sym_X_matrix.shape[0]):
         sym_X_matrix[i,i] = 0
         mask[i,i] = True
-    VMAX = 0.8
-    assert np.max(sym_X_matrix) < VMAX
+    #VMAX = 0.8
+    #assert np.max(sym_X_matrix) < VMAX
     sns.heatmap(sym_X_matrix,
             xticklabels=ORGAN_LABELS,
             yticklabels=ORGAN_LABELS,
             mask=mask,
             #annot=np.array(annot_mat),
-            fmt='',
-            vmin=0,
-            vmax=VMAX)
+            #fmt='',
+            cbar=False)
+            #vmin=0,
+            #vmax=VMAX)
     plt.savefig(out_plot_file)
     print("matrix PLOT", out_plot_file)
 
