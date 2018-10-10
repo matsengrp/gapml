@@ -47,6 +47,9 @@ SConscript(flag + '/sconscript', exports=['flag'])
 flag = 'simulation_compare'
 SConscript(flag + '/sconscript', exports=['flag'])
 
+flag = 'simulation_replicate_real_data'
+SConscript(flag + '/sconscript', exports=['flag'])
+
 #flag = 'simulation_topology_same_diff'
 #SConscript(flag + '/sconscript', exports=['flag'])
 #

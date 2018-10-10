@@ -1,0 +1,135 @@
+# Test if we have any sort of consistency
+# This simulates a larger tree and performs a topology search
+
+import os
+
+from os.path import join
+from nestly.scons import SConsWrap
+from nestly import Nest
+from SCons.Script import Environment, Command, AddOption
+import numpy as np
+
+Import('env')
+localenv = env.Clone()
+
+# Set up state
+base = {'nreps': localenv['NREPS'],
+        'output_name': localenv['OUTPUT_NAME']}
+
+nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
+
+USE_AWS = False
+NUM_RANDOM_REARRANGE = 10
+GROWTH_DICT = {
+    "dome": {
+        "sampling_rate": 0.06,
+        "birth_sync_rounds": 9,
+        "birth_sync_time": 0.081,
+        "death_lambda": 0.1,
+        "birth_decay": -1,
+        "birth_min": 0.1,
+        "lambda_sequence": [3.8, 0.5, 0.05, 0.7, 0.2, 0.5, 1.53, 0.07, 1.5, 0.07],
+        "target_decay": .01,
+        "double": 0.06,
+        "min_leaves": 200,
+        "max_leaves": 500,
+    },
+}
+
+nest.add(
+    'model_seed',
+    [0],
+    label_func=lambda c: 'model_seed%d' % c,
+)
+
+nest.add(
+    'seed',
+    [0],
+)
+
+nest.add(
+    'growth_stage',
+    [
+       'dome',
+    ])
+
+@nest.add_target_with_env(localenv)
+def generate(env, outdir, c):
+    targ_lambdas = ",".join(map(str,
+        GROWTH_DICT[c['growth_stage']]['lambda_sequence']))
+
+    cmd = [
+        'python generate_data.py',
+        '--sampling-rate',
+        GROWTH_DICT[c['growth_stage']]['sampling_rate'],
+        '--model-seed',
+        c['model_seed'],
+        '--data-seed',
+        c['seed'],
+        '--out-obs-file ${TARGETS[0]}',
+        '--out-model-file ${TARGETS[1]}',
+        '--log-file ${TARGETS[2]}',
+        '--time 1',
+        '--birth-sync-rounds',
+        GROWTH_DICT[c['growth_stage']]['birth_sync_rounds'],
+        '--birth-sync-time',
+        GROWTH_DICT[c['growth_stage']]['birth_sync_time'],
+        '--birth-decay',
+        GROWTH_DICT[c['growth_stage']]['birth_decay'],
+        '--birth-min',
+        GROWTH_DICT[c['growth_stage']]['birth_min'],
+        '--death-lambda',
+        GROWTH_DICT[c['growth_stage']]['death_lambda'],
+        '--max-clt-leaves',
+        int(GROWTH_DICT[c['growth_stage']]['max_leaves']/GROWTH_DICT[c['growth_stage']]['sampling_rate'] * 1.1),
+        '--num-barcodes',
+        1,
+        '--min-uniq-alleles',
+        GROWTH_DICT[c['growth_stage']]['min_leaves'],
+        '--max-uniq-alleles',
+        GROWTH_DICT[c['growth_stage']]['max_leaves'],
+        '--max-abundance 20000',
+        '--double-cut-weight',
+        GROWTH_DICT[c['growth_stage']]['double'],
+        '--target-lambdas',
+        targ_lambdas,
+        '--target-lam-decay',
+        GROWTH_DICT[c['growth_stage']]['target_decay'],
+        '--trim-zero-probs 0.1 0.1',
+        '--trim-poissons 4 4',
+        '--trim-long-factor 0.02 0.2',
+        '--insert-zero-prob 0.1',
+        '--insert-poisson 1',
+        '--perturb-target-lambdas-variance 0',
+        '--max-tries 20',
+    ]
+    return env.Command(
+        [
+            join(outdir, 'obs_data.pkl'),
+            join(outdir, 'true_model.pkl'),
+            join(outdir, 'log.txt')],
+        [],
+        ' '.join(map(str, cmd)))
+
+nest.add(
+    'num_barcodes',
+    [1],
+    label_func=lambda c: "num_barcodes%d" % c,
+)
+
+@nest.add_target_with_env(localenv)
+def restrict_observed_alleles(env, outdir, c):
+    cmd = [
+        'python restrict_observed_barcodes.py',
+        '--obs-file ${SOURCES[0]}',
+        '--num-barcodes',
+        c['num_barcodes'],
+        '--out-obs-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+    ]
+    return env.Command(
+        [
+            join(outdir, 'obs_data.pkl'),
+            join(outdir, 'log_restrict.txt')],
+        c['generate'],
+        ' '.join(map(str, cmd)))
