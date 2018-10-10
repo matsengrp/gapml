@@ -98,8 +98,16 @@ def main(args=sys.argv[1:]):
         print("95 CI", corr_mean - 1.96 * std_err, corr_mean + 1.96 * std_err)
 
     # Plot all the params
+    pd_data = []
     for param, fish in zip(fitted_params["mle"], args.fishies):
-        plt.plot(param, label=fish)
+        for targ_idx, targ_val in enumerate(param):
+            print(targ_idx, targ_val)
+            pd_data.append({
+                "target": targ_idx,
+                "val": targ_val,
+                "fish": fish})
+    data = pd.DataFrame(pd_data)
+    sns.swarmplot(x="target", y="val", hue="fish", data=data)
     plt.xlabel("Target index")
     plt.ylabel("Estimated cut rate")
     plt.legend()

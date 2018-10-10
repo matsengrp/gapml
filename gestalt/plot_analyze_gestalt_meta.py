@@ -61,7 +61,6 @@ ORGAN_LABELS = [
 NUM_ORGANS = len(ORGAN_LABELS)
 
 def create_distance_matrix(fitted_bifurc_tree, organ_dict, allele_to_cell_state):
-    fitted_bifurc_tree.label_dist_to_roots()
     for node in fitted_bifurc_tree.traverse('postorder'):
         if node.is_leaf():
             allele_str = node.allele_events_list_str
@@ -110,10 +109,10 @@ def plot_distance_matrix(sym_X_matrix, out_plot_file):
     for i in range(sym_X_matrix.shape[0]):
         sym_X_matrix[i,i] = 10000000000
     sym_X_matrix = np.floor(sym_X_matrix * 100)/100
-    annot_mat = []
-    for i in range(sym_X_matrix.shape[0]):
-        new_row_annot = rankdata(sym_X_matrix[i,:])
-        annot_mat.append(new_row_annot)
+    #annot_mat = []
+    #for i in range(sym_X_matrix.shape[0]):
+    #    new_row_annot = rankdata(sym_X_matrix[i,:])
+    #    annot_mat.append(new_row_annot)
 
     # HEATMAP
     plt.clf()
@@ -121,12 +120,16 @@ def plot_distance_matrix(sym_X_matrix, out_plot_file):
     for i in range(sym_X_matrix.shape[0]):
         sym_X_matrix[i,i] = 0
         mask[i,i] = True
+    VMAX = 0.8
+    assert np.max(sym_X_matrix) < VMAX
     sns.heatmap(sym_X_matrix,
             xticklabels=ORGAN_LABELS,
             yticklabels=ORGAN_LABELS,
             mask=mask,
-            annot=np.array(annot_mat),
-            fmt='')
+            #annot=np.array(annot_mat),
+            fmt='',
+            vmin=0,
+            vmax=VMAX)
     plt.savefig(out_plot_file)
     print("matrix PLOT", out_plot_file)
 
@@ -186,8 +189,23 @@ def do_hypothesis_test(estimated_matrices, random_matrices):
     print("random mean corr", np.mean(all_rand_corrs))
     print('p-val', np.mean(np.abs(corr) < np.abs(all_rand_corrs)))
 
+def create_shuffled_cell_state_abund_labels(allele_to_cell_state):
+    num_leaves = len(allele_to_cell_state)
+    key_list = list(allele_to_cell_state.keys())
+    allele_to_cell_state_random = {}
+    shuffled_leaves = np.random.choice(num_leaves, num_leaves, replace=False)
+    for rand_idx, allele_key in zip(shuffled_leaves, key_list):
+        orig_leaf_dict = allele_to_cell_state[key_list[rand_idx]]
+        shuffled_abunds = np.random.choice(
+                list(orig_leaf_dict.values()),
+                len(orig_leaf_dict),
+                replace=False)
+        allele_to_cell_state_random[allele_key] = {
+            key: val for key, val in zip(orig_leaf_dict.keys(), shuffled_abunds)}
+    return allele_to_cell_state_random
+
 def main(args=sys.argv[1:]):
-    num_rand_permute = 5000
+    num_rand_permute = 2#000
     fishies = ["ADR1", "ADR2"]
     methods = ["PMLE", "chronos", "nj"]
     for method in methods:
@@ -195,6 +213,7 @@ def main(args=sys.argv[1:]):
         random_permute_X_matrices = [[],[]]
         for fish_idx, fish in enumerate(fishies):
             tree, obs_dict = load_fish(fish, method)
+            tree.label_dist_to_roots()
             organ_dict = obs_dict["organ_dict"]
             allele_to_cell_state, _ = get_allele_to_cell_states(obs_dict)
             _, sym_X_matrix = create_distance_matrix(tree, organ_dict, allele_to_cell_state)
@@ -206,19 +225,8 @@ def main(args=sys.argv[1:]):
             # labels are both shuffled.
             # In particular, shuffle the cell type labels (keeping them grouped) across the leaves.
             # Then shuffle the abundances within that cell type label group.
-            num_leaves = len(allele_to_cell_state)
-            key_list = list(allele_to_cell_state.keys())
             for _ in range(num_rand_permute):
-                allele_to_cell_state_random = {}
-                shuffled_leaves = np.random.choice(num_leaves, num_leaves, replace=False)
-                for rand_idx, allele_key in zip(shuffled_leaves, key_list):
-                    orig_leaf_dict = allele_to_cell_state[key_list[rand_idx]]
-                    shuffled_abunds = np.random.choice(
-                            list(orig_leaf_dict.values()),
-                            len(orig_leaf_dict),
-                            replace=False)
-                    allele_to_cell_state_random[allele_key] = {
-                        key: val for key, val in zip(orig_leaf_dict.keys(), shuffled_abunds)}
+                allele_to_cell_state_random = create_shuffled_cell_state_abund_labels(allele_to_cell_state)
 
                 _, rand_permut_X_matrix = create_distance_matrix(
                         tree.copy(),
