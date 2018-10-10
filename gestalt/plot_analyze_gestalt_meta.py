@@ -117,10 +117,10 @@ def plot_distance_matrix(sym_X_matrix, out_plot_file):
     # HEATMAP
     plt.clf()
     mask = np.zeros(sym_X_matrix.shape, dtype=bool)
-    for i in range(sym_X_matrix.shape[0]):
-        sym_X_matrix[i,i] = 0
-        mask[i,i] = True
-    #VMAX = 0.8
+    mask[np.triu_indices(sym_X_matrix.shape[0], k=0)] = True
+    VMAX = 0.8
+    VMIN = 0.2
+    print(np.min(sym_X_matrix[np.triu_indices(sym_X_matrix.shape[0], k=1)]))
     #assert np.max(sym_X_matrix) < VMAX
     sns.heatmap(sym_X_matrix,
             xticklabels=ORGAN_LABELS,
@@ -128,9 +128,8 @@ def plot_distance_matrix(sym_X_matrix, out_plot_file):
             mask=mask,
             #annot=np.array(annot_mat),
             #fmt='',
-            cbar=False)
-            #vmin=0,
-            #vmax=VMAX)
+            vmin=VMIN,
+            vmax=VMAX)
     plt.savefig(out_plot_file)
     print("matrix PLOT", out_plot_file)
 
