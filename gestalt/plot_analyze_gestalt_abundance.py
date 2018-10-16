@@ -23,6 +23,10 @@ def parse_args(args):
         type=str,
         default="_output/%s/sum_states_10/extra_steps_0/tune_pen.pkl")
     parser.add_argument(
+        '--nj-file-template',
+        type=str,
+        default="_output/%s/nj_fitted.pkl")
+    parser.add_argument(
         '--chronos-file-template',
         type=str,
         default="_output/%s/chronos_fitted.pkl")
@@ -33,24 +37,35 @@ def parse_args(args):
     parser.add_argument(
         '--fishies',
         type=str,
-        default="dome1_abund1,dome3_abund1,dome5_abund1,dome8_abund1")
+        default="dome1_abund1")
+        #default="dome1_abund1,dome3_abund1,dome5_abund1,dome8_abund1")
     parser.add_argument(
         '--out-plot-template',
         type=str,
         default="_output/time_to_abund_%s.png")
+    parser.add_argument(
+        '--tot-time',
+        type=float,
+        default="num hpf")
     args = parser.parse_args(args)
     args.fishies = parse_comma_str(args.fishies, str)
     return args
 
-def load_data(args, fish, do_chronos=False):
-    if not do_chronos:
+def load_data(args, fish, method):
+    if method == "PMLE":
         fitted_tree_file = os.path.join(args.folder, args.mle_file_template % fish)
         with open(fitted_tree_file, "rb") as f:
             fitted_bifurc_tree = six.moves.cPickle.load(f)["final_fit"].fitted_bifurc_tree
-    else:
+    elif method == "chronos":
         chronos_tree_file = os.path.join(args.folder, args.chronos_file_template % fish)
         with open(chronos_tree_file, "rb") as f:
             fitted_bifurc_tree = six.moves.cPickle.load(f)[0]["fitted_tree"]
+    elif method == "nj":
+        nj_tree_file = os.path.join(args.folder, args.nj_file_template % fish)
+        with open(nj_tree_file, "rb") as f:
+            fitted_bifurc_tree = six.moves.cPickle.load(f)[1]["fitted_tree"]
+    else:
+        raise ValueError("nope method dont exist")
 
     obs_file = os.path.join(args.folder, args.obs_file_template % fish)
     with open(obs_file, "rb") as f:
@@ -90,21 +105,21 @@ def plot_distance_to_abundance(
     slope, _, _, pval, se = stats.linregress(X_dists, np.log2(Y_abundance))
     print("estimated slope", slope, "pval", pval)
     print("95 CI", slope - 1.96 * se, slope + 1.96 * se)
-    print("estimated percent drop in 1/12 time units", np.power(2., slope/12))
-    print("95 CI", np.power(2.0, (slope - 1.96 * se)/12), np.power(2., (slope + 1.96 * se)/12))
+    print("estimated time btw divisions", -tot_time/slope * 60)
+    print("95 CI", -tot_time * 60/(slope - 1.96 * se), -tot_time * 60/ (slope + 1.96 * se))
 
 
 def main(args=sys.argv[1:]):
     args = parse_args(args)
-    do_chronoses = [False]
-    for do_chronos in do_chronoses:
-        print("DO CHRON", do_chronos)
+    methods = ["PMLE", "chronos", "nj"]
+    for method in methods:
+        print("method", method)
         for fish in args.fishies:
             print(fish)
-            fitted_bifurc_tree, obs_data_dict = load_data(args, fish, do_chronos)
+            fitted_bifurc_tree, obs_data_dict = load_data(args, fish, method)
             plot_distance_to_abundance(
                 fitted_bifurc_tree,
-                obs_data_dict["time"],
+                args.tot_time,
                 out_plot_file = args.out_plot_template % fish)
 
 if __name__ == "__main__":

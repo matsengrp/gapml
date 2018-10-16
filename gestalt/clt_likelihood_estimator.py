@@ -68,6 +68,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         """
         feed_dict = {
             self.model.branch_pen_param_ph: branch_pen_param,
+            self.model.crazy_pen_param_ph: 0.1,
             self.model.target_lam_pen_param_ph: target_lam_pen_param,
         }
         # Check tree is ultrametric
@@ -94,6 +95,7 @@ class CLTPenalizedEstimator(CLTEstimator):
                 "initial penalized log lik %f, unpen log lik %f, branch pen %f, lambda pen %f",
                 pen_log_lik, log_lik, branch_pen, target_lam_pen)
         assert not np.isnan(pen_log_lik)
+        assert not np.isinf(pen_log_lik)
         train_history = [{
                     "iter": -1,
                     "log_lik": log_lik,

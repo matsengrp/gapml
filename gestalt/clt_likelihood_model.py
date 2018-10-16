@@ -91,6 +91,7 @@ class CLTLikelihoodModel:
 
         # Stores the penalty parameters
         self.branch_pen_param_ph = tf.placeholder(tf.float64)
+        self.crazy_pen_param_ph = tf.placeholder(tf.float64)
         self.target_lam_pen_param_ph = tf.placeholder(tf.float64)
 
         if branch_len_inners.size == 0:
@@ -353,6 +354,7 @@ class CLTLikelihoodModel:
             prev_size = up_to_size
             up_to_size += 1
             self.insert_zero_prob = tf.sigmoid(self.all_vars[prev_size: up_to_size])
+        self.all_but_branch_lens = self.all_vars[:up_to_size]
         prev_size = up_to_size
         up_to_size += np.sum(self.known_params.branch_len_inners_unknown) if self.known_params.branch_lens else branch_len_inners.size
         self.branch_len_inners_unknown = tf.exp(self.all_vars[prev_size: up_to_size])
@@ -1047,7 +1049,8 @@ class CLTLikelihoodModel:
         self.smooth_log_lik = (
                 self.log_lik/self.bcode_meta.num_barcodes
                 - self.branch_pen * self.branch_pen_param_ph
-                - self.target_lam_pen * self.target_lam_pen_param_ph)
+                - self.target_lam_pen * self.target_lam_pen_param_ph
+                - self.crazy_pen_param_ph * tf.reduce_mean(tf.pow(self.all_but_branch_lens, 2)))
 
         if create_gradient:
             logging.info("Computing gradients....")

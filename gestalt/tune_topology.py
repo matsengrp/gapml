@@ -493,7 +493,8 @@ def main(args=sys.argv[1:]):
             random_chad = hanging_chad_finder.get_random_chad(
                     tree,
                     bcode_meta,
-                    exclude_chad_func=lambda node: make_chad_psuedo_id(node) in recent_chads)
+                    exclude_chad_func=lambda node: make_chad_psuedo_id(node) in recent_chads,
+                    masking_only=True)
         has_chads = random_chad is not None
         if not has_chads:
             tuning_history.append({

@@ -73,8 +73,9 @@ class HangingChadResult:
         self.parent_node = self.chad_node.up
 
         self.fit_res = fit_res
-        train_hist_last = fit_res.train_history[-1]
-        self.true_performance = train_hist_last['performance'] if 'performance' in train_hist_last else None
+        if fit_res is not None:
+            train_hist_last = fit_res.train_history[-1]
+            self.true_performance = train_hist_last['performance'] if 'performance' in train_hist_last else None
 
     def get_full_tree_fit_params(self, random_init_proportion: float = 0.1):
         """
@@ -498,7 +499,7 @@ def get_random_chad(
             continue
 
         has_masking_cuts = any([sg.min_target + 1 < sg.max_target for anc_state in node.anc_state_list for sg in anc_state.get_singletons()])
-        if node.dist == 0 or (masking_only and has_masking_cuts):
+        if node.dist == 0 or (masking_only and not has_masking_cuts):
             # We're assuming that a tree with no parsimony score probably can't be placed anywhere in the tree
             continue
 
@@ -821,5 +822,7 @@ def _create_chad_results(
             hanging_chad.node.node_id,
             single_full_chad_tree,
             fit_res)
-        for fit_res, single_full_chad_tree in zip(fit_results, single_full_chad_trees)]
+        for fit_res, single_full_chad_tree in zip(fit_results, single_full_chad_trees)
+        if fit_res is not None]
+    assert len(new_chad_results) > 0
     return HangingChadTuneResult(no_chad_res, new_chad_results)
