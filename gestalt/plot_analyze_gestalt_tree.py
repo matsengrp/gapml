@@ -159,7 +159,7 @@ def plot_gestalt_tree(
 
     legend_colors = {}
     for organ_key, color in ORGAN_COLORS.items():
-        text = ORGAN_TRANSLATION[organ_key.replace("7B_", "")]
+        text = ORGAN_TRANSLATION[organ_key]
         label_dict = {
             "text": text,
             "color": "gray",
