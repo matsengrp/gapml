@@ -179,6 +179,8 @@ def load_fish(fish, method, folder=None, get_first=False):
     else:
         raise ValueError("method not known")
 
+    if folder is not None:
+        obs_file = os.path.join(folder, obs_file)
     with open(obs_file, "rb") as f:
         obs_dict = six.moves.cPickle.load(f)
     return fitted_bifurc_tree, obs_dict

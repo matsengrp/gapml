@@ -44,7 +44,6 @@ def parse_args(args):
             plotting the entire gestalt tree.
             this only works if you have the entire ete package
             """)
-    args = parser.parse_args(args)
     parser.add_argument(
         '--fish',
         type=str,
@@ -160,7 +159,7 @@ def plot_gestalt_tree(
 
     legend_colors = {}
     for organ_key, color in ORGAN_COLORS.items():
-        text = ORGAN_TRANSLATION[organ_key.replace("7B_", "")]
+        text = ORGAN_TRANSLATION[organ_key]
         label_dict = {
             "text": text,
             "color": "gray",
@@ -177,8 +176,9 @@ def plot_gestalt_tree(
 
 def main(args=sys.argv[1:]):
     args = parse_args(args)
+    print(args)
     # TODO: this doesnt work right now. need to add in prefix of tmp_mount
-    tree, obs_dict = load_fish(args.fish, method="PMLE", args.folder)
+    tree, obs_dict = load_fish(args.fish, method="PMLE", folder=args.folder)
     allele_to_cell_state, cell_state_dict = get_allele_to_cell_states(obs_dict)
     organ_dict = obs_dict["organ_dict"]
     bcode_meta = obs_dict["bcode_meta"]
