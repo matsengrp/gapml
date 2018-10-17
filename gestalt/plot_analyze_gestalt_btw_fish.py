@@ -11,6 +11,7 @@ matplotlib.use('Agg')
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+from plot_analyze_gestalt_meta import load_fish
 from common import parse_comma_str
 
 def parse_args(args):
@@ -31,12 +32,14 @@ def parse_args(args):
     parser.add_argument(
         '--fishies',
         type=str,
-        default="30hpf1_abund2,30hpf2_abund1,30hpf3_abund2,30hpf4_abund1,30hpf5_abund1,30hpf6_abund1,30hpf7_abund1,30hpf8_abund1")
+        #default="30hpf1_abund2,30hpf2_abund1,30hpf3_abund2,30hpf4_abund1,30hpf5_abund1,30hpf6_abund1,30hpf7_abund1,30hpf8_abund1")
         #default="dome1_abund1,dome3_abund1,dome5_abund1,dome8_abund1")
+        default="ADR1,ADR2")
     parser.add_argument(
         '--out-plot-file',
         type=str,
-        default="_output/target_lam_compare_30hpf.png")
+        default="_output/target_lam_compare_ADR.png")
+        #default="_output/target_lam_compare_30hpf.png")
         #default="_output/target_lam_compare_dome.png")
     parser.set_defaults()
     args = parser.parse_args(args)
@@ -46,6 +49,24 @@ def parse_args(args):
 def _get_normalized_params(param):
     return param/np.sum(param)
 
+
+def load_ADR_fish_params(fish):
+    if fish == "ADR1":
+        obs_file = "analyze_gestalt/_output/ADR1_abund5/fish_data_restrict.pkl"
+    elif fish == "ADR2":
+        obs_file = "analyze_gestalt/_output/ADR2_abund1/fish_data_restrict_with_cell_types.pkl"
+    with open(obs_file, "rb") as f:
+        obs_dict = six.moves.cPickle.load(f)
+
+    if fish == "ADR1":
+        fitted_tree_file = "analyze_gestalt/_output/ADR1_abund5/sum_states_10/extra_steps_0/tune_pen_hanging.pkl"
+    elif fish == "ADR2":
+        fitted_tree_file = "analyze_gestalt/_output/ADR2_abund1/sum_states_10/extra_steps_0/tune_pen_hanging.pkl"
+    with open(fitted_tree_file, "rb") as f:
+        params = six.moves.cPickle.load(f)["final_fit"].model_params_dict["target_lams"]
+
+    return params, obs_dict
+
 def main(args=sys.argv[1:]):
     args = parse_args(args)
     fitted_params = {
@@ -54,18 +75,22 @@ def main(args=sys.argv[1:]):
     simple_fitted_params = []
     for fish in args.fishies:
         print(fish)
-        # Load our estimated target rates
-        file_name = os.path.join(args.folder, args.mle_file_template % fish)
-        with open(file_name, "rb") as f:
-            res = six.moves.cPickle.load(f)["final_fit"]
-            fitted_param = res.model_params_dict["target_lams"]
-            fitted_params["mle"].append(
-                    _get_normalized_params(fitted_param))
+        if fish not in ["ADR1", "ADR2"]:
+            # Load our estimated target rates
+            file_name = os.path.join(args.folder, args.mle_file_template % fish)
+            with open(file_name, "rb") as f:
+                res = six.moves.cPickle.load(f)["final_fit"]
+                fitted_param = res.model_params_dict["target_lams"]
 
-        # Fit a simple target rate thing
-        file_name = os.path.join(args.folder, args.obs_file_template % fish)
-        with open(file_name, "rb") as f:
-            obs_data_dict = six.moves.cPickle.load(f)
+            # Fit a simple target rate thing
+            file_name = os.path.join(args.folder, args.obs_file_template % fish)
+            with open(file_name, "rb") as f:
+                obs_data_dict = six.moves.cPickle.load(f)
+        else:
+            fitted_param, obs_data_dict = load_ADR_fish_params(fish)
+
+        fitted_params["mle"].append(_get_normalized_params(fitted_param))
+
         bcode_meta = obs_data_dict["bcode_meta"]
         obs_data = obs_data_dict["obs_leaves"]
         assert bcode_meta.num_barcodes == 1

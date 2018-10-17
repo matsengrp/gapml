@@ -35,15 +35,15 @@ def parse_args(args):
     parser.add_argument(
         '--num-rands',
         type=int,
-        default=1000)
+        default=2000)
     parser.add_argument(
         '--out-germ-layer-plot-template',
         type=str,
-        default="_output/time_to_germ_layer_%s.png")
+        default="_output/time_to_germ_layer_%s_%s.png")
     parser.add_argument(
         '--out-cell-type-plot-template',
         type=str,
-        default="_output/time_to_cell_type_%s.png")
+        default="_output/time_to_cell_type_%s_%s.png")
     args = parser.parse_args(args)
     return args
 
@@ -69,8 +69,8 @@ def get_distance_to_num_germ_layers(
     for node in fitted_bifurc_tree.traverse('postorder'):
         if node.is_leaf():
             continue
-        if min([len(leaf.germ_layers) for leaf in node]) > 1:
-            continue
+        #if min([len(leaf.germ_layers) for leaf in node]) > 1:
+        #    continue
         X_dists.append(node.dist_to_root)
         n_germ_layers = len(node.germ_layers)
         Y_n_germ_layers.append(n_germ_layers)
@@ -117,8 +117,8 @@ def get_distance_to_num_cell_states(
     for node in fitted_bifurc_tree.traverse('postorder'):
         if node.is_leaf():
             continue
-        if min([len(leaf.cell_types) for leaf in node]) > 1:
-            continue
+        #if min([len(leaf.cell_types) for leaf in node]) > 1:
+        #    continue
         X_dists.append(node.dist_to_root)
         Y_n_cell_states.append(len(node.cell_types))
     return X_dists, Y_n_cell_states
@@ -203,7 +203,7 @@ def do_hypothesis_test(
 
 def main(args=sys.argv[1:]):
     args = parse_args(args)
-    fishies = ["ADR1", "ADR2"]
+    fishies = ["ADR1"] #, "ADR2"]
     methods = ["PMLE", "chronos", "nj"]
     for method in methods:
         print("METHOD", method)
@@ -228,7 +228,7 @@ def main(args=sys.argv[1:]):
             plot_distance_to_num_germ_layers(
                 X_dists,
                 Y_n_germ_layers,
-                args.out_germ_layer_plot_template % fish)
+                args.out_germ_layer_plot_template % (fish, method))
 
             X_dists, Y_n_cell_states = get_distance_to_num_cell_states(
                 tree,
@@ -244,7 +244,7 @@ def main(args=sys.argv[1:]):
             plot_distance_to_num_cell_states(
                 X_dists,
                 Y_n_cell_states,
-                args.out_cell_type_plot_template % fish)
+                args.out_cell_type_plot_template % (fish, method))
     #print("plot branch length distribution")
     #plot_branch_len_time(
     #    res.fitted_bifurc_tree,

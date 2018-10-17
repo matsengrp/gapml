@@ -134,7 +134,7 @@ def plot_distance_matrix(sym_X_matrix, out_plot_file):
     plt.savefig(out_plot_file)
     print("matrix PLOT", out_plot_file)
 
-def load_fish(fish, method, folder=None):
+def load_fish(fish, method, folder=None, get_first=False):
     if fish == "ADR1":
         obs_file = "analyze_gestalt/_output/ADR1_abund5/fish_data_restrict.pkl"
     elif fish == "ADR2":
@@ -148,10 +148,16 @@ def load_fish(fish, method, folder=None):
         if folder is not None:
             fitted_tree_file = os.path.join(folder, fitted_tree_file)
         with open(fitted_tree_file, "rb") as f:
-            #if fish == "ADR1":
-            #    fitted_bifurc_tree = six.moves.cPickle.load(f)[0]["best_res"].fitted_bifurc_tree
-            #else:
-            fitted_bifurc_tree = six.moves.cPickle.load(f)["final_fit"].fitted_bifurc_tree
+            if not get_first:
+                fitted_bifurc_tree = six.moves.cPickle.load(f)["final_fit"].fitted_bifurc_tree
+            else:
+                tune_hist = six.moves.cPickle.load(f)["tuning_history"]
+                for hist_iter in tune_hist:
+                    print("...")
+                    if hist_iter["chad_tune_result"].num_chad_leaves == 1:
+                        fitted_bifurc_tree = hist_iter["chad_tune_result"].get_best_result()[-1].fitted_bifurc_tree
+                        break
+
     elif method == "chronos":
         if fish == "ADR1":
             fitted_tree_file = "analyze_gestalt/_output/ADR1_abund5/chronos_fitted.pkl"
