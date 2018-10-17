@@ -142,13 +142,14 @@ def load_fish(fish, method):
     if method == "PMLE":
         if fish == "ADR1":
             fitted_tree_file = "analyze_gestalt/_output/ADR1_abund5/sum_states_10/extra_steps_0/tune_pen.pkl"
+            fitted_tree_file = "analyze_gestalt/_output/ADR1_abund5/sum_states_10/extra_steps_0/tune_pen_hanging.pkl"
         elif fish == "ADR2":
             fitted_tree_file = "analyze_gestalt/_output/ADR2_abund1/sum_states_10/extra_steps_0/tune_pen_hanging.pkl"
         with open(fitted_tree_file, "rb") as f:
-            if fish == "ADR1":
-                fitted_bifurc_tree = six.moves.cPickle.load(f)[0]["best_res"].fitted_bifurc_tree
-            else:
-                fitted_bifurc_tree = six.moves.cPickle.load(f)["final_fit"].fitted_bifurc_tree
+            #if fish == "ADR1":
+            #    fitted_bifurc_tree = six.moves.cPickle.load(f)[0]["best_res"].fitted_bifurc_tree
+            #else:
+            fitted_bifurc_tree = six.moves.cPickle.load(f)["final_fit"].fitted_bifurc_tree
     elif method == "chronos":
         if fish == "ADR1":
             fitted_tree_file = "analyze_gestalt/_output/ADR1_abund5/chronos_fitted.pkl"
@@ -205,7 +206,7 @@ def create_shuffled_cell_state_abund_labels(allele_to_cell_state):
     return allele_to_cell_state_random
 
 def main(args=sys.argv[1:]):
-    num_rand_permute = 2#000
+    num_rand_permute = 2000
     fishies = ["ADR1", "ADR2"]
     methods = ["PMLE", "chronos", "nj"]
     for method in methods:

@@ -1,18 +1,10 @@
 import sys
-import six
 import argparse
-import os.path
 
-import numpy as np
-from scipy import stats
 import matplotlib
 matplotlib.use('Agg')
-from matplotlib import pyplot
-import seaborn as sns
 
-from common import parse_comma_str
 from plot_analyze_gestalt_meta import get_allele_to_cell_states, load_fish
-from cell_state import CellTypeTree
 from cell_lineage_tree import CellLineageTree
 from plot_mrca_matrices import plot_tree
 import collapsed_tree
@@ -60,7 +52,7 @@ def parse_args(args):
     parser.add_argument(
         '--out-plot',
         type=str,
-        default="_output/out.png")
+        default="_output/ADR1_tree.png")
     return args
 
 def _expand_leaved_tree(fitted_bifurc_tree, allele_to_cell_state, cell_state_dict, default_dist_scale = 0, min_abund_thres = 0):
@@ -181,7 +173,7 @@ def plot_gestalt_tree(
 def main(args=sys.argv[1:]):
     args = parse_args(args)
     # TODO: this doesnt work right now. need to add in prefix of tmp_mount
-    tree, obs_dict = load_fish(args.fish, do_chronos=False)
+    tree, obs_dict = load_fish(args.fish, method="PMLE")
     allele_to_cell_state, cell_state_dict = get_allele_to_cell_states(obs_dict)
     organ_dict = obs_dict["organ_dict"]
     bcode_meta = obs_dict["bcode_meta"]
