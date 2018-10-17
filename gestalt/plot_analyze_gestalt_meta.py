@@ -1,6 +1,7 @@
 import sys
 import matplotlib
 matplotlib.use('Agg')
+import os.path
 import seaborn as sns
 import numpy as np
 import six
@@ -120,7 +121,7 @@ def plot_distance_matrix(sym_X_matrix, out_plot_file):
     mask[np.triu_indices(sym_X_matrix.shape[0], k=0)] = True
     VMAX = 0.8
     VMIN = 0.2
-    print(np.min(sym_X_matrix[np.triu_indices(sym_X_matrix.shape[0], k=1)]))
+    #print(np.min(sym_X_matrix[np.triu_indices(sym_X_matrix.shape[0], k=1)]))
     #assert np.max(sym_X_matrix) < VMAX
     sns.heatmap(sym_X_matrix,
             xticklabels=ORGAN_LABELS,
@@ -133,18 +134,19 @@ def plot_distance_matrix(sym_X_matrix, out_plot_file):
     plt.savefig(out_plot_file)
     print("matrix PLOT", out_plot_file)
 
-def load_fish(fish, method):
+def load_fish(fish, method, folder=None):
     if fish == "ADR1":
-        obs_file = "_output/gestalt_aws/ADR1_fish_data.pkl"
+        obs_file = "analyze_gestalt/_output/ADR1_abund5/fish_data_restrict.pkl"
     elif fish == "ADR2":
         obs_file = "analyze_gestalt/_output/ADR2_abund1/fish_data_restrict_with_cell_types.pkl"
 
     if method == "PMLE":
         if fish == "ADR1":
-            fitted_tree_file = "analyze_gestalt/_output/ADR1_abund5/sum_states_10/extra_steps_0/tune_pen.pkl"
             fitted_tree_file = "analyze_gestalt/_output/ADR1_abund5/sum_states_10/extra_steps_0/tune_pen_hanging.pkl"
         elif fish == "ADR2":
             fitted_tree_file = "analyze_gestalt/_output/ADR2_abund1/sum_states_10/extra_steps_0/tune_pen_hanging.pkl"
+        if folder is not None:
+            fitted_tree_file = os.path.join(folder, fitted_tree_file)
         with open(fitted_tree_file, "rb") as f:
             #if fish == "ADR1":
             #    fitted_bifurc_tree = six.moves.cPickle.load(f)[0]["best_res"].fitted_bifurc_tree
@@ -155,6 +157,8 @@ def load_fish(fish, method):
             fitted_tree_file = "analyze_gestalt/_output/ADR1_abund5/chronos_fitted.pkl"
         elif fish == "ADR2":
             fitted_tree_file = "analyze_gestalt/_output/ADR2_abund1/chronos_fitted.pkl"
+        if folder is not None:
+            fitted_tree_file = os.path.join(folder, fitted_tree_file)
         with open(fitted_tree_file, "rb") as f:
             fitted_bifurc_tree = six.moves.cPickle.load(f)[0]["fitted_tree"]
     elif method == "nj":
@@ -162,6 +166,8 @@ def load_fish(fish, method):
             fitted_tree_file = "analyze_gestalt/_output/ADR1_abund5/nj_fitted.pkl"
         elif fish == "ADR2":
             fitted_tree_file = "analyze_gestalt/_output/ADR2_abund1/nj_fitted.pkl"
+        if folder is not None:
+            fitted_tree_file = os.path.join(folder, fitted_tree_file)
         with open(fitted_tree_file, "rb") as f:
             fitted_bifurc_tree = six.moves.cPickle.load(f)[1]["fitted_tree"]
     else:
