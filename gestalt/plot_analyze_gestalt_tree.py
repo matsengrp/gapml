@@ -50,9 +50,14 @@ def parse_args(args):
         type=str,
         default="ADR1")
     parser.add_argument(
+        '--folder',
+        type=str,
+        default="tmp_mount")
+    parser.add_argument(
         '--out-plot',
         type=str,
         default="_output/ADR1_tree.png")
+    args = parser.parse_args(args)
     return args
 
 def _expand_leaved_tree(fitted_bifurc_tree, allele_to_cell_state, cell_state_dict, default_dist_scale = 0, min_abund_thres = 0):
@@ -173,7 +178,7 @@ def plot_gestalt_tree(
 def main(args=sys.argv[1:]):
     args = parse_args(args)
     # TODO: this doesnt work right now. need to add in prefix of tmp_mount
-    tree, obs_dict = load_fish(args.fish, method="PMLE")
+    tree, obs_dict = load_fish(args.fish, method="PMLE", args.folder)
     allele_to_cell_state, cell_state_dict = get_allele_to_cell_states(obs_dict)
     organ_dict = obs_dict["organ_dict"]
     bcode_meta = obs_dict["bcode_meta"]
