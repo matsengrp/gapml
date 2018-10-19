@@ -131,7 +131,7 @@ def plot_distance_matrix(sym_X_matrix, out_plot_file):
             #fmt='',
             vmin=VMIN,
             vmax=VMAX)
-    plt.savefig(out_plot_file)
+    plt.savefig(out_plot_file, transparent=True, bbox_inches='tight')
     print("matrix PLOT", out_plot_file)
 
 def load_fish(fish, method, folder=None, get_first=False):

@@ -46,7 +46,7 @@ def parse_args(args):
     parser.add_argument(
         '--tot-time',
         type=float,
-        default="num hpf")
+        default=4.3)
     args = parser.parse_args(args)
     args.fishies = parse_comma_str(args.fishies, str)
     return args
