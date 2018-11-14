@@ -3,10 +3,10 @@ You will need to have PHYLIP mix installed so that you can call `mix` on the com
 http://evolution.genetics.washington.edu/phylip/
 
 We use `pip` to install things into a python virtual environment.
-Install the libraries into your virtual environment through the `requirements.txt` file.
-Note: to get tree visualizations from ete3, you will need to do something special since we are using pip (rather than conda).
+FIRST: if you want tree visualizations from ete3, you will need to do something special since we are using pip (rather than conda).
 Install PyQt5 (`sudo apt-get` on linux, `brew install` on mac. For mac, see https://stackoverflow.com/questions/39821177/python-pyqt-on-macos-sierra).
 Then run `pip install PyQt5` in your virtual environment.
+AFTERWARDS: Install the libraries into your virtual environment through the `requirements.txt` file.
 
 We use nestly + SCons to run simulations/analyses.
 You should install scons outside the virtual environment, for a python 2.\* or a 3.5+ environment.
