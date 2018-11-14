@@ -49,13 +49,22 @@ def plot_gestalt_tree(
         fitted_bifurc_tree,
         out_plot_file,
         coll_dist=0.001):
-    from ete3 import NodeStyle
+    from ete3 import NodeStyle, RectFace
     print("at plotting phase....")
-    for l in fitted_bifurc_tree:
-        l.name = "%d" % (l.abundance,)
+    #for l in fitted_bifurc_tree:
+    for leaf in fitted_bifurc_tree:
         nstyle = NodeStyle()
-        nstyle["size"] = np.log2(l.abundance) + 1
-        l.set_style(nstyle)
+        nstyle["size"] = 0
+        leaf.set_style(nstyle)
+
+        leaf.name = ""
+
+        seqFace = RectFace(
+            width=np.log2(leaf.abundance) + 1,
+            height=0.2,
+            fgcolor="blue",
+            bgcolor="blue")
+        leaf.add_face(seqFace, 0, position="aligned")
 
     # Collapse distances for plot readability
     for node in fitted_bifurc_tree.get_descendants():
@@ -66,8 +75,9 @@ def plot_gestalt_tree(
     plot_tree(
             col_tree,
             out_plot_file,
-            width=400,
-            show_leaf_name=True)
+            width=600,
+            height=2500,
+            show_leaf_name=False)
 
 def main(args=sys.argv[1:]):
     args = parse_args(args)
