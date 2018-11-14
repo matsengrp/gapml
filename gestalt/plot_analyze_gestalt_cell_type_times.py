@@ -89,12 +89,10 @@ def get_cell_type_times(fitted_bifurc_tree, organ_dict, allele_to_cell_state):
             # Get the time when this node that only depends to this cell type group branched off
             cell_type_times["time"].append(t_grid)
         if node.is_leaf():
-            # HACK: To make the violin plots of singleton cell types look less confusing
-            cell_type_times["organ"].append(cell_type_str)
-            cell_type_times["time"].append(1.1)
-            # HACK: To make the violin plots of singleton cell types look less confusing
-            cell_type_times["organ"].append(cell_type_str)
-            cell_type_times["time"].append(1.2)
+            for t_grid in np.arange(1, 1.1, time_incr):
+                # HACK: To make the violin plots of singleton cell types look less confusing
+                cell_type_times["organ"].append(cell_type_str)
+                cell_type_times["time"].append(t_grid)
 
         if cell_type_str not in cell_type_counter:
             cell_type_counter[cell_type_str] = 1
