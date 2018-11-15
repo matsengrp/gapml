@@ -9,9 +9,9 @@ import scipy.stats
 from cell_lineage_tree import CellLineageTree
 from matplotlib import pyplot as plt
 import pandas as pd
-from collections import Counter
+from scipy.ndimage import convolve1d
 
-from plot_analyze_gestalt_meta import load_fish, get_allele_to_cell_states, create_shuffled_cell_state_abund_labels, ORGAN_LABELS, ORGAN_ORDER
+from plot_analyze_gestalt_meta import load_fish, get_allele_to_cell_states, ORGAN_LABELS
 
 """
 Plot distribution of (differentiated and pluripotent) cell type times
@@ -33,8 +33,7 @@ HEART_TYPES = [
     "Heart_diss",
 ]
 
-
-def get_cell_type_times(fitted_bifurc_tree, organ_dict, allele_to_cell_state):
+def label_tree_cell_types(fitted_bifurc_tree, organ_dict, allele_to_cell_state):
     for node in fitted_bifurc_tree.traverse('postorder'):
         if node.is_leaf():
             allele_str = node.allele_events_list_str
@@ -56,6 +55,9 @@ def get_cell_type_times(fitted_bifurc_tree, organ_dict, allele_to_cell_state):
             node.add_feature("cell_types", set())
             for child in node.children:
                 node.cell_types.update(child.cell_types)
+
+def get_cell_type_times(fitted_bifurc_tree, organ_dict, allele_to_cell_state):
+    label_tree_cell_types(fitted_bifurc_tree, organ_dict, allele_to_cell_state)
 
     cell_type_times = {
             "organ": [],
@@ -135,6 +137,133 @@ def plot_violins(cell_type_times, out_plot_file):
     plt.savefig(out_plot_file, transparent=True, bbox_inches='tight')
     print("matrix PLOT", out_plot_file)
 
+def get_cell_type_divergence_times(
+        fitted_bifurc_tree,
+        organ_dict,
+        allele_to_cell_state,
+        time_incr=0.1):
+    label_tree_cell_types(fitted_bifurc_tree, organ_dict, allele_to_cell_state)
+    #for node in fitted_bifurc_tree.traverse('postorder'):
+    #    if node.is_leaf():
+    #        allele_str = node.allele_events_list_str
+    #        cell_types = allele_to_cell_state[allele_str]
+    #        node.add_feature("cell_types", {})
+    #        for x, abund in cell_types.items():
+    #            cell_type = organ_dict[x].replace("7B_", "")
+    #            if cell_type in set(HEART_TYPES):
+    #                if "Heart" in node.cell_types:
+    #                    node.cell_types["Heart"] += abund
+    #                else:
+    #                    node.cell_types["Heart"] = abund
+    #            elif cell_type in set(GUT_TYPES):
+    #                if "Gut" in node.cell_types:
+    #                    node.cell_types["Gut"] += abund
+    #                else:
+    #                    node.cell_types["Gut"] = abund
+    #            elif cell_type in set(EYE_TYPES):
+    #                if "Eyes" in node.cell_types:
+    #                    node.cell_types["Eyes"] += abund
+    #                else:
+    #                    node.cell_types["Eyes"] = abund
+    #            else:
+    #                node.cell_types[cell_type] = abund
+    #    else:
+    #        node.add_feature("cell_types", dict())
+    #        for child in node.children:
+    #            for k, v in child.cell_types.items():
+    #                if k in node.cell_types:
+    #                    node.cell_types[k] += v
+    #                else:
+    #                    node.cell_types[k] = v
+
+    cell_type_times = {
+            "leaf_organ": [],
+            "divergence_cell_type": [],
+            "time": [],
+            "count": []}
+    for node in fitted_bifurc_tree.traverse():
+        if node.is_root():
+            continue
+
+        cell_types = list(node.cell_types)
+        cell_type_str = "+".join(list(sorted(cell_types)))
+        for leaf in node:
+            if len(leaf.cell_types) == 1:
+                leaf_organ, abund = list(leaf.cell_types.items())[0]
+                start_time = int(node.up.dist_to_root/time_incr)
+                end_time = int(node.dist_to_root/time_incr)
+                for t_grid in np.arange(start_time, end_time):
+                    cell_type_times["leaf_organ"].append(leaf_organ)
+                    cell_type_times["divergence_cell_type"].append(cell_type_str)
+                    # Get the time when this node that only depends to this cell type group branched off
+                    cell_type_times["time"].append(t_grid)
+                    cell_type_times["count"].append(abund)
+
+    cell_type_times_df = pd.DataFrame(cell_type_times)
+    return cell_type_times_df
+
+def plot_stacked_divergences(cell_type_time_df, out_plot_template):
+    actual_colors = sns.color_palette("muted")
+    num_colors = len(actual_colors)
+    unique_leaf_organs = cell_type_time_df['leaf_organ'].unique()
+    for leaf_organ in unique_leaf_organs:
+        filtered_times = cell_type_time_df[cell_type_time_df['leaf_organ'] == leaf_organ]
+        print(leaf_organ)
+        print(filtered_times.shape)
+        time_uniques = filtered_times['time'].unique()
+        divergence_uniques = filtered_times['divergence_cell_type'].unique()
+
+        divergence_counts = []
+        total_counts = []
+        for divergence_cell_type in divergence_uniques:
+            time_counts_grouped = filtered_times[filtered_times['divergence_cell_type'] == divergence_cell_type].groupby('time').sum()
+            dense_time_counts = np.zeros(time_uniques.size)
+            time_index = time_counts_grouped.index
+            time_counts_grouped = time_counts_grouped.values
+            for idx in range(time_counts_grouped.size):
+                dense_time_counts[time_index[idx]] = time_counts_grouped[idx]
+            total_counts.append(time_counts_grouped.sum())
+            divergence_counts.append(dense_time_counts)
+
+        # Restrict the colors to progenitor cell types that appear often enough
+        if divergence_uniques.size >= num_colors:
+            print("FILITER")
+            count_thres = np.sort(total_counts)[-num_colors]
+            other_counts = np.zeros(time_uniques.size)
+            final_divergence_counts = []
+            final_labels = []
+            for dense_time_counts, label in zip(divergence_counts, divergence_uniques):
+                count = np.sum(dense_time_counts)
+                if count > count_thres:
+                    final_divergence_counts.append(dense_time_counts)
+                    final_labels.append(label)
+                else:
+                    other_counts += dense_time_counts
+            final_divergence_counts.append(other_counts)
+            final_labels.append("other")
+            final_colors = actual_colors[:len(final_labels) - 1] + ["black"]
+        else:
+            final_divergence_counts = divergence_counts
+            final_labels = divergence_uniques
+            final_colors = actual_colors
+
+        # smooth out counts for visualization purposes
+        divergence_counts = np.array(divergence_counts)
+        divergence_counts = convolve1d(
+                divergence_counts,
+                weights=[0.05,0.05,0.1,0.1,0.1,0.1,0.2,0.1,0.1,0.1,0.1,0.05,0.05])
+        plt.clf()
+        plt.figure(figsize=(30,15))
+        plt.stackplot(
+                np.arange(0, time_uniques.size),
+                final_divergence_counts,
+                labels=final_labels,
+                colors=final_colors)
+        plt.xlim(0, 1750)
+        plt.legend(loc='right')
+        out_plot_file = out_plot_template % leaf_organ
+        plt.savefig(out_plot_file, bbox_inches='tight')
+        print("matrix PLOT", out_plot_file)
 
 def main(args=sys.argv[1:]):
     sns.set_context('poster')
@@ -146,9 +275,15 @@ def main(args=sys.argv[1:]):
             tree.label_dist_to_roots()
             organ_dict = obs_dict["organ_dict"]
             allele_to_cell_state, _ = get_allele_to_cell_states(obs_dict)
-            cell_type_times = get_cell_type_times(tree, organ_dict, allele_to_cell_state)
-            out_plot_file = "_output/cell_type_times_%s_%s.png" % (fish, method)
-            plot_violins(cell_type_times, out_plot_file)
+            #cell_type_times = get_cell_type_times(tree, organ_dict, allele_to_cell_state)
+            #out_plot_file = "_output/cell_type_times_%s_%s.png" % (fish, method)
+            #plot_violins(cell_type_times, out_plot_file)
+
+            cell_type_time_df = get_cell_type_divergence_times(tree, organ_dict, allele_to_cell_state)
+            out_plot_template = "_output/cell_type_divergence_times_%s_%%s.png" % fish
+            print(out_plot_template)
+            plot_stacked_divergences(cell_type_time_df, out_plot_template)
+
 
         print(method)
 
