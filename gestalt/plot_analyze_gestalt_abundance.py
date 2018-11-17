@@ -10,6 +10,7 @@ matplotlib.use('Agg')
 from matplotlib import pyplot
 import seaborn as sns
 from common import parse_comma_str
+from plot_analyze_gestalt_meta import load_fish
 
 def parse_args(args):
     parser = argparse.ArgumentParser(
@@ -37,7 +38,7 @@ def parse_args(args):
     parser.add_argument(
         '--fishies',
         type=str,
-        default="dome1_abund1")
+        default="dome5_abund1")
         #default="dome1_abund1,dome3_abund1,dome5_abund1,dome8_abund1")
     parser.add_argument(
         '--out-plot-template',
@@ -47,11 +48,22 @@ def parse_args(args):
         '--tot-time',
         type=float,
         default=4.3)
+    parser.add_argument(
+        '--alpha',
+        type=float,
+        default=0.5)
+    parser.add_argument(
+        '--size',
+        type=float,
+        default=1)
     args = parser.parse_args(args)
     args.fishies = parse_comma_str(args.fishies, str)
     return args
 
 def load_data(args, fish, method):
+    if fish in ["ADR1", "ADR2"]:
+        return load_fish(fish, method)
+
     if method == "PMLE":
         fitted_tree_file = os.path.join(args.folder, args.mle_file_template % fish)
         with open(fitted_tree_file, "rb") as f:
@@ -75,6 +87,7 @@ def load_data(args, fish, method):
 def plot_distance_to_abundance(
         fitted_bifurc_tree,
         tot_time,
+        args,
         out_plot_file="/Users/jeanfeng/Desktop/scatter_dist_to_abundance.png"):
     """
     Understand if distance to root is inversely related to total abundance
@@ -86,10 +99,15 @@ def plot_distance_to_abundance(
             continue
         if min([leaf.abundance for leaf in node]) > 1:
             continue
+        if len(node.spine_children) == 0:
+            continue
         dist = node.get_distance(fitted_bifurc_tree)
         X_dists.append(dist)
-        tot_abundance = float(sum([leaf.abundance for leaf in node]))
+        #tot_abundance = float(sum([leaf.abundance for leaf in node]))
+        tot_abundance = len(node)
         Y_abundance.append(tot_abundance)
+
+    print(Y_abundance)
 
     if out_plot_file:
         print(out_plot_file)
@@ -97,10 +115,14 @@ def plot_distance_to_abundance(
         sns.regplot(
                 np.array(X_dists),
                 np.log2(Y_abundance) - np.log2(np.max(Y_abundance)),
-                robust=True)
+                lowess=True,
+                scatter_kws={"alpha": args.alpha, "s": args.size})
         pyplot.xlabel("dist to root")
         pyplot.ylabel("log_2(abundance/max_abundance)")
-        pyplot.xlim(-0.05,1)
+        pyplot.xlim(-0.05,1.1)
+        pyplot.ylim(
+                np.min(np.log2(Y_abundance) - np.log2(np.max(Y_abundance))) - 0.15,
+                0.15)
         pyplot.savefig(out_plot_file)
     slope, _, _, pval, se = stats.linregress(X_dists, np.log2(Y_abundance))
     print("estimated slope", slope, "pval", pval)
@@ -112,6 +134,7 @@ def plot_distance_to_abundance(
 def main(args=sys.argv[1:]):
     args = parse_args(args)
     methods = ["PMLE", "chronos", "nj"]
+    methods = ["PMLE"]
     for method in methods:
         print("method", method)
         for fish in args.fishies:
@@ -120,6 +143,7 @@ def main(args=sys.argv[1:]):
             plot_distance_to_abundance(
                 fitted_bifurc_tree,
                 args.tot_time,
+                args,
                 out_plot_file = args.out_plot_template % fish)
 
 if __name__ == "__main__":

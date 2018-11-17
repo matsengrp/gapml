@@ -35,7 +35,7 @@ def parse_args(args):
     parser.add_argument(
         '--out-plot-template',
         type=str,
-        default="_output/tree_abund_%s.png")
+        default="_output/tree_abund_%s_noname.png")
     args = parser.parse_args(args)
     return args
 
@@ -57,7 +57,7 @@ def plot_gestalt_tree(
         nstyle["size"] = 0
         leaf.set_style(nstyle)
 
-        leaf.name = ""
+        leaf.name = "" # leaf.allele_events_list_str
 
         seqFace = RectFace(
             width=np.log2(leaf.abundance) + 1,
@@ -75,7 +75,7 @@ def plot_gestalt_tree(
     plot_tree(
             col_tree,
             out_plot_file,
-            width=600,
+            width=1600,
             height=2500,
             show_leaf_name=False)
 

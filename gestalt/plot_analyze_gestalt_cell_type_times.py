@@ -37,7 +37,7 @@ HEART_TYPES = [
 ORGAN_TYPES = [
     "Brain",
     "Eyes",
-    "Gut",
+    "Int",
     "Gills",
     "Blood",
     "Heart",
@@ -57,10 +57,12 @@ def label_tree_cell_types(fitted_bifurc_tree, organ_dict, allele_to_cell_state):
                 node.cell_types.add("Heart")
             if node.cell_types.intersection(set(GUT_TYPES)):
                 node.cell_types = node.cell_types - set(GUT_TYPES)
-                node.cell_types.add("Gut")
+                node.cell_types.add("Int")
             if node.cell_types.intersection(set(EYE_TYPES)):
                 node.cell_types = node.cell_types - set(EYE_TYPES)
                 node.cell_types.add("Eyes")
+            # if see if render better
+            node.cell_types = node.cell_types - set(["Blood"])
         else:
             node.add_feature("cell_types", set())
             for child in node.children:
@@ -92,7 +94,7 @@ def get_cell_type_times(fitted_bifurc_tree, organ_dict, allele_to_cell_state):
         cell_type_abund_dict = node.cell_types
         cell_types = list(cell_type_abund_dict)
 
-        cell_type_str = "+".join(list(sorted(cell_types)))
+        cell_type_str = make_cell_type_str(cell_types)
         time_incr = 0.02
         start_time = node.up.dist_to_root
         end_time = node.dist_to_root
@@ -147,6 +149,9 @@ def plot_violins(cell_type_times, out_plot_file):
     plt.savefig(out_plot_file, transparent=True, bbox_inches='tight')
     print("matrix PLOT", out_plot_file)
 
+def make_cell_type_str(cell_types):
+    return "".join([c[0] for c in sorted(list(cell_types))])
+
 def get_cell_type_divergence_times(
         fitted_bifurc_tree,
         organ_dict,
@@ -162,7 +167,7 @@ def get_cell_type_divergence_times(
 
         cell_types = allele_to_cell_state[leaf.allele_events_list_str]
         leaf_abund = list(cell_types.values())[0]
-        leaf_organ = list(leaf.cell_types)[0]
+        leaf_organ = make_cell_type_str(leaf.cell_types)
         cell_type_flow_df.append(
                 [leaf_organ, len(time_indices), leaf.node_id, leaf_abund])
 
@@ -177,14 +182,14 @@ def get_cell_type_divergence_times(
             discrete_time = discrete_time_index * time_interval
             if node.dist_to_root > discrete_time and node.up.dist_to_root < discrete_time:
                 cell_types = list(node.cell_types)
-                cell_type_str = "+".join(list(sorted(cell_types)))
+                cell_type_str = make_cell_type_str(cell_types)
                 cell_type_flow_df.append(
                         [cell_type_str, discrete_time_index, leaf.node_id, leaf_abund])
                 discrete_time_index -= 1
             else:
                 node = node.up
 
-        root_cell_type_str = "+".join(list(sorted(list(node.cell_types))))
+        root_cell_type_str = make_cell_type_str(node.cell_types)
         cell_type_flow_df.append(
                 [root_cell_type_str, 0, leaf.node_id, leaf_abund])
 
@@ -192,6 +197,10 @@ def get_cell_type_divergence_times(
     return flow_df
 
 def plot_flow(flow_df, out_plot):
+    if flow_df.shape[0] == 0:
+        print("NOTHING TO PLOT")
+        return
+
     in_file = "_output/alluvial.csv"
     flow_df.to_csv(in_file, index=False)
 
@@ -204,6 +213,7 @@ def plot_flow(flow_df, out_plot):
 
     print("Calling:", " ".join(cmd))
     res = subprocess.call(cmd)
+    assert res == 0
     print("resss", res)
 
 def main(args=sys.argv[1:]):
@@ -225,7 +235,8 @@ def main(args=sys.argv[1:]):
                     tree,
                     organ_dict,
                     allele_to_cell_state,
-                    filter_organ=cell_type)
+                    filter_organ=cell_type,
+                    time_indices=list(range(20)))
                 out_plot_template = "_output/cell_type_divergence_times_%s_%s.png" % (fish, cell_type)
                 print(out_plot_template)
                 plot_flow(cell_type_time_df, out_plot_template)

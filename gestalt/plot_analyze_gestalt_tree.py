@@ -1,5 +1,6 @@
 import sys
 import argparse
+import numpy as np
 
 import matplotlib
 matplotlib.use('Agg')
@@ -55,7 +56,11 @@ def parse_args(args):
     parser.add_argument(
         '--out-plot',
         type=str,
-        default="_output/ADR1_tree.png")
+        default="_output/%s_tree.png")
+    parser.add_argument(
+        '--out-abund-plot',
+        type=str,
+        default="_output/%s_tree_abund.png")
     args = parser.parse_args(args)
     return args
 
@@ -174,6 +179,52 @@ def plot_gestalt_tree(
             show_leaf_name=False,
             legend_colors=legend_colors)
 
+def plot_gestalt_tree_abund(
+        fitted_bifurc_tree,
+        bcode_meta,
+        organ_dict,
+        allele_to_cell_state,
+        cell_state_dict,
+        out_plot_file):
+    from ete3 import NodeStyle, RectFace
+    fitted_bifurc_tree = _expand_leaved_tree(fitted_bifurc_tree, allele_to_cell_state, cell_state_dict)
+
+    for leaf in fitted_bifurc_tree:
+        nstyle = NodeStyle()
+        nstyle["size"] = 0
+        leaf.set_style(nstyle)
+
+        seqFace = RectFace(
+            width=np.log2(leaf.abundance) + 1,
+            height=0.2,
+            fgcolor=ORGAN_COLORS[organ_dict[str(leaf.cell_state)]],
+            bgcolor=ORGAN_COLORS[organ_dict[str(leaf.cell_state)]])
+        leaf.add_face(seqFace, 0, position="aligned")
+
+    # Collapse distances for plot readability
+    for node in fitted_bifurc_tree.get_descendants():
+        if node.dist < COLLAPSE_DIST:
+            node.dist = 0
+    col_tree = collapsed_tree.collapse_zero_lens(fitted_bifurc_tree)
+
+    legend_colors = {}
+    for organ_key, color in ORGAN_COLORS.items():
+        text = ORGAN_TRANSLATION[organ_key]
+        label_dict = {
+            "text": text,
+            "color": "gray",
+            "fontsize": 2}
+        legend_colors[color] = label_dict
+
+    print("at plotting phase....")
+    plot_tree(
+            col_tree,
+            out_plot_file,
+            width=600,
+            height=3000,
+            show_leaf_name=False,
+            legend_colors=legend_colors)
+
 def main(args=sys.argv[1:]):
     args = parse_args(args)
     print(args)
@@ -182,13 +233,20 @@ def main(args=sys.argv[1:]):
     allele_to_cell_state, cell_state_dict = get_allele_to_cell_states(obs_dict)
     organ_dict = obs_dict["organ_dict"]
     bcode_meta = obs_dict["bcode_meta"]
-    plot_gestalt_tree(
+    #plot_gestalt_tree(
+    #    tree,
+    #    bcode_meta,
+    #    organ_dict,
+    #    allele_to_cell_state,
+    #    cell_state_dict,
+    #    args.out_plot % args.fish)
+    plot_gestalt_tree_abund(
         tree,
         bcode_meta,
         organ_dict,
         allele_to_cell_state,
         cell_state_dict,
-        args.out_plot)
+        args.out_abund_plot % args.fish)
 
 
 if __name__ == "__main__":

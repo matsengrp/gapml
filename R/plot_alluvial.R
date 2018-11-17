@@ -10,5 +10,5 @@ head(flow_df)
 ggplot(flow_df,
        aes(y = Freq, x=time, alluvium=leaf_id, stratum = progenitor, fill = progenitor)) +
   geom_lode() + geom_flow() +
-  geom_stratum()
-ggsave(out.file)
+  geom_stratum() + geom_text(stat = "stratum", label.strata = TRUE)
+ggsave(out.file, width = 25, height = 10)

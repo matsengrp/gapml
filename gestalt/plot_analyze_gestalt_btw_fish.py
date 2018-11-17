@@ -8,8 +8,6 @@ import scipy.stats
 
 import matplotlib
 matplotlib.use('Agg')
-import seaborn as sns
-import matplotlib.pyplot as plt
 
 from plot_analyze_gestalt_meta import load_fish
 from common import parse_comma_str
