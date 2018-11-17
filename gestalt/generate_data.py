@@ -9,21 +9,19 @@ import time
 import tensorflow as tf
 import logging
 import six
-import pathlib
 import os
 
-from cell_state import CellState, CellTypeTree
-from cell_lineage_tree import CellLineageTree
+from cell_state import CellTypeTree
 from cell_state_simulator import CellTypeSimulator
 from clt_simulator import CLTSimulatorBifurcating
-from clt_simulator_simple import CLTSimulatorSimple, CLTSimulatorSimpler, CLTSimulatorSimplest
+from clt_simulator_simple import CLTSimulatorSimpler, CLTSimulatorSimplest
 from clt_likelihood_model import CLTLikelihoodModel
 from allele_simulator_simult import AlleleSimulatorSimultaneous
 from clt_observer import CLTObserver
 from optim_settings import KnownModelParams
 from barcode_metadata import BarcodeMetadata
 
-from common import create_directory
+from common import create_directory, inv_sigmoid
 from constants import NUM_BARCODE_V7_TARGETS, BARCODE_V7
 
 
@@ -94,11 +92,18 @@ def parse_args():
         default=[0.01] * 2,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
-        '--trim-poissons',
+        '--trim-nbinom-m',
         type=float,
         nargs=2,
         default=[4] * 2,
-        help='poisson parameter for distribution of symmetric deltion about cut site(s)'
+        help='neg binom parameter for left and right trims, until we observe this many failures, same for long and short'
+    )
+    parser.add_argument(
+        '--trim-nbinom-probs',
+        type=float,
+        nargs=2,
+        default=[0.5] * 2,
+        help='neg binom parameters for left and right trims, success probability, same for long and short'
     )
     parser.add_argument(
         '--insert-zero-prob',
@@ -106,10 +111,15 @@ def parse_args():
         default=0.01,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
-        '--insert-poisson',
+        '--insert-nbinom-m',
         type=float,
         default=1,
-        help='poisson parameter for distribution of insertion in cut site(s)')
+        help='neg binom parameter for insertion length, until we observe this many failures')
+    parser.add_argument(
+        '--insert-nbinom-prob',
+        type=float,
+        default=0.1,
+        help='neg binom parameter for insertion length, prob of success')
     parser.add_argument(
         '--birth-sync-rounds', type=float, default=2, help='number of syncronous birth rounds before async begins')
     parser.add_argument(
@@ -301,8 +311,9 @@ def main(args=sys.argv[1:]):
     sess = tf.InteractiveSession()
     # Create model
     known_params = KnownModelParams(
-            target_lams = True,
-            double_cut_weight = True)
+            target_lams=True,
+            double_cut_weight=True,
+            indel_params=True)
     clt_model = CLTLikelihoodModel(
             None,
             bcode_meta,
@@ -313,10 +324,13 @@ def main(args=sys.argv[1:]):
             double_cut_weight = [args.double_cut_weight],
             trim_long_factor = np.array(args.trim_long_factor),
             trim_zero_probs = np.array(args.trim_zero_probs),
-            trim_short_poissons = np.array(args.trim_poissons),
-            trim_long_poissons = np.array(args.trim_poissons),
+            trim_short_nbinom_m = np.array(args.trim_nbinom_m),
+            trim_short_nbinom_logits = inv_sigmoid(args.trim_nbinom_probs),
+            trim_long_nbinom_m = np.array(args.trim_nbinom_m),
+            trim_long_nbinom_logits = inv_sigmoid(args.trim_nbinom_probs),
             insert_zero_prob = np.array([args.insert_zero_prob]),
-            insert_poisson = np.array([args.insert_poisson]),
+            insert_nbinom_m = np.array([args.insert_nbinom_m]),
+            insert_nbinom_logit = inv_sigmoid(np.array([args.insert_nbinom_prob])),
             cell_type_tree = cell_type_tree,
             tot_time = args.time,
             tot_time_extra = 1e-10)

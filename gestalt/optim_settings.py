@@ -25,7 +25,7 @@ class KnownModelParams:
         self.cell_lambdas = cell_lambdas
         self.tot_time = tot_time
         self.indel_params = indel_params
-        self.indel_poissons = indel_params
+        self.indel_dists = indel_params
 
         self.branch_lens = branch_lens
         if self.branch_lens:

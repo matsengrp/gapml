@@ -3,6 +3,7 @@ import logging
 import numpy as np
 import tensorflow as tf
 from tensorflow import Tensor
+from tensorflow.contrib.distributions import NegativeBinomial
 
 from typing import List, Dict
 from numpy import ndarray
@@ -41,10 +42,13 @@ class CLTLikelihoodModel:
             boost_softmax_weights: ndarray = np.ones(3),
             trim_long_factor: ndarray = 0.05 * np.ones(2),
             trim_zero_probs: ndarray = 0.5 * np.ones(2),
-            trim_short_poissons: ndarray = 2.5 * np.ones(2),
-            trim_long_poissons: ndarray = 2.5 * np.ones(2),
+            trim_short_nbinom_m: ndarray = 4 * np.ones(2),
+            trim_short_nbinom_logits: ndarray = np.zeros(2),
+            trim_long_nbinom_m: ndarray = 2.5 * np.ones(2),
+            trim_long_nbinom_logits: ndarray = np.zeros(2),
             insert_zero_prob: ndarray = np.array([0.5]),
-            insert_poisson: ndarray = np.array([0.2]),
+            insert_nbinom_m: ndarray = np.array([1]),
+            insert_nbinom_logit: ndarray = np.ones(1),
             double_cut_weight: ndarray = np.array([1.0]),
             branch_len_inners: ndarray = np.array([]),
             branch_len_offsets_proportion: ndarray = np.array([]),
@@ -108,29 +112,35 @@ class CLTLikelihoodModel:
                 boost_softmax_weights,
                 trim_long_factor,
                 trim_zero_probs,
-                trim_short_poissons,
-                trim_long_poissons,
+                trim_short_nbinom_m,
+                trim_short_nbinom_logits,
+                trim_long_nbinom_m,
+                trim_long_nbinom_logits,
                 insert_zero_prob,
-                insert_poisson,
+                insert_nbinom_m,
+                insert_nbinom_logit,
                 branch_len_inners,
                 branch_len_offsets_proportion,
                 tot_time_extra)
-        self._create_parameters(
+        self._create_unknown_parameters(
                 target_lams,
                 target_lam_decay_rate,
                 double_cut_weight,
                 boost_softmax_weights,
                 trim_long_factor,
                 trim_zero_probs,
-                trim_short_poissons,
-                trim_long_poissons,
+                trim_short_nbinom_m,
+                trim_short_nbinom_logits,
+                trim_long_nbinom_m,
+                trim_long_nbinom_logits,
                 insert_zero_prob,
-                insert_poisson,
+                insert_nbinom_m,
+                insert_nbinom_logit,
                 branch_len_inners,
                 branch_len_offsets_proportion,
                 tot_time_extra)
 
-        self._create_poisson_distributions()
+        self._create_trim_insert_distributions()
         self.tot_time = tf.constant(tot_time, dtype=tf.float64)
 
         # Calculcate the hazards for all the target tracts beforehand. Speeds up computation in the future.
@@ -181,10 +191,13 @@ class CLTLikelihoodModel:
             boost_softmax_weights: ndarray,
             trim_long_factor: ndarray,
             trim_zero_probs: ndarray,
-            trim_short_poissons: ndarray,
-            trim_long_poissons: ndarray,
+            trim_short_nbinom_m: ndarray,
+            trim_short_nbinom_logits: ndarray,
+            trim_long_nbinom_m: ndarray,
+            trim_long_nbinom_logits: ndarray,
             insert_zero_prob: ndarray,
-            insert_poisson: ndarray,
+            insert_nbinom_m: ndarray,
+            insert_nbinom_logit: ndarray,
             branch_len_inners: ndarray,
             branch_len_offsets_proportion: ndarray,
             tot_time_extra: float):
@@ -197,9 +210,12 @@ class CLTLikelihoodModel:
                     target_lam_decay_rate if self.known_params.target_lam_decay_rate else [],
                     double_cut_weight if self.known_params.double_cut_weight else [],
                     trim_long_factor if self.known_params.trim_long_factor else [],
-                    trim_short_poissons if self.known_params.indel_poissons else [],
-                    trim_long_poissons if self.known_params.indel_poissons else [],
-                    insert_poisson if self.known_params.indel_poissons else [],
+                    trim_short_nbinom_m if self.known_params.indel_dists else [],
+                    trim_short_nbinom_logits if self.known_params.indel_dists else [],
+                    trim_long_nbinom_m if self.known_params.indel_dists else [],
+                    trim_long_nbinom_logits if self.known_params.indel_dists else [],
+                    insert_nbinom_m if self.known_params.indel_dists else [],
+                    insert_nbinom_logit if self.known_params.indel_dists else [],
                     boost_softmax_weights if self.known_params.indel_params else [],
                     trim_zero_probs if self.known_params.indel_params else [],
                     insert_zero_prob if self.known_params.indel_params else [],
@@ -231,15 +247,24 @@ class CLTLikelihoodModel:
             up_to_size += trim_long_factor.size
             self.trim_long_factor = self.known_vars[prev_size: up_to_size]
         prev_size = up_to_size
-        if self.known_params.indel_poissons:
-            up_to_size += trim_short_poissons.size
-            self.trim_short_poissons = self.known_vars[prev_size: up_to_size]
+        if self.known_params.indel_dists:
+            up_to_size += trim_short_nbinom_m.size
+            self.trim_short_nbinom_m = self.known_vars[prev_size: up_to_size]
             prev_size = up_to_size
-            up_to_size += trim_long_poissons.size
-            self.trim_long_poissons = self.known_vars[prev_size: up_to_size]
+            up_to_size += trim_short_nbinom_logits.size
+            self.trim_short_nbinom_logits = self.known_vars[prev_size: up_to_size]
+            prev_size = up_to_size
+            up_to_size += trim_long_nbinom_m.size
+            self.trim_long_nbinom_m = self.known_vars[prev_size: up_to_size]
+            prev_size = up_to_size
+            up_to_size += trim_long_nbinom_logits.size
+            self.trim_long_nbinom_logits = self.known_vars[prev_size: up_to_size]
             prev_size = up_to_size
             up_to_size += 1
-            self.insert_poisson = self.known_vars[prev_size: up_to_size]
+            self.insert_nbinom_m = self.known_vars[prev_size: up_to_size]
+            prev_size = up_to_size
+            up_to_size += 1
+            self.insert_nbinom_logit = self.known_vars[prev_size: up_to_size]
         prev_size = up_to_size
         if self.known_params.indel_params:
             up_to_size += boost_softmax_weights.size
@@ -261,17 +286,16 @@ class CLTLikelihoodModel:
             up_to_size += np.sum(self.known_params.branch_len_offsets_proportion)
             self.branch_len_offsets_proportion_known = self.known_vars[prev_size: up_to_size]
 
-    def _create_poisson_distributions(self):
-        # Create my poisson distributions
-        self.poiss_short = [
-                tf.contrib.distributions.Poisson(self.trim_short_poissons[0]),
-                tf.contrib.distributions.Poisson(self.trim_short_poissons[1])]
-        self.poiss_long = [
-                tf.contrib.distributions.Poisson(self.trim_long_poissons[0]),
-                tf.contrib.distributions.Poisson(self.trim_long_poissons[1])]
-        self.poiss_insert = tf.contrib.distributions.Poisson(self.insert_poisson)
+    def _create_trim_insert_distributions(self):
+        self.del_short_dist = [
+                NegativeBinomial(self.trim_short_nbinom_m[0], logits=self.trim_short_nbinom_logits[0]),
+                NegativeBinomial(self.trim_short_nbinom_m[1], logits=self.trim_short_nbinom_logits[1])]
+        self.del_long_dist = [
+                NegativeBinomial(self.trim_long_nbinom_m[0], logits=self.trim_long_nbinom_logits[0]),
+                NegativeBinomial(self.trim_long_nbinom_m[1], logits=self.trim_long_nbinom_logits[1])]
+        self.insert_dist = NegativeBinomial(self.insert_nbinom_m, self.insert_nbinom_logit)
 
-    def _create_parameters(
+    def _create_unknown_parameters(
             self,
             target_lams: ndarray,
             target_lam_decay_rate: ndarray,
@@ -279,10 +303,13 @@ class CLTLikelihoodModel:
             boost_softmax_weights: ndarray,
             trim_long_factor: ndarray,
             trim_zero_probs: ndarray,
-            trim_short_poissons: ndarray,
-            trim_long_poissons: ndarray,
+            trim_short_nbinom_m: ndarray,
+            trim_short_nbinom_logits: ndarray,
+            trim_long_nbinom_m: ndarray,
+            trim_long_nbinom_logits: ndarray,
             insert_zero_prob: ndarray,
-            insert_poisson: ndarray,
+            insert_nbinom_m: ndarray,
+            insert_nbinom_logit: ndarray,
             branch_len_inners: ndarray,
             branch_len_offsets_proportion: ndarray,
             tot_time_extra: float):
@@ -298,9 +325,12 @@ class CLTLikelihoodModel:
                     [] if self.known_params.target_lam_decay_rate else inv_sigmoid(target_lam_decay_rate),
                     [] if self.known_params.double_cut_weight else np.log(double_cut_weight),
                     [] if self.known_params.trim_long_factor else inv_sigmoid(trim_long_factor),
-                    [] if self.known_params.indel_poissons else np.log(trim_short_poissons),
-                    [] if self.known_params.indel_poissons else np.log(trim_long_poissons),
-                    [] if self.known_params.indel_poissons else np.log(insert_poisson),
+                    [] if self.known_params.indel_dists else np.log(trim_short_nbinom_m),
+                    [] if self.known_params.indel_dists else trim_short_nbinom_logits,
+                    [] if self.known_params.indel_dists else np.log(trim_long_nbinom_m),
+                    [] if self.known_params.indel_dists else trim_long_nbinom_logits,
+                    [] if self.known_params.indel_dists else np.log(insert_nbinom_m),
+                    [] if self.known_params.indel_dists else insert_nbinom_logit,
                     [] if self.known_params.indel_params else boost_softmax_weights,
                     [] if self.known_params.indel_params else inv_sigmoid(trim_zero_probs),
                     [] if self.known_params.indel_params else inv_sigmoid(insert_zero_prob),
@@ -332,15 +362,24 @@ class CLTLikelihoodModel:
             up_to_size += trim_long_factor.size
             self.trim_long_factor = tf.sigmoid(self.all_vars[prev_size: up_to_size])
         prev_size = up_to_size
-        if not self.known_params.indel_poissons:
-            up_to_size += trim_short_poissons.size
-            self.trim_short_poissons = tf.exp(self.all_vars[prev_size: up_to_size])
+        if not self.known_params.indel_dists:
+            up_to_size += trim_short_nbinom_m.size
+            self.trim_short_nbinom_m = tf.exp(self.all_vars[prev_size: up_to_size])
             prev_size = up_to_size
-            up_to_size += trim_long_poissons.size
-            self.trim_long_poissons = tf.exp(self.all_vars[prev_size: up_to_size])
+            up_to_size += trim_short_nbinom_logits.size
+            self.trim_short_nbinom_logits = self.all_vars[prev_size: up_to_size]
+            prev_size = up_to_size
+            up_to_size += trim_long_nbinom_m.size
+            self.trim_long_nbinom_m = tf.exp(self.all_vars[prev_size: up_to_size])
+            prev_size = up_to_size
+            up_to_size += trim_long_nbinom_logits.size
+            self.trim_long_nbinom_logits = self.all_vars[prev_size: up_to_size]
             prev_size = up_to_size
             up_to_size += 1
-            self.insert_poisson = tf.exp(self.all_vars[prev_size: up_to_size])
+            self.insert_nbinom_m = tf.exp(self.all_vars[prev_size: up_to_size])
+            prev_size = up_to_size
+            up_to_size += 1
+            self.insert_nbinom_logit = self.all_vars[prev_size: up_to_size]
         prev_size = up_to_size
         if not self.known_params.indel_params:
             up_to_size += boost_softmax_weights.size
@@ -477,10 +516,13 @@ class CLTLikelihoodModel:
                 param_dict["boost_softmax_weights"],
                 param_dict["trim_long_factor"],
                 param_dict["trim_zero_probs"],
-                param_dict["trim_short_poissons"],
-                param_dict["trim_long_poissons"],
+                param_dict["trim_short_nbinom_m"],
+                param_dict["trim_short_nbinom_logits"],
+                param_dict["trim_long_nbinom_m"],
+                param_dict["trim_long_nbinom_logits"],
                 param_dict["insert_zero_prob"],
-                param_dict["insert_poisson"],
+                param_dict["insert_nbinom_m"],
+                param_dict["insert_nbinom_logit"],
                 param_dict["branch_len_inners"],
                 param_dict["branch_len_offsets_proportion"],
                 param_dict["tot_time_extra"])
@@ -493,16 +535,19 @@ class CLTLikelihoodModel:
             boost_softmax_weights: ndarray,
             trim_long_factor: ndarray,
             trim_zero_probs: ndarray,
-            trim_short_poissons: ndarray,
-            trim_long_poissons: ndarray,
-            insert_zero_prob: float,
-            insert_poisson: float,
+            trim_short_nbinom_m: ndarray,
+            trim_short_nbinom_logits: ndarray,
+            trim_long_nbinom_m: ndarray,
+            trim_long_nbinom_logits: ndarray,
+            insert_zero_prob: ndarray,
+            insert_nbinom_m: ndarray,
+            insert_nbinom_logit: ndarray,
             branch_len_inners: ndarray,
             branch_len_offsets_proportion: ndarray,
             tot_time_extra: float):
         """
         Set model params
-        Should be very similar code to _create_parameters
+        Should be very similar code to _create_unknown_parameters
         """
         known_vals = np.concatenate([
             [] if not self.known_params.tot_time else [tot_time_extra],
@@ -510,9 +555,12 @@ class CLTLikelihoodModel:
             [] if not self.known_params.target_lam_decay_rate else target_lam_decay_rate,
             [] if not self.known_params.double_cut_weight else double_cut_weight,
             [] if not self.known_params.trim_long_factor else trim_long_factor,
-            [] if not self.known_params.indel_poissons else trim_short_poissons,
-            [] if not self.known_params.indel_poissons else trim_long_poissons,
-            [] if not self.known_params.indel_poissons else insert_poisson,
+            [] if not self.known_params.indel_dists else trim_short_nbinom_m,
+            [] if not self.known_params.indel_dists else trim_short_nbinom_logits,
+            [] if not self.known_params.indel_dists else trim_long_nbinom_m,
+            [] if not self.known_params.indel_dists else trim_long_nbinom_logits,
+            [] if not self.known_params.indel_dists else insert_nbinom_m,
+            [] if not self.known_params.indel_dists else insert_nbinom_logit,
             [] if not self.known_params.indel_params else boost_softmax_weights,
             [] if not self.known_params.indel_params else trim_zero_probs,
             [] if not self.known_params.indel_params else insert_zero_prob,
@@ -524,9 +572,12 @@ class CLTLikelihoodModel:
             [] if self.known_params.target_lam_decay_rate else np.log(target_lam_decay_rate),
             [] if self.known_params.double_cut_weight else np.log(double_cut_weight),
             [] if self.known_params.trim_long_factor else inv_sigmoid(trim_long_factor),
-            [] if self.known_params.indel_poissons else np.log(trim_short_poissons),
-            [] if self.known_params.indel_poissons else np.log(trim_long_poissons),
-            [] if self.known_params.indel_poissons else np.log(insert_poisson),
+            [] if self.known_params.indel_dists else np.log(trim_short_nbinom_m),
+            [] if self.known_params.indel_dists else trim_short_nbinom_logits,
+            [] if self.known_params.indel_dists else np.log(trim_long_nbinom_m),
+            [] if self.known_params.indel_dists else trim_long_nbinom_logits,
+            [] if self.known_params.indel_dists else np.log(insert_nbinom_m),
+            [] if self.known_params.indel_dists else insert_nbinom_logit,
             [] if self.known_params.indel_params else boost_softmax_weights,
             [] if self.known_params.indel_params else inv_sigmoid(trim_zero_probs),
             [] if self.known_params.indel_params else inv_sigmoid(insert_zero_prob),
@@ -551,10 +602,13 @@ class CLTLikelihoodModel:
             self.boost_softmax_weights,
             self.trim_long_factor,
             self.trim_zero_probs,
-            self.trim_short_poissons,
-            self.trim_long_poissons,
+            self.trim_short_nbinom_m,
+            self.trim_short_nbinom_logits,
+            self.trim_long_nbinom_m,
+            self.trim_long_nbinom_logits,
             self.insert_zero_prob,
-            self.insert_poisson,
+            self.insert_nbinom_m,
+            self.insert_nbinom_logit,
             self.branch_len_inners,
             self.branch_len_offsets_proportion,
             self.tot_time,
@@ -572,10 +626,13 @@ class CLTLikelihoodModel:
             "boost_softmax_weights",
             "trim_long_factor",
             "trim_zero_probs",
-            "trim_short_poissons",
-            "trim_long_poissons",
+            "trim_short_nbinom_m",
+            "trim_short_nbinom_logits",
+            "trim_long_nbinom_m",
+            "trim_long_nbinom_logits",
             "insert_zero_prob",
-            "insert_poisson",
+            "insert_nbinom_m",
+            "insert_nbinom_logit",
             "branch_len_inners",
             "branch_len_offsets_proportion",
             "tot_time",
@@ -870,16 +927,16 @@ class CLTLikelihoodModel:
 
         check_left_max = tf.cast(tf.less_equal(left_trim_len, max_left_trim), tf.float64)
         check_left_min = tf.cast(tf.less_equal(min_left_trim, left_trim_len), tf.float64)
-        # The probability of a left trim for length zero in our truncated poisson is assigned to be (for a normal poisson) Pr(0) + Pr(X > max_trim)
-        # The other probabilities for the truncated poisson are therefore equal to the usual poisson distribution
+        # The probability of a left trim for length zero in our truncated distribution is assigned to be Pr(0) + Pr(X > max_trim)
+        # The other probabilities for the truncated distribution are therefore equal to the original distribution
         short_no_boost_left_prob = tf_common.ifelse(
             tf_common.equal_float(left_trim_len, 0),
             self.trim_zero_prob_left + (1 - self.trim_zero_prob_left) * (
-                self.poiss_short[0].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_short[0].cdf(max_left_trim)),
-            (1 - self.trim_zero_prob_left) * self.poiss_short[0].prob(left_trim_len))
-        # The long inflated poisson for left trims
+                self.del_short_dist[0].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.del_short_dist[0].cdf(max_left_trim)),
+            (1 - self.trim_zero_prob_left) * self.del_short_dist[0].prob(left_trim_len))
+        # The truncated distribution for left trims
         num_positions = tf.constant(1.0, dtype=tf.float64) + max_left_trim - min_left_trim
-        long_left_prob = self.poiss_long[0].prob(left_trim_len - min_left_trim) + (tf.constant(1, dtype=tf.float64) - self.poiss_long[0].cdf(max_left_trim - min_left_trim))/num_positions
+        long_left_prob = self.del_long_dist[0].prob(left_trim_len - min_left_trim) + (tf.constant(1, dtype=tf.float64) - self.del_long_dist[0].cdf(max_left_trim - min_left_trim))/num_positions
         if left_boost_len > 0:
             # If there is a left boost, there are three possibilities:
             # (1) the left trim is smaller than the left boost, so assign probability zero
@@ -895,8 +952,8 @@ class CLTLikelihoodModel:
                 tf_common.ifelse(
                     tf_common.equal_float(left_trim_len, left_boost_len),
                     self.trim_zero_prob_left + (1 - self.trim_zero_prob_left) * (
-                        self.poiss_short[0].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_short[0].cdf(max_left_trim - left_boost_len)),
-                    (1 - self.trim_zero_prob_left) * self.poiss_short[0].prob(left_trim_len - left_boost_len))
+                        self.del_short_dist[0].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.del_short_dist[0].cdf(max_left_trim - left_boost_len)),
+                    (1 - self.trim_zero_prob_left) * self.del_short_dist[0].prob(left_trim_len - left_boost_len))
                 )
             return check_left_max * check_left_min * tf_common.ifelse(
                 is_left_longs,
@@ -940,16 +997,16 @@ class CLTLikelihoodModel:
 
         check_right_max = tf.cast(tf.less_equal(right_trim_len, max_right_trim), tf.float64)
         check_right_min = tf.cast(tf.less_equal(min_right_trim, right_trim_len), tf.float64)
-        # The probability of a right trim for length zero in our truncated poisson is assigned to be (for a normal poisson) Pr(0) + Pr(X > max_trim)
-        # The other probabilities for the truncated poisson are therefore equal to the usual poisson distribution
+        # The probability of a right trim for length zero in our truncated distribution is assigned to be Pr(0) + Pr(X > max_trim)
+        # The other probabilities for the truncated distribution are therefore equal to the usual distribution
         short_no_boost_right_prob = tf_common.ifelse(
             tf_common.equal_float(right_trim_len, 0),
             self.trim_zero_prob_right + (1 - self.trim_zero_prob_right) * (
-                self.poiss_short[1].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_short[1].cdf(max_right_trim)),
-            (1 - self.trim_zero_prob_right) * self.poiss_short[1].prob(right_trim_len))
-        # The inflated poissons for the long right trim
+                self.del_short_dist[1].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.del_short_dist[1].cdf(max_right_trim)),
+            (1 - self.trim_zero_prob_right) * self.del_short_dist[1].prob(right_trim_len))
+        # The truncated distribution for the long right trim (no inflation)
         num_positions = tf.constant(1.0, dtype=tf.float64) + max_right_trim - min_right_trim
-        long_right_prob = self.poiss_long[1].prob(right_trim_len - min_right_trim) + (tf.constant(1, dtype=tf.float64) - self.poiss_long[1].cdf(max_right_trim - min_right_trim))/num_positions
+        long_right_prob = self.del_long_dist[1].prob(right_trim_len - min_right_trim) + (tf.constant(1, dtype=tf.float64) - self.del_long_dist[1].cdf(max_right_trim - min_right_trim))/num_positions
         if right_boost_len > 0:
             # If there is a right boost, there are three possibilities:
             # (1) the right trim is smaller than the right boost, so assign probability zero
@@ -965,8 +1022,8 @@ class CLTLikelihoodModel:
                 tf_common.ifelse(
                     tf_common.equal_float(right_trim_len, right_boost_len),
                     self.trim_zero_prob_right + (1 - self.trim_zero_prob_right) * (
-                        self.poiss_short[0].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.poiss_short[0].cdf(max_right_trim - right_boost_len)),
-                    (1 - self.trim_zero_prob_right) * self.poiss_short[0].prob(right_trim_len - right_boost_len))
+                        self.del_short_dist[0].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.del_short_dist[0].cdf(max_right_trim - right_boost_len)),
+                    (1 - self.trim_zero_prob_right) * self.del_short_dist[0].prob(right_trim_len - right_boost_len))
                 )
             return check_right_max * check_right_min * tf_common.ifelse(
                 is_right_longs,
@@ -996,10 +1053,10 @@ class CLTLikelihoodModel:
         insert_seq_prob = 1.0/tf.pow(tf.constant(4.0, dtype=tf.float64), insert_lens)
         # If there is no boost, there are two possibilities:
         # (1) the insertion is equal to zero, which means it is zero in the
-        # from coin flip or poiss RV
+        # from coin flip or pulled from the usual (neg binom) distribution
         # (2) the insertion is nonzero, which is a nonzero value in the
-        # poiss distribution
-        insert_len_prob = self.poiss_insert.prob(insert_lens)
+        # usual distribution
+        insert_len_prob = self.insert_dist.prob(insert_lens)
         long_insert_prob = tf_common.ifelse(
             tf_common.equal_float(insert_lens, 0),
             self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_len_prob,
@@ -1008,10 +1065,10 @@ class CLTLikelihoodModel:
             # If there is an insertion boost, there are three possibilities:
             # (1) the insertion is smaller than the boost, so assign probability zero
             # (2) the insertion is equal to the boost, which means it is zero in the
-            # zero-inflated poiss distribution (after we remove the boost)
+            # zero-inflated distribution (after we remove the boost)
             # (3) the insertion is longer than the boost, which is a nonzero value in the
-            # zero-inflated poiss distribution (also still must correct for boost)
-            insert_boost_len_prob = self.poiss_insert.prob(insert_lens - insert_boost_len)
+            # zero-inflated distribution (also still must correct for boost)
+            insert_boost_len_prob = self.insert_dist.prob(insert_lens - insert_boost_len)
             insert_prob = tf_common.ifelse(
                 tf_common.less_float(insert_lens, insert_boost_len),
                 # Make this nonzero since otherwise the tensorflow gradient calculation will break
@@ -1021,7 +1078,7 @@ class CLTLikelihoodModel:
                     tf_common.equal_float(insert_lens, insert_boost_len),
                     self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_boost_len_prob,
                     (1 - self.insert_zero_prob) * insert_boost_len_prob)
-                )
+            )
             return tf_common.ifelse(any_trim_longs, long_insert_prob, insert_prob) * insert_seq_prob
         else:
             return long_insert_prob * insert_seq_prob
