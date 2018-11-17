@@ -127,7 +127,6 @@ class PaddedBoundedNegativeBinomial(BoundedNegativeBinomial):
         self.max_val = max_val
         self.m = m
         self.prob = sigmoid(logit)
-        print(self.m, self.prob)
         self.nbinom_dist = nbinom(self.m, 1 - self.prob)
         self.uniform_dist = randint(min_val, max_val + 1)
 
