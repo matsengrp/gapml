@@ -40,12 +40,12 @@ class CLTLikelihoodModel:
             target_lams: ndarray,
             target_lam_decay_rate: ndarray = np.array([1e-10]),
             boost_softmax_weights: ndarray = np.ones(3),
-            trim_long_factor: ndarray = 0.05 * np.ones(2),
-            trim_zero_probs: ndarray = 0.5 * np.ones(2),
-            trim_short_nbinom_m: ndarray = 4 * np.ones(2),
-            trim_short_nbinom_logits: ndarray = np.zeros(2),
-            trim_long_nbinom_m: ndarray = 2.5 * np.ones(2),
-            trim_long_nbinom_logits: ndarray = np.zeros(2),
+            trim_long_factor: ndarray = 0.05 * np.ones(4),
+            trim_zero_probs: ndarray = 0.5 * np.ones(4),
+            trim_short_nbinom_m: ndarray = 4 * np.ones(4),
+            trim_short_nbinom_logits: ndarray = np.zeros(4),
+            trim_long_nbinom_m: ndarray = 2.5 * np.ones(4),
+            trim_long_nbinom_logits: ndarray = np.zeros(4),
             insert_zero_prob: ndarray = np.array([0.5]),
             insert_nbinom_m: ndarray = np.array([1]),
             insert_nbinom_logit: ndarray = np.ones(1),
@@ -245,6 +245,9 @@ class CLTLikelihoodModel:
         if self.known_params.trim_long_factor:
             up_to_size += trim_long_factor.size
             self.trim_long_factor = self.known_vars[prev_size: up_to_size]
+            self.trim_long_factor_dict = [
+                    self.trim_long_factor[:2],
+                    self.trim_long_factor[2:]]
         prev_size = up_to_size
         if self.known_params.indel_dists:
             up_to_size += trim_short_nbinom_m.size
@@ -272,8 +275,9 @@ class CLTLikelihoodModel:
             prev_size = up_to_size
             up_to_size += trim_zero_probs.size
             self.trim_zero_probs = self.known_vars[prev_size: up_to_size]
-            self.trim_zero_prob_left = self.trim_zero_probs[0]
-            self.trim_zero_prob_right = self.trim_zero_probs[1]
+            self.trim_zero_prob_dict = [
+                    self.trim_zero_probs[:2],
+                    self.trim_zero_probs[2:]]
             prev_size = up_to_size
             up_to_size += 1
             self.insert_zero_prob = self.known_vars[prev_size: up_to_size]
@@ -293,13 +297,14 @@ class CLTLikelihoodModel:
         the negative binomial distribution for some awful reason
         """
         def make_del_dist(nbinom_m, nbinom_logits):
+            del_dist_list = [
+                tfp.distributions.NegativeBinomial(
+                    [nbinom_m[i]] * num_singletons,
+                    logits=[nbinom_logits[i]] * num_singletons)
+                for i in range(4)]
             return [
-                tfp.distributions.NegativeBinomial(
-                    [nbinom_m[0]] * num_singletons,
-                    logits=[nbinom_logits[0]] * num_singletons),
-                tfp.distributions.NegativeBinomial(
-                    [nbinom_m[1]] * num_singletons,
-                    logits=[nbinom_logits[1]] * num_singletons)]
+                    del_dist_list[:2],
+                    del_dist_list[2:]]
         self.del_short_dist = make_del_dist(self.trim_short_nbinom_m, self.trim_short_nbinom_logits)
         self.del_long_dist = make_del_dist(self.trim_long_nbinom_m, self.trim_long_nbinom_logits)
         self.insert_dist = tfp.distributions.NegativeBinomial(self.insert_nbinom_m, logits=self.insert_nbinom_logit)
@@ -370,6 +375,9 @@ class CLTLikelihoodModel:
         if not self.known_params.trim_long_factor:
             up_to_size += trim_long_factor.size
             self.trim_long_factor = tf.sigmoid(self.all_vars[prev_size: up_to_size])
+            self.trim_long_factor_dict = [
+                    self.trim_long_factor[:2],
+                    self.trim_long_factor[2:]]
         prev_size = up_to_size
         if not self.known_params.indel_dists:
             up_to_size += trim_short_nbinom_m.size
@@ -397,8 +405,9 @@ class CLTLikelihoodModel:
             prev_size = up_to_size
             up_to_size += trim_zero_probs.size
             self.trim_zero_probs = tf.sigmoid(self.all_vars[prev_size: up_to_size])
-            self.trim_zero_prob_left = self.trim_zero_probs[0]
-            self.trim_zero_prob_right = self.trim_zero_probs[1]
+            self.trim_zero_prob_dict = [
+                    self.trim_zero_probs[:2],
+                    self.trim_zero_probs[2:]]
             prev_size = up_to_size
             up_to_size += 1
             self.insert_zero_prob = tf.sigmoid(self.all_vars[prev_size: up_to_size])
@@ -808,15 +817,19 @@ class CLTLikelihoodModel:
         """
         # Compute the hazard
         # Adding a weight for double cuts for now
-        equal_float = tf_common.equal_float(min_target, max_target)
-        log_left_trim_factor = tf.log(tf_common.ifelse(long_left_statuses, self.trim_long_factor[0], 1))
-        log_right_trim_factor = tf.log(tf_common.ifelse(long_right_statuses, self.trim_long_factor[1], 1))
-        log_focal_lambda_part = log_left_trim_factor + log_right_trim_factor + tf.log(tf.gather(self.target_lams, min_target))
-        log_double_lambda_part = (log_left_trim_factor
+        equal_targ = tf_common.equal_float(min_target, max_target)
+
+        log_left_focal_trim_factor = tf.log(tf_common.ifelse(long_left_statuses, self.trim_long_factor_dict[0][0], 1))
+        log_right_focal_trim_factor = tf.log(tf_common.ifelse(long_right_statuses, self.trim_long_factor_dict[1][0], 1))
+        log_left_intertarg_trim_factor = tf.log(tf_common.ifelse(long_left_statuses, self.trim_long_factor_dict[0][1], 1))
+        log_right_intertarg_trim_factor = tf.log(tf_common.ifelse(long_right_statuses, self.trim_long_factor_dict[1][1], 1))
+
+        log_focal_lambda_part = log_left_focal_trim_factor + log_right_focal_trim_factor + tf.log(tf.gather(self.target_lams, min_target))
+        log_double_lambda_part = (log_left_intertarg_trim_factor
                 + tf.log(tf.gather(self.target_lams, min_target) + tf.gather(self.target_lams, max_target))
-                + log_right_trim_factor
+                + log_right_intertarg_trim_factor
                 + tf.log(self.double_cut_weight))
-        hazard = tf.exp(equal_float * log_focal_lambda_part + (1 - equal_float) * log_double_lambda_part, name="hazard")
+        hazard = tf.exp(equal_targ * log_focal_lambda_part + (1 - equal_targ) * log_double_lambda_part, name="hazard")
         return hazard
 
     def _create_hazard_away_dict(self):
@@ -892,22 +905,103 @@ class CLTLikelihoodModel:
         if not singletons:
             return []
         else:
+            is_intertarget = tf.constant([sg.min_target != sg.max_target for sg in singletons], dtype=tf.float64)
+
             insert_probs_boost = self._create_insert_probs(singletons, insert_boost_len=self.boost_len)
             insert_probs = self._create_insert_probs(singletons, insert_boost_len=0)
-            left_del_probs_boost = self._create_left_del_probs(singletons, left_boost_len=self.boost_len)
-            left_del_probs = self._create_left_del_probs(singletons, left_boost_len=0)
-            right_del_probs_boost = self._create_right_del_probs(singletons, right_boost_len=self.boost_len)
-            right_del_probs = self._create_right_del_probs(singletons, right_boost_len=0)
 
-            insert_boosted_log_p = tf.log(self.boost_probs[0]) + tf.log(left_del_probs) + tf.log(right_del_probs) + tf.log(insert_probs_boost)
-            left_del_boosted_log_p = tf.log(self.boost_probs[1]) + tf.log(left_del_probs_boost) + tf.log(right_del_probs) + tf.log(insert_probs)
-            right_del_boosted_log_p = tf.log(self.boost_probs[2]) + tf.log(left_del_probs) + tf.log(right_del_probs_boost) + tf.log(insert_probs)
+            left_del_intertarg_probs = self._create_left_del_probs(singletons, is_intertarget=True)
+            right_del_intertarg_probs = self._create_right_del_probs(singletons, is_intertarget=True)
+
+            left_del_focal_probs_boost = self._create_left_del_probs(singletons, left_boost_len=self.boost_len)
+            left_del_focal_probs = self._create_left_del_probs(singletons, left_boost_len=0)
+            right_del_focal_probs_boost = self._create_right_del_probs(singletons, right_boost_len=self.boost_len)
+            right_del_focal_probs = self._create_right_del_probs(singletons, right_boost_len=0)
+
+            insert_boosted_log_p = tf.log(self.boost_probs[0]) + tf.log(left_del_focal_probs) + tf.log(right_del_focal_probs) + tf.log(insert_probs_boost)
+            left_del_boosted_log_p = tf.log(self.boost_probs[1]) + tf.log(left_del_focal_probs_boost) + tf.log(right_del_focal_probs) + tf.log(insert_probs)
+            right_del_boosted_log_p = tf.log(self.boost_probs[2]) + tf.log(left_del_focal_probs) + tf.log(right_del_focal_probs_boost) + tf.log(insert_probs)
 
             # Helps make this numerically stable?
-            max_log_p = tf.maximum(tf.maximum(insert_boosted_log_p, left_del_boosted_log_p), right_del_boosted_log_p)
-            return max_log_p + tf.log(tf.exp(insert_boosted_log_p - max_log_p) + tf.exp(left_del_boosted_log_p - max_log_p) + tf.exp(right_del_boosted_log_p - max_log_p))
+            max_log_focal_p = tf.maximum(tf.maximum(insert_boosted_log_p, left_del_boosted_log_p), right_del_boosted_log_p)
+            # focal_p = pr(boost insert) * pr(indel | boost insert) + pr(boost_left) * pr(indel | boost_left) + pr(boost_right) * pr(indel | boost_right)
+            log_focal_p = max_log_focal_p + tf.log(tf.exp(insert_boosted_log_p - max_log_focal_p) + tf.exp(left_del_boosted_log_p - max_log_focal_p) + tf.exp(right_del_boosted_log_p - max_log_focal_p))
 
-    def _create_left_del_probs(self, singletons: List[Singleton], left_boost_len: int):
+            log_intertarg_p = tf.log(left_del_intertarg_probs) + tf.log(right_del_intertarg_probs) + tf.log(insert_probs)
+            return tf_common.ifelse(
+                    is_intertarget,
+                    log_intertarg_p,
+                    log_focal_p)
+
+    def _create_del_probs(self,
+            singletons,
+            trim_len,
+            is_longs,
+            trim_long_mins,
+            trim_long_maxs,
+            is_intertarget: bool,
+            is_right: bool,
+            boost_len: int):
+        """
+        Creates tensorflow nodes that calculate the log conditional probability of the deletions found in
+        each of the singletons
+
+        @return List[tensorflow nodes] for each singleton in `singletons`
+        """
+        is_right = int(is_right)
+        is_intertarget = int(is_intertarget)
+        trim_zero_prob = self.trim_zero_prob_dict[is_right][is_intertarget]
+        del_short_dist = self.del_short_dist[is_right][is_intertarget]
+        del_long_dist = self.del_long_dist[is_right][is_intertarget]
+
+        any_trim_longs = tf.constant(
+                [sg.is_left_long or sg.is_right_long for sg in singletons], dtype=tf.float64)
+
+        min_trim = is_longs * trim_long_mins
+        max_trim = tf_common.ifelse(is_longs, trim_long_maxs, trim_long_mins - 1)
+
+        check_max = tf.cast(tf.less_equal(trim_len, max_trim), tf.float64)
+        check_min = tf.cast(tf.less_equal(min_trim, trim_len), tf.float64)
+        # The probability of a trim for length zero in our truncated distribution is assigned to be Pr(0) + Pr(X > max_trim)
+        # The other probabilities for the truncated distribution are therefore equal to the original distribution
+        short_no_boost_prob = tf_common.ifelse(
+            tf_common.equal_float(trim_len, 0),
+            trim_zero_prob + (1 - trim_zero_prob) * (
+                del_short_dist.prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - del_short_dist.cdf(max_trim)),
+            (1 - trim_zero_prob) * del_short_dist.prob(trim_len))
+
+        # The truncated distribution for trims
+        num_positions = tf.constant(1.0, dtype=tf.float64) + max_trim - min_trim
+        long_padding = (tf.constant(1, dtype=tf.float64) - del_long_dist.cdf(max_trim - min_trim))/num_positions
+        long_prob = del_long_dist.prob(trim_len - min_trim) + long_padding
+        if boost_len > 0:
+            # If there is a left boost, there are three possibilities:
+            # (1) the left trim is smaller than the left boost, so assign probability zero
+            # (2) the left trim is equal to the left boost, which means it is zero in the
+            # zero-inflated distribution (after we remove the boost)
+            # (3) the left trim is longer than the left boost, which is a nonzero value in the
+            # zero-inflated distribution (also still must correct for boost)
+            short_boost_padding = (tf.constant(1, dtype=tf.float64) - del_short_dist.cdf(max_trim - min_trim - boost_len))/(num_positions - boost_len)
+            short_boosted_prob = tf_common.ifelse(
+                tf_common.less_float(trim_len, boost_len),
+                # Make this nonzero since otherwise the tensorflow gradient calculation will break
+                # will be numerically unstable and it will break
+                tf.constant(PERTURB_ZERO, dtype=tf.float64),
+                del_short_dist.prob(trim_len - boost_len) + short_boost_padding)
+            return check_max * check_min * tf_common.ifelse(
+                is_longs,
+                long_prob,
+                tf_common.ifelse(
+                    any_trim_longs,
+                    short_no_boost_prob,
+                    short_boosted_prob))
+        else:
+            return check_max * check_min * tf_common.ifelse(
+                is_longs,
+                long_prob,
+                short_no_boost_prob)
+
+    def _create_left_del_probs(self, singletons: List[Singleton], is_intertarget: bool = False, left_boost_len: int = 0):
         """
         Creates tensorflow nodes that calculate the log conditional probability of the deletions found in
         each of the singletons
@@ -917,8 +1011,6 @@ class CLTLikelihoodModel:
         @return List[tensorflow nodes] for each singleton in `singletons`
         """
         min_targets = [sg.min_target for sg in singletons]
-        any_trim_longs = tf.constant(
-                [sg.is_left_long or sg.is_right_long for sg in singletons], dtype=tf.float64)
         is_left_longs = tf.constant(
                 [sg.is_left_long for sg in singletons], dtype=tf.float64)
         start_posns = tf.constant(
@@ -931,48 +1023,17 @@ class CLTLikelihoodModel:
         left_trim_long_min = tf.constant([self.bcode_meta.left_long_trim_min[mt] for mt in min_targets], dtype=tf.float64)
         left_trim_long_max = tf.constant([self.bcode_meta.left_max_trim[mt] for mt in min_targets], dtype=tf.float64)
 
-        min_left_trim = is_left_longs * left_trim_long_min
-        max_left_trim = tf_common.ifelse(is_left_longs, left_trim_long_max, left_trim_long_min - 1)
+        return self._create_del_probs(
+            singletons,
+            left_trim_len,
+            is_left_longs,
+            left_trim_long_min,
+            left_trim_long_max,
+            is_intertarget,
+            is_right = False,
+            boost_len = left_boost_len)
 
-        check_left_max = tf.cast(tf.less_equal(left_trim_len, max_left_trim), tf.float64)
-        check_left_min = tf.cast(tf.less_equal(min_left_trim, left_trim_len), tf.float64)
-        # The probability of a left trim for length zero in our truncated distribution is assigned to be Pr(0) + Pr(X > max_trim)
-        # The other probabilities for the truncated distribution are therefore equal to the original distribution
-        short_no_boost_left_prob = tf_common.ifelse(
-            tf_common.equal_float(left_trim_len, 0),
-            self.trim_zero_prob_left + (1 - self.trim_zero_prob_left) * (
-                self.del_short_dist[0].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.del_short_dist[0].cdf(max_left_trim)),
-            (1 - self.trim_zero_prob_left) * self.del_short_dist[0].prob(left_trim_len))
-        # The truncated distribution for left trims
-        num_positions = tf.constant(1.0, dtype=tf.float64) + max_left_trim - min_left_trim
-        long_left_prob = self.del_long_dist[0].prob(left_trim_len - min_left_trim) + (tf.constant(1, dtype=tf.float64) - self.del_long_dist[0].cdf(max_left_trim - min_left_trim))/num_positions
-        if left_boost_len > 0:
-            # If there is a left boost, there are three possibilities:
-            # (1) the left trim is smaller than the left boost, so assign probability zero
-            # (2) the left trim is equal to the left boost, which means it is zero in the
-            # zero-inflated distribution (after we remove the boost)
-            # (3) the left trim is longer than the left boost, which is a nonzero value in the
-            # zero-inflated distribution (also still must correct for boost)
-            short_left_prob = tf_common.ifelse(
-                tf_common.less_float(left_trim_len, left_boost_len),
-                # Make this nonzero since otherwise the tensorflow gradient calculation will break
-                # will be numerically unstable and it will break
-                tf.constant(PERTURB_ZERO, dtype=tf.float64),
-                self.del_short_dist[0].prob(left_trim_len - left_boost_len))
-            return check_left_max * check_left_min * tf_common.ifelse(
-                is_left_longs,
-                long_left_prob,
-                tf_common.ifelse(
-                    any_trim_longs,
-                    short_no_boost_left_prob,
-                    short_left_prob))
-        else:
-            return check_left_max * check_left_min * tf_common.ifelse(
-                is_left_longs,
-                long_left_prob,
-                short_no_boost_left_prob)
-
-    def _create_right_del_probs(self, singletons: List[Singleton], right_boost_len: int):
+    def _create_right_del_probs(self, singletons: List[Singleton], is_intertarget: bool = False, right_boost_len: int = 0):
         """
         Creates tensorflow nodes that calculate the log conditional probability of the deletions found in
         each of the singletons
@@ -982,8 +1043,6 @@ class CLTLikelihoodModel:
         @return List[tensorflow nodes] for each singleton in `singletons`
         """
         max_targets = [sg.max_target for sg in singletons]
-        any_trim_longs = tf.constant(
-                [sg.is_left_long or sg.is_right_long for sg in singletons], dtype=tf.float64)
         is_right_longs = tf.constant(
                 [sg.is_right_long for sg in singletons], dtype=tf.float64)
         del_ends = tf.constant(
@@ -995,49 +1054,17 @@ class CLTLikelihoodModel:
 
         right_trim_long_min = tf.constant([self.bcode_meta.right_long_trim_min[mt] for mt in max_targets], dtype=tf.float64)
         right_trim_long_max = tf.constant([self.bcode_meta.right_max_trim[mt] for mt in max_targets], dtype=tf.float64)
-
-        min_right_trim = is_right_longs * right_trim_long_min
-        max_right_trim = tf_common.ifelse(is_right_longs, right_trim_long_max, right_trim_long_min - 1)
-
-        check_right_max = tf.cast(tf.less_equal(right_trim_len, max_right_trim), tf.float64)
-        check_right_min = tf.cast(tf.less_equal(min_right_trim, right_trim_len), tf.float64)
-        # The probability of a right trim for length zero in our truncated distribution is assigned to be Pr(0) + Pr(X > max_trim)
-        # The other probabilities for the truncated distribution are therefore equal to the usual distribution
-        short_no_boost_right_prob = tf_common.ifelse(
-            tf_common.equal_float(right_trim_len, 0),
-            self.trim_zero_prob_right + (1 - self.trim_zero_prob_right) * (
-                self.del_short_dist[1].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.del_short_dist[1].cdf(max_right_trim)),
-            (1 - self.trim_zero_prob_right) * self.del_short_dist[1].prob(right_trim_len))
-        # The truncated distribution for the long right trim (no inflation)
-        num_positions = tf.constant(1.0, dtype=tf.float64) + max_right_trim - min_right_trim
-        long_right_prob = self.del_long_dist[1].prob(right_trim_len - min_right_trim) + (tf.constant(1, dtype=tf.float64) - self.del_long_dist[1].cdf(max_right_trim - min_right_trim))/num_positions
-        if right_boost_len > 0:
-            # If there is a right boost, there are three possibilities:
-            # (1) the right trim is smaller than the right boost, so assign probability zero
-            # (2) the right trim is equal to the right boost, which means it is zero in the
-            # zero-inflated distribution (after we remove the boost)
-            # (3) the right trim is longer than the right boost, which is a nonzero value in the
-            # zero-inflated distribution (also still must correct for boost)
-            short_right_prob = tf_common.ifelse(
-                tf_common.less_float(right_trim_len, right_boost_len),
-                # Make this nonzero since otherwise the tensorflow gradient calculation will break
-                # will be numerically unstable and it will break
-                tf.constant(PERTURB_ZERO, dtype=tf.float64),
-                self.del_short_dist[1].prob(right_trim_len - right_boost_len))
-            return check_right_max * check_right_min * tf_common.ifelse(
+        return self._create_del_probs(
+                singletons,
+                right_trim_len,
                 is_right_longs,
-                long_right_prob,
-                tf_common.ifelse(
-                    any_trim_longs,
-                    short_no_boost_right_prob,
-                    short_right_prob))
-        else:
-            return check_right_max * check_right_min * tf_common.ifelse(
-                is_right_longs,
-                long_right_prob,
-                short_no_boost_right_prob)
+                right_trim_long_min,
+                right_trim_long_max,
+                is_intertarget,
+                is_right = True,
+                boost_len = right_boost_len)
 
-    def _create_insert_probs(self, singletons: List[Singleton], insert_boost_len: int):
+    def _create_insert_probs(self, singletons: List[Singleton], insert_boost_len: int = 0):
         """
         Creates tensorflow nodes that calculate the log conditional probability of the insertions found in
         each of the singletons

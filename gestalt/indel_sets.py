@@ -195,6 +195,10 @@ class Singleton(IndelSet):
         return len(self.insert_str)
 
     @property
+    def is_long_del(self):
+        return [self.is_left_long, self.is_right_long]
+
+    @property
     def is_left_long(self):
         return self.min_deact_target != self.min_target
 

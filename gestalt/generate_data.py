@@ -83,26 +83,26 @@ def parse_args():
         '--trim-long-factor',
         type=float,
         nargs=2,
-        default=[0.05] * 2,
+        default=[0.05] * 4,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
         '--trim-zero-probs',
         type=float,
         nargs=2,
-        default=[0.1] * 2,
+        default=[0.1] * 4,
         help='probability of doing no deletion during repair')
     parser.add_argument(
         '--trim-nbinom-m',
         type=float,
         nargs=2,
-        default=[4] * 2,
+        default=[4] * 4,
         help='neg binom parameter for left and right trims, until we observe this many failures, same for long and short'
     )
     parser.add_argument(
         '--trim-nbinom-probs',
         type=float,
         nargs=2,
-        default=[0.5] * 2,
+        default=[0.5] * 4,
         help='neg binom parameters for left and right trims, success probability, same for long and short'
     )
     parser.add_argument(

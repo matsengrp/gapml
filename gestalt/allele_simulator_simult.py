@@ -37,25 +37,30 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         self.all_target_tract_hazards = model.get_all_target_tract_hazards()
         self.insert_zero_prob = self.model.insert_zero_prob.eval()
         self.trim_zero_probs = self.model.trim_zero_probs.eval()
+        self.trim_zero_prob_dict = np.array([
+                self.trim_zero_probs[:2],
+                self.trim_zero_probs[2:]])
 
         assert boost_len > 0
         self.boost_probs = self.model.boost_probs.eval()
         self.boost_len = boost_len
 
-        self.left_del_distributions = self._create_bounded_nbinoms(
+        self.left_del_distributions = [self._create_bounded_nbinoms(
             min_vals = self.bcode_meta.left_long_trim_min,
             max_vals = self.bcode_meta.left_max_trim,
-            short_nbinom_m = self.model.trim_short_nbinom_m[0].eval(),
-            short_nbinom_logit = self.model.trim_short_nbinom_logits[0].eval(),
-            long_nbinom_m = self.model.trim_long_nbinom_m[0].eval(),
-            long_nbinom_logit = self.model.trim_long_nbinom_logits[0].eval())
-        self.right_del_distributions = self._create_bounded_nbinoms(
+            short_nbinom_m = self.model.trim_short_nbinom_m[i].eval(),
+            short_nbinom_logit = self.model.trim_short_nbinom_logits[i].eval(),
+            long_nbinom_m = self.model.trim_long_nbinom_m[i].eval(),
+            long_nbinom_logit = self.model.trim_long_nbinom_logits[i].eval())
+            for i in [0,1]]
+        self.right_del_distributions = [self._create_bounded_nbinoms(
             min_vals = self.bcode_meta.right_long_trim_min,
             max_vals = self.bcode_meta.right_max_trim,
-            short_nbinom_m = self.model.trim_short_nbinom_m[1].eval(),
-            short_nbinom_logit = self.model.trim_short_nbinom_logits[1].eval(),
-            long_nbinom_m = self.model.trim_long_nbinom_m[1].eval(),
-            long_nbinom_logit = self.model.trim_long_nbinom_logits[1].eval())
+            short_nbinom_m = self.model.trim_short_nbinom_m[i].eval(),
+            short_nbinom_logit = self.model.trim_short_nbinom_logits[i].eval(),
+            long_nbinom_m = self.model.trim_long_nbinom_m[i].eval(),
+            long_nbinom_logit = self.model.trim_long_nbinom_logits[i].eval())
+            for i in [2,3]]
         self.insertion_distribution = nbinom(
                 self.model.insert_nbinom_m.eval(),
                 1 - sigmoid(self.model.insert_nbinom_logit.eval()))
@@ -91,7 +96,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
                     # Short trim
                     "short": ZeroInflatedBoundedNegativeBinomial(0, min_vals[i] - 1, short_nbinom_m, short_nbinom_logit),
                     # Boosted short trim
-                    "boost_short": ZeroInflatedBoundedNegativeBinomial(self.boost_len, min_vals[i] - 1, short_nbinom_m, short_nbinom_logit)}
+                    "boost_short": PaddedBoundedNegativeBinomial(self.boost_len, min_vals[i] - 1, short_nbinom_m, short_nbinom_logit)}
             dstns.append(long_short_dstns)
         return dstns
 
@@ -158,8 +163,48 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         target1 = target_tract.min_target
         target2 = target_tract.max_target
 
+        if target1 != target2:
+            return self._do_intertarg_repair(allele, target_tract)
+        else:
+            return self._do_focal_repair(allele, target_tract)
+
+    def _do_intertarg_repair(self, allele: Allele, target_tract: TargetTract):
+        target1 = target_tract.min_target
+        target2 = target_tract.max_target
         left_long = target_tract.is_left_long
         right_long = target_tract.is_right_long
+        intertarg_left_dist = self.left_del_distributions[1]
+        intertarg_right_dist = self.right_del_distributions[1]
+
+        left_distr_key = "long" if left_long else "short"
+        right_distr_key = "long" if right_long else "short"
+
+        do_insertion = random() > self.insert_zero_prob
+        insertion_length = self.insertion_distribution.rvs() if do_insertion else 0
+
+        do_deletion = [
+                random() > self.trim_zero_prob_dict[0,1],
+                random() > self.trim_zero_prob_dict[1,1]]
+        left_del_len = intertarg_left_dist[target1][left_distr_key].rvs() if do_deletion[0] else 0
+        right_del_len = intertarg_right_dist[target2][right_distr_key].rvs() if do_deletion[1] else 0
+
+        # TODO: make this more realistic. right now just random DNA inserted
+        insertion = ''.join(choice(list('acgt'), insertion_length))
+        allele.indel(
+            target1,
+            target2,
+            left_del_len,
+            right_del_len,
+            insertion)
+        return left_del_len, right_del_len, insertion
+
+    def _do_focal_repair(self, allele: Allele, target_tract: TargetTract):
+        target1 = target_tract.min_target
+        target2 = target_tract.max_target
+        left_long = target_tract.is_left_long
+        right_long = target_tract.is_right_long
+        focal_left_dist = self.left_del_distributions[0]
+        focal_right_dist = self.right_del_distributions[0]
 
         left_short_boost = 0
         right_short_boost = 0
@@ -170,7 +215,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         if left_long or right_long:
             # No zero inflation if we decided to do a long left or right trim
             # No boosts if long left or right del
-            do_deletion = [left_long, right_long]
+            do_deletion = [True, True]
         else:
             # Determine whether to boost insert vs left del vs right del
             len_incr_rv = np.random.multinomial(n=1, pvals=self.boost_probs)
@@ -184,20 +229,22 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
 
             # Serves as zero-inflation for deletion/insertion process
             # Draw a separate RVs for each deletion/insertion process
-            do_deletion = random(2) > self.trim_zero_probs
+            do_deletion = [
+                    random() > self.trim_zero_prob_dict[0,0],
+                    random() > self.trim_zero_prob_dict[1,0]]
 
         if insert_boost:
             insertion_length = insert_boost + self.insertion_distribution.rvs()
         else:
             insertion_length = self.insertion_distribution.rvs() if do_insertion else 0
         if left_short_boost:
-            left_del_len = self.left_del_distributions[target1]["boost_short"].rvs()
+            left_del_len = focal_left_dist[target1]["boost_short"].rvs()
         else:
-            left_del_len = self.left_del_distributions[target1][left_distr_key].rvs() if do_deletion[0] else 0
+            left_del_len = focal_left_dist[target1][left_distr_key].rvs() if do_deletion[0] else 0
         if right_short_boost:
-            right_del_len = self.right_del_distributions[target2]["boost_short"].rvs()
+            right_del_len = focal_right_dist[target2]["boost_short"].rvs()
         else:
-            right_del_len = self.right_del_distributions[target2][right_distr_key].rvs() if do_deletion[1] else 0
+            right_del_len = focal_right_dist[target2][right_distr_key].rvs() if do_deletion[1] else 0
 
         # TODO: make this more realistic. right now just random DNA inserted
         insertion = ''.join(choice(list('acgt'), insertion_length))
@@ -207,3 +254,4 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             left_del_len,
             right_del_len,
             insertion)
+        return left_del_len, right_del_len, insertion
