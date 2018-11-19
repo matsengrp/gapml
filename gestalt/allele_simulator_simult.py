@@ -20,7 +20,6 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
     """
     def __init__(self,
         model: CLTLikelihoodModel,
-        boost_probs: ndarray,
         boost_len: int = 1):
         """
         @param model
@@ -40,7 +39,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         self.trim_zero_probs = self.model.trim_zero_probs.eval()
 
         assert boost_len > 0
-        self.boost_probs = boost_probs
+        self.boost_probs = self.model.boost_probs.eval()
         self.boost_len = boost_len
 
         self.left_del_distributions = self._create_bounded_nbinoms(
@@ -121,7 +120,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
     def simulate(self,
             init_allele: Allele,
             node: CellLineageTree,
-            scale_hazard_func,
+            scale_hazard_func = lambda x: 1,
             time_incr: float = 0.025):
         """
         @param init_allele: the initial state of the allele
@@ -171,7 +170,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         if left_long or right_long:
             # No zero inflation if we decided to do a long left or right trim
             # No boosts if long left or right del
-            do_deletion = [True, True]
+            do_deletion = [left_long, right_long]
         else:
             # Determine whether to boost insert vs left del vs right del
             len_incr_rv = np.random.multinomial(n=1, pvals=self.boost_probs)
@@ -179,19 +178,26 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             if len_incr_rv[0] == 1:
                 insert_boost = self.boost_len
             elif len_incr_rv[1] == 1:
-                left_distr_key = "boost_short"
                 left_short_boost = self.boost_len
             elif len_incr_rv[2] == 1:
-                right_distr_key = "boost_short"
                 right_short_boost = self.boost_len
 
             # Serves as zero-inflation for deletion/insertion process
             # Draw a separate RVs for each deletion/insertion process
             do_deletion = random(2) > self.trim_zero_probs
 
-        insertion_length = insert_boost + (self.insertion_distribution.rvs() if do_insertion else 0)
-        left_del_len = self.left_del_distributions[target1][left_distr_key].rvs() if do_deletion[0] else left_short_boost
-        right_del_len = self.right_del_distributions[target2][right_distr_key].rvs() if do_deletion[1] else right_short_boost
+        if insert_boost:
+            insertion_length = insert_boost + self.insertion_distribution.rvs()
+        else:
+            insertion_length = self.insertion_distribution.rvs() if do_insertion else 0
+        if left_short_boost:
+            left_del_len = self.left_del_distributions[target1]["boost_short"].rvs()
+        else:
+            left_del_len = self.left_del_distributions[target1][left_distr_key].rvs() if do_deletion[0] else 0
+        if right_short_boost:
+            right_del_len = self.right_del_distributions[target2]["boost_short"].rvs()
+        else:
+            right_del_len = self.right_del_distributions[target2][right_distr_key].rvs() if do_deletion[1] else 0
 
         # TODO: make this more realistic. right now just random DNA inserted
         insertion = ''.join(choice(list('acgt'), insertion_length))

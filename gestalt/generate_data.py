@@ -68,10 +68,10 @@ def parse_args():
         default=2,
         help='Weight for double cuts')
     parser.add_argument(
-        '--boost-probs',
+        '--boost-weights',
         type=float,
         nargs=3,
-        default=[0.1, 0.45, 0.45],
+        default=[1, 2, 2],
         help="""
         probability of boosting the insertion, left deletion, right deletion lengths.
         This boost is mutually exclusive -- the boost can be only applied to one of these categories.
@@ -89,8 +89,8 @@ def parse_args():
         '--trim-zero-probs',
         type=float,
         nargs=2,
-        default=[0.01] * 2,
-        help='probability of doing no deletion/insertion during repair')
+        default=[0.1] * 2,
+        help='probability of doing no deletion during repair')
     parser.add_argument(
         '--trim-nbinom-m',
         type=float,
@@ -201,18 +201,18 @@ def create_cell_type_tree(args):
     return cell_type_tree
 
 def create_simulators(args, clt_model):
-    allele_simulator = AlleleSimulatorSimultaneous(
-            clt_model,
-            np.array(args.boost_probs))
+    allele_simulator = AlleleSimulatorSimultaneous(clt_model)
     cell_type_simulator = CellTypeSimulator(clt_model.cell_type_tree)
     if args.is_one_leaf:
         clt_simulator = CLTSimulatorSimplest(
                 cell_type_simulator,
-                allele_simulator)
+                allele_simulator,
+                scale_hazard_func=lambda t: 1)
     elif args.is_stupid_cherry:
         clt_simulator = CLTSimulatorSimpler(
                 cell_type_simulator,
-                allele_simulator)
+                allele_simulator,
+                scale_hazard_func=lambda t: 1)
     else:
         clt_simulator = CLTSimulatorBifurcating(
             args.birth_sync_rounds,
@@ -318,10 +318,10 @@ def main(args=sys.argv[1:]):
             None,
             bcode_meta,
             sess,
+            known_params = known_params,
             target_lams = np.array(args.target_lambdas),
             target_lam_decay_rate = np.array([args.target_lam_decay_rate]),
-            known_params = known_params,
-            double_cut_weight = [args.double_cut_weight],
+            boost_softmax_weights = np.array(args.boost_weights),
             trim_long_factor = np.array(args.trim_long_factor),
             trim_zero_probs = np.array(args.trim_zero_probs),
             trim_short_nbinom_m = np.array(args.trim_nbinom_m),
@@ -331,6 +331,7 @@ def main(args=sys.argv[1:]):
             insert_zero_prob = np.array([args.insert_zero_prob]),
             insert_nbinom_m = np.array([args.insert_nbinom_m]),
             insert_nbinom_logit = inv_sigmoid(np.array([args.insert_nbinom_prob])),
+            double_cut_weight = [args.double_cut_weight],
             cell_type_tree = cell_type_tree,
             tot_time = args.time,
             tot_time_extra = 1e-10)

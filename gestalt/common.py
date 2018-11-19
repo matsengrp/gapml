@@ -26,6 +26,7 @@ def sigmoid(x: float):
 
 def inv_sigmoid(prob: float):
     """
+    (This is also the logit function)
     @return x for prob = 1/(1 + exp(-x))
     """
     return -np.log(np.divide(1.0, prob) - 1.0)

@@ -204,10 +204,13 @@ def read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
             "boost_softmax_weights": np.array([1, 2, 2]),
             "trim_long_factor": 0.05 * np.ones(2),
             "trim_zero_probs": 0.5 * np.ones(2),
-            "trim_short_poissons": 2.5 * np.ones(2),
-            "trim_long_poissons": 2.5 * np.ones(2),
+            "trim_short_nbinom_m": 4 * np.ones(2),
+            "trim_short_nbinom_logits": 0.1 * np.ones(2),
+            "trim_long_nbinom_m": 4 * np.ones(2),
+            "trim_long_nbinom_logits": 0.1 * np.ones(2),
             "insert_zero_prob": np.array([0.5]),
-            "insert_poisson": np.array([0.5]),
+            "insert_nbinom_m": np.array([1]),
+            "insert_nbinom_logit": np.array([-1]),
             "double_cut_weight": np.array([0.4]),
             "tot_time": 1,
             "tot_time_extra": 1.3}
@@ -231,6 +234,10 @@ def read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
     if args.known_params.target_lams:
         fit_params["target_lams"] = true_model_dict['target_lams']
         fit_params["double_cut_weight"] = true_model_dict['double_cut_weight']
+    if args.known_params.indel_params:
+        fit_params["boost_softmax_weights"] = true_model_dict['boost_softmax_weights']
+        fit_params["trim_zero_probs"] = true_model_dict['trim_zero_probs']
+        fit_params["insert_zero_prob"] = true_model_dict['insert_zero_prob']
     return fit_params
 
 

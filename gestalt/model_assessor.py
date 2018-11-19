@@ -114,6 +114,8 @@ class ModelAssessor:
         in the reference tree
         """
         dist_dict = {}
+        if len(other_tree) == 1:
+            return dist_dict
 
         # Compare to no collapse tree
         # If the other tree has a different set of leaves, figure out which subset of leaves to compare

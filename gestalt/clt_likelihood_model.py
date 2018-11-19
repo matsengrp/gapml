@@ -3,7 +3,7 @@ import logging
 import numpy as np
 import tensorflow as tf
 from tensorflow import Tensor
-from tensorflow.contrib.distributions import NegativeBinomial
+import tensorflow_probability as tfp
 
 from typing import List, Dict
 from numpy import ndarray
@@ -140,7 +140,6 @@ class CLTLikelihoodModel:
                 branch_len_offsets_proportion,
                 tot_time_extra)
 
-        self._create_trim_insert_distributions()
         self.tot_time = tf.constant(tot_time, dtype=tf.float64)
 
         # Calculcate the hazards for all the target tracts beforehand. Speeds up computation in the future.
@@ -286,14 +285,24 @@ class CLTLikelihoodModel:
             up_to_size += np.sum(self.known_params.branch_len_offsets_proportion)
             self.branch_len_offsets_proportion_known = self.known_vars[prev_size: up_to_size]
 
-    def _create_trim_insert_distributions(self):
-        self.del_short_dist = [
-                NegativeBinomial(self.trim_short_nbinom_m[0], logits=self.trim_short_nbinom_logits[0]),
-                NegativeBinomial(self.trim_short_nbinom_m[1], logits=self.trim_short_nbinom_logits[1])]
-        self.del_long_dist = [
-                NegativeBinomial(self.trim_long_nbinom_m[0], logits=self.trim_long_nbinom_logits[0]),
-                NegativeBinomial(self.trim_long_nbinom_m[1], logits=self.trim_long_nbinom_logits[1])]
-        self.insert_dist = NegativeBinomial(self.insert_nbinom_m, self.insert_nbinom_logit)
+    def _create_trim_insert_distributions(self, num_singletons: int):
+        """
+        Creates the basic trim + insert helper distributions
+
+        NOTE: Requires the number of singletons because tensorflow refuses to properly broadcast for
+        the negative binomial distribution for some awful reason
+        """
+        def make_del_dist(nbinom_m, nbinom_logits):
+            return [
+                tfp.distributions.NegativeBinomial(
+                    [nbinom_m[0]] * num_singletons,
+                    logits=[nbinom_logits[0]] * num_singletons),
+                tfp.distributions.NegativeBinomial(
+                    [nbinom_m[1]] * num_singletons,
+                    logits=[nbinom_logits[1]] * num_singletons)]
+        self.del_short_dist = make_del_dist(self.trim_short_nbinom_m, self.trim_short_nbinom_logits)
+        self.del_long_dist = make_del_dist(self.trim_long_nbinom_m, self.trim_long_nbinom_logits)
+        self.insert_dist = tfp.distributions.NegativeBinomial(self.insert_nbinom_m, logits=self.insert_nbinom_logit)
 
     def _create_unknown_parameters(
             self,
@@ -890,13 +899,13 @@ class CLTLikelihoodModel:
             right_del_probs_boost = self._create_right_del_probs(singletons, right_boost_len=self.boost_len)
             right_del_probs = self._create_right_del_probs(singletons, right_boost_len=0)
 
-            insert_log_p = tf.log(self.boost_probs[0]) + tf.log(left_del_probs) + tf.log(right_del_probs) + tf.log(insert_probs_boost)
-            left_del_log_p = tf.log(self.boost_probs[1]) + tf.log(left_del_probs_boost) + tf.log(right_del_probs) + tf.log(insert_probs)
-            right_del_log_p = tf.log(self.boost_probs[2]) + tf.log(left_del_probs) + tf.log(right_del_probs_boost) + tf.log(insert_probs)
+            insert_boosted_log_p = tf.log(self.boost_probs[0]) + tf.log(left_del_probs) + tf.log(right_del_probs) + tf.log(insert_probs_boost)
+            left_del_boosted_log_p = tf.log(self.boost_probs[1]) + tf.log(left_del_probs_boost) + tf.log(right_del_probs) + tf.log(insert_probs)
+            right_del_boosted_log_p = tf.log(self.boost_probs[2]) + tf.log(left_del_probs) + tf.log(right_del_probs_boost) + tf.log(insert_probs)
 
             # Helps make this numerically stable?
-            max_log_p = tf.maximum(tf.maximum(insert_log_p, left_del_log_p), right_del_log_p)
-            return max_log_p + tf.log(tf.exp(insert_log_p - max_log_p) + tf.exp(left_del_log_p - max_log_p) + tf.exp(right_del_log_p - max_log_p))
+            max_log_p = tf.maximum(tf.maximum(insert_boosted_log_p, left_del_boosted_log_p), right_del_boosted_log_p)
+            return max_log_p + tf.log(tf.exp(insert_boosted_log_p - max_log_p) + tf.exp(left_del_boosted_log_p - max_log_p) + tf.exp(right_del_boosted_log_p - max_log_p))
 
     def _create_left_del_probs(self, singletons: List[Singleton], left_boost_len: int):
         """
@@ -949,12 +958,7 @@ class CLTLikelihoodModel:
                 # Make this nonzero since otherwise the tensorflow gradient calculation will break
                 # will be numerically unstable and it will break
                 tf.constant(PERTURB_ZERO, dtype=tf.float64),
-                tf_common.ifelse(
-                    tf_common.equal_float(left_trim_len, left_boost_len),
-                    self.trim_zero_prob_left + (1 - self.trim_zero_prob_left) * (
-                        self.del_short_dist[0].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.del_short_dist[0].cdf(max_left_trim - left_boost_len)),
-                    (1 - self.trim_zero_prob_left) * self.del_short_dist[0].prob(left_trim_len - left_boost_len))
-                )
+                self.del_short_dist[0].prob(left_trim_len - left_boost_len))
             return check_left_max * check_left_min * tf_common.ifelse(
                 is_left_longs,
                 long_left_prob,
@@ -1019,12 +1023,7 @@ class CLTLikelihoodModel:
                 # Make this nonzero since otherwise the tensorflow gradient calculation will break
                 # will be numerically unstable and it will break
                 tf.constant(PERTURB_ZERO, dtype=tf.float64),
-                tf_common.ifelse(
-                    tf_common.equal_float(right_trim_len, right_boost_len),
-                    self.trim_zero_prob_right + (1 - self.trim_zero_prob_right) * (
-                        self.del_short_dist[0].prob(tf.constant(0, dtype=tf.float64)) + tf.constant(1, dtype=tf.float64) - self.del_short_dist[0].cdf(max_right_trim - right_boost_len)),
-                    (1 - self.trim_zero_prob_right) * self.del_short_dist[0].prob(right_trim_len - right_boost_len))
-                )
+                self.del_short_dist[1].prob(right_trim_len - right_boost_len))
             return check_right_max * check_right_min * tf_common.ifelse(
                 is_right_longs,
                 long_right_prob,
@@ -1057,7 +1056,7 @@ class CLTLikelihoodModel:
         # (2) the insertion is nonzero, which is a nonzero value in the
         # usual distribution
         insert_len_prob = self.insert_dist.prob(insert_lens)
-        long_insert_prob = tf_common.ifelse(
+        insert_prob = tf_common.ifelse(
             tf_common.equal_float(insert_lens, 0),
             self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_len_prob,
             (1 - self.insert_zero_prob) * insert_len_prob)
@@ -1068,20 +1067,22 @@ class CLTLikelihoodModel:
             # zero-inflated distribution (after we remove the boost)
             # (3) the insertion is longer than the boost, which is a nonzero value in the
             # zero-inflated distribution (also still must correct for boost)
-            insert_boost_len_prob = self.insert_dist.prob(insert_lens - insert_boost_len)
-            insert_prob = tf_common.ifelse(
+            # we use maximum to deal with prob assignments outside of support
+            insert_boost_len_prob = self.insert_dist.prob(tf.maximum(insert_lens - insert_boost_len, 0))
+            insert_boosted_prob = tf_common.ifelse(
                 tf_common.less_float(insert_lens, insert_boost_len),
                 # Make this nonzero since otherwise the tensorflow gradient calculation will break
                 # will be numerically unstable and it will break
                 tf.constant(PERTURB_ZERO, dtype=tf.float64),
-                tf_common.ifelse(
-                    tf_common.equal_float(insert_lens, insert_boost_len),
-                    self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_boost_len_prob,
-                    (1 - self.insert_zero_prob) * insert_boost_len_prob)
-            )
-            return tf_common.ifelse(any_trim_longs, long_insert_prob, insert_prob) * insert_seq_prob
+                insert_boost_len_prob)
+                #tf_common.ifelse(
+                #    tf_common.equal_float(insert_lens, insert_boost_len),
+                #    self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_boost_len_prob,
+                #    (1 - self.insert_zero_prob) * insert_boost_len_prob)
+            #)
+            return tf_common.ifelse(any_trim_longs, insert_prob, insert_boosted_prob) * insert_seq_prob
         else:
-            return long_insert_prob * insert_seq_prob
+            return insert_prob * insert_seq_prob
 
     """
     LOG LIKELIHOOD CALCULATION section
@@ -1119,6 +1120,7 @@ class CLTLikelihoodModel:
         # Get all the conditional probabilities of the trims
         # Doing it all at once to speed up computation
         self.singleton_index_dict = {sg: int(i) for i, sg in enumerate(singletons)}
+        self._create_trim_insert_distributions(len(singletons))
         self.singleton_log_cond_prob = self._create_log_indel_probs(singletons)
 
     """
@@ -1340,6 +1342,7 @@ class CLTLikelihoodModel:
         self.down_probs_dict = down_probs_dict
         self.pt_matrix = pt_matrix
         self.trans_mats = trans_mats
+        self.trim_probs = trim_probs
         return log_lik_alleles, Ddiags
 
     @profile
