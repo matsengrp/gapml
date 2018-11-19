@@ -9,8 +9,7 @@ from clt_likelihood_model import CLTLikelihoodModel
 from optim_settings import KnownModelParams
 from cell_lineage_tree import CellLineageTree
 from indel_sets import TargetTract
-from common import sigmoid
-from bounded_distributions import ZeroInflatedBoundedNegativeBinomial, PaddedBoundedNegativeBinomial
+from bounded_distributions import ZeroInflatedBoundedPoisson, PaddedBoundedPoisson
 
 
 class AlleleSimulatorTestCase(unittest.TestCase):
@@ -74,9 +73,7 @@ class AlleleSimulatorTestCase(unittest.TestCase):
         self.assertEqual(new_allele.get_target_status(), TargetStatus(TargetDeactTract(0,9)))
 
     def test_neg_beta_insert_focal(self):
-        insert_nbinom_m = np.array([1])
-        insert_nbinom_logit = np.array([0])
-        insert_nbinom_prob = sigmoid(insert_nbinom_logit)
+        insert_poiss = np.array([1])
         insert_zero_prob = np.array([0.1])
         boost_softmax_weights = np.array([1,1,1])
         mdl = CLTLikelihoodModel(
@@ -86,8 +83,7 @@ class AlleleSimulatorTestCase(unittest.TestCase):
                 known_params = self.known_params,
                 target_lams = 1 + np.arange(self.bcode_meta.n_targets),
                 boost_softmax_weights = boost_softmax_weights,
-                insert_nbinom_m = insert_nbinom_m,
-                insert_nbinom_logit = insert_nbinom_logit,
+                insert_poiss = insert_poiss,
                 insert_zero_prob = insert_zero_prob)
         self._create_simulator(mdl)
 
@@ -110,8 +106,8 @@ class AlleleSimulatorTestCase(unittest.TestCase):
             left_trims.append(left_trim)
             insert_lens.append(insert_len)
 
-        mean_nbinom = insert_nbinom_prob/(1 - insert_nbinom_prob) * insert_nbinom_m
-        var_nbinom = insert_nbinom_prob/np.power(1 - insert_nbinom_prob, 2) * insert_nbinom_m
+        mean_nbinom = insert_poiss
+        var_nbinom = insert_poiss
         second_moment_nbinom = var_nbinom + np.power(mean_nbinom, 2)
         insert_mean_true = 1./3 * (1 + mean_nbinom) + 2./3 * (1 - insert_zero_prob) * mean_nbinom
         insert_var_true = 1/3. * 2/3. + (1 - insert_zero_prob) * second_moment_nbinom - np.power((1 - insert_zero_prob) * mean_nbinom, 2)
@@ -123,9 +119,7 @@ class AlleleSimulatorTestCase(unittest.TestCase):
         self.assertTrue(np.isclose(np.var(insert_lens), insert_var_true, atol=0.2))
 
     def test_neg_beta_insert_intertarg(self):
-        insert_nbinom_m = np.array([1])
-        insert_nbinom_logit = np.array([0])
-        insert_nbinom_prob = sigmoid(insert_nbinom_logit)
+        insert_poiss = np.array([1])
         insert_zero_prob = np.array([0.1])
         boost_softmax_weights = np.array([1,1,1])
         mdl = CLTLikelihoodModel(
@@ -135,8 +129,7 @@ class AlleleSimulatorTestCase(unittest.TestCase):
                 known_params = self.known_params,
                 target_lams = 1 + np.arange(self.bcode_meta.n_targets),
                 boost_softmax_weights = boost_softmax_weights,
-                insert_nbinom_m = insert_nbinom_m,
-                insert_nbinom_logit = insert_nbinom_logit,
+                insert_poiss = insert_poiss,
                 insert_zero_prob = insert_zero_prob)
         self._create_simulator(mdl)
 
@@ -159,8 +152,8 @@ class AlleleSimulatorTestCase(unittest.TestCase):
             left_trims.append(left_trim)
             insert_lens.append(insert_len)
 
-        mean_nbinom = insert_nbinom_prob/(1 - insert_nbinom_prob) * insert_nbinom_m
-        var_nbinom = insert_nbinom_prob/np.power(1 - insert_nbinom_prob, 2) * insert_nbinom_m
+        mean_nbinom = insert_poiss
+        var_nbinom = insert_poiss
         second_moment_nbinom = var_nbinom + np.power(mean_nbinom, 2)
         insert_mean_true = (1 - insert_zero_prob) * mean_nbinom
         insert_var_true = (1 - insert_zero_prob) * second_moment_nbinom - np.power((1 - insert_zero_prob) * mean_nbinom, 2)
@@ -173,8 +166,7 @@ class AlleleSimulatorTestCase(unittest.TestCase):
 
     def test_neg_beta_left_del_intertarg(self):
         trim_zero_probs = np.array([0.1,0.2,0.4,0.2])
-        trim_short_nbinom_m = np.array([1,2,3,4])
-        trim_short_nbinom_logits = np.array([-0.2, -0.7, 0.2, 0.8])
+        trim_short_poiss = np.array([1,2,3,4])
         mdl = CLTLikelihoodModel(
                 None,
                 self.bcode_meta,
@@ -182,8 +174,7 @@ class AlleleSimulatorTestCase(unittest.TestCase):
                 known_params = self.known_params,
                 target_lams = 1 + np.arange(self.bcode_meta.n_targets),
                 trim_zero_probs = trim_zero_probs,
-                trim_short_nbinom_m = trim_short_nbinom_m,
-                trim_short_nbinom_logits = trim_short_nbinom_logits)
+                trim_short_poiss = trim_short_poiss)
         self._create_simulator(mdl)
 
         target_tract = TargetTract(0,0,1,1)
@@ -208,11 +199,10 @@ class AlleleSimulatorTestCase(unittest.TestCase):
         dist_index = 1
         trim_left_zero_prob = trim_zero_probs[dist_index]
         max_trim_len = self.bcode_meta.left_long_trim_min[0] - 1
-        trim_left_dist = ZeroInflatedBoundedNegativeBinomial(
+        trim_left_dist = ZeroInflatedBoundedPoisson(
                 0,
                 max_trim_len,
-                trim_short_nbinom_m[dist_index],
-                trim_short_nbinom_logits[dist_index])
+                trim_short_poiss[dist_index])
         mean_nbinom = np.sum([
             k * trim_left_dist.pmf(k) for k in range(max_trim_len + 1)])
         left_trim_mean_true = (1 - trim_left_zero_prob) * mean_nbinom

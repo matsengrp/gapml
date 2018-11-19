@@ -74,6 +74,11 @@ class PaddedBoundedPoisson(BoundedPoisson):
     def __str__(self):
         return "padded bounded pois: %d, %d, %f" % (self.min_val, self.max_val, self.poisson_param)
 
+"""
+We tried implementing negative binomial but I don't think it's properly implemented in tensorflow....
+so MLE was not behaving correctly
+"""
+
 class BoundedNegativeBinomial:
     def __init__(self, min_val: int, max_val: int, m: int, logit: float):
         raise NotImplementedError()

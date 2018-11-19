@@ -21,7 +21,7 @@ from clt_observer import CLTObserver
 from optim_settings import KnownModelParams
 from barcode_metadata import BarcodeMetadata
 
-from common import create_directory, inv_sigmoid
+from common import create_directory
 from constants import NUM_BARCODE_V7_TARGETS, BARCODE_V7
 
 
@@ -65,7 +65,7 @@ def parse_args():
     parser.add_argument(
         '--double-cut-weight',
         type=float,
-        default=2,
+        default=0.4,
         help='Weight for double cuts')
     parser.add_argument(
         '--boost-weights',
@@ -83,7 +83,7 @@ def parse_args():
         '--trim-long-factor',
         type=float,
         nargs=2,
-        default=[0.05] * 4,
+        default=[0.2] * 4,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
         '--trim-zero-probs',
@@ -92,18 +92,11 @@ def parse_args():
         default=[0.1] * 4,
         help='probability of doing no deletion during repair')
     parser.add_argument(
-        '--trim-nbinom-m',
+        '--trim-poiss',
         type=float,
         nargs=2,
         default=[4] * 4,
         help='neg binom parameter for left and right trims, until we observe this many failures, same for long and short'
-    )
-    parser.add_argument(
-        '--trim-nbinom-probs',
-        type=float,
-        nargs=2,
-        default=[0.5] * 4,
-        help='neg binom parameters for left and right trims, success probability, same for long and short'
     )
     parser.add_argument(
         '--insert-zero-prob',
@@ -111,15 +104,10 @@ def parse_args():
         default=0.01,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
-        '--insert-nbinom-m',
+        '--insert-poiss',
         type=float,
         default=1,
         help='neg binom parameter for insertion length, until we observe this many failures')
-    parser.add_argument(
-        '--insert-nbinom-prob',
-        type=float,
-        default=0.1,
-        help='neg binom parameter for insertion length, prob of success')
     parser.add_argument(
         '--birth-sync-rounds', type=float, default=2, help='number of syncronous birth rounds before async begins')
     parser.add_argument(
@@ -324,13 +312,10 @@ def main(args=sys.argv[1:]):
             boost_softmax_weights = np.array(args.boost_weights),
             trim_long_factor = np.array(args.trim_long_factor),
             trim_zero_probs = np.array(args.trim_zero_probs),
-            trim_short_nbinom_m = np.array(args.trim_nbinom_m),
-            trim_short_nbinom_logits = inv_sigmoid(args.trim_nbinom_probs),
-            trim_long_nbinom_m = np.array(args.trim_nbinom_m),
-            trim_long_nbinom_logits = inv_sigmoid(args.trim_nbinom_probs),
+            trim_short_poiss = np.array(args.trim_poiss),
+            trim_long_poiss = np.array(args.trim_poiss),
             insert_zero_prob = np.array([args.insert_zero_prob]),
-            insert_nbinom_m = np.array([args.insert_nbinom_m]),
-            insert_nbinom_logit = inv_sigmoid(np.array([args.insert_nbinom_prob])),
+            insert_poiss = np.array([args.insert_poiss]),
             double_cut_weight = [args.double_cut_weight],
             cell_type_tree = cell_type_tree,
             tot_time = args.time,

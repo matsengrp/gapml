@@ -112,8 +112,10 @@ class CLTPenalizedEstimator(CLTEstimator):
             boost_probs = np.exp(var_dict["boost_softmax_weights"])/np.sum(
                     np.exp(var_dict["boost_softmax_weights"]))
             logging.info("boost softmax prob %s", boost_probs)
-            for k, v in var_dict.items():
+            sorted_keys = sorted(list(var_dict.keys()))
+            for k in sorted_keys:
                 if k not in ["branch_len_offsets_proportion", "branch_len_inners", "boost_probs"]:
+                    v = var_dict[k]
                     logging.info("%s: %s", k, v)
 
             _, pen_log_lik, log_lik, branch_pen, target_lam_pen, dist_to_roots, spine_lens = self.model.sess.run(

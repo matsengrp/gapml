@@ -1,18 +1,16 @@
-from numpy import ndarray
 from typing import List
 import numpy as np
 from scipy.stats import expon
 from numpy.random import choice, random
-from scipy.stats import nbinom
+from scipy.stats import poisson
 
 from allele import Allele, AlleleList
 from indel_sets import TargetTract
 from cell_lineage_tree import CellLineageTree
 from allele_simulator import AlleleSimulator
-from bounded_distributions import ZeroInflatedBoundedNegativeBinomial, PaddedBoundedNegativeBinomial
+from bounded_distributions import ZeroInflatedBoundedPoisson, PaddedBoundedPoisson
 
 from clt_likelihood_model import CLTLikelihoodModel
-from common import sigmoid
 
 class AlleleSimulatorSimultaneous(AlleleSimulator):
     """
@@ -27,7 +25,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
                         being applied to the insertion, left del, right del distributions.
                         The boost will shift the insertion dist by `boost_len`.
                         The boost will change the minimum left del len to `boost_len` (but doesn't
-                        shift the max length -- nbinom distributions are properly normalized).
+                        shift the max length -- poiss distributions are properly normalized).
                         Likewise for the right del dist.
                         Note that boosts are not applied if the left or right deletions are long.
         @param boost_len: the amount to boost up the length of the indel
@@ -45,45 +43,35 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         self.boost_probs = self.model.boost_probs.eval()
         self.boost_len = boost_len
 
-        self.left_del_distributions = [self._create_bounded_nbinoms(
+        self.left_del_distributions = [self._create_bounded_poisss(
             min_vals = self.bcode_meta.left_long_trim_min,
             max_vals = self.bcode_meta.left_max_trim,
-            short_nbinom_m = self.model.trim_short_nbinom_m[i].eval(),
-            short_nbinom_logit = self.model.trim_short_nbinom_logits[i].eval(),
-            long_nbinom_m = self.model.trim_long_nbinom_m[i].eval(),
-            long_nbinom_logit = self.model.trim_long_nbinom_logits[i].eval())
+            short_poiss = self.model.trim_short_poiss[i].eval(),
+            long_poiss = self.model.trim_long_poiss[i].eval())
             for i in [0,1]]
-        self.right_del_distributions = [self._create_bounded_nbinoms(
+        self.right_del_distributions = [self._create_bounded_poisss(
             min_vals = self.bcode_meta.right_long_trim_min,
             max_vals = self.bcode_meta.right_max_trim,
-            short_nbinom_m = self.model.trim_short_nbinom_m[i].eval(),
-            short_nbinom_logit = self.model.trim_short_nbinom_logits[i].eval(),
-            long_nbinom_m = self.model.trim_long_nbinom_m[i].eval(),
-            long_nbinom_logit = self.model.trim_long_nbinom_logits[i].eval())
+            short_poiss = self.model.trim_short_poiss[i].eval(),
+            long_poiss = self.model.trim_long_poiss[i].eval())
             for i in [2,3]]
-        self.insertion_distribution = nbinom(
-                self.model.insert_nbinom_m.eval(),
-                1 - sigmoid(self.model.insert_nbinom_logit.eval()))
+        self.insertion_distribution = poisson(self.model.insert_poiss.eval())
 
     def get_root(self):
         return AlleleList(
                 [self.bcode_meta.unedited_barcode] * self.bcode_meta.num_barcodes,
                 self.bcode_meta)
 
-    def _create_bounded_nbinoms(self,
+    def _create_bounded_poisss(self,
             min_vals: List[float],
             max_vals: List[float],
-            short_nbinom_m: float,
-            short_nbinom_logit: float,
-            long_nbinom_m: float,
-            long_nbinom_logit: float):
+            short_poiss: float,
+            long_poiss: float):
         """
         @param min_vals: the min long trim length for this target (left or right)
         @param max_vals: the max trim length for this target (left or right)
         @param short_binom_m: neg binom parameter for short trims, number of failures
-        @param short_binom_logit: neg binom parameter for short trims, logit for prob of success
         @param long_binom_m: neg binom parameter for long trims, number of failures
-        @param long_binom_logit: neg binom parameter for long trims, logit for prob of success
 
         @return bounded poisson distributions for each target, for long, short , boosted-short trims
                 List[Dict[bool, BoundedPoisson]]
@@ -92,11 +80,11 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         for i in range(self.bcode_meta.n_targets):
             long_short_dstns = {
                     # Long trim
-                    "long": PaddedBoundedNegativeBinomial(min_vals[i], max_vals[i], long_nbinom_m, long_nbinom_logit),
+                    "long": PaddedBoundedPoisson(min_vals[i], max_vals[i], long_poiss),
                     # Short trim
-                    "short": ZeroInflatedBoundedNegativeBinomial(0, min_vals[i] - 1, short_nbinom_m, short_nbinom_logit),
+                    "short": ZeroInflatedBoundedPoisson(0, min_vals[i] - 1, short_poiss),
                     # Boosted short trim
-                    "boost_short": PaddedBoundedNegativeBinomial(self.boost_len, min_vals[i] - 1, short_nbinom_m, short_nbinom_logit)}
+                    "boost_short": PaddedBoundedPoisson(self.boost_len, min_vals[i] - 1, short_poiss)}
             dstns.append(long_short_dstns)
         return dstns
 
