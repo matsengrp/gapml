@@ -101,12 +101,12 @@ def parse_args():
     parser.add_argument(
         '--insert-zero-prob',
         type=float,
-        default=0.01,
+        default=0.3,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
         '--insert-poiss',
         type=float,
-        default=1,
+        default=4,
         help='neg binom parameter for insertion length, until we observe this many failures')
     parser.add_argument(
         '--birth-sync-rounds', type=float, default=2, help='number of syncronous birth rounds before async begins')

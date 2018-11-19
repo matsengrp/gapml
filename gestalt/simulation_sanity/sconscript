@@ -49,15 +49,16 @@ def generate(env, outdir, c):
         '--out-obs-file ${TARGETS[0]}',
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
-        #'--target-lambda 0.4',
+        '--target-lambda 0.6,0.8',
         #'--target-lambda 0.8,0.7,0.6,.5,.4',
-        '--target-lambda 1.5,1.2,.8',
-        '--target-lam-decay 0.6',
-        '--double 0.0001',
-        '--trim-long-factor 0.001 0.001',
+        #'--target-lambda 1.5,1.2,.8',
+        #'--target-lam-decay 0.6',
+        '--insert-poiss 4',
+        '--insert-zero-prob 0.2',
+        '--double 0.2',
         '--time 1',
         '--num-barcodes',
-        10,
+        200,
         '--birth-sync-rounds 2',
         '--birth-sync-time 0.4',
         '--birth-decay -8',
@@ -79,7 +80,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [10],
+    [200],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -164,6 +165,8 @@ def run_MLE(env, outdir, c):
         '--max-chad-tune-search 0',
         '--num-init-random-rearrange 0',
         '--tot-time-known',
+        #'--lambda-known',
+        '--lambda-decay-known',
     ]
     return env.Command(
         [
