@@ -47,6 +47,7 @@ class CLTTrimProbTestCase(unittest.TestCase):
         tf.global_variables_initializer().run()
         self.mdl._create_trim_insert_distributions(1)
 
+    @unittest.skip("Asdf")
     def test_get_short_trim_probs_leftmost_targ(self):
         sg = Singleton(
                 start_pos = 0,
@@ -56,7 +57,6 @@ class CLTTrimProbTestCase(unittest.TestCase):
                 max_target = 0,
                 max_deact_target = 0)
         left_trim, right_trim = sg.get_trim_lens(self.bcode_meta)
-        print(left_trim, right_trim, sg.insert_len)
         left_del_prob = self.mdl._create_left_del_probs([sg], left_boost_len=0).eval()
         left_del_dist = ZeroInflatedBoundedNegativeBinomial(
                 0,
@@ -64,7 +64,6 @@ class CLTTrimProbTestCase(unittest.TestCase):
                 self.trim_short_nbinom_m[0],
                 self.trim_short_nbinom_logits[0])
         left_del = (1 - self.trim_zero_probs[0]) * left_del_dist.pmf(left_trim)
-        print(left_del, left_del_prob)
         self.assertTrue(np.isclose(left_del, left_del_prob[0]))
 
         left_boost_del_prob = self.mdl._create_left_del_probs([sg], left_boost_len=1).eval()
@@ -74,7 +73,6 @@ class CLTTrimProbTestCase(unittest.TestCase):
                 self.trim_short_nbinom_m[0],
                 self.trim_short_nbinom_logits[0])
         left_boost_del = left_boost_del_dist.pmf(left_trim)
-        print("left boost", left_boost_del, left_boost_del_prob)
         self.assertTrue(np.isclose(left_boost_del, left_boost_del_prob[0]))
 
         right_del_prob = self.mdl._create_right_del_probs([sg], right_boost_len=0).eval()
@@ -84,7 +82,6 @@ class CLTTrimProbTestCase(unittest.TestCase):
                 self.trim_short_nbinom_m[1],
                 self.trim_short_nbinom_logits[1])
         right_del = (1 - self.trim_zero_probs[1]) * right_del_dist.pmf(right_trim)
-        print(right_del, right_del_prob)
         self.assertTrue(np.isclose(right_del, right_del_prob[0]))
 
         right_boost_del_prob = self.mdl._create_right_del_probs([sg], right_boost_len=1).eval()
@@ -94,21 +91,17 @@ class CLTTrimProbTestCase(unittest.TestCase):
                 self.trim_short_nbinom_m[1],
                 self.trim_short_nbinom_logits[1])
         right_boost_del = right_boost_del_dist.pmf(right_trim)
-        print("right boost", right_boost_del, right_boost_del_prob)
         self.assertTrue(np.isclose(right_boost_del, right_boost_del_prob[0], atol=1e-4))
 
         insert_prob = self.mdl._create_insert_probs([sg], insert_boost_len=0).eval()
         insert_dist = nbinom(self.insert_nbinom_m, 1 - sigmoid(self.insert_nbinom_logit))
         insert = self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_dist.pmf(sg.insert_len)
-        print(insert, insert_prob)
         self.assertTrue(np.isclose(insert, insert_prob[0]))
 
         log_indel_probs = self.mdl._create_log_indel_probs([sg]).eval()
         log_indel_self_calc = 1./3 * (np.log(insert_prob) + np.log(right_del) + np.log(left_boost_del)) + 1./3 * (np.log(insert_prob) + np.log(right_boost_del) + np.log(left_del))
-        print(log_indel_probs, log_indel_self_calc)
         self.assertTrue(log_indel_probs, log_indel_self_calc)
 
-    @unittest.skip("Asdf")
     def test_get_short_trim_probs_rightmost_targ(self):
         sg = Singleton(
                 start_pos = 262,
@@ -116,34 +109,48 @@ class CLTTrimProbTestCase(unittest.TestCase):
                 min_deact_target = 9,
                 min_target = 9,
                 max_target = 9,
-                max_deact_target = 9)
+                max_deact_target = 9,
+                insert_str="ATAC")
         left_trim, right_trim = sg.get_trim_lens(self.bcode_meta)
-        print(left_trim, right_trim, sg.insert_len)
-        log_left_del_prob = self.mdl._create_left_del_probs([sg], left_boost_len=0).eval()
+        left_del_prob = self.mdl._create_left_del_probs([sg], left_boost_len=0).eval()
         left_del_dist = ZeroInflatedBoundedNegativeBinomial(
                 0,
-                self.bcode_meta.left_max_trim[0],
+                self.bcode_meta.left_max_trim[9],
                 self.trim_short_nbinom_m[0],
                 self.trim_short_nbinom_logits[0])
-        log_left_del = self.trim_zero_probs[0] + (1 - self.trim_zero_probs[0]) * left_del_dist.pmf(left_trim)
-        print(log_left_del, log_left_del_prob)
-        self.assertTrue(np.isclose(log_left_del, log_left_del_prob[0]))
+        left_del = self.trim_zero_probs[0] + (1 - self.trim_zero_probs[0]) * left_del_dist.pmf(left_trim)
+        self.assertTrue(np.isclose(left_del, left_del_prob[0]))
 
-        log_right_del_prob = self.mdl._create_right_del_probs([sg], right_boost_len=0).eval()
+        right_del_prob = self.mdl._create_right_del_probs([sg], right_boost_len=0).eval()
         right_del_dist = ZeroInflatedBoundedNegativeBinomial(
                 0,
-                self.bcode_meta.right_max_trim[0],
+                self.bcode_meta.right_max_trim[9],
                 self.trim_short_nbinom_m[1],
                 self.trim_short_nbinom_logits[1])
-        log_right_del = (1 - self.trim_zero_probs[1]) * right_del_dist.pmf(right_trim)
-        print(log_right_del, log_right_del_prob)
-        self.assertTrue(np.isclose(log_right_del, log_right_del_prob[0]))
+        right_del = (1 - self.trim_zero_probs[1]) * right_del_dist.pmf(right_trim)
+        self.assertTrue(np.isclose(right_del, right_del_prob[0]))
 
-        log_insert_prob = self.mdl._create_insert_probs([sg], insert_boost_len=0).eval()
+        right_boost_del_dist = ZeroInflatedBoundedNegativeBinomial(
+                1,
+                self.bcode_meta.right_max_trim[9],
+                self.trim_short_nbinom_m[0],
+                self.trim_short_nbinom_logits[0])
+        right_boost_del = right_boost_del_dist.pmf(right_trim)
+
+        insert_prob = self.mdl._create_insert_probs([sg], insert_boost_len=0).eval()
         insert_dist = nbinom(self.insert_nbinom_m, 1 - sigmoid(self.insert_nbinom_logit))
-        log_insert = self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_dist.pmf(sg.insert_len)
-        print(log_insert, log_insert_prob)
-        self.assertTrue(np.isclose(log_insert, log_insert_prob[0]))
+        insert = (1 - self.insert_zero_prob) * insert_dist.pmf(sg.insert_len) * 1./np.power(4,4)
+        self.assertTrue(np.isclose(insert, insert_prob[0]))
+
+        insert_boost_prob = self.mdl._create_insert_probs([sg], insert_boost_len=1).eval()
+        insert_boost = insert_dist.pmf(sg.insert_len - 1) * 1./np.power(4,4)
+        self.assertTrue(np.isclose(insert_boost, insert_boost_prob[0]))
+
+        log_indel_probs = self.mdl._create_log_indel_probs([sg]).eval()
+        log_indel_self_calc = (
+                + 1./3 * (np.log(insert_prob) + np.log(right_boost_del) + np.log(left_del))
+                + 1./3 * (np.log(insert_boost_prob) + np.log(right_del) + np.log(left_del)))
+        self.assertTrue(log_indel_probs, log_indel_self_calc)
 
 #    def test_get_long_trim_probs(self):
 #        sg = Singleton(
