@@ -749,6 +749,7 @@ def tune(
             fit_param_list=[warm_start_fit_params],
             known_params=args.known_params,
             scratch_dir=args.scratch_dir,
+            use_poisson=args.use_poisson,
             assessor=assessor,
             name="chad-tuning%d" % parent_idx)
         worker_list.append(worker)

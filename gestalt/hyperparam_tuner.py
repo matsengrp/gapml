@@ -205,6 +205,7 @@ def _tune_hyperparams(
             args.max_extra_steps,
             args.max_sum_states,
             args.scratch_dir,
+            args.use_poisson,
             args.num_processes)
 
         # Create our summary of tuning
@@ -229,6 +230,7 @@ def _get_many_bcode_hyperparam_score(
         max_extra_steps: int,
         max_sum_states: int,
         scratch_dir: str,
+        use_poisson: bool,
         num_processes: int):
     """
     @return score = the validation log likelihood
@@ -262,7 +264,8 @@ def _get_many_bcode_hyperparam_score(
             transition_wrap_maker=transition_wrap_maker,
             fit_param_list=[fit_params],
             known_params=all_known_params,
-            scratch_dir=scratch_dir)
+            scratch_dir=scratch_dir,
+            use_poisson=use_poisson)
         worker_list.append(scorer)
 
     job_manager = SubprocessManager(
@@ -283,6 +286,7 @@ def _get_one_bcode_hyperparam_score(
         max_extra_steps: int,
         max_sum_states: int,
         scratch_dir: str,
+        use_poisson: bool,
         num_processes: int):
     """
     @return score = Pr(validation data | train data)
@@ -351,6 +355,7 @@ def _get_one_bcode_hyperparam_score(
             transition_wrap_maker=transition_wrap_maker,
             fit_param_list=[fit_params],
             known_params=all_known_params,
+            use_poisson=use_poisson,
             scratch_dir=scratch_dir)
         worker_list.append(scorer)
 

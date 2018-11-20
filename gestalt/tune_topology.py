@@ -203,7 +203,7 @@ def parse_args(args):
 
 def read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
     fit_params = {
-            "target_lams": get_init_target_lams(bcode_meta.n_targets, 0) * 0.001,
+            "target_lams": get_init_target_lams(bcode_meta.n_targets, 0) * 0.5,
             "target_lam_decay_rate": np.array([0.5]),
             "boost_softmax_weights": np.array([1, 2, 2]),
             "trim_long_factor": 0.05 * np.ones(2),
@@ -352,48 +352,6 @@ def fit_multifurc_tree(
         use_poisson=args.use_poisson,
         assessor=assessor).run_worker(None)[0]
     return result
-
-
-def do_refit_bifurc_tree(
-        raw_res: LikelihoodScorerResult,
-        bcode_meta: BarcodeMetadata,
-        args,
-        assessor: ModelAssessor = None):
-    """
-    we need to refit using the bifurcating tree
-    """
-    # Copy over the latest model parameters for warm start
-    param_dict = raw_res.get_fit_params()
-    refit_bifurc_tree = raw_res.fitted_bifurc_tree.copy()
-    num_nodes = refit_bifurc_tree.get_num_nodes()
-    # Copy over the branch lengths
-    br_lens = np.ones(num_nodes) * 1e-10
-    for node in refit_bifurc_tree.traverse():
-        assert node.dist >= 0
-        br_lens[node.node_id] = max(node.dist, 1e-10)
-        node.resolved_multifurcation = True
-    param_dict["branch_len_inners"] = br_lens
-    param_dict["branch_len_offsets_proportion"] = np.ones(num_nodes) * 1e-10
-
-    # Fit the bifurcating tree
-    transition_wrap_maker = TransitionWrapperMaker(
-            raw_res.fitted_bifurc_tree,
-            bcode_meta,
-            args.max_extra_steps,
-            args.max_sum_states)
-    bifurc_res = LikelihoodScorer(
-        get_randint(),
-        raw_res.fitted_bifurc_tree,
-        bcode_meta,
-        args.max_iters,
-        args.num_inits,
-        transition_wrap_maker,
-        fit_param_list=[param_dict],
-        known_params=args.known_params,
-        assessor=assessor,
-        name="bifurc_refit").run_worker(None)[0]
-    return bifurc_res
-
 
 def _do_random_rearrange(tree, bcode_meta, num_random_rearrange):
     """
