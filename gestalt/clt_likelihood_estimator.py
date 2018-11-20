@@ -66,9 +66,10 @@ class CLTPenalizedEstimator(CLTEstimator):
                             useful to see how progress is being made
         @param conv_thres: threshold for declaring convergence
         """
+        print("conv_thres", conv_thres)
         feed_dict = {
             self.model.branch_pen_param_ph: branch_pen_param,
-            self.model.crazy_pen_param_ph: 0.1,
+            self.model.crazy_pen_param_ph: 0.001,
             self.model.target_lam_pen_param_ph: target_lam_pen_param,
         }
         # Check tree is ultrametric

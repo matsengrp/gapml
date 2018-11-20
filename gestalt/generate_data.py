@@ -83,19 +83,21 @@ def parse_args():
         '--trim-long-factor',
         type=float,
         nargs=2,
-        default=[0.2] * 4,
+        default=[0.1] * 2,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
         '--trim-zero-probs',
         type=float,
-        nargs=2,
-        default=[0.1] * 4,
+        nargs=4,
+        default=[0.5] * 4,
         help='probability of doing no deletion during repair')
     parser.add_argument(
-        '--trim-poiss',
+        '--trim-params',
         type=float,
         nargs=2,
-        default=[4] * 4,
+        default=[np.log(4)] * 2,
+        #nargs=4,
+        #default=[np.log(4),0.1] * 2,
         help='neg binom parameter for left and right trims, until we observe this many failures, same for long and short'
     )
     parser.add_argument(
@@ -104,9 +106,12 @@ def parse_args():
         default=0.3,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
-        '--insert-poiss',
+        '--insert-params',
         type=float,
-        default=4,
+        nargs=1,
+        default=[2],
+        #nargs=2,
+        #default=[1,0.3],
         help='neg binom parameter for insertion length, until we observe this many failures')
     parser.add_argument(
         '--birth-sync-rounds', type=float, default=2, help='number of syncronous birth rounds before async begins')
@@ -158,6 +163,10 @@ def parse_args():
         '--is-stupid-cherry',
         action='store_true',
         help="special tree structure for tests")
+    parser.add_argument(
+        '--use-poisson',
+        action='store_true',
+        help="trims follow poisson")
 
     parser.set_defaults()
     args = parser.parse_args()
@@ -312,14 +321,15 @@ def main(args=sys.argv[1:]):
             boost_softmax_weights = np.array(args.boost_weights),
             trim_long_factor = np.array(args.trim_long_factor),
             trim_zero_probs = np.array(args.trim_zero_probs),
-            trim_short_poiss = np.array(args.trim_poiss),
-            trim_long_poiss = np.array(args.trim_poiss),
+            trim_short_params = np.array(args.trim_params),
+            trim_long_params = np.array(args.trim_params),
             insert_zero_prob = np.array([args.insert_zero_prob]),
-            insert_poiss = np.array([args.insert_poiss]),
+            insert_params = np.array(args.insert_params),
             double_cut_weight = [args.double_cut_weight],
             cell_type_tree = cell_type_tree,
             tot_time = args.time,
-            tot_time_extra = 1e-10)
+            tot_time_extra = 1e-10,
+            use_poisson=args.use_poisson)
     tf.global_variables_initializer().run()
     logging.info("Done creating model")
 
@@ -330,11 +340,20 @@ def main(args=sys.argv[1:]):
             args.max_tries)
 
     # Check that the the abundance of the leaves is not too high
+    right_trims = []
+    left_trims = []
     if args.max_abundance is not None:
         for obs in obs_leaves:
             if obs.abundance > args.max_abundance:
                 raise ValueError(
                     "Number of barcodes does not seem to be enough. There are leaves with %d abundance" % obs.abundance)
+            for allele_events in obs.allele_events_list:
+                for evt in allele_events.events:
+                    left_t, right_t = evt.get_trim_lens(bcode_meta)
+                    if evt.max_target == 0:
+                        right_trims.append(right_t)
+                    if evt.min_target == 1:
+                        left_trims.append(left_t)
 
     logging.info("Number of uniq obs alleles %d", len(obs_leaves))
     print("Number of uniq obs alleles %d" % len(obs_leaves))

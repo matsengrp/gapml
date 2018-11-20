@@ -66,7 +66,8 @@ def generate(env, outdir, c):
         '--max-uniq-alleles',
         100,
         '--max-abundance 40',
-        '--perturb-target 0'
+        '--perturb-target 0',
+        '--use-poisson',
     ]
     return env.Command(
         [
@@ -154,8 +155,8 @@ def run_MLE(env, outdir, c):
         '1', #100,20',
         '--target-lam-pen',
         '1',
-        '--max-sum-states 2002',
-        '--max-extra-steps 2',
+        '--max-sum-states 10',
+        '--max-extra-steps 10',
         '--max-iters 50000',
         '--num-penalty-tune-splits 2',
         '--num-penalty-tune-iters 1',
@@ -163,8 +164,9 @@ def run_MLE(env, outdir, c):
         '--max-chad-tune-search 0',
         '--num-init-random-rearrange 0',
         '--tot-time-known',
-        #'--lambda-known',
+        '--lambda-known',
         '--lambda-decay-known',
+        '--use-poisson',
     ]
     return env.Command(
         [

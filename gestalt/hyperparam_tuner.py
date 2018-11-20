@@ -171,6 +171,7 @@ def _tune_hyperparams(
         fit_param_list=fit_param_list,
         known_params=args.known_params,
         scratch_dir=args.scratch_dir,
+        use_poisson=args.use_poisson,
         assessor=assessor)
         for tree_split, transition_wrap_maker in zip(tree_splits, trans_wrap_makers)]
 

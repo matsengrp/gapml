@@ -206,6 +206,10 @@ class Singleton(IndelSet):
     def is_right_long(self):
         return self.max_deact_target != self.max_target
 
+    @property
+    def is_intertarget(self):
+        return self.max_target != self.min_target
+
     def get_target_tract(self):
         return TargetTract(
                 self.min_deact_target,

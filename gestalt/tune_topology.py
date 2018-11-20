@@ -166,6 +166,10 @@ def parse_args(args):
         help="""
         Log the number of hanging chads found in the tree
         """)
+    parser.add_argument(
+        '--use-poisson',
+        action='store_true',
+        help="Use poisson distribution")
 
     parser.set_defaults(tot_time_known=True)
     args = parser.parse_args(args)
@@ -199,16 +203,16 @@ def parse_args(args):
 
 def read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
     fit_params = {
-            "target_lams": get_init_target_lams(bcode_meta.n_targets, 0),
+            "target_lams": get_init_target_lams(bcode_meta.n_targets, 0) * 0.001,
             "target_lam_decay_rate": np.array([0.5]),
             "boost_softmax_weights": np.array([1, 2, 2]),
-            "trim_long_factor": 0.05 * np.ones(4),
+            "trim_long_factor": 0.05 * np.ones(2),
             "trim_zero_probs": 0.5 * np.ones(4),
-            "trim_short_poiss": 4 * np.ones(4),
-            "trim_long_poiss": 4 * np.ones(4),
+            "trim_short_params":  np.array([1,1]) if args.use_poisson else np.array([1,0.2] * 2),
+            "trim_long_params":  np.array([1,1]) if args.use_poisson else np.array([1,0.2] * 2),
             "insert_zero_prob": np.array([0.5]),
-            "insert_poiss": np.array([1]),
-            "double_cut_weight": np.array([0.4]),
+            "insert_params": np.array([1]) if args.use_poisson else np.array([1,0.1]),
+            "double_cut_weight": np.array([0.1]),
             "tot_time": 1,
             "tot_time_extra": 1.3}
     # Use warm-start info if available
@@ -235,6 +239,10 @@ def read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
         fit_params["boost_softmax_weights"] = true_model_dict['boost_softmax_weights']
         fit_params["trim_zero_probs"] = true_model_dict['trim_zero_probs']
         fit_params["insert_zero_prob"] = true_model_dict['insert_zero_prob']
+    if args.known_params.indel_dists:
+        fit_params["trim_short_params"] = true_model_dict['trim_short_params']
+        fit_params["trim_long_params"] = true_model_dict['trim_long_params']
+        fit_params["insert_params"] = true_model_dict['insert_params']
     return fit_params
 
 
@@ -341,6 +349,7 @@ def fit_multifurc_tree(
         fit_param_list=[param_dict],
         known_params=args.known_params,
         scratch_dir=args.scratch_dir,
+        use_poisson=args.use_poisson,
         assessor=assessor).run_worker(None)[0]
     return result
 
