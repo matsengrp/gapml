@@ -49,11 +49,10 @@ def generate(env, outdir, c):
         '--out-obs-file ${TARGETS[0]}',
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
-        '--target-lambda 0.003,0.003',
-        '--double 100',
-        #'--target-lambda 0.6',
-        '--insert-poiss 4',
-        '--insert-zero-prob 0.2',
+        #'--target-lambda 0.003,0.003',
+        '--double 0.0000003',
+        '--target-lambda 10,10',
+        '--insert-zero-prob 0.1',
         '--time 1',
         '--num-barcodes',
         200,
@@ -67,7 +66,7 @@ def generate(env, outdir, c):
         100,
         '--max-abundance 40',
         '--perturb-target 0',
-        '--use-poisson',
+        #'--use-poisson',
     ]
     return env.Command(
         [
@@ -85,6 +84,8 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def restrict_observed_alleles(env, outdir, c):
+    # NOTE: restricting output is essentially ignored
+    # if we pass in the oracle tree
     cmd = [
         'python restrict_observed_barcodes.py',
         '--obs-file ${SOURCES[0]}',
@@ -166,7 +167,7 @@ def run_MLE(env, outdir, c):
         '--tot-time-known',
         '--lambda-known',
         '--lambda-decay-known',
-        '--use-poisson',
+        #'--use-poisson',
     ]
     return env.Command(
         [

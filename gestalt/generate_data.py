@@ -94,24 +94,24 @@ def parse_args():
     parser.add_argument(
         '--trim-params',
         type=float,
-        nargs=2,
-        default=[np.log(4)] * 2,
-        #nargs=4,
-        #default=[np.log(4),0.1] * 2,
+        #nargs=2,
+        #default=[np.log(4)] * 2,
+        nargs=4,
+        default=[np.log(4),0.1] * 2,
         help='neg binom parameter for left and right trims, until we observe this many failures, same for long and short'
     )
     parser.add_argument(
         '--insert-zero-prob',
         type=float,
-        default=0.3,
+        default=0.1,
         help='probability of doing no deletion/insertion during repair')
     parser.add_argument(
         '--insert-params',
         type=float,
-        nargs=1,
-        default=[2],
-        #nargs=2,
-        #default=[1,0.3],
+        #nargs=1,
+        #default=[2],
+        nargs=2,
+        default=[1,0.3],
         help='neg binom parameter for insertion length, until we observe this many failures')
     parser.add_argument(
         '--birth-sync-rounds', type=float, default=2, help='number of syncronous birth rounds before async begins')
