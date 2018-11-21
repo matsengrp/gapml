@@ -7,49 +7,40 @@ import os
 from os.path import join
 from nestly.scons import SConsWrap
 from nestly import Nest
-from SCons.Script import Environment
-from SCons.Script import AddOption
+import SCons.Script as sc
 
 # Command line options
 
-AddOption('--nreps',
-          dest='nreps',
-          default=1,
-          type='int',
-          nargs=1,
-          action='store',
-          help='number of replicates')
+sc.AddOption('--clusters', type='string', help="Clusters to submit to. Default is local execution.", default='')
+sc.AddOption('--output', type='string', help="output folder", default='_output')
 
-AddOption('--output_name',
-          dest='output_name',
-          default='output',
-          type='str',
-          nargs=1,
-          help='name of output directory')
+env = sc.Environment(
+        ENV=os.environ,
+        clusters=sc.GetOption('clusters'),
+        output=sc.GetOption('output'))
 
-env = Environment(ENV=os.environ,
-                  NREPS = GetOption('nreps'),
-                  OUTPUT_NAME = GetOption('output_name'))
-
-Export('env')
+sc.Export('env')
 
 env.SConsignFile()
 
 flag = 'simulation_sanity'
+sc.SConscript(flag + '/sconscript', exports=['flag'])
+
+flag = 'simulation_topol_consist'
+sc.SConscript(flag + '/sconscript', exports=['flag'])
+
+flag = 'simulation_compare'
+sc.SConscript(flag + '/sconscript', exports=['flag'])
+
+flag = 'simulation_replicate_real_data'
+sc.SConscript(flag + '/sconscript', exports=['flag'])
+
+flag = 'analyze_gestalt'
 SConscript(flag + '/sconscript', exports=['flag'])
+
 
 #flag = 'simulation_consistency'
 #SConscript(flag + '/sconscript', exports=['flag'])
-
-flag = 'simulation_topol_consist'
-SConscript(flag + '/sconscript', exports=['flag'])
-
-flag = 'simulation_compare'
-SConscript(flag + '/sconscript', exports=['flag'])
-
-flag = 'simulation_replicate_real_data'
-SConscript(flag + '/sconscript', exports=['flag'])
-
 #flag = 'simulation_topology_same_diff'
 #SConscript(flag + '/sconscript', exports=['flag'])
 #
@@ -67,6 +58,3 @@ SConscript(flag + '/sconscript', exports=['flag'])
 #
 #flag = 'simulation_one_barcode'
 #SConscript(flag + '/sconscript', exports=['flag'])
-
-flag = 'analyze_gestalt'
-SConscript(flag + '/sconscript', exports=['flag'])

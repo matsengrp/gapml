@@ -12,10 +12,7 @@ Import('env')
 localenv = env.Clone()
 
 # Set up state
-base = {'nreps': localenv['NREPS'],
-        'output_name': localenv['OUTPUT_NAME']}
-
-nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
+nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 MAX_LEAVES = 250
 FISH_DATA = {
@@ -140,8 +137,8 @@ nest.add(
         #"30hpf6",
         #"30hpf7",
         #"30hpf8",
-        #"dome1",
-        #"dome3",
+        "dome1",
+        "dome3",
         "dome5",
         "dome8",
     ],
@@ -270,8 +267,8 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = "512,128,32,8"
-    targ_lam_penalty_params = "10,1"
+    penalty_params = "32"
+    targ_lam_penalty_params = "2"
     cmd = [
         'python3 tune_topology.py',
         '--obs-file ${SOURCES[0]}',
@@ -290,11 +287,11 @@ def run_MLE(env, outdir, c):
         '--max-fit-splits',
         4,
         '--num-chad-tune-iters',
-        1,
+        20,
         '--num-chad-stop',
-        1,
+        10,
         '--max-chad-tune-search',
-        0,
+        9,
         '--max-sum-states',
         c['sum_states'],
         '--max-extra-steps',
@@ -302,15 +299,15 @@ def run_MLE(env, outdir, c):
         '--max-iters 50000',
         '--num-inits 1',
         '--tot-time-known',
-        '--num-processes 2',
+        '--num-processes 3',
         '--num-init-random-rearrange 5',
         '--scratch-dir',
 	join('analyze_gestalt', outdir, 'scratch'),
     ]
     return env.Command(
         [
-            join(outdir, 'tune_pen.pkl'),
-            join(outdir, 'tune_pen.txt'),
+            join(outdir, 'tune_pen_hanging.pkl'),
+            join(outdir, 'tune_pen_hanging.txt'),
 	],
         [
             c['restrict_observed_alleles'][0],

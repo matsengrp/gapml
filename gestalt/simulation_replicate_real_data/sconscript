@@ -13,10 +13,7 @@ Import('env')
 localenv = env.Clone()
 
 # Set up state
-base = {'nreps': localenv['NREPS'],
-        'output_name': localenv['OUTPUT_NAME']}
-
-nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
+nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 USE_AWS = False
 NUM_RANDOM_REARRANGE = 10
