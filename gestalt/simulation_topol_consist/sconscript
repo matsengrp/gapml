@@ -18,21 +18,21 @@ base = {'nreps': localenv['NREPS'],
 
 nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
 
-USE_AWS = True
+USE_AWS = False
 NUM_RANDOM_REARRANGE = 20
 GROWTH_DICT = {
     "small": {
         "sampling_rate": 0.08,
         "birth_sync_rounds": 5,
-        "birth_sync_time": 0.02,
-        "death_lambda": 0.2,
-        "birth_decay": -16,
+        "birth_sync_time": 0.04,
+        "death_lambda": 0.3,
+        "birth_decay": -18,
         "birth_min": 6,
-        "lambda_sequence": [.95, 0.9, 0.85, .8, .75, .7, .6],
+        "lambda_sequence": [.95, 0.9, 0.85, .8, .75, .7, .65],
         "target_decay": .4,
         "double": 0.06,
-        "min_leaves": 80,
-        "max_leaves": 120,
+        "min_leaves": 70,
+        "max_leaves": 110,
     },
     "mini": {
         "sampling_rate": 0.1,
@@ -57,7 +57,7 @@ nest.add(
 
 nest.add(
     'seed',
-    range(400,410),
+    range(0,1),
 )
 
 nest.add(
@@ -103,11 +103,11 @@ def generate(env, outdir, c):
         targ_lambdas,
         '--target-lam-decay',
         GROWTH_DICT[c['growth_stage']]['target_decay'],
-        '--trim-zero-probs 0.1 0.1',
-        '--trim-poissons 4 4',
+        '--trim-zero-probs 0.15 0.1 0.15 0.1',
+        '--trim-params 1.35 -0.1 1.2 0.1',
         '--trim-long-factor 0.02 0.02',
-        '--insert-zero-prob 0.1',
-        '--insert-poisson 1',
+        '--insert-zero-prob 0.5',
+        '--insert-params 1 0.3',
         '--perturb-target-lambdas-variance 0',
         '--max-tries 20',
     ]
@@ -216,9 +216,9 @@ def run_topology(env, outdir, c):
     if not USE_AWS:
         cmd = [
             'python get_parsimony_topologies.py',
-            '--obs-file ${sources[0]}',
-            '--out-template-file ${targets[0]}',
-            '--log-file ${targets[1]}',
+            '--obs-file ${SOURCES[0]}',
+            '--out-template-file ${TARGETS[0]}',
+            '--log-file ${TARGETS[1]}',
         ] + cmd_template
         return env.Command(
             targets,
@@ -349,13 +349,13 @@ def run_neighbor_joining(env, outdir, c):
 
 nest.add(
     'sum_states',
-    [10], # not really different from using 30
+    [30],
     label_func=lambda c: "sum_states_%d" % c,
 )
 
 nest.add(
     'extra_steps',
-    [1],
+    [2],
     label_func=lambda c: "extra_steps_%d" % c,
 )
 
