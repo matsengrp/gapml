@@ -68,7 +68,7 @@ class CLTChronosEstimator(CLTEstimator):
         ]
 
         print("Calling:", " ".join(cmd))
-        res = subprocess.call(cmd)
+        res = subprocess.check_output(cmd)
         print("resss", res)
 
         # Read fitted tree
