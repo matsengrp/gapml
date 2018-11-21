@@ -27,9 +27,10 @@ source ../venv_beagle_py3/bin/activate
 
 @click.command()
 @click.option('--clusters', default='', help='Clusters to submit to. Default is local execution.')
+@click.option('--max-tries', default=2, help='Maximum number of times to try resubmitting to cluster')
 @click.argument('target')
 @click.argument('to_execute_str')
-def cli(clusters, target, to_execute_str):
+def cli(clusters, max_tries, target, to_execute_str):
     """
     Execute a command with targets, perhaps on a SLURM
     cluster via sbatch. Wait until the command has completed.
@@ -54,17 +55,24 @@ def cli(clusters, target, to_execute_str):
         fp.write(to_execute_str + '\n')
         fp.write('touch %s\n' % sentinel_path)
 
-    out = subprocess.check_output(
-            'sbatch --clusters %s %s' % (clusters, script_full_path),
-            shell=True)
-    click.echo(out.decode('UTF-8'))
+    for _ in range(max_tries):
+        out = subprocess.check_output(
+                'sbatch --clusters %s %s' % (clusters, script_full_path),
+                shell=True)
+        click.echo(out.decode('UTF-8'))
 
-    # Wait until the sentinel file appears, then clean up.
-    while not os.path.exists(sentinel_path):
-        time.sleep(5)
-    os.remove(sentinel_path)
+        # Wait until the sentinel file appears, then clean up.
+        while not os.path.exists(sentinel_path):
+            time.sleep(5)
+        os.remove(sentinel_path)
 
-    return out
+        # Check if the job failed some weird death.
+        with open(os.path.join(execution_dir, "job.err"), "r") as err_f:
+            do_retry = any(["Illegal instruction" in line for line in err_f.readlines()])
+        if not do_retry:
+            break
+
+    return int(do_retry)
 
 
 if __name__ == '__main__':
