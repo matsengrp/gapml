@@ -57,7 +57,7 @@ nest.add(
 
 nest.add(
     'seed',
-    range(0,1),
+    range(2,3),
 )
 
 nest.add(
@@ -398,7 +398,7 @@ def run_MLE(env, outdir, c):
         '--num-inits 1',
         '--tot-time-known',
         '--num-processes',
-        6 if c['num_barcodes'] == 1 else 3,
+        6 if c['num_barcodes'] == 1 else 4,
         '--num-init-random-rearrange',
         NUM_RANDOM_REARRANGE if c['num_barcodes'] == 1 else 0,
         '--count-chads' if c['num_barcodes'] == 1 else '',
@@ -407,15 +407,17 @@ def run_MLE(env, outdir, c):
 	join('simulation_topol_consist', outdir, 'scratch'),
     ]
     targets = [
-                join(outdir, 'tune_fitted.pkl'),
-                join(outdir, 'tune_fitted.txt')]
+                join(outdir, 'tune_fitted_pretuned.pkl'),
+                join(outdir, 'tune_fitted_pretuned.txt')]
     sources = [
                 c['restrict_observed_alleles'][0],
                 c['run_topology'][0],
-                c['generate'][1]] + c['run_chronos']
+                c['generate'][1]] + c['run_topology'][1:]
     sources = [str(s) for s in sources]
     if not USE_AWS:
         cmd = [
+            'sbatch -M beagle',
+            'run_beagle.sh',
             'python tune_topology.py',
             '--obs-file ${SOURCES[0]}',
             '--topology-file ${SOURCES[1]}',

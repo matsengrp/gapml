@@ -319,9 +319,14 @@ class BHVDistanceMeasurer(TreeDistanceMeasurer):
                 bhv_out_file,
                 tree_in_file,
                 verbose_out_file)
-        subprocess.check_output(
+        print(bhv_cmd)
+        try:
+            subprocess.check_output(
                 bhv_cmd,
                 shell=True)
+        except subprocess.CalledProcessError as e:
+            logging.info("ERROR getting BHV distance: %s", str(e))
+            return -1
 
         # read bhv output, distance is on the last line
         with open(bhv_out_file, "r") as f:
