@@ -382,7 +382,7 @@ class CLTLikelihoodModel:
             prev_size = up_to_size
             up_to_size += 1
             self.insert_zero_prob = tf.sigmoid(self.all_vars[prev_size: up_to_size])
-        self.all_but_branch_lens = self.all_vars[:up_to_size]
+        self.all_but_branch_lens = self.all_vars[:up_to_size] if up_to_size > 0 else tf.constant(0, dtype=tf.float64)
         prev_size = up_to_size
         up_to_size += np.sum(self.known_params.branch_len_inners_unknown) if self.known_params.branch_lens else branch_len_inners.size
         self.branch_len_inners_unknown = tf.exp(self.all_vars[prev_size: up_to_size])
