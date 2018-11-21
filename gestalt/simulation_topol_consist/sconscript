@@ -52,7 +52,8 @@ nest.add(
 
 nest.add(
     'seed',
-    range(3,4),
+    # seeds running: 3
+    range(4,6),
 )
 
 nest.add(
@@ -121,7 +122,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [1,],
+    [1,2,4],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 

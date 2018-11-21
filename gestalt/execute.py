@@ -8,8 +8,8 @@ import subprocess
 import time
 
 sbatch_prelude = """#!/bin/bash
-#SBATCH -o job_%j.out
-#SBATCH -e job_%j.err
+#SBATCH -o %s/job.out
+#SBATCH -e %s/job.err
 #SBATCH -c 18
 #SBATCH -N 1
 #SBATCH --mem 55000
@@ -50,7 +50,7 @@ def cli(clusters, target, to_execute_str):
     script_full_path = os.path.join(execution_dir, script_name)
     sentinel_path = os.path.join(execution_dir, 'sentinel.txt')
     with open(script_full_path, 'w') as fp:
-        fp.write(sbatch_prelude)
+        fp.write(sbatch_prelude % (execution_dir, execution_dir))
         fp.write(to_execute_str + '\n')
         fp.write('touch %s\n' % sentinel_path)
 

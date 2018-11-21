@@ -18,10 +18,7 @@ Import('env')
 localenv = env.Clone()
 
 # Set up state
-base = {'nreps': localenv['NREPS'],
-        'output_name': localenv['OUTPUT_NAME']}
-
-nest = SConsWrap(Nest(base_dict=base), '_'+localenv['OUTPUT_NAME'], alias_environment=localenv)
+nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 nest.add(
     'seed',
@@ -32,8 +29,8 @@ nest.add(
 
 nest.add(
     'setting',
-    #['none'])
-    ['one_leaf'])
+    ['none'])
+    #['one_leaf'])
 
 @nest.add_target_with_env(localenv)
 def generate(env, outdir, c):
@@ -50,21 +47,21 @@ def generate(env, outdir, c):
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
         #'--target-lambda 0.003,0.003',
-        '--double 0.0000003',
-        '--target-lambda 10,10',
+        '--double 0.3',
+        '--target-lambda 0.6,1.0',
         '--insert-zero-prob 0.1',
         '--time 1',
         '--num-barcodes',
-        200,
-        '--birth-sync-rounds 2',
-        '--birth-sync-time 0.4',
+        50,
+        '--birth-sync-rounds 3',
+        '--birth-sync-time 0.2',
         '--birth-decay -8',
         '--birth-min 3',
         '--min-uniq-alleles',
         0,
         '--max-uniq-alleles',
         100,
-        '--max-abundance 40',
+        '--max-abundance 100',
         '--perturb-target 0',
         #'--use-poisson',
     ]
@@ -78,7 +75,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [200],
+    [8],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -155,18 +152,19 @@ def run_MLE(env, outdir, c):
         '--branch-pen',
         '1', #100,20',
         '--target-lam-pen',
-        '1',
+        '0.1',
         '--max-sum-states 10',
-        '--max-extra-steps 10',
-        '--max-iters 50000',
+        '--max-extra-steps 1',
+        '--max-iters 25000',
         '--num-penalty-tune-splits 2',
         '--num-penalty-tune-iters 1',
-        '--num-chad-tune-iters 3',
-        '--max-chad-tune-search 0',
+        '--num-chad-tune-iters 2',
+        '--max-chad-tune-search 3',
         '--num-init-random-rearrange 0',
         '--tot-time-known',
-        '--lambda-known',
+        #'--lambda-known',
         '--lambda-decay-known',
+        '--num-processes 3'
         #'--use-poisson',
     ]
     return env.Command(
