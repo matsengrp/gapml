@@ -130,8 +130,20 @@ def main(args=sys.argv[1:]):
         "Number of uniq obs after restricting to first %d alleles: %d",
         args.num_barcodes,
         len(restricted_obs_leaves))
-    random.shuffle(restricted_obs_leaves)
-    obs_data_dict["obs_leaves"] = restricted_obs_leaves[:args.max_leaves]
+
+    # We restrict the number of unique alleles for tree fitting.
+    # Randomly draw them without replacement, weight alleles by their abundance
+    abundances = np.array([leaf.abundance for leaf in restricted_obs_leaves])
+    if len(restricted_obs_leaves) <= args.max_leaves:
+        obs_data_dict["obs_leaves"] = restricted_obs_leaves
+    else:
+        selected_indices = np.random.choice(
+                np.arange(len(restricted_obs_leaves)),
+                size=args.max_leaves,
+                p=abundances/float(np.sum(abundances)),
+                replace=False)
+        logging.info("abund %s", [abundances[i] for i in selected_indices])
+        obs_data_dict["obs_leaves"] = [restricted_obs_leaves[i] for i in selected_indices]
     print(
         "Number of uniq obs after random selection to first %d alleles: %d" %
         (args.num_barcodes,

@@ -97,7 +97,7 @@ def parse_args():
         #nargs=2,
         #default=[np.log(4)] * 2,
         nargs=4,
-        default=[np.log(4),0.1] * 2,
+        default=[np.log(3),0] * 2,
         help='neg binom parameter for left and right trims, until we observe this many failures, same for long and short'
     )
     parser.add_argument(

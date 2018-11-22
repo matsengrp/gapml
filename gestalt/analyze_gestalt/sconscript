@@ -14,135 +14,166 @@ localenv = env.Clone()
 # Set up state
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
-MAX_LEAVES = 250
+MAX_LEAVES = 400
+
 FISH_DATA = {
     "ADR1": {
         "path": "/fh/fast/matsen_e/gestalt/fish_7B_UMI_collapsed_reads/fish_7B_UMI_collapsed_reads.txt",
         "bcode_min_pos": 122,
         "format": 0,
-        "abund": 5,
-        "max_leaves": None,
+        "branch_pen_params": "128,32,8",
+        "target_lam_pen_params": "2,0.5",
     },
     "ADR2": {
         "path": "/fh/fast/matsen_e/gestalt/GSE81713_fish_ADR2_PHYLIP_MIX_gte5_input.annotations.txt",
         "bcode_min_pos": 122,
         "format": 1,
-        "abund": 1,
-        "max_leaves": None,
+        "branch_pen_params": "128,32,8",
+        "target_lam_pen_params": "2,0.5",
     },
-    "30hpf1": {
+    "30hpf_v6_1": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171798_embryos_1_1_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
-        "abund": 2,
-        "max_leaves": None,
     },
-    "30hpf2": {
+    "30hpf_v6_2": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171799_embryos_1_2_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
-        "abund": 1,
-        "max_leaves": None,
     },
-    "30hpf3": {
+    "30hpf_v6_3": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171800_embryos_1_3_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
-        "abund": 2,
-        "max_leaves": None,
     },
-    "30hpf4": {
+    "30hpf_v6_4": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171801_embryos_1_4_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
-        "abund": 1,
-        "max_leaves": None,
     },
-    "30hpf5": {
+    "30hpf_v6_5": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171802_embryos_1_5_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
-        "abund": 1,
-        "max_leaves": None,
     },
-    "30hpf6": {
+    "30hpf_v6_6": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171803_embryos_1_6_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
-        "abund": 1,
-        "max_leaves": None,
     },
-    "30hpf7": {
+    "30hpf_v6_7": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171804_embryos_1_7_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
-        "abund": 1,
-        "max_leaves": MAX_LEAVES,
     },
-    "30hpf8": {
+    "30hpf_v6_8": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171805_embryos_1_8_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
-        "abund": 1,
-        "max_leaves": MAX_LEAVES,
     },
+    # V7 timecourse experiments, Only the 1x concentration experiments
     "dome1": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171788_Dome_1_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
-        "abund": 1,
-        "max_leaves": MAX_LEAVES,
     },
     "dome3": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171791_Dome_3_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
-        "abund": 1,
-        "max_leaves": MAX_LEAVES,
     },
     "dome5": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171793_Dome_5_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
-        "abund": 1,
-        "max_leaves": MAX_LEAVES,
     },
     "dome8": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171796_Dome_8_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
-        "abund": 1,
-        "max_leaves": MAX_LEAVES,
     },
     "dome9": {
-        # There are WAY too few alleles from dome9
+        # There are only 15 alleles -- do not analyze this fish
         "path": "/fh/fast/matsen_e/gestalt/GSM2171797_Dome_9_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
-        "abund": 1,
-        "max_leaves": MAX_LEAVES,
+    },
+    "dome10": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171790_Dome_10_1x.stats.txt",
+        "bcode_min_pos": 122,
+        "format": 2,
+    },
+    "3day1": {
+        # Has 2745 leaves
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171723_3d_1_1x.stats.txt",
+        "bcode_min_pos": 122,
+        "format": 2,
+        "branch_pen_params": "128,32,8",
+        "target_lam_pen_params": "2,0.5",
+    },
+    "3day2": {
+        # Has 947 leaves
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171727_3d_2_1x.stats.txt",
+        "bcode_min_pos": 122,
+        "format": 2,
+        "branch_pen_params": "128,32,8",
+        "target_lam_pen_params": "2,0.5",
+    },
+    "3day3": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171729_3d_3_1x.stats.txt",
+        "bcode_min_pos": 122,
+        "format": 2,
+        "branch_pen_params": "128,32,8",
+        "target_lam_pen_params": "2,0.5",
+    },
+    "3day4": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171731_3d_4_1x.stats.txt",
+        "bcode_min_pos": 122,
+        "format": 2,
+        "branch_pen_params": "128,32,8",
+        "target_lam_pen_params": "2,0.5",
+    },
+    "3day5": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171733_3d_5_1x.stats.txt",
+        "bcode_min_pos": 122,
+        "format": 2,
+        "branch_pen_params": "128,32,8",
+        "target_lam_pen_params": "2,0.5",
+    },
+    "3day6": {
+        "path": "/fh/fast/matsen_e/gestalt/GSM2171735_3d_6_1x.stats.txt",
+        "bcode_min_pos": 122,
+        "format": 2,
+        "branch_pen_params": "128,32,8",
+        "target_lam_pen_params": "2,0.5",
     },
 }
 
 nest.add(
     'data',
     [
-        #"ADR1",
+        "ADR1",
         #"ADR2",
-        #"30hpf1",
-        #"30hpf2",
-        #"30hpf3",
-        #"30hpf4",
-        #"30hpf5",
-        #"30hpf6",
-        #"30hpf7",
-        #"30hpf8",
-        "dome1",
-        "dome3",
-        "dome5",
-        "dome8",
+        #"30hpf_v6_1",
+        #"30hpf_v6_2",
+        #"30hpf_v6_3",
+        #"30hpf_v6_4",
+        #"30hpf_v6_5",
+        #"30hpf_v6_6",
+        #"30hpf_v6_7",
+        #"30hpf_v6_8",
+        #"dome1",
+        #"dome3",
+        #"dome5",
+        #"dome8",
+        #"dome10",
+        #"3day1",
+        #"3day2",
+        #"3day3",
+        #"3day4",
+        #"3day5",
+        #"3day6",
     ],
-    label_func=lambda c: "%s_abund%d" % (c, FISH_DATA[c]['abund']),
 )
 
 @nest.add_target_with_env(localenv)
@@ -157,8 +188,7 @@ def read_gestalt(env, outdir, c):
         FISH_DATA[c['data']]['bcode_min_pos'],
         '--out-obs-data ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
-        '--abundance-thres',
-        FISH_DATA[c['data']]['abund'],
+        '--abundance-thres 1',
 	'--time 1',
     ]
     return env.Command(
@@ -168,15 +198,23 @@ def read_gestalt(env, outdir, c):
         [],
         ' '.join(map(str, cmd)))
 
+nest.add(
+    'sampling_seed',
+    [0],
+    label_func=lambda c: "sampling_seed%d" % c)
+
 @nest.add_target_with_env(localenv)
 def restrict_observed_alleles(env, outdir, c):
     cmd = [
         'python3 restrict_observed_barcodes.py',
+        '--seed',
+        c['sampling_seed'],
         '--obs-file ${SOURCES[0]}',
         '--num-barcodes 1',
         '--out-obs-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
-        '--max-leaves %d' % FISH_DATA[c['data']]['max_leaves'] if FISH_DATA[c['data']]['max_leaves'] is not None else '',
+        '--max-leaves',
+        MAX_LEAVES,
     ]
     return env.Command(
         [
@@ -255,21 +293,19 @@ def run_neighbor_joining(env, outdir, c):
 
 nest.add(
     'sum_states',
-    [10],
+    [1],
     label_func=lambda c: "sum_states_%d" % c,
 )
 
 nest.add(
     'extra_steps',
-    [0],
+    [1],
     label_func=lambda c: "extra_steps_%d" % c,
 )
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = "32"
-    targ_lam_penalty_params = "2"
-    cmd = [
+    cmd_arg = [
         'python3 tune_topology.py',
         '--obs-file ${SOURCES[0]}',
         '--topology-file ${SOURCES[1]}',
@@ -277,9 +313,9 @@ def run_MLE(env, outdir, c):
         '--log-file ${TARGETS[1]}',
         '--seed 400',
         '--branch-pen-params',
-        penalty_params,
+        FISH_DATA[c['data']]['branch_pen_params'],
         '--target-lam-pen-params',
-        targ_lam_penalty_params,
+        FISH_DATA[c['data']]['target_lam_pen_params'],
         '--num-penalty-tune-iters',
         1,
         '--num-penalty-tune-splits',
@@ -299,11 +335,18 @@ def run_MLE(env, outdir, c):
         '--max-iters 50000',
         '--num-inits 1',
         '--tot-time-known',
-        '--num-processes 3',
+        '--num-processes 2',
         '--num-init-random-rearrange 5',
         '--scratch-dir',
 	join('analyze_gestalt', outdir, 'scratch'),
     ]
+    cmd_arg_str = "'%s'" % ' '.join(map(str, cmd_arg))
+    cmd = [
+        'python execute.py',
+        '--clusters',
+        localenv['clusters'],
+        "${TARGETS[0]}",
+        cmd_arg_str]
     return env.Command(
         [
             join(outdir, 'tune_pen_hanging.pkl'),

@@ -66,11 +66,19 @@ def cli(clusters, max_tries, target, to_execute_str):
             time.sleep(5)
         os.remove(sentinel_path)
 
-        # Check if the job failed some weird death.
+        # Check if the job failed some weird death
+        # This is caused when I import tensorflow_probability
+        # I think it has to do with a bad machine + tensorflow_probability.
+        # the current solution is to wait long enough, resubmit a new job, and then
+        # hope we got a new machine that won't cry
         with open(os.path.join(execution_dir, "job.err"), "r") as err_f:
             do_retry = any(["Illegal instruction" in line for line in err_f.readlines()])
         if not do_retry:
             break
+        else:
+            # Wait 1000 seconds and hope we can get hold of a new machine
+            print("Sadness. Waiting before we resubmit...")
+            time.sleep(1000)
 
     return int(do_retry)
 

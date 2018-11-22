@@ -52,8 +52,8 @@ nest.add(
 
 nest.add(
     'seed',
-    # seeds running: 3
-    range(4,6),
+    # seeds running: 3 - 5
+    range(6,7),
 )
 
 nest.add(

@@ -29,16 +29,16 @@ nest.add(
 
 nest.add(
     'setting',
-    ['none'])
+    ['oracle'])
     #['one_leaf'])
 
 @nest.add_target_with_env(localenv)
 def generate(env, outdir, c):
     cmd = [
         'python generate_data.py',
-        "--is-%s" % c['setting'].replace("_", "-") if c['setting'] != 'none' else '',
+        "--is-%s" % c['setting'].replace("_", "-") if c['setting'] == 'one_leaf' else '',
         '--sampling',
-        1,
+        0.2,
         '--model-seed',
         c['seed'],
         '--data-seed',
@@ -48,20 +48,20 @@ def generate(env, outdir, c):
         '--log-file ${TARGETS[2]}',
         #'--target-lambda 0.003,0.003',
         '--double 0.3',
-        '--target-lambda 0.6,1.0',
+        '--target-lambda 0.6,0.6,0.2,0.4,0.23,0.4,0.6',
         '--insert-zero-prob 0.1',
         '--time 1',
         '--num-barcodes',
-        50,
-        '--birth-sync-rounds 3',
-        '--birth-sync-time 0.2',
-        '--birth-decay -8',
+        1,
+        '--birth-sync-rounds 6',
+        '--birth-sync-time 0.05',
+        '--birth-decay -5',
         '--birth-min 3',
         '--min-uniq-alleles',
         0,
         '--max-uniq-alleles',
-        100,
-        '--max-abundance 100',
+        2000,
+        '--max-abundance 1000',
         '--perturb-target 0',
         #'--use-poisson',
     ]
@@ -75,7 +75,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [8],
+    [1],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -140,7 +140,7 @@ def run_parsimony(env, outdir, c):
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    cmd = [
+    cmd_arg = [
         'python tune_topology.py',
         '--obs-file ${SOURCES[0]}',
         '--topology-file ${SOURCES[1]}',
@@ -167,6 +167,13 @@ def run_MLE(env, outdir, c):
         '--num-processes 3'
         #'--use-poisson',
     ]
+    cmd_arg_str = "'%s'" % ' '.join(map(str, cmd_arg))
+    cmd = [
+        'python execute.py',
+        '--clusters',
+        localenv['clusters'],
+        "${TARGETS[0]}",
+        cmd_arg_str]
     return env.Command(
         [
             join(outdir, 'fitted_pen.pkl'),
