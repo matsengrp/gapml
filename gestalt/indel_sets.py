@@ -122,6 +122,13 @@ class SingletonWC(IndelSet):
     def insert_len(self):
         return len(self.insert_str)
 
+    def get_target_tract(self):
+        return TargetTract(
+                self.min_deact_target,
+                self.min_target,
+                self.max_target,
+                self.max_deact_target)
+
     @property
     def inner_wc(self):
         if self.max_target - 1 >= self.min_target + 1:
@@ -355,11 +362,9 @@ class DeactTargetsEvt(DeactEvt):
     def get_deact_result(self):
         return DeactTract(self.min_deact_target, self.max_deact_target)
 
-class TractRepr(tuple):
+class TargetTractTuple(tuple):
     """
-    Look up "target tract representation" in the manuscript
-    Essentially a tuple of target tracts
-    (Used as an allele group to sum over in the likelihood calculation)
+    a tuple of target tracts
     """
     def __new__(cls, *args):
         return tuple.__new__(cls, args)
@@ -369,7 +374,7 @@ class TractRepr(tuple):
 
     def lesseq(self, tracts2):
         """
-        @param tracts2: TargetTractRepr
+        @param tracts2: TargetTargetTractTuple
 
         @return self <= tracts2
         """
@@ -393,7 +398,7 @@ class TractRepr(tuple):
 
     def diff(self, tracts2):
         """
-        @param tracts2: TargetTractRepr
+        @param tracts2: TargetTargetTractTuple
 
         @return tracts2 - self if self <= tracts2, otherwise returns empty tuple
         """
@@ -430,4 +435,5 @@ class TractRepr(tuple):
         @return flatractened version of a list of tuples of target tract
         """
         tracts_raw = reduce(lambda x,y: x + y, tract_groups, ())
-        return TractRepr(*tracts_raw)
+        tracts_sorted = list(sorted(tracts_raw, key=lambda x: x.min_deact_target))
+        return TargetTractTuple(*tracts_sorted)
