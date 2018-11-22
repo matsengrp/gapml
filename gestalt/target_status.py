@@ -3,7 +3,7 @@ import numpy as np
 from typing import List
 
 from barcode_metadata import BarcodeMetadata
-from indel_sets import TargetTract
+from indel_sets import TargetTract, TargetTractTuple
 
 class TargetDeactTract(tuple):
     def __new__(cls, min_deact_target, max_deact_target):
@@ -140,6 +140,13 @@ class TargetStatus(tuple):
             binary_status[deact_tract.min_deact_target: deact_tract.max_deact_target + 1] = 1
         return binary_status
 
+    def get_inactive_targets(self, bcode_meta: BarcodeMetadata):
+        """
+        @return List[int] of active targets
+        """
+        inactive_status = self.get_binary_status(bcode_meta.n_targets)
+        return np.where(inactive_status == 1)[0].tolist()
+
     def get_active_targets(self, bcode_meta: BarcodeMetadata):
         """
         @return List[int] of active targets
@@ -147,15 +154,15 @@ class TargetStatus(tuple):
         inactive_status = self.get_binary_status(bcode_meta.n_targets)
         return np.where(inactive_status == 0)[0].tolist()
 
-    def get_possible_target_tracts(self, bcode_meta: BarcodeMetadata):
+    def get_possible_target_tracts(self, bcode_meta: BarcodeMetadata, active_any_targs: List[int] = None):
         """
         @return List[TargetTract]
         """
         # Take one step from this TT group using two step procedure
         # 1. enumerate all possible start positions for target tract
         # 2. enumerate all possible end positions for target tract
-
-        active_any_targs = self.get_active_targets(bcode_meta)
+        if active_any_targs is None:
+            active_any_targs = self.get_active_targets(bcode_meta)
         n_any_targs = len(active_any_targs)
         # List possible starts of the target tracts
         all_starts = [[] for _ in range(n_any_targs)]
@@ -211,6 +218,13 @@ class TargetStatus(tuple):
                 curr_deact_start_targ,
                 len(binary_status) - 1))
         return TargetStatus(*deact_targs)
+
+    @staticmethod
+    def from_target_tract_tuple(target_tract_tuple: TargetTractTuple):
+        raw_targ_stat = TargetStatus()
+        for tt in target_tract_tuple:
+            raw_targ_stat = raw_targ_stat.add_target_tract(tt)
+        return raw_targ_stat
 
     @staticmethod
     def get_all_transitions(bcode_meta: BarcodeMetadata):

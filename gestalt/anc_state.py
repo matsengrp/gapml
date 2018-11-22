@@ -4,8 +4,8 @@ from typing import List
 from functools import reduce
 
 from allele_events import AlleleEvents
-from indel_sets import IndelSet, SingletonWC
-from target_status import TargetStatus, TargetDeactTract
+from indel_sets import IndelSet, SingletonWC, Wildcard
+from target_status import TargetStatus, TargetTractTuple, TargetDeactTract
 from barcode_metadata import BarcodeMetadata
 
 class AncState:
@@ -25,6 +25,9 @@ class AncState:
             return "unmod"
 
     def to_max_target_status(self):
+        """
+        @return the max target status associated with the anc state (including both wildcards and singleton-wildcards)
+        """
         if len(self.indel_set_list) == 0:
             return TargetStatus()
         else:
@@ -36,6 +39,9 @@ class AncState:
             return targ_stat
 
     def to_sg_max_target_status(self):
+        """
+        @return the max target status associated with ONLY the singleton-wildcards in the anc state
+        """
         if len(self.indel_set_list) == 0:
             return TargetStatus()
         else:
@@ -80,10 +86,10 @@ class AncState:
             indel_set1 = anc_state1.indel_set_list[idx1]
             indel_set2 = anc_state2.indel_set_list[idx2]
 
-            if indel_set2.max_target < indel_set1.min_target:
+            if indel_set2.max_deact_target < indel_set1.min_deact_target:
                 idx2 += 1
                 continue
-            elif indel_set1.max_target < indel_set2.min_target:
+            elif indel_set1.max_deact_target < indel_set2.min_deact_target:
                 idx1 += 1
                 continue
 
@@ -93,7 +99,7 @@ class AncState:
                 intersect_list.append(indel_sets_intersect)
 
             # Increment counter
-            if indel_set1.max_target < indel_set2.max_target:
+            if indel_set1.max_deact_target < indel_set2.max_deact_target:
                 idx1 += 1
             else:
                 idx2 += 1
@@ -142,3 +148,27 @@ class AncState:
             for targ_stat_raw in full_target_statuses]
 
         return merged_target_statuses
+
+    def is_possible(self, target_tract_tuple: TargetTractTuple):
+        """
+        @return boolean whether possible
+        """
+        singletons = self.get_singleton_wcs()
+        sg_tts = {sg.get_target_tract(): sg for sg in singletons}
+
+        fake_anc_state = []
+        for target_tract in target_tract_tuple:
+            if target_tract in sg_tts:
+                fake_anc_state.append(sg_tts[target_tract])
+            else:
+                fake_anc_state.append(Wildcard(
+                    target_tract.min_deact_targ,
+                    target_tract.max_deact_targ))
+        intersected_anc_state = AncState.intersect(self, AncState(fake_anc_state)).indel_set_list
+        if len(intersected_anc_state) != len(fake_anc_state):
+            return False
+        else:
+            for fake_indel_set, intersected_indel_set in zip(fake_anc_state, intersected_anc_state):
+                if fake_indel_set != intersected_indel_set:
+                    return False
+        return True

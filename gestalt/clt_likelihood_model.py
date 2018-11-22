@@ -1601,10 +1601,13 @@ class CLTLikelihoodModel:
 
         @return the reordered version of vec_lik according to the order in node_trans_mat
         """
+        # TDOO: think about if this is correct -- to filter out states not in the
+        # wrapper (the if statement)
         index_vals = [[
                 [new_wrapper.key_dict[targ_stat], 0],
                 ordered_down_probs[old_wrapper.key_dict[targ_stat]][0]]
-            for targ_stat in new_wrapper.states]
+            for targ_stat in new_wrapper.states
+            if targ_stat in old_wrapper.key_dict]
         down_probs = tf_common.scatter_nd(
                 index_vals,
                 output_shape=[new_wrapper.num_possible_states + 1, 1],

@@ -80,6 +80,7 @@ class CLTPenalizedEstimator(CLTEstimator):
         # Check branch lengths positive
         assert self.model._are_all_branch_lens_positive()
 
+        var_dict = self.model.get_vars_as_dict()
         pen_log_lik, log_lik, branch_pen, target_lam_pen, dist_to_roots, spine_lens = self.model.sess.run(
             [
                 self.model.smooth_log_lik,
@@ -90,7 +91,6 @@ class CLTPenalizedEstimator(CLTEstimator):
                 self.model.spine_lens,
             ],
             feed_dict=feed_dict)
-        var_dict = self.model.get_vars_as_dict()
 
         logging.info(
                 "initial penalized log lik %f, unpen log lik %f, branch pen %f, lambda pen %f",
