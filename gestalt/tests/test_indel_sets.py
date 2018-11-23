@@ -62,13 +62,65 @@ class AlleleTestCase(unittest.TestCase):
         par_anc_state = AncState.intersect(anc_state7, anc_state1)
         self.assertEqual(par_anc_state.indel_set_list, l7)
 
-    def test_intersect_ancstate_more(self):
+    def test_intersect_ancstate_offset_indel_sets(self):
+        """
+        Slightly trickier anc states with indel sets that are overlapping in weird ways
+        """
         l1 = [SingletonWC(17, 29, 0, 0, 1, 1, 'tggg'), SingletonWC(73, 116, 2, 2, 6, 6, 'aggcga')]
         l2 = [SingletonWC(42, 64, 1, 1, 3, 3, 'ac'), SingletonWC(153, 2, 5, 5, 5, 5, 'a')]
         anc_state1 = AncState(l1)
         anc_state2 = AncState(l2)
         par_anc_state = AncState.intersect(anc_state1, anc_state2)
-        print(par_anc_state)
         self.assertEqual(len(par_anc_state.indel_set_list), 1)
         self.assertTrue(l2[-1] in par_anc_state.indel_set_list)
-         #["(3, 2)..(153, 2, 5, 5, 5, 5, 'a')"]
+
+        l1 = [SingletonWC(17, 49, 0, 0, 2, 2, 'tggg')]
+        l2 = [SingletonWC(42, 64, 1, 1, 3, 3, 'ac')]
+        anc_state1 = AncState(l1)
+        anc_state2 = AncState(l2)
+        par_anc_state = AncState.intersect(anc_state1, anc_state2)
+        self.assertEqual(len(par_anc_state.indel_set_list), 0)
+
+        l1 = [SingletonWC(17, 60, 0, 0, 3, 4, '')]
+        l2 = [SingletonWC(100, 34, 2, 3, 3, 3, 'ac')]
+        anc_state1 = AncState(l1)
+        anc_state2 = AncState(l2)
+        par_anc_state = AncState.intersect(anc_state1, anc_state2)
+        self.assertEqual(len(par_anc_state.indel_set_list), 0)
+
+    def test_intersect_ancstate_touching_sgwcs(self):
+        """
+        Test annoying cases where the long trims of singleton-wildcards run into each other
+        Then the preceding allele can only be correctly calculated with a post-processing step
+        """
+        # even though they share the singleton-wc[1,2,2,2], they can't actually be preceded by such
+        # an allele
+        l1 = [SingletonWC(17, 29, 0, 0, 1, 1, 'tggg'), SingletonWC(55, 35, 1, 2, 2, 2, 'a')]
+        l2 = [SingletonWC(20, 4, 0, 0, 0, 0, 'ac'), SingletonWC(55, 35, 1, 2, 2, 2, 'a')]
+        anc_state1 = AncState(l1)
+        anc_state2 = AncState(l2)
+        par_anc_state = AncState.intersect(anc_state1, anc_state2)
+        self.assertEqual(len(par_anc_state.indel_set_list), 0)
+
+        l1 = [SingletonWC(17, 60, 0, 0, 2, 2, 'tggg'), SingletonWC(85, 35, 2, 3, 3, 3, 'a')]
+        l2 = [SingletonWC(20, 100, 0, 0, 5, 5, 'ac')]
+        anc_state1 = AncState(l1)
+        anc_state2 = AncState(l2)
+        par_anc_state = AncState.intersect(anc_state1, anc_state2)
+        self.assertEqual(len(par_anc_state.indel_set_list), 1)
+        self.assertTrue(Wildcard(1,1) in par_anc_state.indel_set_list)
+
+        l1 = [SingletonWC(17, 45, 0, 0, 1, 2, 'tggg'), SingletonWC(70, 3, 2, 2, 2, 2, '')]
+        l2 = [SingletonWC(17, 45, 0, 0, 1, 2, 'tggg')]
+        anc_state1 = AncState(l1)
+        anc_state2 = AncState(l2)
+        par_anc_state = AncState.intersect(anc_state1, anc_state2)
+        self.assertEqual(len(par_anc_state.indel_set_list), 0)
+
+        l1 = [SingletonWC(17, 45, 0, 0, 1, 2, 'tggg'), SingletonWC(70, 3, 2, 2, 2, 2, '')]
+        l2 = [SingletonWC(19, 43, 0, 0, 1, 2, ''), SingletonWC(70, 3, 2, 2, 2, 2, '')]
+        anc_state1 = AncState(l1)
+        anc_state2 = AncState(l2)
+        par_anc_state = AncState.intersect(anc_state1, anc_state2)
+        self.assertEqual(len(par_anc_state.indel_set_list), 1)
+        self.assertTrue(l2[-1] in par_anc_state.indel_set_list)
