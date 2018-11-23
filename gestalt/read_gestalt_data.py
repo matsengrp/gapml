@@ -18,6 +18,7 @@ from clt_observer import ObservedAlignedSeq
 from read_seq_data import process_event_format7B
 from cell_state import CellState, CellTypeTree
 from allele_events import AlleleEvents, Event
+from anc_state import AncState
 from constants import CONTROL_ORGANS
 from constants import NO_EVENT_STRS
 from constants import BARCODE_V6, NUM_BARCODE_V6_TARGETS
@@ -64,6 +65,11 @@ def parse_args():
         type=int,
         default=122,
         help='barcode index offset')
+    parser.add_argument(
+        '--merge-thres',
+        type=int,
+        default=8,
+        help='if events are within this many basepairs of each other, then merge as single event')
     return parser.parse_args()
 
 def process_observed_seq_format7B(
@@ -71,7 +77,8 @@ def process_observed_seq_format7B(
         cell_state: CellState,
         bcode_meta: BarcodeMetadata,
         min_pos: int,
-        abundance: int = 1):
+        abundance: int = 1,
+        merge_thres: int = 1):
     """
     Converts new format allele to python repr allele
 
@@ -148,7 +155,13 @@ def process_observed_seq_format7B(
     non_clashing_events = cleaned_events[:1]
     for evt in cleaned_events[1:]:
         prev_evt = non_clashing_events[-1]
-        if prev_evt.max_target >= evt.min_target:
+        _, max_deact_targ = prev_evt.get_min_max_deact_targets(bcode_meta)
+        min_deact_targ, _ = evt.get_min_max_deact_targets(bcode_meta)
+        do_merge_cause_close = max_deact_targ == min_deact_targ and ((evt.start_pos - prev_evt.del_end) <= merge_thres)
+        #if max_deact_targ == min_deact_targ:
+        #    print(evt.start_pos - prev_evt.del_end, merge_thres, do_merge_cause_close)
+        do_merge_cause_impossible = prev_evt.max_target >= evt.min_target
+        if do_merge_cause_close or do_merge_cause_impossible:
             new_omit_str_len = max(0, evt.start_pos - prev_evt.start_pos >= prev_evt.del_len)
             new_event = Event(
                     prev_evt.start_pos,
@@ -161,7 +174,7 @@ def process_observed_seq_format7B(
         else:
             non_clashing_events.append(evt)
 
-    print("allelle", non_clashing_events)
+    #print("allelle", non_clashing_events)
     obs = ObservedAlignedSeq(
             None,
             [AlleleEvents(non_clashing_events)],
@@ -172,7 +185,8 @@ def process_observed_seq_format7B(
 def parse_reads_file_format_GSE17(file_name,
                               bcode_meta: BarcodeMetadata,
                               bcode_min_pos: int,
-                              max_read: int = None):
+                              max_read: int = None,
+                              merge_thres: int = 1):
     """
     @param max_read: maximum number of alleles to read (for debugging purposes)
 
@@ -202,7 +216,8 @@ def parse_reads_file_format_GSE17(file_name,
                     cell_state,
                     bcode_meta,
                     bcode_min_pos,
-                    abundance=abundance)
+                    abundance=abundance,
+                    merge_thres=merge_thres)
                 obs_key = str(obs_aligned_seq)
                 if obs_key not in observed_alleles:
                     observed_alleles[obs_key] = obs_aligned_seq
@@ -222,7 +237,8 @@ def parse_reads_file_format_GSM(file_name,
                               bcode_meta: BarcodeMetadata,
                               bcode_min_pos: int,
                               target_hdr_fmt: str="target%d",
-                              max_read: int = None):
+                              max_read: int = None,
+                              merge_thres: int = 1):
     """
     @param max_read: maximum number of alleles to read (for debugging purposes)
 
@@ -250,7 +266,8 @@ def parse_reads_file_format_GSM(file_name,
                 ],
                 cell_state,
                 bcode_meta,
-                bcode_min_pos)
+                bcode_min_pos,
+                merge_thres=merge_thres)
             obs_key = str(obs_aligned_seq)
             if obs_key not in observed_alleles:
                 observed_alleles[obs_key] = obs_aligned_seq
@@ -270,7 +287,8 @@ def parse_reads_file_format7B(file_name,
                               bcode_meta: BarcodeMetadata,
                               bcode_min_pos: int,
                               target_hdr_fmt: str="target%d",
-                              max_read: int = None):
+                              max_read: int = None,
+                              merge_thres: int = 1):
     """
     @param max_read: maximum number of alleles to read (for debugging purposes)
 
@@ -304,7 +322,8 @@ def parse_reads_file_format7B(file_name,
                     ],
                     cell_state,
                     bcode_meta,
-                    bcode_min_pos)
+                    bcode_min_pos,
+                    merge_thres=merge_thres)
                 obs_key = str(obs_aligned_seq)
                 if obs_key not in observed_alleles:
                     observed_alleles[obs_key] = obs_aligned_seq
@@ -366,17 +385,20 @@ def main():
         obs_leaves_cell_state, organ_dict = parse_reads_file_format7B(
             args.reads_file,
             bcode_meta,
-            args.bcode_min_pos - args.bcode_pad_length)
+            args.bcode_min_pos - args.bcode_pad_length,
+            merge_thres=args.merge_thres)
     elif args.reads_format == 1:
         obs_leaves_cell_state, organ_dict = parse_reads_file_format_GSE17(
             args.reads_file,
             bcode_meta,
-            args.bcode_min_pos - args.bcode_pad_length)
+            args.bcode_min_pos - args.bcode_pad_length,
+            merge_thres=args.merge_thres)
     elif args.reads_format == 2:
         obs_leaves_cell_state, organ_dict = parse_reads_file_format_GSM(
             args.reads_file,
             bcode_meta,
-            args.bcode_min_pos - args.bcode_pad_length)
+            args.bcode_min_pos - args.bcode_pad_length,
+            merge_thres=args.merge_thres)
     else:
         raise ValueError("huh")
     obs_leaves_cell_state = [obs for obs in obs_leaves_cell_state if obs.abundance >= args.abundance_thres]
@@ -386,11 +408,19 @@ def main():
     obs_leaves = merge_by_allele(obs_leaves_cell_state)
 
     # Check trim length assignments
+    # Check all indels are disjoin in terms of what targets they deactivate
     for obs in obs_leaves:
-        #print(obs.orig_seq)
-        #print(obs.allele_events_list[0])
         for evt in obs.allele_events_list[0].events:
             evt.get_trim_lens(bcode_meta)
+        anc_state = AncState.create_for_observed_allele(obs.allele_events_list[0], bcode_meta)
+        for i, evt in enumerate(anc_state.indel_set_list):
+            if i == 0:
+                continue
+            prev_evt = anc_state.indel_set_list[i - 1]
+            if prev_evt.max_deact_target == evt.min_deact_target:
+                raise ValueError(
+                    "There are clashing events in the allele with ancstate %s. Distance between clashing events: %d."
+                    % (anc_state, evt.start_pos - prev_evt.del_end))
 
     # Save the observed data
     with open(args.out_obs_data, "wb") as f:
