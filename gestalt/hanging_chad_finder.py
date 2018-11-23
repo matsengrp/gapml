@@ -367,7 +367,7 @@ def _get_chad_possibilities(
     ancestral_events_finder.annotate_ancestral_states(orig_tree, bcode_meta)
     new_pars_score = ancestral_events_finder.get_parsimony_score(orig_tree)
     if new_pars_score < parsimony_score:
-        logging.info("orig has prob %d< %d", new_pars_score, parsimony_score)
+        logging.info("orig has prob %d < %d", new_pars_score, parsimony_score)
         logging.info(tree.get_ascii(attributes=['anc_state_list_str']))
         logging.info(tree.get_ascii(attributes=['dist']))
     assert new_pars_score == parsimony_score

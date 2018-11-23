@@ -67,6 +67,8 @@ class Wildcard(IndelSet):
             return None
         min_targ = max(wc1.min_target, wc2.min_target)
         max_targ = min(wc1.max_target, wc2.max_target)
+        if min_targ > max_targ:
+            return None
         return Wildcard(min_targ, max_targ)
 
 class SingletonWC(IndelSet):

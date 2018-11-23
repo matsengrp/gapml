@@ -143,15 +143,20 @@ class TransitionWrapperMaker:
         @param end_target_status: the ending target status
         @param anc_state: AncState for specifying the possible ancestral states of this node
 
-        @return Set[TargetTractTuples] -- target statuses that are within an EXTRA `self.max_extra_steps` steps away from `end_target_status`
+        @return List[TargetTractTuples] -- target statuses that are within an EXTRA `self.max_extra_steps` steps away from `end_target_status`
                 when starting at any state in `parent_statuses`. (extra meaning more than the minimum required to go from some parent
                 state to the end state )
         """
+        if max_steps == 0 or min_steps_to_sg == 0:
+            return parent_target_tract_tuples
+
         # label all nodes starting from the parent statuses with their closest distance (up to the max distance)
         dist_to_start_dict = {p: {"dist": 0, "paths": [[p]]} for p in parent_target_tract_tuples}
         states_to_explore = set(parent_target_tract_tuples)
+        dist_to_states_dict = {0: [p for p in parent_target_tract_tuples]}
         max_targets = set(anc_state.to_max_target_status().get_inactive_targets(self.bcode_meta))
         for i in range(max_steps):
+            dist_to_states_dict[i + 1] = []
             new_states = set()
             for state in states_to_explore:
                 targ_stat = TargetStatus.from_target_tract_tuple(state)
@@ -165,6 +170,7 @@ class TransitionWrapperMaker:
                     new_state = TargetTractTuple.merge([state, (possible_tt,)])
                     if not anc_state.is_possible(new_state):
                         continue
+
                     if (new_state not in dist_to_start_dict) or (dist_to_start_dict[new_state]["dist"] >= i + 1):
                         new_paths = [path + [new_state] for path in dist_to_start_dict[state]["paths"]]
                         if (new_state not in dist_to_start_dict) or (dist_to_start_dict[new_state]["dist"] > i + 1):
@@ -174,6 +180,7 @@ class TransitionWrapperMaker:
                         dist_to_start_dict[new_state] = {
                                 "dist": i + 1,
                                 "paths": combined_new_paths}
+                        dist_to_states_dict[i + 1].append(new_state)
                         new_states.add(new_state)
             states_to_explore = new_states
 
@@ -182,16 +189,17 @@ class TransitionWrapperMaker:
         sg_max_targ_stat = anc_state.to_sg_max_target_status()
         sg_max_inactive_targs = sg_max_targ_stat.get_inactive_targets(self.bcode_meta)
         close_states = []
-        for max_step_state in states_to_explore:
-            for path in dist_to_start_dict[max_step_state]["paths"]:
-                # Only need to start looking after `min_steps_to_sg` since we know this is the miin
-                # number of steps needed. Just for efficiency
-                for path_state in path[min_steps_to_sg:]:
-                    path_targ_stat = TargetStatus.from_target_tract_tuple(path_state)
-                    path_inactive_targs = path_targ_stat.get_inactive_targets(self.bcode_meta)
-                    if set(sg_max_inactive_targs) <= set(path_inactive_targs):
-                        close_states += path
-                        break
+        for idx in range(min_steps_to_sg, max_steps):
+            for max_step_state in dist_to_states_dict[idx]:
+                for path in dist_to_start_dict[max_step_state]["paths"]:
+                    # Only need to start looking after `min_steps_to_sg` since we know this is the miin
+                    # number of steps needed. Just for efficiency
+                    for path_state in path[min_steps_to_sg:]:
+                        path_targ_stat = TargetStatus.from_target_tract_tuple(path_state)
+                        path_inactive_targs = path_targ_stat.get_inactive_targets(self.bcode_meta)
+                        if set(sg_max_inactive_targs) <= set(path_inactive_targs):
+                            close_states += path
+                            break
 
         assert len(close_states) > 0
         return list(set(close_states))

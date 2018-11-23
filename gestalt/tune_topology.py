@@ -204,7 +204,7 @@ def parse_args(args):
 def read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
     fit_params = {
             "target_lams": get_init_target_lams(bcode_meta.n_targets, 0) * 0.5,
-            "target_lam_decay_rate": np.array([0.5]),
+            "target_lam_decay_rate": np.array([0.1]),
             "boost_softmax_weights": np.array([1, 2, 2]),
             "trim_long_factor": 0.05 * np.ones(2),
             "trim_zero_probs": 0.5 * np.ones(4),

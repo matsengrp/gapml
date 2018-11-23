@@ -61,3 +61,14 @@ class AlleleTestCase(unittest.TestCase):
         anc_state7 = AncState(l7)
         par_anc_state = AncState.intersect(anc_state7, anc_state1)
         self.assertEqual(par_anc_state.indel_set_list, l7)
+
+    def test_intersect_ancstate_more(self):
+        l1 = [SingletonWC(17, 29, 0, 0, 1, 1, 'tggg'), SingletonWC(73, 116, 2, 2, 6, 6, 'aggcga')]
+        l2 = [SingletonWC(42, 64, 1, 1, 3, 3, 'ac'), SingletonWC(153, 2, 5, 5, 5, 5, 'a')]
+        anc_state1 = AncState(l1)
+        anc_state2 = AncState(l2)
+        par_anc_state = AncState.intersect(anc_state1, anc_state2)
+        print(par_anc_state)
+        self.assertEqual(len(par_anc_state.indel_set_list), 1)
+        self.assertTrue(l2[-1] in par_anc_state.indel_set_list)
+         #["(3, 2)..(153, 2, 5, 5, 5, 5, 'a')"]
