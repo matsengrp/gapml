@@ -51,8 +51,6 @@ class TransitionWrapper:
         self.leaf_state = None
         if is_leaf:
             self.leaf_state = anc_state.to_max_target_status()
-            print(self.leaf_state)
-            print(target_statuses)
             assert self.leaf_state in target_statuses
 
 class TransitionWrapperMaker:
@@ -95,7 +93,7 @@ class TransitionWrapperMaker:
                 if node.is_root():
                     wrapper_list.append(TransitionWrapper(
                         [TargetTractTuple()],
-                        [], #[TargetStatus()],
+                        [],
                         anc_state,
                         node.is_leaf()))
                     continue
@@ -105,8 +103,6 @@ class TransitionWrapperMaker:
                 parent_target_tract_tuples = transition_matrix_states[node.up.node_id][idx].target_tract_tuples
                 up_anc_state = node.up.anc_state_list[idx]
                 min_required_steps = len(set(anc_state.get_singletons()) - set(up_anc_state.get_singletons()))
-                print("up",up_anc_state)
-                print("node",anc_state)
                 close_target_tract_tuples = self.get_states_close_by(
                         min_required_steps + self.max_extra_steps,
                         min_required_steps,
@@ -115,7 +111,7 @@ class TransitionWrapperMaker:
 
                 transition_wrap = TransitionWrapper(
                     close_target_tract_tuples,
-                    [], #transition_matrix_states[node.up.node_id][idx].states,
+                    [],
                     anc_state,
                     node.is_leaf())
 
@@ -126,8 +122,8 @@ class TransitionWrapperMaker:
                     len(transition_wrap.states),
                     len(transition_wrap.target_tract_tuples))
                 if len(transition_wrap.states) > 100:
-                    logging.info("=== node %s", anc_state)
-                    logging.info("=== up %s", up_anc_state)
+                    logging.info("=== many-state-node %s", anc_state)
+                    logging.info("=== parent-many-state-node %s", up_anc_state)
 
                 wrapper_list.append(transition_wrap)
 
@@ -184,7 +180,7 @@ class TransitionWrapperMaker:
         # Pick out states along paths that reach the max singleton ancestral state
         # for this node within the specified `max_steps`
         sg_max_targ_stat = anc_state.to_sg_max_target_status()
-        sg_max_active_targs = sg_max_targ_stat.get_active_targets(self.bcode_meta)
+        sg_max_inactive_targs = sg_max_targ_stat.get_inactive_targets(self.bcode_meta)
         close_states = []
         for max_step_state in states_to_explore:
             for path in dist_to_start_dict[max_step_state]["paths"]:
@@ -192,8 +188,8 @@ class TransitionWrapperMaker:
                 # number of steps needed. Just for efficiency
                 for path_state in path[min_steps_to_sg:]:
                     path_targ_stat = TargetStatus.from_target_tract_tuple(path_state)
-                    path_active_targs = path_targ_stat.get_active_targets(self.bcode_meta)
-                    if sg_max_active_targs <= path_active_targs:
+                    path_inactive_targs = path_targ_stat.get_inactive_targets(self.bcode_meta)
+                    if set(sg_max_inactive_targs) <= set(path_inactive_targs):
                         close_states += path
                         break
 

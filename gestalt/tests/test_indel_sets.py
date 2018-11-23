@@ -27,7 +27,7 @@ class AlleleTestCase(unittest.TestCase):
 
     def test_intersect_ancstate(self):
         l1 = [Wildcard(1,1), SingletonWC(10,30,2, 2,2,2, "asdf"), SingletonWC(70, 100, 3,4,4,5,"")]
-        l2 = [Wildcard(2,3), Wildcard(3,5)]
+        l2 = [Wildcard(2,2), Wildcard(3,5)]
         anc_state1 = AncState(l1)
         anc_state2 = AncState(l2)
         par_anc_state = AncState.intersect(anc_state1, anc_state2)

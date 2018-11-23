@@ -86,10 +86,10 @@ class AncState:
             indel_set1 = anc_state1.indel_set_list[idx1]
             indel_set2 = anc_state2.indel_set_list[idx2]
 
-            if indel_set2.max_deact_target < indel_set1.min_deact_target:
+            if indel_set2.max_target < indel_set1.min_target:
                 idx2 += 1
                 continue
-            elif indel_set1.max_deact_target < indel_set2.min_deact_target:
+            elif indel_set1.max_target < indel_set2.min_target:
                 idx1 += 1
                 continue
 
@@ -99,12 +99,48 @@ class AncState:
                 intersect_list.append(indel_sets_intersect)
 
             # Increment counter
-            if indel_set1.max_deact_target < indel_set2.max_deact_target:
+            if indel_set1.max_target < indel_set2.max_target:
                 idx1 += 1
             else:
                 idx2 += 1
 
+        # Post-process intersection with a final check for singleton-wildcards
+        # that deactivate the same target -- there is an ordering between these touching
+        # singleton-wildcards that must be obeyed for irreversbility
+        intersect_list = AncState._post_process(intersect_list, anc_state1)
+        intersect_list = AncState._post_process(intersect_list, anc_state2)
         return AncState(intersect_list)
+
+    @staticmethod
+    def _post_process(intersect_list, anc_state):
+        min_target_to_indel_set = {
+                indel_set.min_deact_target: indel_set
+                for indel_set in anc_state.indel_set_list
+                if indel_set.min_deact_target == indel_set.min_target}
+        max_target_to_indel_set = {
+                indel_set.max_deact_target: indel_set
+                for indel_set in anc_state.indel_set_list
+                if indel_set.max_deact_target == indel_set.max_target}
+
+        new_intersect_list = []
+        for idx, indel_set in enumerate(intersect_list):
+            # see if there is a touching SGWC in anc_state that must occur after this anc_state
+            # Note that the following check must ensure we are comparing touching SGWCs
+            if indel_set.min_target != indel_set.min_deact_target and indel_set.min_deact_target in max_target_to_indel_set:
+                if idx == 0 or intersect_list[idx - 1].max_deact_target != indel_set.min_deact_target:
+                    # The current `indel_set` cannot occur before the matching touching indel set in `anc_state`.
+                    # Remove from ancestral state
+                    continue
+
+            if indel_set.max_target != indel_set.max_deact_target and indel_set.max_deact_target in min_target_to_indel_set:
+                if idx == len(intersect_list) - 1 or intersect_list[idx + 1].min_deact_target != indel_set.max_deact_target:
+                    # The current `indel_set` cannot occur before the matching touching indel set in `anc_state`.
+                    # Remove from ancestral state
+                    continue
+
+            new_intersect_list.append(indel_set)
+
+        return new_intersect_list
 
     def get_singleton_wcs(self):
         return [indel_set for indel_set in self.indel_set_list if indel_set.__class__ == SingletonWC]
