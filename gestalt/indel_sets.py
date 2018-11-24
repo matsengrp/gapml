@@ -434,8 +434,16 @@ class TargetTractTuple(tuple):
     @staticmethod
     def merge(tract_groups: List[Tuple[TargetTract]]):
         """
-        @return flatractened version of a list of tuples of target tract
+        @return flattened version of a list of tuples of target tract, taking care of masking cases
         """
         tracts_raw = reduce(lambda x,y: x + y, tract_groups, ())
-        tracts_sorted = list(sorted(tracts_raw, key=lambda x: x.min_deact_target))
-        return TargetTractTuple(*tracts_sorted)
+        tracts_sorted = list(sorted(tracts_raw, key=lambda x: x.min_target))
+        final_tracts = [tracts_sorted[0]]
+        for tt in tracts_sorted[1:]:
+            if final_tracts[-1].max_deact_target > tt.max_deact_target:
+                continue
+            else:
+                assert final_tracts[-1].max_target < tt.min_target
+                final_tracts.append(tt)
+
+        return TargetTractTuple(*final_tracts)

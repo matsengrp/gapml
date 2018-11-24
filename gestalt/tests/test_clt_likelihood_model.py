@@ -5,7 +5,6 @@ import numpy as np
 
 from indel_sets import SingletonWC
 from clt_likelihood_model import CLTLikelihoodModel
-from cell_lineage_tree import CellLineageTree
 from barcode_metadata import BarcodeMetadata
 from indel_sets import TargetTract, Wildcard
 from allele_events import AlleleEvents

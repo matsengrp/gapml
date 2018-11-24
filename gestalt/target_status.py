@@ -221,6 +221,9 @@ class TargetStatus(tuple):
 
     @staticmethod
     def from_target_tract_tuple(target_tract_tuple: TargetTractTuple):
+        """
+        Create target status from target tract tuple
+        """
         raw_targ_stat = TargetStatus()
         for tt in target_tract_tuple:
             raw_targ_stat = raw_targ_stat.add_target_tract(tt)
