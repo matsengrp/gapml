@@ -23,7 +23,7 @@ FISH_DATA = {
         "format": 0,
         "branch_pen_params": "128,32,8",
         "target_lam_pen_params": "2,0.5",
-        "merge_thres": "4",
+        "merge_thres": 4,
     },
     "ADR2": {
         "path": "/fh/fast/matsen_e/gestalt/GSE81713_fish_ADR2_PHYLIP_MIX_gte5_input.annotations.txt",
@@ -31,7 +31,7 @@ FISH_DATA = {
         "format": 1,
         "branch_pen_params": "128,32,8",
         "target_lam_pen_params": "2,0.5",
-        "merge_thres": "4",
+        "merge_thres": 4,
     },
     "30hpf_v6_1": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171798_embryos_1_1_v6.stats.txt",
@@ -183,6 +183,7 @@ nest.add(
 def read_gestalt(env, outdir, c):
     cmd = [
         'python3 read_gestalt_data.py',
+        '--seed 0',
         '--reads-file',
         FISH_DATA[c['data']]['path'],
         '--reads-format',
@@ -297,6 +298,12 @@ def run_neighbor_joining(env, outdir, c):
         ' '.join(map(str, cmd)))
 
 nest.add(
+    'sum_states',
+    [50],
+    label_func=lambda c: "sum_states_%d" % c,
+)
+
+nest.add(
     'extra_steps',
     [1],
     label_func=lambda c: "extra_steps_%d" % c,
@@ -329,6 +336,8 @@ def run_MLE(env, outdir, c):
         9,
         '--max-extra-steps',
         c['extra_steps'],
+        '--max-sum-states',
+        c['sum_states'],
         '--max-iters 50000',
         '--num-inits 1',
         '--tot-time-known',

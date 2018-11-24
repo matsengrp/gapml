@@ -854,7 +854,7 @@ class CLTLikelihoodModel:
         """
         # TODO: move this check elsewhere? This is to check that all trim lengths make sense!
         for sg in singletons:
-            print("SG TRIM", sg.get_trim_lens(self.bcode_meta))
+            sg.get_trim_lens(self.bcode_meta)
 
         if not singletons:
             return []

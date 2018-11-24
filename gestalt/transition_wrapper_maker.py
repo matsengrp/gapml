@@ -2,6 +2,7 @@ from typing import List, Dict, Set
 import random
 import logging
 import numpy as np
+import time
 
 from anc_state import AncState
 from cell_lineage_tree import CellLineageTree
@@ -61,7 +62,8 @@ class TransitionWrapperMaker:
             self,
             tree: CellLineageTree,
             bcode_metadata: BarcodeMetadata,
-            max_extra_steps: int = 1):
+            max_extra_steps: int = 1,
+            max_sum_states: int = None):
         """
         @param tree: the tree to create transition wrappers for
         @param max_extra_steps: number of extra steps to search for possible ancestral states
@@ -70,6 +72,7 @@ class TransitionWrapperMaker:
         self.tree = tree
 
         self.max_extra_steps = max_extra_steps
+        self.max_sum_states = max_sum_states
 
     def create_transition_wrappers(self):
         """
@@ -93,9 +96,10 @@ class TransitionWrapperMaker:
                         node.is_leaf()))
                     continue
 
-                # Subset the possible internal states as lower bound
-                # The subset is going to be those within a small number of steps
-                transition_matrix_states[node.up.node_id][idx]
+                # List out possible internal states but only consider those within a small number of steps
+                # of the possible max parsimony ancestral states
+                # We do this by counting those wwithin the minimal target status of all possible max parsimony
+                # ancestral states
                 parent_target_tract_tuples = transition_matrix_states[node.up.node_id][idx].target_tract_tuples
                 up_anc_state = node.up.anc_state_list[idx]
                 minimal_sgs, maximal_sgs = max_parsimony_sgs[node.node_id][idx]
@@ -103,18 +107,28 @@ class TransitionWrapperMaker:
                 min_required_steps = len(set(minimal_sgs) - set(maximal_up_sgs))
                 max_required_steps = len(set(maximal_sgs) - set(minimal_up_sgs))
                 requested_target_status = TargetStatus.from_target_tract_tuple(TargetTractTuple(*[sg.get_target_tract() for sg in minimal_sgs]))
-                close_target_tract_tuples = self.get_states_close_by(
-                        max_required_steps + self.max_extra_steps,
-                        min_required_steps,
-                        parent_target_tract_tuples,
-                        anc_state,
-                        requested_target_status)
 
-                transition_wrap = TransitionWrapper(
-                    close_target_tract_tuples,
-                    [],
-                    anc_state,
-                    node.is_leaf())
+                states_too_many = True
+                max_extra_steps = self.max_extra_steps
+                while states_too_many and max_extra_steps >= 0:
+                    close_target_tract_tuples = self.get_states_close_by(
+                            max_required_steps + max_extra_steps,
+                            min_required_steps,
+                            parent_target_tract_tuples,
+                            anc_state,
+                            requested_target_status)
+
+                    transition_wrap = TransitionWrapper(
+                        close_target_tract_tuples,
+                        [],
+                        anc_state,
+                        node.is_leaf())
+
+                    states_too_many = self.max_sum_states is not None and len(transition_wrap.states) > self.max_sum_states
+                    if states_too_many:
+                        logging.info("=== many-state-node %s %d", anc_state, len(transition_wrap.states))
+                        logging.info("=== parent-many-state-node %s", up_anc_state)
+                        max_extra_steps -= 1
 
                 logging.info(
                     "Subsampling states for node %d, parent # states %d, node # subsampled states %d, (node target tract tuples %d)",
@@ -122,9 +136,6 @@ class TransitionWrapperMaker:
                     len(transition_matrix_states[node.up.node_id][idx].states),
                     len(transition_wrap.states),
                     len(transition_wrap.target_tract_tuples))
-                if len(transition_wrap.states) > 100:
-                    logging.info("=== many-state-node %s", anc_state)
-                    logging.info("=== parent-many-state-node %s", up_anc_state)
 
                 wrapper_list.append(transition_wrap)
 
@@ -192,13 +203,23 @@ class TransitionWrapperMaker:
                     new_states.add(new_state)
             states_to_explore = new_states
 
-        # Pick out states along paths that reach the max singleton ancestral state
-        # for this node within the specified `max_steps`
+        # Pick out states along paths that reach the minimal target status
+        # of all possible max parsimony ancestral states within the specified `max_steps`
         sg_max_inactive_targs = requested_target_status.get_inactive_targets(self.bcode_meta)
+        # This is the list aggregating all paths
         close_states = []
-        for idx in range(min_steps_to_sg, max_steps + 1):
-            for max_step_state in dist_to_states_dict[idx]:
-                for path in dist_to_start_dict[max_step_state][idx]:
+        # This just keeps track of paths we have added already -- for code speedup
+        added_paths = set()
+        for num_steps in np.arange(max_steps, min_steps_to_sg - 1, step=-1):
+            if num_steps not in dist_to_states_dict:
+                continue
+
+            for state in dist_to_states_dict[num_steps]:
+                if (state, num_steps) in added_paths:
+                    continue
+
+                added_paths.add((state, num_steps))
+                for path in dist_to_start_dict[state][num_steps]:
                     # Only need to start looking after `min_steps_to_sg` since we know this is the miin
                     # number of steps needed. Just for efficiency
                     for path_state in path[min_steps_to_sg:]:
@@ -207,6 +228,5 @@ class TransitionWrapperMaker:
                         if set(sg_max_inactive_targs) <= set(path_inactive_targs):
                             close_states += path
                             break
-
         assert len(close_states) > 0
         return list(set(close_states))

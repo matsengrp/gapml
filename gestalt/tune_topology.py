@@ -126,6 +126,11 @@ def parse_args(args):
         default=1,
         help='maximum number of extra steps to explore possible ancestral states')
     parser.add_argument(
+        '--max-sum-states',
+        type=int,
+        default=1,
+        help='if number of ancestral states exceeds this, consider a smaller number of extra steps')
+    parser.add_argument(
         '--lambda-known',
         action='store_true',
         help='are target rates known?')
@@ -305,7 +310,8 @@ def fit_multifurc_tree(
     transition_wrap_maker = TransitionWrapperMaker(
             tree,
             bcode_meta,
-            args.max_extra_steps)
+            args.max_extra_steps,
+            args.max_sum_states)
     if 'branch_len_inners' in param_dict:
         # If branch length estimates are provided and we have the mapping between
         # the full_tree nodes and the nodes in the no_chad tree, then we should do warm-start.

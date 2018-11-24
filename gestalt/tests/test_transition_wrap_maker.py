@@ -27,7 +27,7 @@ class TransitionWrapperMakerTestCase(unittest.TestCase):
         topology.add_child(child1)
         child1.add_feature("node_id", 1)
 
-        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=10, max_num_states=None)
+        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=10)
         transition_wrap_dict = trans_wrap_maker.create_transition_wrappers()
         self.assertEqual(len(transition_wrap_dict[0]), num_barcodes)
         self.assertEqual(transition_wrap_dict[0][0].states, [TargetStatus()])
@@ -46,14 +46,14 @@ class TransitionWrapperMakerTestCase(unittest.TestCase):
         child1.add_feature("node_id", 1)
 
         # allow many extra steps
-        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=10, max_num_states=None)
+        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=10)
         transition_wrap_dict = trans_wrap_maker.create_transition_wrappers()
         self.assertEqual(len(transition_wrap_dict[0]), num_barcodes)
         self.assertEqual(transition_wrap_dict[0][0].states, [TargetStatus()])
         self.assertEqual(transition_wrap_dict[1][0].states, [TargetStatus(), TargetStatus(TargetDeactTract(0,0))])
 
         # what happens when i dont allow any extra steps
-        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=0, max_num_states=1)
+        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=0)
         transition_wrap_dict = trans_wrap_maker.create_transition_wrappers()
         self.assertEqual(len(transition_wrap_dict[0]), num_barcodes)
         self.assertEqual(transition_wrap_dict[0][0].states, [TargetStatus()])
@@ -72,7 +72,7 @@ class TransitionWrapperMakerTestCase(unittest.TestCase):
         child1.add_feature("node_id", 1)
 
         # allow many extra steps
-        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=10, max_num_states=None)
+        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=10)
         transition_wrap_dict = trans_wrap_maker.create_transition_wrappers()
         self.assertEqual(len(transition_wrap_dict[0]), num_barcodes)
         self.assertEqual(transition_wrap_dict[0][0].states, [TargetStatus()])
@@ -83,7 +83,7 @@ class TransitionWrapperMakerTestCase(unittest.TestCase):
         self.assertTrue(TargetStatus(TargetDeactTract(0,1)) in transition_wrap_dict[1][0].states)
 
         # what happens when i dont allow any extra steps
-        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=0, max_num_states=1)
+        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=0)
         transition_wrap_dict = trans_wrap_maker.create_transition_wrappers()
         self.assertEqual(len(transition_wrap_dict[0]), num_barcodes)
         self.assertEqual(transition_wrap_dict[0][0].states, [TargetStatus()])
@@ -105,19 +105,19 @@ class TransitionWrapperMakerTestCase(unittest.TestCase):
         child1.add_feature("node_id", 1)
 
         # allow many extra steps
-        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=10, max_num_states=None)
+        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=10)
         transition_wrap_dict = trans_wrap_maker.create_transition_wrappers()
         self.assertEqual(len(transition_wrap_dict[1][0].target_tract_tuples), 3)
         self.assertEqual(len(transition_wrap_dict[1][0].states), 3)
 
         # allow one extra steps
-        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=1, max_num_states=1)
+        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=1)
         transition_wrap_dict = trans_wrap_maker.create_transition_wrappers()
         self.assertEqual(len(transition_wrap_dict[1][0].states), 3)
         self.assertEqual(len(transition_wrap_dict[1][0].target_tract_tuples), 3)
 
         # allow no extra steps
-        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=0, max_num_states=1)
+        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=0)
         transition_wrap_dict = trans_wrap_maker.create_transition_wrappers()
         self.assertEqual(len(transition_wrap_dict[1][0].states), 2)
 
@@ -133,12 +133,12 @@ class TransitionWrapperMakerTestCase(unittest.TestCase):
         child1.add_feature("node_id", 1)
 
         # allow many extra steps
-        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=2, max_num_states=None)
+        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=2)
         transition_wrap_dict = trans_wrap_maker.create_transition_wrappers()
         self.assertEqual(len(transition_wrap_dict[1][0].states), 5)
 
         # allow one extra steps
-        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=1, max_num_states=1)
+        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=1)
         transition_wrap_dict = trans_wrap_maker.create_transition_wrappers()
         self.assertEqual(len(transition_wrap_dict[1][0].states), 5)
         # hidden possible target tract tuples are: focal target 1 (short), focal target 2 (short), cut 1 spill over to 2.
@@ -146,7 +146,7 @@ class TransitionWrapperMakerTestCase(unittest.TestCase):
         self.assertEqual(len(transition_wrap_dict[1][0].target_tract_tuples), 7)
 
         # allow no extra steps
-        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=0, max_num_states=1)
+        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=0)
         transition_wrap_dict = trans_wrap_maker.create_transition_wrappers()
         self.assertEqual(len(transition_wrap_dict[1][0].states), 2)
 
@@ -175,7 +175,7 @@ class TransitionWrapperMakerTestCase(unittest.TestCase):
         child3.add_feature("node_id", 3)
 
         # allow no extra steps
-        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=0, max_num_states=1)
+        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=0)
         transition_wrap_dict = trans_wrap_maker.create_transition_wrappers()
         self.assertEqual(len(transition_wrap_dict[1][0].states), 2)
         self.assertTrue(TargetStatus(TargetDeactTract(0,0)) in transition_wrap_dict[1][0].states)
@@ -212,7 +212,7 @@ class TransitionWrapperMakerTestCase(unittest.TestCase):
         child1.add_child(child3)
         child3.add_feature("node_id", 3)
 
-        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=10, max_num_states=10)
+        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=10)
         transition_wrap_dict = trans_wrap_maker.create_transition_wrappers()
         self.assertEqual(len(transition_wrap_dict[1][0].states), 2)
         self.assertTrue(TargetStatus(TargetDeactTract(0,0)) in transition_wrap_dict[1][0].states)
@@ -251,7 +251,7 @@ class TransitionWrapperMakerTestCase(unittest.TestCase):
         child1.add_child(child3)
         child3.add_feature("node_id", 3)
 
-        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=10, max_num_states=10)
+        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=10)
         transition_wrap_dict = trans_wrap_maker.create_transition_wrappers()
         self.assertEqual(len(transition_wrap_dict[1][0].states), 2)
         self.assertTrue(TargetStatus(TargetDeactTract(1,1)) in transition_wrap_dict[1][0].states)
@@ -288,7 +288,7 @@ class TransitionWrapperMakerTestCase(unittest.TestCase):
         child1.add_child(child3)
         child3.add_feature("node_id", 3)
 
-        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=0, max_num_states=10)
+        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=0)
         transition_wrap_dict = trans_wrap_maker.create_transition_wrappers()
         self.assertEqual(len(transition_wrap_dict[1][0].states), 2)
         self.assertTrue(TargetStatus(TargetDeactTract(1,1)) in transition_wrap_dict[1][0].states)
