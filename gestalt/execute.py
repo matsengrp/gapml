@@ -26,7 +26,7 @@ source ../venv_beagle_py3/bin/activate
 
 
 @click.command()
-@click.option('--clusters', default='', help='Clusters to submit to. Default is local execution.')
+@click.option('--clusters', default='local', help='Clusters to submit to. Default is local execution.')
 @click.option('--max-tries', default=2, help='Maximum number of times to try resubmitting to cluster')
 @click.argument('target')
 @click.argument('to_execute_str')
@@ -39,7 +39,7 @@ def cli(clusters, max_tries, target, to_execute_str):
 
     TO_EXECUTE_F_STRING: The command to execute
     """
-    if clusters == '':
+    if clusters == 'local':
         # Local execution.
         click.echo("Executing locally:")
         click.echo(to_execute_str)

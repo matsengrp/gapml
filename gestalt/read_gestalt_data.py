@@ -2,15 +2,12 @@
 Read data from GESTALT and convert to pickle file with List[ObservedAlignedSeq]
 """
 from typing import List
-import os
-import sys
+import random
 import csv
 import numpy as np
 import argparse
 import time
 import logging
-import pickle
-from pathlib import Path
 import six
 
 from barcode_metadata import BarcodeMetadata
@@ -25,6 +22,11 @@ from constants import BARCODE_V6, NUM_BARCODE_V6_TARGETS
 
 def parse_args():
     parser = argparse.ArgumentParser(description='read cell file')
+    parser.add_argument(
+        '--seed',
+        type=int,
+        default=0,
+        help='seed')
     parser.add_argument(
         '--reads-file',
         type=str,
@@ -365,6 +367,8 @@ def main():
     args = parse_args()
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
+    np.random.seed(args.seed)
+    random.seed(args.seed)
 
     # Pad the barcode on the left and right in case there are long left/right deletions
     # at the ends of the barcode
@@ -409,6 +413,14 @@ def main():
 
     # Check trim length assignments
     # Check all indels are disjoin in terms of what targets they deactivate
+    evt_to_obs = {}
+    for obs in obs_leaves:
+        anc_state = AncState.create_for_observed_allele(obs.allele_events_list[0], bcode_meta)
+        for evt in anc_state.indel_set_list:
+            if evt not in evt_to_obs:
+                evt_to_obs[evt] = [anc_state]
+            else:
+                evt_to_obs[evt].append(anc_state)
     for obs in obs_leaves:
         for evt in obs.allele_events_list[0].events:
             evt.get_trim_lens(bcode_meta)
@@ -417,10 +429,16 @@ def main():
             if i == 0:
                 continue
             prev_evt = anc_state.indel_set_list[i - 1]
-            if prev_evt.max_deact_target == evt.min_deact_target:
-                raise ValueError(
+            if prev_evt.max_deact_target == evt.min_deact_target and (evt.min_deact_target == evt.min_target or prev_evt.max_deact_target == prev_evt.max_target):
+                print(
                     "There are clashing events in the allele with ancstate %s. Distance between clashing events: %d."
                     % (anc_state, evt.start_pos - prev_evt.del_end))
+                if evt.min_deact_target != evt.min_target:
+                    irreversibility_checks = [prev_evt in a.indel_set_list for a in evt_to_obs[evt]]
+                else:
+                    irreversibility_checks = [evt in a.indel_set_list for a in evt_to_obs[prev_evt]]
+                if len(irreversibility_checks) > 2 and not all(irreversibility_checks):
+                    raise ValueError("nope. clashing events not preserving irreversibility (though crazy homoplasy could also be occurring), %s" % irreversibility_checks)
 
     # Save the observed data
     with open(args.out_obs_data, "wb") as f:

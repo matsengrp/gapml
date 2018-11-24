@@ -77,7 +77,6 @@ class CLTNeighborJoiningEstimator(CLTEstimator):
         return root_clt
 
 
-
     @staticmethod
     def _do_convert(tree_node, clt_node):
         for child in tree_node.get_children():

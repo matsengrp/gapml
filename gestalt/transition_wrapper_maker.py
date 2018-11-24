@@ -61,12 +61,10 @@ class TransitionWrapperMaker:
             self,
             tree: CellLineageTree,
             bcode_metadata: BarcodeMetadata,
-            max_extra_steps: int = 1,
-            max_num_states: int = None):
+            max_extra_steps: int = 1):
         """
         @param tree: the tree to create transition wrappers for
         @param max_extra_steps: number of extra steps to search for possible ancestral states
-        @param max_num_states: ignored
         """
         self.bcode_meta = bcode_metadata
         self.tree = tree
