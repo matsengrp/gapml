@@ -55,6 +55,14 @@ def cli(clusters, max_tries, target, to_execute_str):
         fp.write(to_execute_str + '\n')
         fp.write('touch %s\n' % sentinel_path)
 
+    # Clean up old job log files if they exist
+    scratch_job_files = [
+        os.path.join(execution_dir, "job.err"),
+        os.path.join(execution_dir, "job.out")]
+    for scratch_file in scratch_job_files:
+        if os.path.exists(scratch_file):
+            os.remove(scratch_file)
+
     for _ in range(max_tries):
         out = subprocess.check_output(
                 'sbatch --clusters %s %s' % (clusters, script_full_path),

@@ -3,8 +3,6 @@ from functools import reduce
 
 from cell_lineage_tree import CellLineageTree
 from anc_state import AncState
-from indel_sets import TargetTractTuple
-from target_status import TargetStatus
 
 from barcode_metadata import BarcodeMetadata
 
@@ -12,7 +10,6 @@ from barcode_metadata import BarcodeMetadata
 Our in-built engine for finding all possible
 events in the internal nodes.
 """
-
 
 def annotate_ancestral_states(tree: CellLineageTree, bcode_meta: BarcodeMetadata, do_fast: bool=False):
     """
@@ -37,8 +34,8 @@ def annotate_ancestral_states(tree: CellLineageTree, bcode_meta: BarcodeMetadata
         node.add_feature(
                 "anc_state_list_str",
                 "%s:%s" % (str(node.node_id), [str(k) for k in node.anc_state_list]))
-    logging.info("Ancestral state")
-    logging.info(node.get_ascii(attributes=["anc_state_list_str"], show_internal=True))
+    #logging.info("Ancestral state")
+    #logging.info(node.get_ascii(attributes=["anc_state_list_str"], show_internal=True))
 
 
 def get_possible_anc_states(tree: CellLineageTree):

@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 import numpy as np
 import subprocess
@@ -95,6 +96,9 @@ class CLTChronosEstimator(CLTEstimator):
             orig_cell_lineage_tree.dist = leaf.dist
             orig_cell_lineage_tree.detach()
             leaf_parent.add_child(orig_cell_lineage_tree)
+
+        os.remove(tree_out_file)
+        os.remove(tree_in_file)
 
         return root_clt
 

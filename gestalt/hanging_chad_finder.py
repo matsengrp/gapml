@@ -816,7 +816,7 @@ def _create_chad_results(
     assert len(fit_results) == len(single_full_chad_trees)
     num_failures = sum([r is None for r in fit_results])
     if any([r is None for r in fit_results]):
-        logging.info("WARNING: there were %d failures. unstable pen param?", num_failures)
+        logging.info("WARNING: there were %d failures", num_failures)
 
     new_chad_results = [
         HangingChadResult(

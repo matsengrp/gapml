@@ -149,9 +149,9 @@ class LikelihoodScorer(ParallelWorker):
             res_model.topology,
             res_model.get_fitted_bifurcating_tree(),
             train_history)
-        logging.info(result.fitted_bifurc_tree.get_ascii(attributes=["node_id"], show_internal=True))
-        logging.info(result.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
-        logging.info(result.fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+        #logging.info(result.fitted_bifurc_tree.get_ascii(attributes=["node_id"], show_internal=True))
+        #logging.info(result.fitted_bifurc_tree.get_ascii(attributes=["dist"], show_internal=True))
+        #logging.info(result.fitted_bifurc_tree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
         return result
 
     def _get_best_result(

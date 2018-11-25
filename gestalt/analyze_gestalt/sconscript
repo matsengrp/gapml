@@ -21,134 +21,188 @@ FISH_DATA = {
         "path": "/fh/fast/matsen_e/gestalt/fish_7B_UMI_collapsed_reads/fish_7B_UMI_collapsed_reads.txt",
         "bcode_min_pos": 122,
         "format": 0,
-        "branch_pen_params": "128,32,8",
-        "target_lam_pen_params": "2,0.5",
-        "merge_thres": 4,
+        #"branch_pen_params": "128,32,8",
+        #"target_lam_pen_params": "2,0.5",
+        # Best pen params for above is 128 0.5
+        "branch_pen_params": "512,128,32",
+        "target_lam_pen_params": "2,1",
+        "merge": 4,
     },
     "ADR2": {
         "path": "/fh/fast/matsen_e/gestalt/GSE81713_fish_ADR2_PHYLIP_MIX_gte5_input.annotations.txt",
         "bcode_min_pos": 122,
         "format": 1,
-        "branch_pen_params": "128,32,8",
-        "target_lam_pen_params": "2,0.5",
-        "merge_thres": 4,
+        "branch_pen_params": "512,128,32",
+        "target_lam_pen_params": "2,1",
+        "merge": 4,
     },
     "30hpf_v6_1": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171798_embryos_1_1_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
+        "branch_pen_params": "2048,512,128",
+        "target_lam_pen_params": "8,2",
+        "merge": 5,
     },
     "30hpf_v6_2": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171799_embryos_1_2_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
+        "branch_pen_params": "2048,512,128",
+        "target_lam_pen_params": "8,2",
+        "merge": 4,
     },
     "30hpf_v6_3": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171800_embryos_1_3_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
+        "branch_pen_params": "2048,512,128",
+        "target_lam_pen_params": "8,2",
+        "merge": 4,
     },
     "30hpf_v6_4": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171801_embryos_1_4_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
+        "branch_pen_params": "2048,512,128",
+        "target_lam_pen_params": "8,2",
+        "merge": 4,
     },
     "30hpf_v6_5": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171802_embryos_1_5_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
+        "branch_pen_params": "2048,512,128",
+        "target_lam_pen_params": "8,2",
+        "merge": 4,
     },
     "30hpf_v6_6": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171803_embryos_1_6_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
+        "branch_pen_params": "2048,512,128",
+        "target_lam_pen_params": "8,2",
+        "merge": 4,
     },
     "30hpf_v6_7": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171804_embryos_1_7_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
+        "branch_pen_params": "2048,512,128",
+        "target_lam_pen_params": "8,2",
+        "merge": 4,
     },
     "30hpf_v6_8": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171805_embryos_1_8_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
+        "branch_pen_params": "2048,512,128",
+        "target_lam_pen_params": "8,2",
+        "merge": 4,
     },
     # V7 timecourse experiments, Only the 1x concentration experiments
     "dome1": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171788_Dome_1_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
+        "branch_pen_params": "2048,512,128",
+        "target_lam_pen_params": "8,2",
+        "merge": 4,
     },
     "dome3": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171791_Dome_3_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
+        "branch_pen_params": "2048,512,128",
+        "target_lam_pen_params": "8,2",
+        "merge": 4,
     },
     "dome5": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171793_Dome_5_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
+        "branch_pen_params": "2048,512,128",
+        "target_lam_pen_params": "8,2",
+        "merge": 4,
     },
     "dome8": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171796_Dome_8_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
+        "branch_pen_params": "2048,512,128",
+        "target_lam_pen_params": "8,2",
+        "merge": 4,
     },
     "dome9": {
         # There are only 15 alleles -- do not analyze this fish
         "path": "/fh/fast/matsen_e/gestalt/GSM2171797_Dome_9_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
+        "branch_pen_params": "2048,512,128",
+        "target_lam_pen_params": "8,2",
+        "merge": 4,
     },
     "dome10": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171790_Dome_10_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
+        "branch_pen_params": "2048,512,128",
+        "target_lam_pen_params": "8,2",
+        "merge": 4,
     },
+    # 3day fish experiments, only concetration 1x
     "3day1": {
         # Has 2745 leaves
         "path": "/fh/fast/matsen_e/gestalt/GSM2171723_3d_1_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
-        "branch_pen_params": "128,32,8",
-        "target_lam_pen_params": "2,0.5",
-        "merge_thres": 4,
+        #"branch_pen_params": "128,32,8",
+        #"target_lam_pen_params": "2,0.5",
+        # Best one chosen in 128 2
+        "branch_pen_params": "512,128,32",
+        "target_lam_pen_params": "8,2",
+        "merge": 5,
     },
     "3day2": {
         # Has 947 leaves
         "path": "/fh/fast/matsen_e/gestalt/GSM2171727_3d_2_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
-        "branch_pen_params": "128,32,8",
-        "target_lam_pen_params": "2,0.5",
+        "branch_pen_params": "512,128,32",
+        "target_lam_pen_params": "8,2",
+        "merge": 5,
     },
     "3day3": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171729_3d_3_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
-        "branch_pen_params": "128,32,8",
-        "target_lam_pen_params": "2,0.5",
+        "branch_pen_params": "512,128,32",
+        "target_lam_pen_params": "8,2",
+        "merge": 5,
     },
     "3day4": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171731_3d_4_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
-        "branch_pen_params": "128,32,8",
-        "target_lam_pen_params": "2,0.5",
+        "branch_pen_params": "512,128,32",
+        "target_lam_pen_params": "8,2",
+        "merge": 5,
     },
     "3day5": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171733_3d_5_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
-        "branch_pen_params": "128,32,8",
-        "target_lam_pen_params": "2,0.5",
+        "branch_pen_params": "512,128,32",
+        "target_lam_pen_params": "8,2",
+        "merge": 5,
     },
     "3day6": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171735_3d_6_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
-        "branch_pen_params": "128,32,8",
-        "target_lam_pen_params": "2,0.5",
+        "branch_pen_params": "512,128,32",
+        "target_lam_pen_params": "8,2",
+        "merge": 5,
     },
 }
 
@@ -156,23 +210,23 @@ nest.add(
     'data',
     [
         #"ADR1",
-        #"ADR2",
-        #"30hpf_v6_1",
-        #"30hpf_v6_2",
-        #"30hpf_v6_3",
+        "ADR2",
+        "30hpf_v6_1",
+        "30hpf_v6_2",
+        "30hpf_v6_3",
         #"30hpf_v6_4",
         #"30hpf_v6_5",
         #"30hpf_v6_6",
         #"30hpf_v6_7",
         #"30hpf_v6_8",
-        #"dome1",
-        #"dome3",
-        #"dome5",
+        "dome1",
+        "dome3",
+        "dome5",
         #"dome8",
         #"dome10",
         "3day1",
-        #"3day2",
-        #"3day3",
+        "3day2",
+        "3day3",
         #"3day4",
         #"3day5",
         #"3day6",
@@ -195,7 +249,7 @@ def read_gestalt(env, outdir, c):
         '--abundance-thres 1',
 	'--time 1',
 	'--merge',
-        FISH_DATA[c['data']]['merge_thres'],
+        FISH_DATA[c['data']]['merge'],
     ]
     return env.Command(
         [
@@ -254,48 +308,48 @@ def run_parsimony(env, outdir, c):
         c['restrict_observed_alleles'],
         ' '.join(map(str, cmd)))
 
-@nest.add_target_with_env(localenv)
-def run_chronos(env, outdir, c):
-    cmd = [
-        'python3 fit_chronos.py',
-        '--seed 1',
-        '--lambdas',
-        '0.0001,0.001,0.01,0.1,1',
-        '--obs-file ${SOURCES[0]}',
-        '--topology-file ${SOURCES[1]}',
-        '--out-model-file ${TARGETS[0]}',
-        '--log-file ${TARGETS[1]}',
-        '--num-init-random-rearrange 0',
-        '--scratch-dir',
-	join('analyze_gestalt', outdir, 'scratch'),
-    ]
-    return env.Command(
-        [
-            join(outdir, 'chronos_fitted.pkl'),
-            join(outdir, 'chronos_fitted.txt')],
-        [
-            c['restrict_observed_alleles'][0],
-            c['run_parsimony'][0]],
-        ' '.join(map(str, cmd)))
-
-@nest.add_target_with_env(localenv)
-def run_neighbor_joining(env, outdir, c):
-    cmd = [
-        'python3 fit_neighbor_joining.py',
-        '--seed 1',
-        '--obs-file ${SOURCES[0]}',
-        '--out-model-file ${TARGETS[0]}',
-        '--log-file ${TARGETS[1]}',
-        '--scratch-dir',
-	join('analyze_gestalt', outdir, 'scratch'),
-    ]
-    return env.Command(
-        [
-            join(outdir, 'nj_fitted.pkl'),
-            join(outdir, 'nj_fitted.txt')],
-        [
-            c['restrict_observed_alleles'][0]],
-        ' '.join(map(str, cmd)))
+#@nest.add_target_with_env(localenv)
+#def run_chronos(env, outdir, c):
+#    cmd = [
+#        'python3 fit_chronos.py',
+#        '--seed 1',
+#        '--lambdas',
+#        '0.0001,0.001,0.01,0.1,1',
+#        '--obs-file ${SOURCES[0]}',
+#        '--topology-file ${SOURCES[1]}',
+#        '--out-model-file ${TARGETS[0]}',
+#        '--log-file ${TARGETS[1]}',
+#        '--num-init-random-rearrange 0',
+#        '--scratch-dir',
+#	join('analyze_gestalt', outdir, 'scratch'),
+#    ]
+#    return env.Command(
+#        [
+#            join(outdir, 'chronos_fitted.pkl'),
+#            join(outdir, 'chronos_fitted.txt')],
+#        [
+#            c['restrict_observed_alleles'][0],
+#            c['run_parsimony'][0]],
+#        ' '.join(map(str, cmd)))
+#
+#@nest.add_target_with_env(localenv)
+#def run_neighbor_joining(env, outdir, c):
+#    cmd = [
+#        'python3 fit_neighbor_joining.py',
+#        '--seed 1',
+#        '--obs-file ${SOURCES[0]}',
+#        '--out-model-file ${TARGETS[0]}',
+#        '--log-file ${TARGETS[1]}',
+#        '--scratch-dir',
+#	join('analyze_gestalt', outdir, 'scratch'),
+#    ]
+#    return env.Command(
+#        [
+#            join(outdir, 'nj_fitted.pkl'),
+#            join(outdir, 'nj_fitted.txt')],
+#        [
+#            c['restrict_observed_alleles'][0]],
+#        ' '.join(map(str, cmd)))
 
 nest.add(
     'sum_states',

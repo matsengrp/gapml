@@ -3,7 +3,9 @@ import logging
 import numpy as np
 import tensorflow as tf
 from tensorflow import Tensor
-import tensorflow_probability as tfp
+# Do not use tensorflow probability since some nodes in AWS will just crash...
+# Old machines are not compatible with tensorflow_probability, I think
+#import tensorflow_probability as tfp
 
 from typing import List, Dict
 from numpy import ndarray
@@ -284,7 +286,8 @@ class CLTLikelihoodModel:
                 del_dist_list = [tfp.distributions.Poisson(tf.exp(params[i])) for i in range(n_trim_types)]
             else:
                 del_dist_list = [
-                    tfp.distributions.NegativeBinomial(
+                    #tfp.distributions.NegativeBinomial(
+                    tf.contrib.distributions.NegativeBinomial(
                         tf.exp(params[i, 0]) * tf.constant(np.ones(num_singletons), dtype=tf.float64),
                         logits=params[i, 1] * tf.constant(np.ones(num_singletons), dtype=tf.float64))
                     for i in range(n_trim_types)]
@@ -294,7 +297,8 @@ class CLTLikelihoodModel:
         if self.use_poisson:
             self.insert_dist = tfp.distributions.Poisson(tf.exp(self.insert_params[0]))
         else:
-            self.insert_dist = tfp.distributions.NegativeBinomial(
+            #self.insert_dist = tfp.distributions.NegativeBinomial(
+            self.insert_dist = tf.contrib.distributions.NegativeBinomial(
                     tf.exp(self.insert_params[0]),
                     logits=self.insert_params[1])
 

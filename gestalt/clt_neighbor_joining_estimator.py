@@ -1,15 +1,12 @@
 import logging
+import os
 import time
-import numpy as np
-import subprocess
 from ete3 import Tree
 from typing import List
 
 from clt_observer import ObservedAlignedSeq
 from clt_estimator import CLTEstimator
 from cell_lineage_tree import CellLineageTree
-import ancestral_events_finder
-from collapsed_tree import _remove_single_child_unobs_nodes
 from barcode_metadata import BarcodeMetadata
 
 from Bio.Phylo import draw_ascii, write
@@ -72,7 +69,9 @@ class CLTNeighborJoiningEstimator(CLTEstimator):
         for leaf in root_clt:
             leaf.add_feature('leaf_key', leaf.allele_events_list_str)
         logging.info("Done with fitting tree using neighbor joining")
-        logging.info(fitted_tree.get_ascii(attributes=["dist"]))
+        #logging.info(fitted_tree.get_ascii(attributes=["dist"]))
+
+        os.remove(newick_tree_file)
 
         return root_clt
 

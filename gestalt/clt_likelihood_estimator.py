@@ -108,6 +108,7 @@ class CLTPenalizedEstimator(CLTEstimator):
 
         st_time = time.time()
         prev_pen_log_lik = pen_log_lik[0]
+        logging.info("max iters %d", self.max_iters)
         for i in range(self.max_iters):
             var_dict = self.model.get_vars_as_dict()
             boost_probs = np.exp(var_dict["boost_softmax_weights"])/np.sum(

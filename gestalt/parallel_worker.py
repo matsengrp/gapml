@@ -75,8 +75,10 @@ class ParallelWorkerManager:
 
             # Create the folder for the output from this batch worker
             worker_batch_folder = "%s/batch_%d" % (self.worker_folder, batch_idx)
-            if not os.path.exists(worker_batch_folder):
-                os.makedirs(worker_batch_folder)
+            if os.path.exists(worker_batch_folder):
+                # If it already exists, clean out the entire folder and then make a new one
+                shutil.rmtree(worker_batch_folder)
+            os.makedirs(worker_batch_folder)
             self.output_folders.append(worker_batch_folder)
 
             # Create the command for this batch worker
@@ -114,13 +116,13 @@ class ParallelWorkerManager:
                 # Probably the file doesn't exist and the job failed?
                 traceback.print_exc()
                 if self.retry:
-                    print("Rerunning locally -- could not load pickle files %s" % f)
+                    logging.info("Rerunning locally -- could not load pickle files %s" % f)
                     # Now let's try to recover by running the worker
                     res = [w.run(self.shared_obj) for w in self.batched_workers[i]]
 
             for j, r in enumerate(res):
                 if r is None:
-                    print("WARNING: batch submission manager, worker failed %s" % self.batched_workers[i][j].name)
+                    logging.info("WARNING: batch submission manager, worker failed %s" % self.batched_workers[i][j].name)
                     worker_results.append(None)
                 else:
                     worker_results.append(r)
@@ -169,7 +171,9 @@ class SubprocessManager(ParallelWorkerManager):
         self.worker_folder = worker_folder
         self.num_processes = num_processes
         self.shared_obj = shared_obj
+
         self.create_batch_worker_cmds(worker_list, len(worker_list))
+
         self.batch_system = "subprocess"
 
     def run(self, successful_only=False, sleep=0.01):
