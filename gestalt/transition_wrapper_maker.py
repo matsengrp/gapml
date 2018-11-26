@@ -112,7 +112,7 @@ class TransitionWrapperMaker:
                 states_too_many = True
                 max_extra_steps = self.max_extra_steps
                 while states_too_many and max_extra_steps >= 0:
-                    close_target_tract_tuples = self.get_states_close_by_better(
+                    close_target_tract_tuples = self.get_states_close_by(
                             max_required_steps + max_extra_steps,
                             min_required_steps,
                             parent_target_tract_tuples,
@@ -144,95 +144,6 @@ class TransitionWrapperMaker:
         return transition_matrix_states
 
     def get_states_close_by(
-            self,
-            max_steps: int,
-            min_steps_to_sg: int,
-            parent_target_tract_tuples: List[TargetTractTuple],
-            anc_state: AncState,
-            requested_target_status: TargetStatus):
-        """
-        @param parent_statuses: the parent target statuses
-        @param targ_stat_transitions_dict: dictionary specifying all possible transitions between target statuses
-        @param targ_stat_inv_transitions_dict: dictionary specifying all possible inverse/backwards transitions between target statuses
-        @param end_target_status: the ending target status
-        @param anc_state: AncState for specifying the possible ancestral states of this node
-        @param requred_target_status: we want target tract tuples that are close to this target status
-
-        TODO: this code is really inefficient and slow but it works for now
-
-        @return List[TargetTractTuples] -- target tract tuples within max_steps of
-        """
-        if max_steps == 0:
-            # special case: there are no steps we are allowed to take.
-            # then the only possible state is exactly the state of the node
-            # this should really only happen for nodes with no events or leaf nodes
-            assert all([indel_set.__class__ == SingletonWC for indel_set in anc_state.indel_set_list])
-            no_step_max_state = [sg.get_target_tract() for sg in anc_state.get_singleton_wcs()]
-            return [TargetTractTuple(*no_step_max_state)]
-
-        # map each target tract tuple to a Dict. Dict maps distance to paths of that distance to reach that target tract tuple
-        dist_to_start_dict = {p: {0: [[p]]} for p in parent_target_tract_tuples}
-        # Maps distance to nodes that we can reach in exactly that distance
-        dist_to_states_dict = {0: [p for p in parent_target_tract_tuples]}
-        max_targets = set(anc_state.to_max_target_status().get_inactive_targets(self.bcode_meta))
-        # Keep track of the latest states visited
-        states_to_explore = set(parent_target_tract_tuples)
-        # Find all paths of at most max_steps long where paths are all possible according to `anc_state`
-        for i in range(max_steps):
-            dist_to_states_dict[i + 1] = []
-            new_states = set()
-            for state in states_to_explore:
-                targ_stat = TargetStatus.from_target_tract_tuple(state)
-                active_any_targs = list(sorted(list(
-                    max_targets - set(targ_stat.get_inactive_targets(self.bcode_meta)))))
-                possible_targ_tracts = targ_stat.get_possible_target_tracts(
-                        self.bcode_meta,
-                        active_any_targs=active_any_targs)
-
-                for possible_tt in possible_targ_tracts:
-                    new_state = TargetTractTuple.merge([state, (possible_tt,)])
-                    if not anc_state.is_possible(new_state):
-                        continue
-
-                    # If this is first time we reached this state or this is one of the shortest paths to reach this state
-                    if new_state not in dist_to_start_dict:
-                        dist_to_start_dict[new_state] = {}
-                    if i + 1 not in dist_to_start_dict[new_state]:
-                        dist_to_start_dict[new_state][i + 1] = []
-                    dist_to_start_dict[new_state][i + 1] += [path + [new_state] for path in dist_to_start_dict[state][i]]
-                    dist_to_states_dict[i + 1].append(new_state)
-                    new_states.add(new_state)
-            states_to_explore = new_states
-
-        # Pick out states along paths that reach the minimal target status
-        # of all possible max parsimony ancestral states within the specified `max_steps`
-        sg_max_inactive_targs = requested_target_status.get_inactive_targets(self.bcode_meta)
-        # This is the list aggregating all paths
-        close_states = []
-        # This just keeps track of paths we have added already -- for code speedup
-        added_paths = set()
-        for num_steps in np.arange(max_steps, min_steps_to_sg - 1, step=-1):
-            if num_steps not in dist_to_states_dict:
-                continue
-
-            for state in dist_to_states_dict[num_steps]:
-                if (state, num_steps) in added_paths:
-                    continue
-
-                added_paths.add((state, num_steps))
-                for path in dist_to_start_dict[state][num_steps]:
-                    # Only need to start looking after `min_steps_to_sg` since we know this is the miin
-                    # number of steps needed. Just for efficiency
-                    for path_state in path[min_steps_to_sg:]:
-                        path_targ_stat = TargetStatus.from_target_tract_tuple(path_state)
-                        path_inactive_targs = path_targ_stat.get_inactive_targets(self.bcode_meta)
-                        if set(sg_max_inactive_targs) <= set(path_inactive_targs):
-                            close_states += path
-                            break
-        assert len(close_states) > 0
-        return list(set(close_states))
-
-    def get_states_close_by_better(
             self,
             max_steps: int,
             min_steps_to_sg: int,
