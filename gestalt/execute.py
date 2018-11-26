@@ -21,8 +21,9 @@ sbatch_prelude = """#!/bin/bash
 cd /home/jfeng2/gestaltamania/gestalt
 module load python3/3.4.3
 module load Java/1.7.0_15
-source ../venv_beagle_py3/bin/activate
+source ../%s/bin/activate
 """
+virtual_env_options = ["venv_beagle_py3", "venv_beagle_py3_old"]
 
 
 @click.command()
@@ -50,20 +51,20 @@ def cli(clusters, max_tries, target, to_execute_str):
     script_name = 'job.sh'
     script_full_path = os.path.join(execution_dir, script_name)
     sentinel_path = os.path.join(execution_dir, 'sentinel.txt')
-    with open(script_full_path, 'w') as fp:
-        fp.write(sbatch_prelude % (execution_dir, execution_dir))
-        fp.write(to_execute_str + '\n')
-        fp.write('touch %s\n' % sentinel_path)
+    for venv_option in virtual_env_options:
+        with open(script_full_path, 'w') as fp:
+            fp.write(sbatch_prelude % (execution_dir, execution_dir, venv_option))
+            fp.write(to_execute_str + '\n')
+            fp.write('touch %s\n' % sentinel_path)
 
-    # Clean up old job log files if they exist
-    scratch_job_files = [
-        os.path.join(execution_dir, "job.err"),
-        os.path.join(execution_dir, "job.out")]
-    for scratch_file in scratch_job_files:
-        if os.path.exists(scratch_file):
-            os.remove(scratch_file)
+        # Clean up old job log files if they exist
+        scratch_job_files = [
+            os.path.join(execution_dir, "job.err"),
+            os.path.join(execution_dir, "job.out")]
+        for scratch_file in scratch_job_files:
+            if os.path.exists(scratch_file):
+                os.remove(scratch_file)
 
-    for _ in range(max_tries):
         out = subprocess.check_output(
                 'sbatch --clusters %s %s' % (clusters, script_full_path),
                 shell=True)
@@ -86,7 +87,7 @@ def cli(clusters, max_tries, target, to_execute_str):
         else:
             # Wait 1000 seconds and hope we can get hold of a new machine
             print("Sadness. Waiting before we resubmit...")
-            time.sleep(1000)
+            time.sleep(10)
 
     return int(do_retry)
 

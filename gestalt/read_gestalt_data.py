@@ -176,6 +176,19 @@ def process_observed_seq_format7B(
         else:
             non_clashing_events.append(evt)
 
+    # Make sure the right trim length for the right-most target is not too long
+    if len(non_clashing_events):
+        last_evt = non_clashing_events[-1]
+        if last_evt.max_target == bcode_meta.n_targets - 1:
+            if last_evt.del_end > bcode_meta.orig_length:
+                logging.info("last event overflow! shorten trim length!")
+                non_clashing_events[-1] = Event(
+                    last_evt.start_pos,
+                    bcode_meta.orig_length - last_evt.start_pos,
+                    last_evt.min_target,
+                    last_evt.max_target,
+                    last_evt.insert_str)
+
     #print("allelle", non_clashing_events)
     obs = ObservedAlignedSeq(
             None,
@@ -422,8 +435,15 @@ def main():
             else:
                 evt_to_obs[evt].append(anc_state)
     for obs in obs_leaves:
-        for evt in obs.allele_events_list[0].events:
-            evt.get_trim_lens(bcode_meta)
+        try:
+            for evt in obs.allele_events_list[0].events:
+                evt.get_trim_lens(bcode_meta)
+        except AssertionError as e:
+            print(e)
+            print(obs.allele_events_list[0])
+            print(bcode_meta.right_max_trim)
+            for evt in obs.allele_events_list[0].events:
+                print(evt.get_trim_lens(bcode_meta))
         anc_state = AncState.create_for_observed_allele(obs.allele_events_list[0], bcode_meta)
         for i, evt in enumerate(anc_state.indel_set_list):
             if i == 0:
