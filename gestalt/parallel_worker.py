@@ -112,13 +112,17 @@ class ParallelWorkerManager:
             try:
                 with open(f, "rb") as output_f:
                     res = six.moves.cPickle.load(output_f)
-            except Exception as e:
+            except (Exception, FileNotFoundError):
                 # Probably the file doesn't exist and the job failed?
                 traceback.print_exc()
                 if self.retry:
                     logging.info("Rerunning locally -- could not load pickle files %s" % f)
-                    # Now let's try to recover by running the worker
                     res = [w.run(self.shared_obj) for w in self.batched_workers[i]]
+                else:
+                    res = [None] * len(self.batched_workers[i])
+
+            if res is None:
+                res = [None] * len(self.batched_workers[i])
 
             for j, r in enumerate(res):
                 if r is None:

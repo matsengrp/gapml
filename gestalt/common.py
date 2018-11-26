@@ -36,7 +36,7 @@ def save_data(data, out_file: str):
         six.moves.cPickle.dump(data, f, protocol = 2)
 
 def get_randint():
-    return np.random.randint(low=0, high=10000)
+    return np.random.randint(low=0, high=10000000)
 
 def create_directory(file_name):
     dir_path = os.path.dirname(file_name)

@@ -64,7 +64,7 @@ class TransitionWrapperMaker:
             tree: CellLineageTree,
             bcode_metadata: BarcodeMetadata,
             max_extra_steps: int = 1,
-            max_sum_states: int = None):
+            max_sum_states: int = 3000):
         """
         @param tree: the tree to create transition wrappers for
         @param max_extra_steps: number of extra steps to search for possible ancestral states
@@ -111,6 +111,8 @@ class TransitionWrapperMaker:
 
                 states_too_many = True
                 max_extra_steps = self.max_extra_steps
+                if self.max_sum_states is not None:
+                    max_extra_steps = self.max_extra_steps if np.power(2, min_required_steps) <= self.max_sum_states else self.max_extra_steps - 1
                 while states_too_many and max_extra_steps >= 0:
                     close_target_tract_tuples = self.get_states_close_by(
                             max_required_steps + max_extra_steps,
@@ -126,10 +128,12 @@ class TransitionWrapperMaker:
                         node.is_leaf())
 
                     states_too_many = self.max_sum_states is not None and len(transition_wrap.states) > self.max_sum_states
-                    if states_too_many:
-                        logging.info("=== many-state-node %s %d", anc_state, len(transition_wrap.states))
-                        logging.info("=== parent-many-state-node %s", up_anc_state)
-                        max_extra_steps -= 1
+                    #if states_too_many:
+                    logging.info("=== many-state-node %s %d", anc_state, len(transition_wrap.states))
+                    for tt in transition_wrap.target_tract_tuples:
+                        logging.info(tt)
+                    logging.info("=== parent-many-state-node %s", up_anc_state)
+                    max_extra_steps -= 1
 
                 logging.info(
                     "Subsampling states for node %d, parent # states %d, node # subsampled states %d, (node target tract tuples %d)",
@@ -162,6 +166,7 @@ class TransitionWrapperMaker:
 
         @return List[TargetTractTuples] -- target tract tuples within max_steps of
         """
+        logging.info("max steps %d", max_steps)
         if max_steps == 0:
             # special case: there are no steps we are allowed to take.
             # then the only possible state is exactly the state of the node
@@ -182,7 +187,8 @@ class TransitionWrapperMaker:
             parent_passed_requested = set(sg_max_inactive_targs) <= set(parent_inactive_targs)
             parent_state = (p, parent_passed_requested)
             state_queue.put((0, parent_state))
-            state_to_parents_dict[parent_state] = []
+            state_to_parents_dict[parent_state] = {}
+            state_to_parents_dict[parent_state][0] = set()
 
         max_targets = set(anc_state.to_max_target_status().get_inactive_targets(self.bcode_meta))
         # Find all paths of at most max_steps long where paths are all possible according to `anc_state`
@@ -210,28 +216,31 @@ class TransitionWrapperMaker:
                     new_state_passed_requested = set(sg_max_inactive_targs) <= set(new_state_inactive_targs)
                 child_state = (new_state, new_state_passed_requested)
                 state_queue.put((dist + 1, child_state))
+
                 if child_state not in state_to_parents_dict:
-                    state_to_parents_dict[child_state] = []
-                state_to_parents_dict[child_state].append((state, state_passed_requested))
+                    state_to_parents_dict[child_state] = {}
+                if dist + 1 not in state_to_parents_dict[child_state]:
+                    state_to_parents_dict[child_state][dist + 1] = set()
+                state_to_parents_dict[child_state][dist + 1].add(
+                        (state, state_passed_requested))
 
         # Backtracking to get the states along paths of less than max_steps that passed thru a requested state
         close_states = set()
-        for state, parents in state_to_parents_dict.items():
+        for state, state_to_par_step_ct_dict in state_to_parents_dict.items():
             passed_requested = state[1]
             if not passed_requested:
                 continue
-            if state in close_states:
-                continue
 
-            ancestor_queue = Queue()
-            ancestor_queue.put((state, max_steps))
-            while not ancestor_queue.empty():
-                ancestor, back_count = ancestor_queue.get_nowait()
-                if (ancestor, back_count) not in close_states:
+            for step_count in state_to_par_step_ct_dict.keys():
+                ancestor_queue = Queue()
+                ancestor_queue.put((state, step_count))
+                while not ancestor_queue.empty():
+                    ancestor, back_count = ancestor_queue.get_nowait()
                     if back_count >= 1:
-                        for anc_parent in state_to_parents_dict[ancestor]:
-                            ancestor_queue.put((anc_parent, back_count - 1))
-                close_states.add((ancestor, back_count))
+                        if (ancestor, back_count) not in close_states and back_count in state_to_parents_dict[ancestor]:
+                            for anc_parent in state_to_parents_dict[ancestor][back_count]:
+                                ancestor_queue.put((anc_parent, back_count - 1))
+                    close_states.add((ancestor, back_count))
 
         assert len(close_states) > 0
         return list(set([state for (state, _), _ in close_states]))

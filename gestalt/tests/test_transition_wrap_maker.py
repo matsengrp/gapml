@@ -93,6 +93,28 @@ class TransitionWrapperMakerTestCase(unittest.TestCase):
         self.assertTrue(TargetStatus(TargetDeactTract(1,1)) in transition_wrap_dict[1][0].states)
         self.assertTrue(TargetStatus(TargetDeactTract(0,1)) in transition_wrap_dict[1][0].states)
 
+    def test_transition_intertarg_two_things(self):
+        num_barcodes = 1
+        bcode_meta = self._create_bcode(num_barcodes)
+
+        topology = CellLineageTree(allele_events_list = [AlleleEvents(num_targets=self.num_targets)])
+        topology.add_feature("node_id", 0)
+
+        child1 = CellLineageTree(allele_events_list=[AlleleEvents(
+            [Event(30,60,0,2,""), Event(110, 10, 3,3,'')],
+            num_targets=self.num_targets)])
+        topology.add_child(child1)
+        child1.add_feature("node_id", 1)
+
+        # allow no steps
+        trans_wrap_maker = TransitionWrapperMaker(topology, bcode_meta, max_extra_steps=0)
+        transition_wrap_dict = trans_wrap_maker.create_transition_wrappers()
+        self.assertEqual(len(transition_wrap_dict[0]), num_barcodes)
+        self.assertEqual(transition_wrap_dict[0][0].states, [TargetStatus()])
+        self.assertTrue(TargetStatus() in transition_wrap_dict[1][0].states)
+        self.assertTrue(TargetStatus(TargetDeactTract(0,2)) in transition_wrap_dict[1][0].states)
+        self.assertEqual(len(transition_wrap_dict[1][0].states), 4)
+
     def test_transition_long_intertarget(self):
         num_barcodes = 1
         bcode_meta = self._create_bcode(num_barcodes)
@@ -300,3 +322,37 @@ class TransitionWrapperMakerTestCase(unittest.TestCase):
         self.assertEqual(len(transition_wrap_dict[3][0].states), 2)
         self.assertTrue(TargetStatus(TargetDeactTract(1,1)) in transition_wrap_dict[3][0].states)
         self.assertEqual(len(transition_wrap_dict[3][0].target_tract_tuples), 2)
+
+    def test_transition_start_middle(self):
+        num_barcodes = 1
+        bcode_meta = self._create_bcode(num_barcodes)
+
+        topology0 = CellLineageTree(allele_events_list=[AlleleEvents([], num_targets=self.num_targets)])
+        topology0.add_feature("node_id", 0)
+
+        topology = CellLineageTree(allele_events_list=[AlleleEvents([], num_targets=self.num_targets)])
+        topology.add_feature("node_id", 1)
+        topology0.add_child(topology)
+
+        child1 = CellLineageTree(allele_events_list=[AlleleEvents(
+            [Event(20,6,0,0,""),Event(40,5,1,1,""),Event(110, 10, 3,3,'')],
+            num_targets=self.num_targets)])
+        topology.add_child(child1)
+        child1.add_feature("node_id", 2)
+
+        child2 = CellLineageTree(allele_events_list=[AlleleEvents(
+            [Event(40,5,1,1,"")],
+            num_targets=self.num_targets)])
+        child2.add_feature("node_id", 3)
+        topology.add_child(child2)
+
+        # allow no steps
+        trans_wrap_maker = TransitionWrapperMaker(topology0, bcode_meta, max_extra_steps=0)
+        transition_wrap_dict = trans_wrap_maker.create_transition_wrappers()
+
+        self.assertEqual(len(transition_wrap_dict[0]), num_barcodes)
+        self.assertEqual(transition_wrap_dict[0][0].states, [TargetStatus()])
+        self.assertTrue(TargetStatus() in transition_wrap_dict[1][0].states)
+        self.assertEqual(len(transition_wrap_dict[1][0].states), 2)
+        self.assertEqual(len(transition_wrap_dict[2][0].states), 4)
+        self.assertEqual(len(transition_wrap_dict[3][0].states), 1)

@@ -6,6 +6,7 @@ import time
 import sys
 import os
 from subprocess import check_output, Popen
+import logging
 
 class CustomCommand:
     def __init__(self, cmd_str, outfname, logdir, env, threads=None):
@@ -71,14 +72,12 @@ def run_cmd(cmdfo, batch_system=None, batch_options=None):
         os.makedirs(cmdfo.logdir)
 
     if fout is not None and ferr is not None:
-        fout_f = open(fout, 'w')
-        ferr_f = open(ferr, 'w')
-        proc = Popen(cmd_str.split(),
+        with open(fout, "w") as fout_f:
+            with open(ferr, "w") as ferr_f:
+                proc = Popen(cmd_str.split(),
                      stdout=fout_f,
                      stderr=ferr_f,
                      env=cmdfo.env)
-        fout_f.close()
-        ferr_f.close()
     else:
         proc = Popen(cmd_str.split(),
                      stdout=None,
@@ -121,6 +120,7 @@ def finish_process(iproc, procs, n_tries, cmdfo, batch_system=None, batch_option
     Deal with a process once it's finished (i.e. check if it failed, and restart if so)
     """
     procs[iproc].communicate() # send data to stdin, read data from stdout and stderr, wait for process to terminate
+    logging.info("finish_process return code %d, cmd %s", procs[iproc].returncode, cmdfo.cmd_str)
     if procs[iproc].returncode == 0:
         if os.path.exists(cmdfo.outfname):
             process_out_err('', '', extra_str='' if len(procs) == 1 else str(iproc), logdir=cmdfo.logdir, debug=debug)
