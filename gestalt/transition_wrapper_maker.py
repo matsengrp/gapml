@@ -3,6 +3,7 @@ import random
 import logging
 import numpy as np
 import time
+from queue import Queue, PriorityQueue
 
 from anc_state import AncState
 from cell_lineage_tree import CellLineageTree
@@ -111,7 +112,7 @@ class TransitionWrapperMaker:
                 states_too_many = True
                 max_extra_steps = self.max_extra_steps
                 while states_too_many and max_extra_steps >= 0:
-                    close_target_tract_tuples = self.get_states_close_by(
+                    close_target_tract_tuples = self.get_states_close_by_better(
                             max_required_steps + max_extra_steps,
                             min_required_steps,
                             parent_target_tract_tuples,
@@ -230,3 +231,96 @@ class TransitionWrapperMaker:
                             break
         assert len(close_states) > 0
         return list(set(close_states))
+
+    def get_states_close_by_better(
+            self,
+            max_steps: int,
+            min_steps_to_sg: int,
+            parent_target_tract_tuples: List[TargetTractTuple],
+            anc_state: AncState,
+            requested_target_status: TargetStatus):
+        """
+        @param parent_statuses: the parent target statuses
+        @param targ_stat_transitions_dict: dictionary specifying all possible transitions between target statuses
+        @param targ_stat_inv_transitions_dict: dictionary specifying all possible inverse/backwards transitions between target statuses
+        @param end_target_status: the ending target status
+        @param anc_state: AncState for specifying the possible ancestral states of this node
+        @param requred_target_status: we want target tract tuples that are close to this target status
+
+        TODO: this code is really inefficient and slow but it works for now
+
+        @return List[TargetTractTuples] -- target tract tuples within max_steps of
+        """
+        if max_steps == 0:
+            # special case: there are no steps we are allowed to take.
+            # then the only possible state is exactly the state of the node
+            # this should really only happen for nodes with no events or leaf nodes
+            assert all([indel_set.__class__ == SingletonWC for indel_set in anc_state.indel_set_list])
+            no_step_max_state = [sg.get_target_tract() for sg in anc_state.get_singleton_wcs()]
+            return [TargetTractTuple(*no_step_max_state)]
+
+        # Pick out states along paths that reach the minimal target status
+        # of all possible max parsimony ancestral states within the specified `max_steps`
+        sg_max_inactive_targs = requested_target_status.get_inactive_targets(self.bcode_meta)
+        # Maps distance to nodes that we can reach in exactly that distance
+        state_to_parents_dict = {}
+        state_queue = PriorityQueue()
+        for p in parent_target_tract_tuples:
+            parent_targ_stat = TargetStatus.from_target_tract_tuple(p)
+            parent_inactive_targs = parent_targ_stat.get_inactive_targets(self.bcode_meta)
+            parent_passed_requested = set(sg_max_inactive_targs) <= set(parent_inactive_targs)
+            parent_state = (p, parent_passed_requested)
+            state_queue.put((0, parent_state))
+            state_to_parents_dict[parent_state] = []
+
+        max_targets = set(anc_state.to_max_target_status().get_inactive_targets(self.bcode_meta))
+        # Find all paths of at most max_steps long where paths are all possible according to `anc_state`
+        while not state_queue.empty():
+            dist, (state, state_passed_requested) = state_queue.get_nowait()
+            if dist >= max_steps:
+                continue
+
+            targ_stat = TargetStatus.from_target_tract_tuple(state)
+            active_any_targs = list(sorted(list(
+                max_targets - set(targ_stat.get_inactive_targets(self.bcode_meta)))))
+            possible_targ_tracts = targ_stat.get_possible_target_tracts(
+                    self.bcode_meta,
+                    active_any_targs=active_any_targs)
+
+            for possible_tt in possible_targ_tracts:
+                new_state = TargetTractTuple.merge([state, (possible_tt,)])
+                if not anc_state.is_possible(new_state):
+                    continue
+
+                new_state_passed_requested = state_passed_requested
+                if not state_passed_requested:
+                    new_state_targ_stat = TargetStatus.from_target_tract_tuple(new_state)
+                    new_state_inactive_targs = new_state_targ_stat.get_inactive_targets(self.bcode_meta)
+                    new_state_passed_requested = set(sg_max_inactive_targs) <= set(new_state_inactive_targs)
+                child_state = (new_state, new_state_passed_requested)
+                state_queue.put((dist + 1, child_state))
+                if child_state not in state_to_parents_dict:
+                    state_to_parents_dict[child_state] = []
+                state_to_parents_dict[child_state].append((state, state_passed_requested))
+
+        # Backtracking to get the states along paths of less than max_steps that passed thru a requested state
+        close_states = set()
+        for state, parents in state_to_parents_dict.items():
+            passed_requested = state[1]
+            if not passed_requested:
+                continue
+            if state in close_states:
+                continue
+
+            ancestor_queue = Queue()
+            ancestor_queue.put((state, max_steps))
+            while not ancestor_queue.empty():
+                ancestor, back_count = ancestor_queue.get_nowait()
+                if (ancestor, back_count) not in close_states:
+                    if back_count >= 1:
+                        for anc_parent in state_to_parents_dict[ancestor]:
+                            ancestor_queue.put((anc_parent, back_count - 1))
+                close_states.add((ancestor, back_count))
+
+        assert len(close_states) > 0
+        return list(set([state for (state, _), _ in close_states]))
