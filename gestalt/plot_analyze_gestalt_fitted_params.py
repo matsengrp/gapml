@@ -25,10 +25,7 @@ def parse_args(args):
     parser.add_argument(
         '--fishies',
         type=str,
-        default="ADR1,ADR2")
-        #default="30hpf_v6_5,30hpf_v6_6,30hpf_v6_7,30hpf_v6_8")
-        #default="dome1,dome3,dome8")
-        #default="3day1,3day2,3day3,3day4,3day5")
+        default="ADR1,ADR2,dome1,30hpf_v6_5,3day1")
     parser.set_defaults()
     args = parser.parse_args(args)
     args.fishies = parse_comma_str(args.fishies, str)
@@ -45,12 +42,20 @@ def load_ADR_fish_params(fish):
 
     return params, obs_dict
 
+def get_insert_length_mean(all_model_params):
+    # TODO: take into account the inflation and stuff...
+    return -1
+
+def get_insert_length_sd(all_model_params):
+    # TODO: take into account the inflation and stuff...
+    return -1
+
 def get_long_trim_length_mean(all_model_params, is_left):
     # TODO: take into account the inflation and stuff...
     start_idx = 0 if is_left else 2
     count = np.exp(all_model_params["trim_long_params"][start_idx + 0])
     prob = sigmoid(all_model_params["trim_long_params"][start_idx + 1])
-    return count * prob/(1 - prob)
+    return count * (1 - prob)/prob
 
 def get_long_trim_length_sd(all_model_params, is_left):
     # TODO: take into account the inflation and stuff...
@@ -62,7 +67,7 @@ def get_short_trim_length_mean(all_model_params, is_left):
     start_idx = 0 if is_left else 2
     count = np.exp(all_model_params["trim_short_params"][start_idx + 0])
     prob = sigmoid(all_model_params["trim_short_params"][start_idx + 1])
-    return count * prob/(1 - prob)
+    return count * (1 - prob)/prob
 
 def get_short_trim_length_sd(all_model_params, is_left):
     # TODO: take into account the inflation and stuff...
@@ -106,10 +111,11 @@ def main(args=sys.argv[1:]):
         fish_param_dict["Left long trim length SD"] = get_long_trim_length_sd(all_model_params, is_left=True)
         fish_param_dict["Right long trim length mean"] = get_long_trim_length_mean(all_model_params, is_left=False)
         fish_param_dict["Right long trim length SD"] = get_long_trim_length_sd(all_model_params, is_left=False)
+        fish_param_dict["Insertion length mean"] = get_insert_length_mean(all_model_params)
+        fish_param_dict["Insertion length SD"] = get_insert_length_sd(all_model_params)
         fish_param_dicts.append(fish_param_dict)
 
     df = pd.DataFrame(fish_param_dicts, index=args.fishies)
-    print(df)
     print(df.transpose().to_latex(float_format=lambda x: '%.3f' % x))
 
 if __name__ == "__main__":
