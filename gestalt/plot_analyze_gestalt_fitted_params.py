@@ -4,6 +4,7 @@ import argparse
 import os.path
 import numpy as np
 import pandas as pd
+from scipy.stats import nbinom
 
 from common import parse_comma_str, sigmoid
 
@@ -42,20 +43,30 @@ def load_ADR_fish_params(fish):
 
     return params, obs_dict
 
-def get_insert_length_mean(all_model_params):
+def get_insert_zero_prob(all_model_params):
     # TODO: take into account the inflation and stuff...
     return -1
 
+def get_insert_length_mean(all_model_params):
+    count = np.exp(all_model_params["insert_params"][0])
+    prob = sigmoid(all_model_params["insert_params"][1])
+    insert_dist = nbinom(count, 1 - prob)
+    return insert_dist.mean() + 1
+
 def get_insert_length_sd(all_model_params):
-    # TODO: take into account the inflation and stuff...
-    return -1
+    count = np.exp(all_model_params["insert_params"][0])
+    prob = sigmoid(all_model_params["insert_params"][1])
+    insert_dist = nbinom(count, 1 - prob)
+    return insert_dist.std()
 
 def get_long_trim_length_mean(all_model_params, is_left):
     # TODO: take into account the inflation and stuff...
     start_idx = 0 if is_left else 2
     count = np.exp(all_model_params["trim_long_params"][start_idx + 0])
     prob = sigmoid(all_model_params["trim_long_params"][start_idx + 1])
-    return count * (1 - prob)/prob
+    print(count)
+    print(prob)
+    return count * prob/(1 - prob)
 
 def get_long_trim_length_sd(all_model_params, is_left):
     # TODO: take into account the inflation and stuff...
@@ -67,7 +78,9 @@ def get_short_trim_length_mean(all_model_params, is_left):
     start_idx = 0 if is_left else 2
     count = np.exp(all_model_params["trim_short_params"][start_idx + 0])
     prob = sigmoid(all_model_params["trim_short_params"][start_idx + 1])
-    return count * (1 - prob)/prob
+    print("coun", count, "prob", prob)
+    trim_dist = nbinom(count, 1 - prob)
+    return trim_dist.mean() + 1
 
 def get_short_trim_length_sd(all_model_params, is_left):
     # TODO: take into account the inflation and stuff...
@@ -111,6 +124,7 @@ def main(args=sys.argv[1:]):
         fish_param_dict["Left long trim length SD"] = get_long_trim_length_sd(all_model_params, is_left=True)
         fish_param_dict["Right long trim length mean"] = get_long_trim_length_mean(all_model_params, is_left=False)
         fish_param_dict["Right long trim length SD"] = get_long_trim_length_sd(all_model_params, is_left=False)
+        fish_param_dict["Insertion zero prob"] = get_insert_zero_prob(all_model_params)
         fish_param_dict["Insertion length mean"] = get_insert_length_mean(all_model_params)
         fish_param_dict["Insertion length SD"] = get_insert_length_sd(all_model_params)
         fish_param_dicts.append(fish_param_dict)
