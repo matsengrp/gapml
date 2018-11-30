@@ -1,4 +1,5 @@
 import sys
+import random
 import matplotlib
 matplotlib.use('Agg')
 import os.path
@@ -106,7 +107,7 @@ def create_distance_matrix(fitted_bifurc_tree, organ_dict, allele_to_cell_state)
     sym_X_matrix = (X_matrix + X_matrix.T)/2
     return X_matrix, sym_X_matrix
 
-def plot_distance_matrix(sym_X_matrix, out_plot_file):
+def plot_distance_matrix(sym_X_matrix, out_plot_file, vrange = [0.2, 0.8]):
     for i in range(sym_X_matrix.shape[0]):
         sym_X_matrix[i,i] = 10000000000
     sym_X_matrix = np.floor(sym_X_matrix * 100)/100
@@ -119,8 +120,6 @@ def plot_distance_matrix(sym_X_matrix, out_plot_file):
     plt.clf()
     mask = np.zeros(sym_X_matrix.shape, dtype=bool)
     mask[np.triu_indices(sym_X_matrix.shape[0], k=0)] = True
-    VMAX = 0.8
-    VMIN = 0.2
     #print(np.min(sym_X_matrix[np.triu_indices(sym_X_matrix.shape[0], k=1)]))
     #assert np.max(sym_X_matrix) < VMAX
     sns.heatmap(sym_X_matrix,
@@ -129,22 +128,16 @@ def plot_distance_matrix(sym_X_matrix, out_plot_file):
             mask=mask,
             #annot=np.array(annot_mat),
             #fmt='',
-            vmin=VMIN,
-            vmax=VMAX)
+            vmin=vrange[0],
+            vmax=vrange[1])
     plt.savefig(out_plot_file, transparent=True, bbox_inches='tight')
     print("matrix PLOT", out_plot_file)
 
 def load_fish(fish, method, folder=None, get_first=False):
-    if fish == "ADR1":
-        obs_file = "analyze_gestalt/_output/ADR1_abund5/fish_data_restrict.pkl"
-    elif fish == "ADR2":
-        obs_file = "analyze_gestalt/_output/ADR2_abund1/fish_data_restrict_with_cell_types.pkl"
+    obs_file = "analyze_gestalt/_output/%s/sampling_seed0/fish_data_restrict.pkl" % fish
 
     if method == "PMLE":
-        if fish == "ADR1":
-            fitted_tree_file = "analyze_gestalt/_output/ADR1_abund5/sum_states_10/extra_steps_0/tune_pen_hanging.pkl"
-        elif fish == "ADR2":
-            fitted_tree_file = "analyze_gestalt/_output/ADR2_abund1/sum_states_10/extra_steps_0/tune_pen_hanging.pkl"
+        fitted_tree_file = "analyze_gestalt/_output/%s/sampling_seed0/sum_states_25/extra_steps_1/tune_pen_hanging.pkl" % fish
         if folder is not None:
             fitted_tree_file = os.path.join(folder, fitted_tree_file)
         with open(fitted_tree_file, "rb") as f:
@@ -159,19 +152,21 @@ def load_fish(fish, method, folder=None, get_first=False):
                         break
 
     elif method == "chronos":
-        if fish == "ADR1":
-            fitted_tree_file = "analyze_gestalt/_output/ADR1_abund5/chronos_fitted.pkl"
-        elif fish == "ADR2":
-            fitted_tree_file = "analyze_gestalt/_output/ADR2_abund1/chronos_fitted.pkl"
+        fitted_tree_file = "analyze_gestalt/_output/%s/sampling_seed0/chronos_fitted.pkl" % fish
+        #if fish == "ADR1":
+        #    fitted_tree_file = "analyze_gestalt/_output/ADR1_abund5/chronos_fitted.pkl"
+        #elif fish == "ADR2":
+        #    fitted_tree_file = "analyze_gestalt/_output/ADR2_abund1/chronos_fitted.pkl"
         if folder is not None:
             fitted_tree_file = os.path.join(folder, fitted_tree_file)
         with open(fitted_tree_file, "rb") as f:
             fitted_bifurc_tree = six.moves.cPickle.load(f)[0]["fitted_tree"]
     elif method == "nj":
-        if fish == "ADR1":
-            fitted_tree_file = "analyze_gestalt/_output/ADR1_abund5/nj_fitted.pkl"
-        elif fish == "ADR2":
-            fitted_tree_file = "analyze_gestalt/_output/ADR2_abund1/nj_fitted.pkl"
+        fitted_tree_file = "analyze_gestalt/_output/%s/sampling_seed0/nj_fitted.pkl" % fish
+        #if fish == "ADR1":
+        #    fitted_tree_file = "analyze_gestalt/_output/ADR1_abund5/nj_fitted.pkl"
+        #elif fish == "ADR2":
+        #    fitted_tree_file = "analyze_gestalt/_output/ADR2_abund1/nj_fitted.pkl"
         if folder is not None:
             fitted_tree_file = os.path.join(folder, fitted_tree_file)
         with open(fitted_tree_file, "rb") as f:
@@ -221,30 +216,42 @@ def create_shuffled_cell_state_abund_labels(allele_to_cell_state):
 
 def main(args=sys.argv[1:]):
     num_rand_permute = 2000
+    random.seed(0)
+    np.random.seed(0)
     fishies = ["ADR1", "ADR2"]
     methods = ["PMLE", "chronos", "nj"]
+    method_plotting_values = {
+            "PMLE": [0.2, 0.8],
+            "chronos": [0, 0.6],
+            "nj": [0, 0.35],
+    }
+    null_method = "chronos"
     for method in methods:
         sym_X_matrices = []
         random_permute_X_matrices = [[],[]]
         for fish_idx, fish in enumerate(fishies):
+            print("FISH", fish)
+            null_tree, _ = load_fish(fish, null_method)
+            null_tree.label_dist_to_roots()
+
             tree, obs_dict = load_fish(fish, method)
             tree.label_dist_to_roots()
             organ_dict = obs_dict["organ_dict"]
             allele_to_cell_state, _ = get_allele_to_cell_states(obs_dict)
             _, sym_X_matrix = create_distance_matrix(tree, organ_dict, allele_to_cell_state)
             out_plot_file = "_output/sym_heat_%s_%s.png" % (fish, method)
-            plot_distance_matrix(sym_X_matrix, out_plot_file)
+            plot_distance_matrix(sym_X_matrix, out_plot_file, method_plotting_values[method])
             sym_X_matrices.append(sym_X_matrix)
 
             # Now compare against the "null distribution" where the cell type and abundance
-            # labels are both shuffled.
+            # labels are both shuffled. The null distribution is shared across all different tree fitting methods
             # In particular, shuffle the cell type labels (keeping them grouped) across the leaves.
             # Then shuffle the abundances within that cell type label group.
             for _ in range(num_rand_permute):
                 allele_to_cell_state_random = create_shuffled_cell_state_abund_labels(allele_to_cell_state)
 
                 _, rand_permut_X_matrix = create_distance_matrix(
-                        tree.copy(),
+                        null_tree.copy(),
                         organ_dict,
                         allele_to_cell_state_random)
                 random_permute_X_matrices[fish_idx].append(rand_permut_X_matrix)
