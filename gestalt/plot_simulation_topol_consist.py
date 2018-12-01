@@ -8,7 +8,7 @@ import matplotlib
 matplotlib.use('Agg')
 import seaborn as sns
 
-from tree_distance import BHVDistanceMeasurer, InternalCorrMeasurer
+from tree_distance import BHVDistanceMeasurer, InternalCorrMeasurer, UnrootRFDistanceMeasurer
 from common import parse_comma_str
 import file_readers
 
@@ -23,7 +23,7 @@ def parse_args(args):
     parser.add_argument(
         '--mle-file-template',
         type=str,
-        default="_output/model_seed%d/%d/%s/num_barcodes%d/sum_states_10/extra_steps_1/tune_fitted.pkl")
+        default="_output/model_seed%d/%d/%s/num_barcodes%d/sum_states_30/extra_steps_2/tune_fitted.pkl")
     parser.add_argument(
         '--chronos-file-template',
         type=str,
@@ -43,7 +43,8 @@ def parse_args(args):
     parser.add_argument(
         '--data-seeds',
         type=str,
-        default=",".join(map(str, range(400,410))))
+        default=",".join(map(str, range(10,14))))
+        #default=",".join(map(str, range(10,11))))
     parser.add_argument(
         '--n-bcodes-list',
         type=str,
@@ -75,7 +76,7 @@ def get_true_model(
         args,
         seed,
         n_bcodes,
-        measurer_classes=[BHVDistanceMeasurer, InternalCorrMeasurer]):
+        measurer_classes=[BHVDistanceMeasurer, InternalCorrMeasurer, UnrootRFDistanceMeasurer]):
     file_name = os.path.join(args.simulation_folder,
             args.true_model_file_template % (
                 args.model_seed,
@@ -144,9 +145,11 @@ def main(args=sys.argv[1:]):
     args = parse_args(args)
     plot_perf_measures = [
             "full_bhv",
-            "collapse_bhv",
             "full_internal_pearson",
-            "collapse_internal_pearson"]
+            "full_ete_rf_unroot",
+            #"collapse_bhv",
+            #"collapse_internal_pearson"
+    ]
     plot_perf_measures_set = set(plot_perf_measures)
 
     all_perfs = []
@@ -157,6 +160,7 @@ def main(args=sys.argv[1:]):
             true_params, assessor = get_true_model(args, seed, n_bcodes)
 
             try:
+                print("mle")
                 mle_params, mle_tree = get_mle_result(args, seed, n_bcodes)
                 mle_perf_dict = assessor.assess(mle_tree, mle_params)
                 for k, v in mle_perf_dict.items():
@@ -172,7 +176,13 @@ def main(args=sys.argv[1:]):
                 print("not found mle", n_bcodes, seed)
 
             try:
-                _, chronos_tree = get_chronos_result(args, seed, n_bcodes, assessor)
+                print("chronos")
+                _, chronos_tree = get_chronos_result(
+                        args,
+                        seed,
+                        n_bcodes,
+                        assessor,
+                        plot_perf_measures[0])
                 chronos_perf_dict = assessor.assess(chronos_tree)
                 for k, v in chronos_perf_dict.items():
                     if k in plot_perf_measures_set:
@@ -187,7 +197,13 @@ def main(args=sys.argv[1:]):
                 print("not found chronos", n_bcodes, seed)
 
             try:
-                _, nj_tree = get_neighbor_joining_result(args, seed, n_bcodes, assessor)
+                print("nj")
+                _, nj_tree = get_neighbor_joining_result(
+                        args,
+                        seed,
+                        n_bcodes,
+                        assessor,
+                        plot_perf_measures[0])
                 nj_perf_dict = assessor.assess(nj_tree)
                 for k, v in nj_perf_dict.items():
                     if k in plot_perf_measures_set:
