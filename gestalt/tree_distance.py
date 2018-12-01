@@ -240,6 +240,7 @@ class TreeDistanceMeasurer:
 class UnrootRFDistanceMeasurer(TreeDistanceMeasurer):
     """
     Robinson foulds distance, unrooted trees
+    Returns the fraction of unshared splits of all possible splits.
     """
     name = "ete_rf_unroot"
 
@@ -250,12 +251,13 @@ class UnrootRFDistanceMeasurer(TreeDistanceMeasurer):
                 attr_t2=self.attr,
                 expand_polytomies=False,
                 unrooted_trees=True)
-        return rf_res[0]
+        return rf_res[0]/float(rf_res[1])
 
 
 class RootRFDistanceMeasurer(TreeDistanceMeasurer):
     """
     Robinson foulds distance, rooted trees
+    Returns the fraction of unshared splits of all possible splits.
     """
     name = "ete_rf_root"
 
@@ -267,7 +269,7 @@ class RootRFDistanceMeasurer(TreeDistanceMeasurer):
                     attr_t2=self.attr,
                     expand_polytomies=False,
                     unrooted_trees=False)
-            return rf_res[0]
+            return rf_res[0]/float(rf_res[1])
         except Exception as err:
             logging.info("cannot get root RF distance: %s", str(err))
             print("cannot get root RF distance: %s", str(err))
