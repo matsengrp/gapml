@@ -11,6 +11,7 @@ from cell_lineage_tree import CellLineageTree
 from matplotlib import pyplot as plt
 from scipy.stats import rankdata
 
+from common import assign_rand_tree_lengths
 
 """
 Create distance matrices between cell types in adult fish 1 and 2
@@ -210,12 +211,16 @@ def create_shuffled_cell_state_abund_labels(allele_to_cell_state):
                 list(orig_leaf_dict.values()),
                 len(orig_leaf_dict),
                 replace=False)
+        #allele_to_cell_state_random[allele_key] = {
+        #    key: val for key, val in zip(orig_leaf_dict.keys(), shuffled_abunds)}
+        random_cell_types = np.random.choice(len(ORGAN_LABELS), size=len(orig_leaf_dict), replace=False)
         allele_to_cell_state_random[allele_key] = {
-            key: val for key, val in zip(orig_leaf_dict.keys(), shuffled_abunds)}
+            str(key): val for key, val in zip(random_cell_types, shuffled_abunds)}
     return allele_to_cell_state_random
 
 def main(args=sys.argv[1:]):
     num_rand_permute = 2000
+    null_method = None
     random.seed(0)
     np.random.seed(0)
     fishies = ["ADR1", "ADR2"]
@@ -225,14 +230,13 @@ def main(args=sys.argv[1:]):
             "chronos": [0, 0.6],
             "nj": [0, 0.35],
     }
-    null_method = "chronos"
     for method in methods:
         sym_X_matrices = []
         random_permute_X_matrices = [[],[]]
         for fish_idx, fish in enumerate(fishies):
             print("FISH", fish)
+            null_method = method if null_method is None else null_method
             null_tree, _ = load_fish(fish, null_method)
-            null_tree.label_dist_to_roots()
 
             tree, obs_dict = load_fish(fish, method)
             tree.label_dist_to_roots()
@@ -249,9 +253,11 @@ def main(args=sys.argv[1:]):
             # Then shuffle the abundances within that cell type label group.
             for _ in range(num_rand_permute):
                 allele_to_cell_state_random = create_shuffled_cell_state_abund_labels(allele_to_cell_state)
+                assign_rand_tree_lengths(null_tree, 1)
+                null_tree.label_dist_to_roots()
 
                 _, rand_permut_X_matrix = create_distance_matrix(
-                        null_tree.copy(),
+                        null_tree,
                         organ_dict,
                         allele_to_cell_state_random)
                 random_permute_X_matrices[fish_idx].append(rand_permut_X_matrix)
