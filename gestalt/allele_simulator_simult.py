@@ -60,13 +60,13 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             self.left_del_dist = self._create_bounded_nbinoms(
                 min_vals = self.bcode_meta.left_long_trim_min,
                 max_vals = self.bcode_meta.left_max_trim,
-                short_params = self.model.trim_short_params_reshaped[0].eval(),
-                long_params = self.model.trim_long_params_reshaped[0].eval())
+                short_params = self.model.trim_short_params_reshaped[0,:].eval(),
+                long_params = self.model.trim_long_params_reshaped[0,:].eval())
             self.right_del_dist = self._create_bounded_nbinoms(
                 min_vals = self.bcode_meta.right_long_trim_min,
                 max_vals = self.bcode_meta.right_max_trim,
-                short_params = self.model.trim_short_params_reshaped[1].eval(),
-                long_params = self.model.trim_long_params_reshaped[1].eval())
+                short_params = self.model.trim_short_params_reshaped[1,:].eval(),
+                long_params = self.model.trim_long_params_reshaped[1,:].eval())
             self.insertion_distribution = nbinom(np.exp(insert_params[0]), 1 - sigmoid(insert_params[1]))
 
     def get_root(self):

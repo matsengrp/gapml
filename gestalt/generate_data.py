@@ -53,6 +53,11 @@ def parse_args():
         default=",".join([".4", ".5", ".1", "0.5", "0.3", "0.6"]),
         help='target cut rates -- will get slightly perturbed for the true value')
     parser.add_argument(
+        '--cut-site',
+        type=int,
+        default=6,
+        help="position from the right-most position of target where the cut site is")
+    parser.add_argument(
         '--target-lam-decay-rate',
         type=float,
         default=0,
@@ -293,7 +298,7 @@ def main(args=sys.argv[1:]):
 
     # Create the barcode in the embryo cell. Use default sequence if ten targets. Otherwise create a new one.
     barcode_orig = BarcodeMetadata.create_fake_barcode_str(args.num_targets) if args.num_targets != NUM_BARCODE_V7_TARGETS else BARCODE_V7
-    bcode_meta = BarcodeMetadata(unedited_barcode = barcode_orig, num_barcodes = args.num_barcodes)
+    bcode_meta = BarcodeMetadata(unedited_barcode = barcode_orig, num_barcodes = args.num_barcodes, cut_site=args.cut_site)
 
     # initialize the target lambdas with some perturbation to ensure we don't have eigenvalues that are exactly equal
     #args.target_lambdas, args.birth_intercept, args.death_lambda = initialize_lambda_rates(args)

@@ -1299,7 +1299,7 @@ class CLTLikelihoodModel:
 
                     # Get the trim probabilities
                     with tf.name_scope("trim_matrix%d" % node.node_id):
-                        trim_probs[child.node_id] = self._create_trim_prob_matrix(child_wrapper)
+                        trim_probs[child.node_id] = self._create_trim_instant_prob_matrix(child_wrapper)
 
                     # Create the probability matrix exp(Qt)
                     with tf.name_scope("expm_ops%d" % node.node_id):
@@ -1308,7 +1308,7 @@ class CLTLikelihoodModel:
                             self.dist_to_root[child.node_id] - self.branch_lens[child.node_id],
                             self.branch_lens[child.node_id])
                         pt_matrix[child.node_id], _, _, Ddiags[child.node_id] = tf_common.myexpm(
-                                tr_mat,
+                                tf.multiply(tr_mat, trim_probs[child.node_id]),
                                 decay_factor)
 
                     # Get the probability for the data descended from the child node, assuming that the node
@@ -1316,7 +1316,7 @@ class CLTLikelihoodModel:
                     # These down probs are ordered according to the child node's numbering of the TTs states
                     with tf.name_scope("recurse%d" % node.node_id):
                         ch_ordered_down_probs = tf.matmul(
-                                tf.multiply(pt_matrix[child.node_id], trim_probs[child.node_id]),
+                                pt_matrix[child.node_id],
                                 Lprob[child.node_id])
 
                     with tf.name_scope("rearrange%d" % node.node_id):
@@ -1458,7 +1458,7 @@ class CLTLikelihoodModel:
         return q_matrix_full
 
     @profile
-    def _create_trim_prob_matrix(self, child_transition_wrapper: TransitionWrapper):
+    def _create_trim_instant_prob_matrix(self, child_transition_wrapper: TransitionWrapper):
         """
         @param transition_wrapper: TransitionWrapper that is associated with a particular branch
 
@@ -1475,23 +1475,33 @@ class CLTLikelihoodModel:
         for sg in child_singletons:
             assert target_to_singleton[sg.min_target] is None
             target_to_singleton[sg.min_target] = sg
+            target_to_singleton[sg.max_target] = sg
 
+        possible_states = set(child_transition_wrapper.states)
         sparse_indices = []
         sparse_vals = []
         for start_target_status in child_transition_wrapper.states:
-            for end_target_status in child_transition_wrapper.states:
+            all_end_states = set(self.targ_stat_transitions_dict[start_target_status].keys())
+            possible_end_states = all_end_states.intersection(possible_states)
+            for end_target_status in possible_end_states:
                 new_deact_targs = end_target_status.minus(start_target_status)
                 singleton_set = set([
                     target_to_singleton[deact_targ] for deact_targ in new_deact_targs
                     if target_to_singleton[deact_targ] is not None])
-                if singleton_set:
-                    start_key = child_transition_wrapper.key_dict[start_target_status]
-                    end_key = child_transition_wrapper.key_dict[end_target_status]
-                    sparse_indices.append([start_key, end_key])
+                start_key = child_transition_wrapper.key_dict[start_target_status]
+                end_key = child_transition_wrapper.key_dict[end_target_status]
+                sparse_indices.append([start_key, end_key])
+                if len(singleton_set) == 1:
                     trim_prob_val = tf.reduce_sum(tf.gather(
                         self.singleton_log_cond_prob,
                         [int(self.singleton_index_dict[sg]) for sg in singleton_set]))
                     sparse_vals.append(trim_prob_val)
+                elif len(singleton_set) > 1:
+                    # Can't possibly introduce the correct indel tract -- need more than one
+                    sparse_vals.append(-np.inf)
+                elif len(singleton_set) == 0:
+                    # This indel tract must be maskdd.
+                    sparse_vals.append(0.0)
 
         output_length = child_transition_wrapper.num_possible_states + 1
         output_shape = [output_length, output_length]
