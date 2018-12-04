@@ -31,14 +31,13 @@ def parse_args(args):
     parser.add_argument(
         '--num-rands',
         type=int,
-        default=10)
+        default=2000)
     parser.add_argument(
         '--fishies',
         type=str,
         #default="ADR1,ADR2")
         #default="30hpf_v6_5,30hpf_v6_6,30hpf_v6_7,30hpf_v6_8")
-        #default="dome1,dome3,dome8,dome10")
-        default="dome1,dome3,dome8")
+        default="dome1,dome3,dome8,dome10")
         #default="3day1,3day2,3day3,3day4,3day5")
     parser.add_argument(
         '--out-plot-file',
@@ -91,7 +90,9 @@ def _get_all_pairwise_correlations(param_vals):
         for idx2_offset, fit_param2 in enumerate(param_vals[idx1:]):
             corr = scipy.stats.spearmanr(fit_param1, fit_param2)[0]
             idx2 = idx1 + idx2_offset
-            all_corrs[idx1][idx2] = corr
+            all_corrs[idx1,idx2] = corr
+            all_corrs[idx2,idx1] = corr
+    print("all_corr", all_corrs)
     return all_corrs
 
 def _get_mean_corr(corr_matrix):
@@ -112,7 +113,6 @@ def _get_summary_bootstrap(all_corrs, num_rands=5, ci_limits=[2.5, 97.5]):
     if num_obs > 2:
         bootstrap_vals = []
         for _ in range(num_rands):
-            print(".")
             sampled_obs = np.random.choice(num_obs, num_obs, replace=True)
             new_corr_matrix = np.zeros((num_obs, num_obs))
             for idx1, i in enumerate(sampled_obs):
