@@ -21,9 +21,9 @@ def parse_args(args):
         type=str,
         default="_output/%s/sampling_seed0/fish_data_restrict.pkl")
     parser.add_argument(
-        '--mle-file-template',
+        '--mle-file-templates',
         type=str,
-        default="_output/%s/sampling_seed0/sum_states_25/extra_steps_1/tune_pen_hanging.pkl")
+        default="_output/%s/sampling_seed0/sum_states_25/extra_steps_1/tune_pen_hanging.pkl,_output/%s/sampling_seed0/sum_states_10/extra_steps_1/tune_pen_hanging.pkl")
     parser.add_argument(
         '--folder',
         type=str,
@@ -35,20 +35,21 @@ def parse_args(args):
     parser.add_argument(
         '--fishies',
         type=str,
-        #default="ADR1,ADR2")
-        #default="30hpf_v6_5,30hpf_v6_6,30hpf_v6_7,30hpf_v6_8")
-        default="dome1,dome3,dome8,dome10")
+        default="ADR1,ADR2")
+        #default="30hpf_v6_3,30hpf_v6_4,30hpf_v6_5,30hpf_v6_6,30hpf_v6_7,30hpf_v6_8")
+        #default="dome1,dome3,dome5,dome8,dome10")
         #default="3day1,3day2,3day3,3day4,3day5")
     parser.add_argument(
         '--out-plot-file',
         type=str,
-        #default="_output/target_lam_compare_ADR.png")
+        default="_output/target_lam_compare_ADR.png")
         #default="_output/target_lam_compare_30hpf.png")
-        default="_output/target_lam_compare_dome.png")
+        #default="_output/target_lam_compare_dome.png")
         #default="_output/target_lam_compare_3day.png")
     parser.set_defaults()
     args = parser.parse_args(args)
     args.fishies = parse_comma_str(args.fishies, str)
+    args.mle_file_templates = parse_comma_str(args.mle_file_templates, str)
     return args
 
 def load_ADR_fish_params(fish):
@@ -77,7 +78,7 @@ def _estimate_targ_rate_simple(obs_data_dict):
             targ_used[evt.min_target] += 1
             targ_used[evt.max_target] += 1
         else:
-            targ_used[evt.min_target] += 1
+            targ_used[evt.min_target] += 2
     return targ_used
 
 def _get_all_pairwise_correlations(param_vals):
@@ -124,7 +125,8 @@ def _get_summary_bootstrap(all_corrs, num_rands=5, ci_limits=[2.5, 97.5]):
         bootstrap_ci = np.percentile(bootstrap_vals, ci_limits)
     else:
         bootstrap_ci = np.array([mean_corr, mean_corr])
-    return mean_corr, bootstrap_ci
+    quantiles = np.percentile(all_corrs[np.triu_indices(num_obs, k=1)], ci_limits)
+    return mean_corr, bootstrap_ci, quantiles
 
 def main(args=sys.argv[1:]):
     args = parse_args(args)
@@ -135,7 +137,10 @@ def main(args=sys.argv[1:]):
         print(fish)
         if fish not in ["ADR1", "ADR2"]:
             # Load our estimated target rates
-            file_name = os.path.join(args.folder, args.mle_file_template % fish)
+            for mle_file_template in args.mle_file_templates:
+                file_name = os.path.join(args.folder, mle_file_template % fish)
+                if os.path.exists(file_name):
+                    break
             with open(file_name, "rb") as f:
                 fitted_data = six.moves.cPickle.load(f)
                 if "final_fit" in fitted_data:
@@ -158,9 +163,10 @@ def main(args=sys.argv[1:]):
         print("fitting method", key)
         param_vals = fitted_params[key]
         all_corrs = _get_all_pairwise_correlations(param_vals)
-        corr_mean, ci_95 = _get_summary_bootstrap(all_corrs, args.num_rands)
+        corr_mean, ci_95, quantiles_95 = _get_summary_bootstrap(all_corrs, args.num_rands)
         print("Mean %.03f" % corr_mean)
         print("95 CI (%.03f, %.03f)" % (ci_95[0], ci_95[1]))
+        print("95 quantiles (%.03f, %.03f)" % (quantiles_95[0], quantiles_95[1]))
 
     # Plot all the params
     pd_data = []
