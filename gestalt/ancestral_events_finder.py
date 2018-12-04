@@ -76,20 +76,15 @@ def get_parsimony_score(tree: CellLineageTree, do_fast: bool=False):
         pars_score += branch_pars_score
     return pars_score
 
-def get_max_parsimony_anc_singletons(tree: CellLineageTree):
+def get_max_parsimony_anc_singletons(tree: CellLineageTree, bcode_meta: BarcodeMetadata):
     """
     Call this after calling `annotate_ancestral_states`
-    @return a dict mapping node id to (1) a possible max-parsimony ancestral state with minimal number of cuts and
-            (2) a possible max-parsimony ancestral state with maximal number of cuts
+    @return a dict mapping node id to the max-parsimony ancestral state using the SGs in the anc state
     """
     max_parsimony_states = {}
     for node in tree.traverse("preorder"):
         max_parsimony_states[node.node_id] = []
         for idx, anc_state in enumerate(node.anc_state_list):
             node_sgs = anc_state.get_singletons()
-            child_sgs = [set(child.anc_state_list[idx].get_singletons()) for child in node.get_children()]
-            intersection_sgs = reduce(lambda x,y: x.intersection(y), child_sgs, set(node_sgs))
-            max_parsimony_states[node.node_id].append((
-                intersection_sgs,
-                node_sgs))
+            max_parsimony_states[node.node_id].append(node_sgs)
     return max_parsimony_states

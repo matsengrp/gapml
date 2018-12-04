@@ -30,17 +30,15 @@ class TransitionWrapper:
     def __init__(
             self,
             target_tract_tuples: List[TargetTractTuple],
-            parent_targ_statuses: List[TargetStatus],
             anc_state: AncState,
             is_leaf: bool):
         self.target_tract_tuples = target_tract_tuples
-        self.parent_targ_statuses = parent_targ_statuses
         # The possible states that precede the observed data at the leaves
         # Note that for leaf states, this is the set of all possible states that can precede this leaf,
         # even though the leaf can only be one state.
         target_statuses = list(set([
             TargetStatus.from_target_tract_tuple(tt_tuple)
-            for tt_tuple in target_tract_tuples] + self.parent_targ_statuses))
+            for tt_tuple in target_tract_tuples]))
         self.states = target_statuses
         # The mapping from state to state index number for this node
         self.key_dict = {targ_stat: i for i, targ_stat in enumerate(target_statuses)}
@@ -75,6 +73,38 @@ class TransitionWrapperMaker:
         self.max_extra_steps = max_extra_steps
         self.max_sum_states = max_sum_states
 
+    def _get_close_transition_wrapper(
+            self,
+            node: CellLineageTree,
+            idx: int,
+            max_parsimony_sgs: Dict[int, List],
+            parent_tt_tuples: List[TargetTractTuple]):
+        anc_state = node.anc_state_list[idx]
+        maximal_sgs = max_parsimony_sgs[node.node_id][idx]
+        maximal_up_sgs = max_parsimony_sgs[node.up.node_id][idx]
+        min_required_steps = len(set(maximal_sgs) - set(maximal_up_sgs))
+        requested_target_status = TargetStatus.from_target_tract_tuple(TargetTractTuple(*[sg.get_target_tract() for sg in maximal_sgs]))
+
+        states_too_many = True
+        max_extra_steps = self.max_extra_steps
+        if self.max_sum_states is not None:
+            max_extra_steps = self.max_extra_steps if np.power(2, min_required_steps) <= self.max_sum_states else self.max_extra_steps - 1
+        while states_too_many and max_extra_steps >= 0:
+            close_target_tract_tuples = self.get_states_close_by(
+                    min_required_steps + max_extra_steps,
+                    min_required_steps,
+                    parent_tt_tuples,
+                    anc_state,
+                    requested_target_status)
+            transition_wrap = TransitionWrapper(
+                close_target_tract_tuples,
+                anc_state,
+                node.is_leaf())
+            states_too_many = self.max_sum_states is not None and len(transition_wrap.states) > self.max_sum_states
+            if states_too_many:
+                max_extra_steps -= 1
+        return transition_wrap
+
     def create_transition_wrappers(self):
         """
         @return Dict[node id, List[TransitionWrapperMaker]]: a dictionary that stores the
@@ -82,69 +112,49 @@ class TransitionWrapperMaker:
         """
         # Annotate with ancestral states using the efficient upper bounding algo
         anc_evt_finder.annotate_ancestral_states(self.tree, self.bcode_meta)
-        max_parsimony_sgs = anc_evt_finder.get_max_parsimony_anc_singletons(self.tree)
+        max_parsimony_sgs = anc_evt_finder.get_max_parsimony_anc_singletons(self.tree, self.bcode_meta)
 
         # Create a dictionary mapping node to its TransitionWrapper
         transition_matrix_states = dict()
         for node in self.tree.traverse("preorder"):
-            wrapper_list = []
-            for idx, anc_state in enumerate(node.anc_state_list):
-                if node.is_root():
-                    wrapper_list.append(TransitionWrapper(
+            transition_matrix_states[node.node_id] = []
+        transition_matrix_states[self.tree.node_id] = [TransitionWrapper(
                         [TargetTractTuple()],
-                        [],
                         anc_state,
-                        node.is_leaf()))
-                    continue
+                        self.tree.is_leaf()) for anc_state in self.tree.anc_state_list]
 
+        for up_node in self.tree.traverse("preorder"):
+            if up_node.is_leaf():
+                continue
+            for idx, up_anc_state in enumerate(up_node.anc_state_list):
                 # List out possible internal states but only consider those within a small number of steps
                 # of the possible max parsimony ancestral states
                 # We do this by counting those wwithin the minimal target status of all possible max parsimony
                 # ancestral states
-                parent_target_tract_tuples = transition_matrix_states[node.up.node_id][idx].target_tract_tuples
-                up_anc_state = node.up.anc_state_list[idx]
-                minimal_sgs, maximal_sgs = max_parsimony_sgs[node.node_id][idx]
-                minimal_up_sgs, maximal_up_sgs = max_parsimony_sgs[node.up.node_id][idx]
-                min_required_steps = len(set(minimal_sgs) - set(maximal_up_sgs))
-                max_required_steps = len(set(maximal_sgs) - set(minimal_up_sgs))
-                requested_target_status = TargetStatus.from_target_tract_tuple(TargetTractTuple(*[sg.get_target_tract() for sg in minimal_sgs]))
+                parent_target_tract_tuples = transition_matrix_states[up_node.node_id][idx].target_tract_tuples
+                filtered_down_tt_tuples = set(parent_target_tract_tuples)
+                for node in up_node.children:
+                    transition_wrap = self._get_close_transition_wrapper(
+                            node,
+                            idx,
+                            max_parsimony_sgs,
+                            parent_target_tract_tuples)
+                    filtered_down_tt_tuples = filtered_down_tt_tuples.intersection(set(transition_wrap.target_tract_tuples))
 
-                states_too_many = True
-                max_extra_steps = self.max_extra_steps
-                if self.max_sum_states is not None:
-                    max_extra_steps = self.max_extra_steps if np.power(2, min_required_steps) <= self.max_sum_states else self.max_extra_steps - 1
-                while states_too_many and max_extra_steps >= 0:
-                    close_target_tract_tuples = self.get_states_close_by(
-                            max_required_steps + max_extra_steps,
-                            min_required_steps,
-                            parent_target_tract_tuples,
-                            anc_state,
-                            requested_target_status)
+                for node in up_node.children:
+                    transition_wrap = self._get_close_transition_wrapper(
+                            node,
+                            idx,
+                            max_parsimony_sgs,
+                            filtered_down_tt_tuples)
+                    transition_matrix_states[node.node_id].append(transition_wrap)
+                    logging.info(
+                        "Subsampling states for node %d, parent # states %d, node # subsampled states %d, (node target tract tuples %d)",
+                        node.node_id,
+                        len(transition_matrix_states[node.up.node_id][idx].states),
+                        len(transition_wrap.states),
+                        len(transition_wrap.target_tract_tuples))
 
-                    transition_wrap = TransitionWrapper(
-                        close_target_tract_tuples,
-                        [],
-                        anc_state,
-                        node.is_leaf())
-
-                    states_too_many = self.max_sum_states is not None and len(transition_wrap.states) > self.max_sum_states
-                    #if states_too_many:
-                    logging.info("=== many-state-node %s %d", anc_state, len(transition_wrap.states))
-                    for tt in transition_wrap.target_tract_tuples:
-                        logging.info(tt)
-                    logging.info("=== parent-many-state-node %s", up_anc_state)
-                    max_extra_steps -= 1
-
-                logging.info(
-                    "Subsampling states for node %d, parent # states %d, node # subsampled states %d, (node target tract tuples %d)",
-                    node.node_id,
-                    len(transition_matrix_states[node.up.node_id][idx].states),
-                    len(transition_wrap.states),
-                    len(transition_wrap.target_tract_tuples))
-
-                wrapper_list.append(transition_wrap)
-
-            transition_matrix_states[node.node_id] = wrapper_list
         return transition_matrix_states
 
     def get_states_close_by(
@@ -166,7 +176,6 @@ class TransitionWrapperMaker:
 
         @return List[TargetTractTuples] -- target tract tuples within max_steps of
         """
-        logging.info("max steps %d", max_steps)
         if max_steps == 0:
             # special case: there are no steps we are allowed to take.
             # then the only possible state is exactly the state of the node

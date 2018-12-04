@@ -2,6 +2,9 @@ import time
 import tensorflow as tf
 import numpy as np
 import scipy.linalg
+
+from common import get_randint
+
 """
 Tensorflow helper functions
 """
@@ -49,7 +52,7 @@ def py_func(func, inp, Tout, stateful=True, name=None, grad=None):
     (Code was copied from the internet)
     """
     # Need to generate a unique name to avoid duplicates:
-    rnd_name = 'PyFuncGrad' + str(int(np.abs(np.random.randint(0, 1E+8) + int(time.time()) - 1000000000)))
+    rnd_name = 'PyFuncGrad' + str(int(np.abs(get_randint() + int(time.time()) - 1000000000))) + str(get_randint())
 
     tf.RegisterGradient(rnd_name)(grad)
     g = tf.get_default_graph()
