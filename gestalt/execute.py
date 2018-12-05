@@ -10,9 +10,9 @@ import time
 sbatch_prelude = """#!/bin/bash
 #SBATCH -o %s/job.out
 #SBATCH -e %s/job.err
-#SBATCH -c 18
+#SBATCH -c %d
 #SBATCH -N 1
-#SBATCH --mem 55000
+#SBATCH --mem %d
 #SBATCH --exclusive
 #SBATCH -p largenode
 #SBATCH --mail-type=ALL
@@ -29,9 +29,10 @@ virtual_env_options = ["venv_beagle_py3", "venv_beagle_py3_old"]
 @click.command()
 @click.option('--clusters', default='local', help='Clusters to submit to. Default is local execution.')
 @click.option('--max-tries', default=2, help='Maximum number of times to try resubmitting to cluster')
+@click.option('--aws-machine', default='mem', help='try for compute-optimized vs large-mem notes')
 @click.argument('target')
 @click.argument('to_execute_str')
-def cli(clusters, max_tries, target, to_execute_str):
+def cli(clusters, max_tries, aws_machine, target, to_execute_str):
     """
     Execute a command with targets, perhaps on a SLURM
     cluster via sbatch. Wait until the command has completed.
@@ -46,6 +47,13 @@ def cli(clusters, max_tries, target, to_execute_str):
         click.echo(to_execute_str)
         return subprocess.check_output(to_execute_str, shell=True)
 
+    if aws_machine == "mem":
+        n_cores = 16
+        memory_req = 240000
+    else:
+        n_cores = 18
+        memory_req = 58000
+
     # Put the batch script in the directory of the first target.
     execution_dir = os.path.dirname(target)
     script_name = 'job.sh'
@@ -53,7 +61,12 @@ def cli(clusters, max_tries, target, to_execute_str):
     sentinel_path = os.path.join(execution_dir, 'sentinel.txt')
     for venv_option in virtual_env_options:
         with open(script_full_path, 'w') as fp:
-            fp.write(sbatch_prelude % (execution_dir, execution_dir, venv_option))
+            fp.write(sbatch_prelude % (
+                execution_dir,
+                execution_dir,
+                n_cores,
+                memory_req,
+                venv_option))
             fp.write(to_execute_str + '\n')
             fp.write('touch %s\n' % sentinel_path)
 

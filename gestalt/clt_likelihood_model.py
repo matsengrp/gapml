@@ -1294,12 +1294,8 @@ class CLTLikelihoodModel:
                 for child in node.children:
                     child_wrapper = transition_wrappers[child.node_id][bcode_idx]
                     with tf.name_scope("Transition_matrix%d" % node.node_id):
-                        trans_mats[child.node_id] = self._create_transition_matrix(
+                        trans_mats[child.node_id], trim_probs[child.node_id] = self._create_transition_matrix(
                                 child_wrapper)
-
-                    # Get the trim probabilities
-                    with tf.name_scope("trim_matrix%d" % node.node_id):
-                        trim_probs[child.node_id] = self._create_trim_instant_prob_matrix(child_wrapper)
 
                     # Create the probability matrix exp(Qt)
                     with tf.name_scope("expm_ops%d" % node.node_id):
@@ -1307,9 +1303,7 @@ class CLTLikelihoodModel:
                         decay_factor = self._get_decay_factor(
                             self.dist_to_root[child.node_id] - self.branch_lens[child.node_id],
                             self.branch_lens[child.node_id])
-                        pt_matrix[child.node_id], _, _, Ddiags[child.node_id] = tf_common.myexpm(
-                                tf.multiply(tr_mat, trim_probs[child.node_id]),
-                                decay_factor)
+                        pt_matrix[child.node_id], _, _, Ddiags[child.node_id] = tf_common.myexpm(tr_mat, decay_factor)
 
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.
@@ -1368,13 +1362,36 @@ class CLTLikelihoodModel:
     @profile
     def _create_transition_matrix(self, transition_wrapper: TransitionWrapper):
         """
+        Returns the instantaneous transition matrix of the aggregated Markov chain
+                Also return trim probs for debugging
+        """
+        matrix_len = transition_wrapper.num_possible_states + 1
+        targ_tract_left = self._create_marginal_transition_matrix_left(
+                transition_wrapper)
+
+        # Get the trim probabilities
+        trim_probs_left = self._create_trim_instant_prob_matrix_left(transition_wrapper)
+
+        # Combine the trim probs with marginal transition rates
+        q_matrix = targ_tract_left * trim_probs_left
+
+        # Add last column with hazard to impossible states -- use prooperty
+        # that things sum to zero
+        hazard_impossible_states = -tf.reshape(
+                tf.reduce_sum(q_matrix, axis=1),
+                [matrix_len, 1])
+        q_matrix_full = tf.concat([q_matrix, hazard_impossible_states], axis=1)
+        return q_matrix_full, trim_probs_left
+
+    @profile
+    def _create_marginal_transition_matrix_left(self, transition_wrapper: TransitionWrapper):
+        """
         @param transition_wrapper: TransitionWrapper that is associated with a particular branch
 
-        @return tensorflow tensor with instantaneous transition rates between meta-states,
-                only specifies rates for the meta-states given in `transition_wrapper`.
-                So it will create a row for each meta-state in the `transition_wrapper` and then
-                create one "impossible" sink state.
-                This is the Q matrix for a given branch.
+        @return tensorflow tensor with the first component in the factorization
+                of the instantaneous transition rates, the part that deals with the target status
+                and target tracts. The last row corresponds to the sink state.
+                We omit the last column since its parent function will handle its creation
         """
         # Get the target tracts of the singletons -- this is important
         # since the transition matrix excludes the impossible target tracts
@@ -1447,25 +1464,23 @@ class CLTLikelihoodModel:
             sparse_vals,
             [matrix_len, matrix_len - 1],
             name="top.q_matrix")
-        q_matrix = q_all_tt_matrix + q_single_tt_matrix
-        # Add hazard to impossible states
-        hazard_impossible_states = -tf.reshape(
-                tf.reduce_sum(q_matrix, axis=1),
-                [matrix_len, 1])
 
-        q_matrix_full = tf.concat([q_matrix, hazard_impossible_states], axis=1)
-
-        return q_matrix_full
+        q_matrix_left = q_all_tt_matrix + q_single_tt_matrix
+        return q_matrix_left
 
     @profile
-    def _create_trim_instant_prob_matrix(self, child_transition_wrapper: TransitionWrapper):
+    def _create_trim_instant_prob_matrix_left(self, child_transition_wrapper: TransitionWrapper):
         """
         @param transition_wrapper: TransitionWrapper that is associated with a particular branch
 
-        @return matrix of conditional probabilities of each trim
+        @return The second component when factorizing the instantaneous transition rates
+                between the meta-states. This is the matrix of conditional probabilities of each trim.
                 So the entry in (i,j) is the trim probability for transitioning from target status i
                 to target status j. There is a trim prob associated with it because this must correspond to
                 the introduction of a singleton in the AncState.
+                Last row corresponds to sink state.
+                We omit the last column corresponding to sink state. Its parent function will handle
+                the creation.
 
                 note: this is used to generate the matrix for a specific branch in the tree
                 If the transition is not possible, we fill in with trim prob 1.0 since it doesnt matter
@@ -1504,7 +1519,7 @@ class CLTLikelihoodModel:
                     sparse_vals.append(0.0)
 
         output_length = child_transition_wrapper.num_possible_states + 1
-        output_shape = [output_length, output_length]
+        output_shape = [output_length, output_length - 1]
 
         if sparse_vals:
             return tf.exp(tf.scatter_nd(

@@ -182,6 +182,7 @@ def process_observed_seq_format7B(
         if last_evt.max_target == bcode_meta.n_targets - 1:
             if last_evt.del_end > bcode_meta.orig_length:
                 logging.info("last event overflow! shorten trim length!")
+                print("last event overflow! shorten trim length!")
                 non_clashing_events[-1] = Event(
                     last_evt.start_pos,
                     bcode_meta.orig_length - last_evt.start_pos,

@@ -74,11 +74,12 @@ class BarcodeMetadata:
         """
         @return List[str], return a single barcode, not an object!
         """
-        start_end_spacer = BARCODE_V7[0]
+        start_spacer = BARCODE_V7[0]
+        end_spacer = BARCODE_V7[-1]
         target_seq = BARCODE_V7[1]
         btw_target_spacer = BARCODE_V7[2]
-        bcode = (start_end_spacer, target_seq)
+        bcode = (start_spacer, target_seq)
         for i in range(num_targets - 1):
             bcode += (btw_target_spacer, target_seq)
-        bcode += (start_end_spacer,)
+        bcode += (end_spacer,)
         return bcode

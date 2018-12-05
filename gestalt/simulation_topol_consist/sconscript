@@ -23,9 +23,9 @@ GROWTH_DICT = {
         "death_lambda": 0.3,
         "birth_decay": -18,
         "birth_min": 6,
-        "lambda_sequence": [0.9, 0.85, .8, .75, .7, .65, .6],
-        "target_decay": .4,
-        "double": 0.06,
+        "lambda_sequence": [.75, .7, .65, .6, .55, .5, .45],
+        "target_decay": 0,
+        "double": 0.05,
         "min_leaves": 70,
         "max_leaves": 110,
     },
@@ -52,8 +52,8 @@ nest.add(
 
 nest.add(
     'seed',
-    # seeds running: 3 - 5
-    range(6,7),
+    # starts from 10
+    range(20,22),
 )
 
 nest.add(
@@ -231,7 +231,7 @@ def run_MLE(env, outdir, c):
     penalty_params = "512,128,32,8"
     target_lam_penalty_params = "1"
     if c['num_barcodes'] == 1:
-        penalty_params = "2048,512,128,32"
+        penalty_params = "2048,512,128"
         target_lam_penalty_params = "10"
     elif c['num_barcodes'] == 2:
         target_lam_penalty_params = "1"
@@ -239,8 +239,8 @@ def run_MLE(env, outdir, c):
         target_lam_penalty_params = "1"
 
     targets = [
-                join(outdir, 'tune_fitted.pkl'),
-                join(outdir, 'tune_fitted.txt')]
+                join(outdir, 'tune_fitted_new.pkl'),
+                join(outdir, 'tune_fitted_new.txt')]
     sources = [
                 c['restrict_observed_alleles'][0],
                 c['run_topology'][0],
@@ -278,10 +278,11 @@ def run_MLE(env, outdir, c):
         '--num-inits 1',
         '--tot-time-known',
         '--num-processes',
-        6 if c['num_barcodes'] == 1 else 4,
+        4,
         '--num-init-random-rearrange',
         NUM_RANDOM_REARRANGE if c['num_barcodes'] == 1 else 0,
         '--count-chads' if c['num_barcodes'] == 1 else '',
+        '--lambda-decay-known',
         '--scratch-dir',
         #'_output/scratch',
 	join('simulation_topol_consist', outdir, 'scratch'),
@@ -291,6 +292,10 @@ def run_MLE(env, outdir, c):
         'python execute.py',
         '--clusters',
         localenv['clusters'],
+        '--aws-machine compute',
         "${TARGETS[0]}",
-        cmd_arg_str]
+        cmd_arg_str,
+        #'srun -p matsen_e,campus',
+        #'--cpus-per-task 8',
+        ]
     return env.Command(targets, sources, ' '.join(map(str, cmd)))
