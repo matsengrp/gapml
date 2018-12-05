@@ -1,4 +1,5 @@
 import sys
+import random
 import argparse
 import matplotlib
 matplotlib.use('Agg')
@@ -9,6 +10,7 @@ import scipy.stats
 import pandas as pd
 from scipy import stats
 
+from common import assign_rand_tree_lengths
 from plot_analyze_gestalt_meta import load_fish, get_allele_to_cell_states, create_shuffled_cell_state_abund_labels
 
 ECTO = 0
@@ -35,7 +37,12 @@ def parse_args(args):
     parser.add_argument(
         '--num-rands',
         type=int,
-        default=2000)
+        default=20) #000)
+    parser.add_argument(
+        '--null-method',
+        type=str,
+        default=None,
+        help="If none, use the method itself as reference. Otherwise always use this method as reference.")
     parser.add_argument(
         '--out-germ-layer-plot-template',
         type=str,
@@ -58,9 +65,9 @@ def get_distance_to_num_germ_layers(
     for node in fitted_bifurc_tree.traverse('postorder'):
         if node.is_leaf():
             allele_str = node.allele_events_list_str
-            germ_layers = list(allele_to_cell_state[allele_str].keys())
+            tissue_types = list(allele_to_cell_state[allele_str].keys())
             node.add_feature("germ_layers", set([
-                ORGAN_GERM_LAYERS[organ_dict[c_state].replace("7B_", "")] for c_state in germ_layers]))
+                ORGAN_GERM_LAYERS[organ_dict[c_state].replace("7B_", "")] for c_state in tissue_types]))
         else:
             node.add_feature("germ_layers", set())
             for child in node.children:
@@ -69,7 +76,7 @@ def get_distance_to_num_germ_layers(
     for node in fitted_bifurc_tree.traverse('postorder'):
         if node.is_leaf():
             continue
-        #if min([len(leaf.germ_layers) for leaf in node]) > 1:
+        #if len(node.germ_layers) == 4:
         #    continue
         X_dists.append(node.dist_to_root)
         n_germ_layers = len(node.germ_layers)
@@ -117,7 +124,7 @@ def get_distance_to_num_cell_states(
     for node in fitted_bifurc_tree.traverse('postorder'):
         if node.is_leaf():
             continue
-        #if min([len(leaf.cell_types) for leaf in node]) > 1:
+        #if len(node.cell_types) == 11:
         #    continue
         X_dists.append(node.dist_to_root)
         Y_n_cell_states.append(len(node.cell_types))
@@ -181,7 +188,7 @@ def plot_branch_len_time(
 
 def do_hypothesis_test(
         estimated_X_Y,
-        tree,
+        null_tree,
         allele_to_cell_state,
         organ_dict,
         get_X_Y_func,
@@ -190,37 +197,51 @@ def do_hypothesis_test(
     Formally, the null hypothesis is the cell types and abundances are completely
     randomly assigned to the leaves of the two trees.
     """
-    corr, stupid_pval = scipy.stats.pearsonr(estimated_X_Y[0], estimated_X_Y[1])
+    slope, _, corr, stupid_pval, stderr = scipy.stats.linregress(estimated_X_Y[1], estimated_X_Y[0])
+    all_rand_slopes = []
     all_rand_corrs = []
     for _ in range(num_rands):
         shuffled_meta = create_shuffled_cell_state_abund_labels(allele_to_cell_state)
-        rand_X, rand_Y = get_X_Y_func(tree, shuffled_meta, organ_dict)
-        rand_corr, _ = scipy.stats.pearsonr(rand_X, rand_Y)
+        rand_X, rand_Y = get_X_Y_func(null_tree, shuffled_meta, organ_dict)
+        rand_slope, _, rand_corr, _, _ = scipy.stats.linregress(rand_Y, rand_X)
         all_rand_corrs.append(rand_corr)
-    print('correlation', corr, 'stupid pval', stupid_pval)
-    print("random mean corr", np.mean(all_rand_corrs))
-    print('p-val', np.mean(np.abs(corr) < np.abs(all_rand_corrs)))
+        all_rand_slopes.append(rand_slope)
+    print("corr %.03f" % corr)
+    print("random mean corr %.03f" % np.mean(all_rand_corrs))
+    print('p-val %.03f' % (np.mean(np.abs(corr) < np.abs(all_rand_corrs))))
+    #print("slope %.03f (%.03f, %.03f)" % (slope, slope - 1.96 * stderr, slope + 1.96 * stderr))
+    #print("random mean slope %.03f" % np.mean(all_rand_slopes))
+    #print('p-val', np.mean(np.abs(slope) < np.abs(all_rand_slopes)))
 
 def main(args=sys.argv[1:]):
     args = parse_args(args)
-    fishies = ["ADR1"] #, "ADR2"]
+    random.seed(1)
+    np.random.seed(1)
+    fishies = ["ADR1", "ADR2"]
     methods = ["PMLE", "chronos", "nj"]
     for method in methods:
         print("METHOD", method)
+        null_method = method if args.null_method is None else args.null_method
         for fish in fishies:
             print("FISH", fish)
+            null_tree, _ = load_fish(fish, null_method)
+            assign_rand_tree_lengths(null_tree, 1)
+            null_tree.label_dist_to_roots()
+
             tree, obs_dict = load_fish(fish, method)
             tree.label_dist_to_roots()
+
             allele_to_cell_state, cell_state_dict = get_allele_to_cell_states(obs_dict)
             organ_dict = obs_dict["organ_dict"]
 
+            print("GERM LAYERS")
             X_dists, Y_n_germ_layers = get_distance_to_num_germ_layers(
                 tree,
                 allele_to_cell_state,
                 organ_dict)
             do_hypothesis_test(
                 (X_dists, Y_n_germ_layers),
-                tree,
+                null_tree,
                 allele_to_cell_state,
                 organ_dict,
                 get_distance_to_num_germ_layers,
@@ -230,13 +251,14 @@ def main(args=sys.argv[1:]):
                 Y_n_germ_layers,
                 args.out_germ_layer_plot_template % (fish, method))
 
+            print("TISSUE TYPES")
             X_dists, Y_n_cell_states = get_distance_to_num_cell_states(
                 tree,
                 allele_to_cell_state,
                 organ_dict)
             do_hypothesis_test(
                 (X_dists, Y_n_cell_states),
-                tree,
+                null_tree,
                 allele_to_cell_state,
                 organ_dict,
                 get_distance_to_num_cell_states,
