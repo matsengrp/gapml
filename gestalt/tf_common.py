@@ -65,7 +65,13 @@ def _custom_expm(x, t):
     The additional outputs are useful for calculating the gradient later
     """
     D, A = np.linalg.eig(x)
+    #print("D", D.shape, np.unique(D).size)
     A_inv = np.linalg.inv(A)
+    if np.sum(np.isnan(D)) + np.sum(np.isnan(A_inv)) + np.sum(np.isnan(A)) > 0:
+        print("A_INV", A_inv)
+        print("bad A", A)
+        print("bad D", D)
+        1/0
     #res =  np.dot(A, np.dot(
     #    np.diag(np.exp(
     #        # Do not allow overflow!
@@ -101,10 +107,11 @@ def _expm_grad(op, grad0, grad1, grad2, grad3):
     DD_diff = tf.subtract(D_vec, tf.transpose(D_vec), name="DD_diff_raw")
     # Make sure that the difference matrix doesnt have things exactly equal to zero
     # Perturb a little bit if that happens.
-    bad_diffs = tf.cast(tf.less(tf.abs(DD_diff), 1e-4), dtype=tf.float64)
+    bad_diff_thres = 1e-4
+    bad_diffs = tf.cast(tf.less(tf.abs(DD_diff), bad_diff_thres), dtype=tf.float64)
     DD_diff = tf.add(
             DD_diff,
-            tf.multiply(bad_diffs, 1e-4))
+            tf.multiply(bad_diffs, bad_diff_thres))
     DD_diff = tf.matrix_set_diag(DD_diff, tf.ones(Q_len, dtype=tf.float64), name="DD_diff_set_diag")
     t_factor = tf.divide(expDt_vec - tf.transpose(expDt_vec), DD_diff, name="t_factor_raw")
     t_factor = tf.matrix_set_diag(t_factor, t * expDt, name="t_factor_filled")
@@ -126,17 +133,24 @@ def _expm_grad(op, grad0, grad1, grad2, grad3):
             tf.matmul(grad0, A_inv, transpose_b=True),
             transpose_a=True)
     tiled_sandwicher = tf.tile(sandwicher, multiples=[Q_len, Q_len])
-    sw_Vs = tf.cast(tf.multiply(tiled_sandwicher, Vs), tf.float32)
-    sw_Vs = tf.expand_dims(tf.expand_dims(sw_Vs, 0), -1)
+    sw_Vs = tf.multiply(tiled_sandwicher, Vs)
+    sw_Vs = tf.verify_tensor_all_finite(sw_Vs, "sw vs before cast")
+    # Scaling for numerical overflow issues
+    mean_sw_Vs = tf.reduce_mean(sw_Vs)
+    scaled_sw_Vs = sw_Vs/mean_sw_Vs
+    scaled_sw_Vs = tf.cast(scaled_sw_Vs, tf.float32)
+    scaled_sw_Vs = tf.verify_tensor_all_finite(scaled_sw_Vs, "sw vs after cast")
+    scaled_sw_Vs = tf.expand_dims(tf.expand_dims(scaled_sw_Vs, 0), -1)
+
     # Calculate the dotproduct using convolutional operators
-    # TODO: unfortunately the conv operator in tensorflow requires float32 instead of 64.
+    # TODO: unfortunately the conv operator in tensorflow (v1.5) requires float32 instead of 64.
     #       We're going to lose some precision in the tradeoff for using someone else's code.
     #       In the future, we can consider implementing this entirely on our own.
-    avg_filter = tf.expand_dims(tf.expand_dims(
-            tf.ones(shape=[Q_len, Q_len], dtype=tf.float32),
-            -1), -1)
-    avged = tf.nn.conv2d(sw_Vs, avg_filter, strides=[1, Q_len, Q_len, 1], padding="SAME")
-    dL_dQ = avged[0, :, :, 0]
+    conv_filter = tf.ones(shape=[Q_len, Q_len], dtype=tf.float32)
+    reshaped_conv_filter = tf.expand_dims(tf.expand_dims(conv_filter, -1), -1)
+    avged = tf.nn.conv2d(scaled_sw_Vs, reshaped_conv_filter, strides=[1, Q_len, Q_len, 1], padding="SAME")
+    # Fixing up after we rescaled
+    dL_dQ = tf.cast(avged[0, :, :, 0], dtype=tf.float64) * mean_sw_Vs
 
     dP_dt = tf.matmul(A, tf.matmul(
                 tf.diag(D * expDt),

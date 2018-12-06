@@ -1142,6 +1142,7 @@ class CLTLikelihoodModel:
         self.singleton_index_dict = {sg: int(i) for i, sg in enumerate(singletons)}
         self._create_trim_insert_distributions(len(singletons))
         self.singleton_log_cond_prob = self._create_log_indel_probs(singletons)
+        self.singleton_cond_prob = tf.exp(self.singleton_log_cond_prob)
 
     """
     Section for creating the log likelihood of the allele data
@@ -1300,10 +1301,12 @@ class CLTLikelihoodModel:
                     # Create the probability matrix exp(Qt)
                     with tf.name_scope("expm_ops%d" % node.node_id):
                         tr_mat = tf.verify_tensor_all_finite(trans_mats[child.node_id], "transmat %d problem" % child.node_id)
-                        decay_factor = self._get_decay_factor(
-                            self.dist_to_root[child.node_id] - self.branch_lens[child.node_id],
-                            self.branch_lens[child.node_id])
-                        pt_matrix[child.node_id], _, _, Ddiags[child.node_id] = tf_common.myexpm(tr_mat, decay_factor)
+                        #decay_factor = self._get_decay_factor(
+                        #    self.dist_to_root[child.node_id] - self.branch_lens[child.node_id],
+                        #    self.branch_lens[child.node_id])
+                        pt_matrix[child.node_id], _, _, Ddiags[child.node_id] = tf_common.myexpm(
+                                tr_mat,
+                                self.branch_lens[child.node_id])
 
                     # Get the probability for the data descended from the child node, assuming that the node
                     # has a particular target tract repr.
@@ -1505,28 +1508,31 @@ class CLTLikelihoodModel:
                     if target_to_singleton[deact_targ] is not None])
                 start_key = child_transition_wrapper.key_dict[start_target_status]
                 end_key = child_transition_wrapper.key_dict[end_target_status]
-                sparse_indices.append([start_key, end_key])
                 if len(singleton_set) == 1:
-                    trim_prob_val = tf.reduce_sum(tf.gather(
-                        self.singleton_log_cond_prob,
-                        [int(self.singleton_index_dict[sg]) for sg in singleton_set]))
-                    sparse_vals.append(trim_prob_val)
+                    sparse_indices.append([start_key, end_key])
+                    sg = list(singleton_set)[0]
+                    trim_prob_val = self.singleton_cond_prob[int(self.singleton_index_dict[sg])]
+                    # HACK: We cannot have the trim probabilities too too small. otherwise
+                    # the gradient calculations break (because the values get way to crazy
+                    # and then tensorflow, after casting things to float32 in expm gradient,
+                    # will set things to infinity). We lower bound trim probabilities here
+                    # to 1e-13
+                    sparse_vals.append(trim_prob_val - 1.0)
                 elif len(singleton_set) > 1:
                     # Can't possibly introduce the correct indel tract -- need more than one
-                    sparse_vals.append(-np.inf)
-                elif len(singleton_set) == 0:
-                    # This indel tract must be maskdd.
-                    sparse_vals.append(0.0)
+                    sparse_indices.append([start_key, end_key])
+                    sparse_vals.append(tf.constant(-1.0, dtype=tf.float64))
 
         output_length = child_transition_wrapper.num_possible_states + 1
         output_shape = [output_length, output_length - 1]
 
         if sparse_vals:
-            return tf.exp(tf.scatter_nd(
+            return tf.maximum(tf.constant(1, dtype=tf.float64) + tf.scatter_nd(
                 sparse_indices,
                 sparse_vals,
                 output_shape,
-                name="top.trim_probs"))
+                name="top.trim_probs"),
+                tf.constant(0, dtype=tf.float64))
         else:
             return tf.ones(output_shape, dtype=tf.float64)
 
