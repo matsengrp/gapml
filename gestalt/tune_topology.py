@@ -139,6 +139,10 @@ def parse_args(args):
         action='store_true',
         help='are target rate decay rates known?')
     parser.add_argument(
+        '--lambda-decay-fixed',
+        type=float,
+        default=None)
+    parser.add_argument(
         '--tot-time-known',
         action='store_true',
         help='is total time known?')
@@ -192,7 +196,7 @@ def parse_args(args):
 
     args.known_params = KnownModelParams(
          target_lams=args.lambda_known,
-         target_lam_decay_rate=args.lambda_decay_known,
+         target_lam_decay_rate=args.lambda_decay_known or args.lambda_decay_fixed is not None,
          tot_time=args.tot_time_known)
 
     assert args.num_penalty_tune_iters >= 1
@@ -231,7 +235,10 @@ def read_fit_params_file(args, bcode_meta, obs_data_dict, true_model_dict):
     if args.known_params.trim_long_factor:
         fit_params["trim_long_factor"] = true_model_dict['trim_long_factor']
     if args.known_params.target_lam_decay_rate:
-        fit_params["target_lam_decay_rate"] = true_model_dict['target_lam_decay_rate']
+        if args.lambda_decay_fixed is not None:
+            fit_params["target_lam_decay_rate"] = np.array([args.lambda_decay_fixed])
+        else:
+            fit_params["target_lam_decay_rate"] = true_model_dict['target_lam_decay_rate']
     if args.known_params.target_lams:
         fit_params["target_lams"] = true_model_dict['target_lams']
         fit_params["double_cut_weight"] = true_model_dict['double_cut_weight']

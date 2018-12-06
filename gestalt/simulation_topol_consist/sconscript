@@ -53,7 +53,8 @@ nest.add(
 nest.add(
     'seed',
     # starts from 10
-    range(20,22),
+    #range(20,22),
+    [21],
 )
 
 nest.add(
@@ -232,11 +233,11 @@ def run_MLE(env, outdir, c):
     target_lam_penalty_params = "1"
     if c['num_barcodes'] == 1:
         penalty_params = "2048,512,128"
-        target_lam_penalty_params = "10"
+        target_lam_penalty_params = "16,8"
     elif c['num_barcodes'] == 2:
-        target_lam_penalty_params = "1"
+        target_lam_penalty_params = "8,2"
     elif c['num_barcodes'] == 4:
-        target_lam_penalty_params = "1"
+        target_lam_penalty_params = "8,2"
 
     targets = [
                 join(outdir, 'tune_fitted_new.pkl'),
@@ -292,7 +293,7 @@ def run_MLE(env, outdir, c):
         'python execute.py',
         '--clusters',
         localenv['clusters'],
-        '--aws-machine compute',
+        '--aws-machine mem',
         "${TARGETS[0]}",
         cmd_arg_str,
         #'srun -p matsen_e,campus',

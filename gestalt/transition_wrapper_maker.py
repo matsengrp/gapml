@@ -88,7 +88,7 @@ class TransitionWrapperMaker:
         states_too_many = True
         max_extra_steps = self.max_extra_steps
         if self.max_sum_states is not None:
-            max_extra_steps = self.max_extra_steps if np.power(2, min_required_steps) <= self.max_sum_states else self.max_extra_steps - 1
+            max_extra_steps = self.max_extra_steps if np.power(2, min_required_steps) <= self.max_sum_states else max(self.max_extra_steps - 1, 0)
         while states_too_many and max_extra_steps >= 0:
             close_target_tract_tuples = self.get_states_close_by(
                     min_required_steps + max_extra_steps,
