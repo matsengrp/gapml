@@ -11,6 +11,20 @@ import collapsed_tree
 
 COLLAPSE_DIST = 0.001
 
+ORGAN_COLORS = {
+        "7B_Brain": "#4F6128",
+        "7B_Eye1": "#77933C",
+        "7B_Eye2": "#C3D69B",
+        "7B_Gills": "#FFC000",
+        "7B_Blood": "#FF0000",
+        "7B_Heart_chunk": "#632523",
+        "7B_Heart_GFP+": "#D99795",
+        "7B_Heart_GFP-": "#E6B9B8",
+        "7B_Heart_diss": "#943735",
+        "7B_Upper_GI": "#558ED5",
+        "7B_Intestine": "#8EB3E3",
+}
+
 def parse_args(args):
     parser = argparse.ArgumentParser(
             description="""
@@ -46,6 +60,7 @@ def convert_to_json_recurse(
         curr_node,
         bcode_meta,
         organ_dict,
+        organ_tot_counts,
         allele_to_cell_state,
         cell_state_dict):
     node_dict = {
@@ -66,17 +81,20 @@ def convert_to_json_recurse(
             "consistency": "NOTWT" if not curr_node.is_root() else "WT"
     }
     if curr_node.is_leaf():
-        node_dict["sample"] = organ_dict[str(curr_node.cell_state)]
+        organ = organ_dict[str(curr_node.cell_state)]
+        node_dict["sample"] = organ
+        node_dict["color"] = ORGAN_COLORS[organ]
         node_dict["event"] = convert_allele_events_to_event_str(curr_node, bcode_meta)
-        node_dict["organProportions"] = {node_dict["sample"]: 0.001}
-        node_dict["max_organ_prop"] = 0.0001
+        organ_prop = curr_node.abundance/float(organ_tot_counts[organ])
+        node_dict["organProportions"] = {node_dict["sample"]: organ_prop}
+        node_dict["max_organ_prop"] = organ_prop
         print(node_dict)
         return node_dict
 
     node_dict["children"] = []
     for child in curr_node.children:
         node_dict["children"].append(
-            convert_to_json_recurse(child, bcode_meta, organ_dict, allele_to_cell_state, cell_state_dict)
+            convert_to_json_recurse(child, bcode_meta, organ_dict, organ_tot_counts, allele_to_cell_state, cell_state_dict)
         )
     return node_dict
 
@@ -88,6 +106,14 @@ def collapse_short_dists(fitted_bifurc_tree):
             node.dist = 0
     col_tree = collapsed_tree.collapse_zero_lens(fitted_bifurc_tree)
     return col_tree
+
+def make_organ_tot_counts(tree, organ_dict):
+    print(organ_dict.keys())
+    organ_tot_counts = {organ: 0 for organ in organ_dict.values()}
+    for leaf in tree:
+        organ = organ_dict[str(leaf.cell_state)]
+        organ_tot_counts[organ] += leaf.abundance
+    return organ_tot_counts
 
 def main(args=sys.argv[1:]):
     args = parse_args(args)
@@ -102,10 +128,12 @@ def main(args=sys.argv[1:]):
     tree = _expand_leaved_tree(tree, allele_to_cell_state, cell_state_dict)
     tree.label_node_ids()
     tree.label_dist_to_roots()
+    organ_tot_counts = make_organ_tot_counts(tree, organ_dict)
     tree_json = convert_to_json_recurse(
         tree,
         bcode_meta,
         organ_dict,
+        organ_tot_counts,
         allele_to_cell_state,
         cell_state_dict)
 
