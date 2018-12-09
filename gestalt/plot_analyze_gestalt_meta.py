@@ -63,6 +63,39 @@ ORGAN_LABELS = [
 ]
 NUM_ORGANS = len(ORGAN_LABELS)
 
+def parse_args(args):
+    parser = argparse.ArgumentParser(
+            description="""
+            compare tissue distances between adult fish.
+            """)
+    parser.add_argument(
+        '--obs-file',
+        type=str,
+        default="analyze_gestalt/_output/%s/sampling_seed0/fish_data_restrict.pkl")
+    parser.add_argument(
+        '--mle-template',
+        type=str,
+        default="analyze_gestalt/_output/%s/sampling_seed0/sum_states_20/extra_steps_1/tune_pen_hanging.pkl")
+    parser.add_argument(
+        '--chronos-template',
+        type=str,
+        default="analyze_gestalt/_output/%s/sampling_seed0/chronos_fitted.pkl")
+    parser.add_argument(
+        '--nj-template',
+        type=str,
+        default="analyze_gestalt/_output/%s/sampling_seed0/nj_fitted.pkl")
+    parser.add_argument(
+        '--num-rand-permute',
+        type=int,
+        default=20)
+    parser.add_argument(
+        '--null-method',
+        type=str,
+        default=None,
+        help="If none, use the method itself as reference. Otherwise always use this method as reference.")
+    args = parser.parse_args(args)
+    return args
+
 def create_distance_matrix(fitted_bifurc_tree, organ_dict, allele_to_cell_state):
     for node in fitted_bifurc_tree.traverse('postorder'):
         if node.is_leaf():
@@ -134,11 +167,11 @@ def plot_distance_matrix(sym_X_matrix, out_plot_file, vrange = [0.2, 0.8]):
     plt.savefig(out_plot_file, transparent=True, bbox_inches='tight')
     print("matrix PLOT", out_plot_file)
 
-def load_fish(fish, method, folder=None, get_first=False):
-    obs_file = "analyze_gestalt/_output/%s/sampling_seed0/fish_data_restrict.pkl" % fish
+def load_fish(fish, args, method, folder=None, get_first=False):
+    obs_file = args.obs_file % fish
 
     if method == "PMLE":
-        fitted_tree_file = "analyze_gestalt/_output/%s/sampling_seed0/sum_states_25/extra_steps_1/tune_pen_hanging.pkl" % fish
+        fitted_tree_file = args.mle_template % fish
         if folder is not None:
             fitted_tree_file = os.path.join(folder, fitted_tree_file)
         with open(fitted_tree_file, "rb") as f:
@@ -153,21 +186,13 @@ def load_fish(fish, method, folder=None, get_first=False):
                         break
 
     elif method == "chronos":
-        fitted_tree_file = "analyze_gestalt/_output/%s/sampling_seed0/chronos_fitted.pkl" % fish
-        #if fish == "ADR1":
-        #    fitted_tree_file = "analyze_gestalt/_output/ADR1_abund5/chronos_fitted.pkl"
-        #elif fish == "ADR2":
-        #    fitted_tree_file = "analyze_gestalt/_output/ADR2_abund1/chronos_fitted.pkl"
+        fitted_tree_file = args.chronos_template % fish
         if folder is not None:
             fitted_tree_file = os.path.join(folder, fitted_tree_file)
         with open(fitted_tree_file, "rb") as f:
             fitted_bifurc_tree = six.moves.cPickle.load(f)[0]["fitted_tree"]
     elif method == "nj":
-        fitted_tree_file = "analyze_gestalt/_output/%s/sampling_seed0/nj_fitted.pkl" % fish
-        #if fish == "ADR1":
-        #    fitted_tree_file = "analyze_gestalt/_output/ADR1_abund5/nj_fitted.pkl"
-        #elif fish == "ADR2":
-        #    fitted_tree_file = "analyze_gestalt/_output/ADR2_abund1/nj_fitted.pkl"
+        fitted_tree_file = args.ng_template % fish
         if folder is not None:
             fitted_tree_file = os.path.join(folder, fitted_tree_file)
         with open(fitted_tree_file, "rb") as f:
@@ -219,10 +244,11 @@ def create_shuffled_cell_state_abund_labels(allele_to_cell_state):
     return allele_to_cell_state_random
 
 def main(args=sys.argv[1:]):
-    num_rand_permute = 2000
-    null_method = None
+    args = parse_args(args)
+    print(args)
     random.seed(0)
     np.random.seed(0)
+
     fishies = ["ADR1", "ADR2"]
     methods = ["PMLE", "chronos", "nj"]
     method_plotting_values = {
@@ -235,10 +261,10 @@ def main(args=sys.argv[1:]):
         random_permute_X_matrices = [[],[]]
         for fish_idx, fish in enumerate(fishies):
             print("FISH", fish)
-            null_method = method if null_method is None else null_method
-            null_tree, _ = load_fish(fish, null_method)
+            null_method = method if args.null_method is None else args.null_method
+            null_tree, _ = load_fish(fish, args, null_method)
 
-            tree, obs_dict = load_fish(fish, method)
+            tree, obs_dict = load_fish(fish, args, method)
             tree.label_dist_to_roots()
             organ_dict = obs_dict["organ_dict"]
             allele_to_cell_state, _ = get_allele_to_cell_states(obs_dict)
@@ -251,7 +277,7 @@ def main(args=sys.argv[1:]):
             # labels are both shuffled. The null distribution is shared across all different tree fitting methods
             # In particular, shuffle the cell type labels (keeping them grouped) across the leaves.
             # Then shuffle the abundances within that cell type label group.
-            for _ in range(num_rand_permute):
+            for _ in range(args.num_rand_permute):
                 allele_to_cell_state_random = create_shuffled_cell_state_abund_labels(allele_to_cell_state)
                 assign_rand_tree_lengths(null_tree, 1)
                 null_tree.label_dist_to_roots()

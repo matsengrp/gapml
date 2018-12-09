@@ -5,12 +5,24 @@ import sys
 import argparse
 import json
 
+from cell_lineage_tree import CellLineageTree
 from plot_analyze_gestalt_meta import get_allele_to_cell_states, load_fish
-from plot_analyze_gestalt_tree import _expand_leaved_tree
 import collapsed_tree
 
 COLLAPSE_DIST = 0.001
-
+ORGAN_TRANSLATION = {
+    "7B_Brain": "Brain",
+    "7B_Eye1": "Left eye",
+    "7B_Eye2": "Right eye",
+    "7B_Gills": "Gills",
+    "7B_Intestine": "Intestinal bulb",
+    "7B_Upper_GI": "Post intestine",
+    "7B_Blood": "Blood",
+    "7B_Heart_chunk": "Heart",
+    "7B_Heart_diss": "DHC",
+    "7B_Heart_GFP-": "NC",
+    "7B_Heart_GFP+": "Cardiomyocytes",
+}
 ORGAN_COLORS = {
         "7B_Brain": "#4F6128",
         "7B_Eye1": "#77933C",
@@ -31,6 +43,22 @@ def parse_args(args):
             make json format of gestalt tree for d3.
             """)
     parser.add_argument(
+        '--obs-file',
+        type=str,
+        default="analyze_gestalt/_output/%s/sampling_seed0/fish_data_restrict.pkl")
+    parser.add_argument(
+        '--mle-template',
+        type=str,
+        default="analyze_gestalt/_output/%s/sampling_seed0/sum_states_20/extra_steps_1/tune_pen_hanging.pkl")
+    parser.add_argument(
+        '--chronos-template',
+        type=str,
+        default="analyze_gestalt/_output/%s/sampling_seed0/chronos_fitted.pkl")
+    parser.add_argument(
+        '--nj-template',
+        type=str,
+        default="analyze_gestalt/_output/%s/sampling_seed0/nj_fitted.pkl")
+    parser.add_argument(
         '--fish',
         type=str,
         default="ADR1")
@@ -44,6 +72,44 @@ def parse_args(args):
         default="_output/%s_tree.json")
     args = parser.parse_args(args)
     return args
+
+def _expand_leaved_tree(fitted_bifurc_tree, allele_to_cell_state, cell_state_dict, default_dist_scale = 0, min_abund_thres = 0):
+    """
+    @param default_dist_scale: how much to assign the leaf branch to the different cell types vs. preserve as internal branch length
+    @param min_abund_thres: minimum abundance for us to include that cell type leaf in the tree (we will always include
+                        the cell type with the highest abundance, regardless of absolute abundance)
+    """
+    leaved_tree = fitted_bifurc_tree.copy()
+    for l in leaved_tree:
+        allele_str = l.allele_events_list_str
+        if l.cell_state is None:
+            old_dist = l.dist
+            l.dist = old_dist * (1 - default_dist_scale)
+            sorted_cell_states = sorted(
+                    [(c_state_str, abund) for c_state_str, abund in allele_to_cell_state[allele_str].items()],
+                    key = lambda c: c[1],
+                    reverse=True)
+            for c_state_str, abund in sorted_cell_states[:1]:
+                new_child = CellLineageTree(
+                    l.allele_list,
+                    l.allele_events_list,
+                    cell_state_dict[c_state_str],
+                    dist = old_dist * default_dist_scale,
+                    abundance = abund,
+                    resolved_multifurcation = True)
+                l.add_child(new_child)
+            for c_state_str, abund in sorted_cell_states[1:]:
+                if abund > min_abund_thres:
+                    new_child = CellLineageTree(
+                        l.allele_list,
+                        l.allele_events_list,
+                        cell_state_dict[c_state_str],
+                        dist = old_dist * default_dist_scale,
+                        abundance = abund,
+                        resolved_multifurcation = True)
+                    l.add_child(new_child)
+    print("num leaves", len(leaved_tree))
+    return leaved_tree
 
 def convert_allele_events_to_event_str(leaf, bcode_meta):
     target_events = ["NONE"] * bcode_meta.n_targets
@@ -71,7 +137,7 @@ def convert_to_json_recurse(
             "color": "black",
             "SAMPLE": "UNKNOWN",
             "justOrganSplit": False,
-            "nodecolor": "black",
+            "nodecolor": "black" if not curr_node.is_root() else "green",
             "organCountsMax": 0,
             "cladeTotal": 0,
             "max_organ_prop": 0.0,
@@ -82,7 +148,7 @@ def convert_to_json_recurse(
     }
     if curr_node.is_leaf():
         organ = organ_dict[str(curr_node.cell_state)]
-        node_dict["sample"] = organ
+        node_dict["sample"] = ORGAN_TRANSLATION[organ]
         node_dict["color"] = ORGAN_COLORS[organ]
         node_dict["event"] = convert_allele_events_to_event_str(curr_node, bcode_meta)
         organ_prop = curr_node.abundance/float(organ_tot_counts[organ])
@@ -118,8 +184,7 @@ def make_organ_tot_counts(tree, organ_dict):
 def main(args=sys.argv[1:]):
     args = parse_args(args)
     print(args)
-    # TODO: this doesnt work right now. need to add in prefix of tmp_mount
-    tree, obs_dict = load_fish(args.fish, method="PMLE", folder=args.folder)
+    tree, obs_dict = load_fish(args.fish, args, method="PMLE", folder=args.folder)
     allele_to_cell_state, cell_state_dict = get_allele_to_cell_states(obs_dict)
     organ_dict = obs_dict["organ_dict"]
     bcode_meta = obs_dict["bcode_meta"]
