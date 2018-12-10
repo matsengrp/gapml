@@ -65,9 +65,12 @@ def plot_abundance_histogram(sim_obs_data_dict, real_obs_data_dict, out_plot_fil
     sim_abund = get_abundance(sim_obs_data_dict)
     real_abund = get_abundance(real_obs_data_dict)
     plt.clf()
-    plt.hist([sim_abund, real_abund], bins=20, density=True, label=["sim", "real"])
+    plt.hist([sim_abund, real_abund], bins=20, density=True, label=["Simulated", "Dome Fish 1"])
+    plt.yscale('log')
     plt.xlabel("Number of times allele is observed")
-    plt.legend()
+    plt.ylabel("Frequency")
+    #plt.legend()
+    plt.tight_layout()
     plt.savefig(out_plot_file)
 
 def get_target_deactivated(obs_data_dict):
@@ -84,9 +87,11 @@ def plot_target_deact_histogram(sim_obs_data_dict, real_obs_data_dict, out_plot_
     sim_targ = get_target_deactivated(sim_obs_data_dict)
     real_targ = get_target_deactivated(real_obs_data_dict)
     plt.clf()
-    plt.hist([sim_targ, real_targ], bins=10, density=True, label=["sim", "real"])
+    plt.hist([sim_targ, real_targ], bins=10, density=True, label=["Simulated", "Dome Fish 1"])
     plt.xlabel("Target index")
-    plt.legend()
+    plt.ylabel("Frequency target was inactive")
+    #plt.legend().remove()
+    plt.tight_layout()
     plt.savefig(out_plot_file)
 
 def get_bcode_exhaustion(obs_data_dict):
@@ -109,15 +114,18 @@ def plot_bcode_exhaustion(sim_obs_data_dict, real_obs_data_dict, out_plot_file):
     data = pd.DataFrame.from_dict({
         "num_targets_deactivated": np.concatenate([np.arange(bcode_meta.n_targets + 1), np.arange(bcode_meta.n_targets + 1)]),
         "proportions": np.concatenate([sim_deact_proportions, real_deact_proportions]),
-        "label": ["sim"] * (bcode_meta.n_targets + 1) + ["real"] * (bcode_meta.n_targets + 1)
+        "Data": ["Simulated"] * (bcode_meta.n_targets + 1) + ["Dome Fish 1"] * (bcode_meta.n_targets + 1)
     })
     plt.clf()
-    sns.lineplot(
+    sns.catplot(
         x="num_targets_deactivated",
         y="proportions",
-        hue="label",
+        hue="Data",
         data=data,
-        estimator=None)
+        kind="bar")
+    plt.yscale('log')
+    plt.xlabel("Number of inactive targets in observed barcode")
+    plt.ylabel("Proportion")
     plt.savefig(out_plot_file)
 
 def main(args=sys.argv[1:]):
@@ -125,6 +133,7 @@ def main(args=sys.argv[1:]):
     with open(args.real_data, "rb") as f:
         real_obs_data_dict = six.moves.cPickle.load(f)
 
+    sns.set_context("paper", font_scale = 1.4)
     for data_seed in args.data_seeds:
         obs_file = os.path.join(
                 args.simulation_folder,

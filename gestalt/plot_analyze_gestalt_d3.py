@@ -129,6 +129,12 @@ def convert_to_json_recurse(
         organ_tot_counts,
         allele_to_cell_state,
         cell_state_dict):
+    is_spine = False
+    if hasattr(curr_node, "spine_children") and len(curr_node.spine_children) == 0:
+        is_spine = True
+    if not is_spine and any([hasattr(c, "spine_children") for c in curr_node.children if hasattr(c, "spine_children")]):
+        is_spine = True
+
     node_dict = {
             "name": str(curr_node.node_id),
             "parent": str(curr_node.up.node_id) if not curr_node.is_root() else "null",
@@ -137,7 +143,8 @@ def convert_to_json_recurse(
             "color": "black",
             "SAMPLE": "UNKNOWN",
             "justOrganSplit": False,
-            "nodecolor": "black" if not curr_node.is_root() else "green",
+            "is_spine": is_spine,
+            "nodecolor": "black",
             "organCountsMax": 0,
             "cladeTotal": 0,
             "max_organ_prop": 0.0,
@@ -146,6 +153,7 @@ def convert_to_json_recurse(
             "organProportions": {"test": 1},
             "consistency": "NOTWT" if not curr_node.is_root() else "WT"
     }
+    print(node_dict["is_spine"])
     if curr_node.is_leaf():
         organ = organ_dict[str(curr_node.cell_state)]
         node_dict["sample"] = ORGAN_TRANSLATION[organ]
@@ -154,7 +162,6 @@ def convert_to_json_recurse(
         organ_prop = curr_node.abundance/float(organ_tot_counts[organ])
         node_dict["organProportions"] = {node_dict["sample"]: organ_prop}
         node_dict["max_organ_prop"] = organ_prop
-        print(node_dict)
         return node_dict
 
     node_dict["children"] = []

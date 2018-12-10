@@ -15,48 +15,43 @@ import file_readers
 
 def parse_args(args):
     parser = argparse.ArgumentParser(
-            description='tune over topologies and fit model parameters')
+            description='plot tree fitting method results wrt number of barcodes')
     parser.add_argument(
         '--true-model-file-template',
         type=str,
-        default="_output/model_seed%d/%d/%s/true_model.pkl")
+        default="_output/model_seed%d/%d/%s/phantom0/true_model.pkl")
     parser.add_argument(
         '--mle-file-template',
         type=str,
-        default="_output/model_seed%d/%d/%s/num_barcodes%d/sum_states_30/extra_steps_2/tune_fitted.pkl")
+        #default="_output/model_seed%d/%d/%s/phantom0/num_barcodes%d/sum_states_30/extra_steps_2/tune_fitted_new.pkl")
+        default="_output/model_seed%d/%d/%s/phantom0/num_barcodes%d/sum_states_20/extra_steps_1/tune_fitted.pkl")
     parser.add_argument(
         '--chronos-file-template',
         type=str,
-        default="_output/model_seed%d/%d/%s/num_barcodes%d/chronos_fitted.pkl")
+        default="_output/model_seed%d/%d/%s/phantom0/num_barcodes%d/chronos_fitted.pkl")
     parser.add_argument(
         '--nj-file-template',
         type=str,
-        default="_output/model_seed%d/%d/%s/num_barcodes%d/nj_fitted.pkl")
+        default="_output/model_seed%d/%d/%s/phantom0/num_barcodes%d/nj_fitted.pkl")
     parser.add_argument(
         '--simulation-folder',
         type=str,
-        default="simulation_topol_consist")
+        #default="simulation_topol_consist")
+        default="simulation_compare")
     parser.add_argument(
         '--model-seed',
         type=int,
+        #default=101)
         default=100)
     parser.add_argument(
         '--data-seeds',
         type=str,
-        default=",".join(map(str, range(10,14))))
-        #default=",".join(map(str, range(10,11))))
-    parser.add_argument(
-        '--n-bcodes-list',
-        type=str,
-        default="1,2,4")
-    parser.add_argument(
-        '--growth-stage',
-        type=str,
-        default="small")
+        #default=",".join(map(str, range(20,40))))
+        default=",".join(map(str, range(300,320))))
     parser.add_argument(
         '--out-plot',
         type=str,
-        default="_output/simulation_topol_consist_plot.png")
+        default="_output/%s_plot.png")
     parser.add_argument(
         '--scratch-dir',
         type=str,
@@ -69,7 +64,8 @@ def parse_args(args):
         os.mkdir(args.scratch_dir)
 
     args.data_seeds = parse_comma_str(args.data_seeds, int)
-    args.n_bcodes_list = parse_comma_str(args.n_bcodes_list, int)
+    args.n_bcodes_list = [1,2,4] if args.simulation_folder == "simulation_topol_consist" else [1]
+    args.growth_stage = "small" if args.simulation_folder == "simulation_topol_consist" else "30hpf"
     return args
 
 def get_true_model(
@@ -143,12 +139,15 @@ def get_chronos_result(args, seed, n_bcodes, assessor, perf_measure="full_bhv"):
 
 def main(args=sys.argv[1:]):
     args = parse_args(args)
+    LABEL_DICT = {
+        "full_bhv": "BHV",
+        "full_internal_pearson": "1 - Internal corr",
+        "full_ete_rf_unroot": "RF",
+    }
     plot_perf_measures = [
             "full_bhv",
             "full_internal_pearson",
             "full_ete_rf_unroot",
-            #"collapse_bhv",
-            #"collapse_internal_pearson"
     ]
     plot_perf_measures_set = set(plot_perf_measures)
 
@@ -166,11 +165,11 @@ def main(args=sys.argv[1:]):
                 for k, v in mle_perf_dict.items():
                     if k in plot_perf_measures_set:
                         small_dict = {
-                                'method': 'mle',
-                                'n_bcodes': n_bcodes,
+                                'Method': 'GapML',
+                                'Number of barcodes': n_bcodes,
                                 'seed': seed,
-                                'perf_meas': k,
-                                'value': v}
+                                'Performance metric': LABEL_DICT[k],
+                                'Value': v}
                         all_perfs.append(small_dict)
             except FileNotFoundError:
                 print("not found mle", n_bcodes, seed)
@@ -187,11 +186,11 @@ def main(args=sys.argv[1:]):
                 for k, v in chronos_perf_dict.items():
                     if k in plot_perf_measures_set:
                         small_dict = {
-                                'method': 'chronos',
-                                'n_bcodes': n_bcodes,
+                                'Method': 'CS + chronos',
+                                'Number of barcodes': n_bcodes,
                                 'seed': seed,
-                                'perf_meas': k,
-                                'value': v}
+                                'Performance metric': LABEL_DICT[k],
+                                'Value': v}
                         all_perfs.append(small_dict)
             except FileNotFoundError:
                 print("not found chronos", n_bcodes, seed)
@@ -208,62 +207,31 @@ def main(args=sys.argv[1:]):
                 for k, v in nj_perf_dict.items():
                     if k in plot_perf_measures_set:
                         small_dict = {
-                                'method': 'nj',
-                                'n_bcodes': n_bcodes,
+                                'Method': 'NJ + chronos',
+                                'Number of barcodes': n_bcodes,
                                 'seed': seed,
-                                'perf_meas': k,
-                                'value': v}
+                                'Performance metric': LABEL_DICT[k],
+                                'Value': v}
                         all_perfs.append(small_dict)
             except FileNotFoundError:
                 print("not found nj", n_bcodes, seed)
 
     method_perfs = pd.DataFrame(all_perfs)
     print(method_perfs)
+    sns.set_context("paper", font_scale = 1.8)
     sns_plot = sns.catplot(
-            x="n_bcodes",
-            y="value",
-            hue="method",
-            col="perf_meas",
+            x="Number of barcodes",
+            y="Value",
+            hue="Method",
+            col="Performance metric",
             data=method_perfs,
             kind="point",
-            col_wrap=2,
-            col_order=plot_perf_measures,
+            col_wrap=1,
+            col_order=[LABEL_DICT[k] for k in plot_perf_measures],
             sharey=False)
-    sns_plot.savefig(args.out_plot)
+    sns_plot.set_titles("{col_name}")
+    sns_plot.savefig(args.out_plot % args.simulation_folder)
 
 
 if __name__ == "__main__":
     main()
-
-#ONE_TREE_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/tune_example_refitnew_tree0.pkl" % (prefix, model_seed, seeds[0], 3)
-#ONE_TREE_PLOT_TEMPLATE = "%ssimulation_topol_consist/_output/model_seed%d/%d/lambda_diff/num_barcodes%d/tune_example_refitnew_tree0.png" % (prefix, model_seed, seeds[0], 3)
-#with open(ONE_TREE_TEMPLATE, "rb") as f:
-#    result = six.moves.cPickle.load(f)
-#
-#dist_key = "bhv"
-#Y_bhv = []
-#Y_pen_log_lik = []
-#X_iters = []
-#for train_iter_res in result["raw"].train_history:
-#    if 'tree_dists' in train_iter_res:
-#        Y_bhv.append(train_iter_res['tree_dists'][dist_key])
-#        Y_pen_log_lik.append(train_iter_res['pen_log_lik'])
-#        X_iters.append(train_iter_res['iter'])
-#last_raw_iter = X_iters[-1]
-#for train_iter_res in result["refit"].train_history:
-#    if 'tree_dists' in train_iter_res:
-#        Y_bhv.append(train_iter_res['tree_dists'][dist_key])
-#        Y_pen_log_lik.append(train_iter_res['pen_log_lik'])
-#        X_iters.append(last_raw_iter + train_iter_res['iter'])
-#
-#plt.clf()
-#plt.figure(1)
-#plt.subplot(211)
-#plt.plot(X_iters, Y_bhv)
-#plt.ylabel("%s distance" % dist_key)
-#plt.subplot(212)
-#plt.plot(X_iters, Y_pen_log_lik)
-#plt.ylabel("pen log lik")
-#plt.xlabel("Iterations")
-#plt.savefig(ONE_TREE_PLOT_TEMPLATE)
-#print(ONE_TREE_PLOT_TEMPLATE)

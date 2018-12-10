@@ -1,4 +1,5 @@
 import sys
+import argparse
 import random
 import matplotlib
 matplotlib.use('Agg')
@@ -50,16 +51,16 @@ ORGAN_ORDER = {
 }
 ORGAN_LABELS = [
     "Brain",
-    "Eye1",
-    "Eye2",
+    "Left Eye",
+    "Right Eye",
     "Gills",
-    "Intestine",
-    "Upper_GI",
+    "Intestinal bulb",
+    "Post intestine",
     "Blood",
-    "Heart_GFP+",
-    "Heart_chunk",
-    "Heart_GFP-",
-    "Heart_diss",
+    "Cardiomyocytes",
+    "Heart",
+    "NC",
+    "DHC",
 ]
 NUM_ORGANS = len(ORGAN_LABELS)
 
@@ -87,7 +88,7 @@ def parse_args(args):
     parser.add_argument(
         '--num-rand-permute',
         type=int,
-        default=20)
+        default=2)
     parser.add_argument(
         '--null-method',
         type=str,
@@ -141,7 +142,22 @@ def create_distance_matrix(fitted_bifurc_tree, organ_dict, allele_to_cell_state)
     sym_X_matrix = (X_matrix + X_matrix.T)/2
     return X_matrix, sym_X_matrix
 
-def plot_distance_matrix(sym_X_matrix, out_plot_file, vrange = [0.2, 0.8]):
+def plot_two_distance_matrices(sym_X_matrices, out_plot_file=None, vrange = [0.2, 0.8]):
+    plt.clf()
+    fig, axn = plt.subplots(1, 2, sharex=True, sharey=True, figsize=(14,7))
+    cbar_ax = fig.add_axes([.91, .3, .03, .6])
+    for i, ax in enumerate(axn.flat):
+        plot_distance_matrix(sym_X_matrices[i],
+                ax=ax,
+                cbar=i == 0,
+                cbar_ax=None if i else cbar_ax,
+                vrange=vrange)
+
+    fig.tight_layout(rect=[0, 0, .9, 1])
+    plt.savefig(out_plot_file, transparent=True, bbox_inches='tight')
+    print("matrix PLOT", out_plot_file)
+
+def plot_distance_matrix(sym_X_matrix, out_plot_file=None, ax=None, cbar=True, cbar_ax=None, vrange = [0.2, 0.8]):
     for i in range(sym_X_matrix.shape[0]):
         sym_X_matrix[i,i] = 10000000000
     sym_X_matrix = np.floor(sym_X_matrix * 100)/100
@@ -151,7 +167,6 @@ def plot_distance_matrix(sym_X_matrix, out_plot_file, vrange = [0.2, 0.8]):
     #    annot_mat.append(new_row_annot)
 
     # HEATMAP
-    plt.clf()
     mask = np.zeros(sym_X_matrix.shape, dtype=bool)
     mask[np.triu_indices(sym_X_matrix.shape[0], k=0)] = True
     #print(np.min(sym_X_matrix[np.triu_indices(sym_X_matrix.shape[0], k=1)]))
@@ -162,10 +177,14 @@ def plot_distance_matrix(sym_X_matrix, out_plot_file, vrange = [0.2, 0.8]):
             mask=mask,
             #annot=np.array(annot_mat),
             #fmt='',
+            ax=ax,
+            cbar=cbar,
+            cbar_ax=cbar_ax,
             vmin=vrange[0],
             vmax=vrange[1])
-    plt.savefig(out_plot_file, transparent=True, bbox_inches='tight')
-    print("matrix PLOT", out_plot_file)
+    if out_plot_file:
+        plt.savefig(out_plot_file, transparent=True, bbox_inches='tight')
+        print("matrix PLOT", out_plot_file)
 
 def load_fish(fish, args, method, folder=None, get_first=False):
     obs_file = args.obs_file % fish
@@ -192,7 +211,7 @@ def load_fish(fish, args, method, folder=None, get_first=False):
         with open(fitted_tree_file, "rb") as f:
             fitted_bifurc_tree = six.moves.cPickle.load(f)[0]["fitted_tree"]
     elif method == "nj":
-        fitted_tree_file = args.ng_template % fish
+        fitted_tree_file = args.nj_template % fish
         if folder is not None:
             fitted_tree_file = os.path.join(folder, fitted_tree_file)
         with open(fitted_tree_file, "rb") as f:
@@ -250,12 +269,13 @@ def main(args=sys.argv[1:]):
     np.random.seed(0)
 
     fishies = ["ADR1", "ADR2"]
-    methods = ["PMLE", "chronos", "nj"]
+    methods = ["PMLE"]#, "chronos", "nj"]
     method_plotting_values = {
             "PMLE": [0.2, 0.8],
             "chronos": [0, 0.6],
             "nj": [0, 0.35],
     }
+    sns.set_context("paper", font_scale=1.7)
     for method in methods:
         sym_X_matrices = []
         random_permute_X_matrices = [[],[]]
@@ -270,7 +290,13 @@ def main(args=sys.argv[1:]):
             allele_to_cell_state, _ = get_allele_to_cell_states(obs_dict)
             _, sym_X_matrix = create_distance_matrix(tree, organ_dict, allele_to_cell_state)
             out_plot_file = "_output/sym_heat_%s_%s.png" % (fish, method)
-            plot_distance_matrix(sym_X_matrix, out_plot_file, method_plotting_values[method])
+            plt.clf()
+            plt.figure(figsize=(6,5))
+            plot_distance_matrix(
+                    sym_X_matrix,
+                    out_plot_file,
+                    ax=None,
+                    vrange=method_plotting_values[method])
             sym_X_matrices.append(sym_X_matrix)
 
             # Now compare against the "null distribution" where the cell type and abundance
@@ -287,6 +313,11 @@ def main(args=sys.argv[1:]):
                         organ_dict,
                         allele_to_cell_state_random)
                 random_permute_X_matrices[fish_idx].append(rand_permut_X_matrix)
+        out_plot_file = "_output/sym_heat_%s.png" % (method)
+        plot_two_distance_matrices(
+                sym_X_matrices,
+                out_plot_file,
+                vrange=method_plotting_values[method])
 
         print(method)
         do_hypothesis_test(sym_X_matrices, random_permute_X_matrices)

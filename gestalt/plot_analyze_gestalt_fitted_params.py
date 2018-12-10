@@ -19,7 +19,8 @@ def parse_args(args):
     parser.add_argument(
         '--mle-file-template',
         type=str,
-        default="_output/%s/sampling_seed0/sum_states_25/extra_steps_1/tune_pen_hanging.pkl")
+        #default="_output/%s/sampling_seed0/sum_states_25/extra_steps_1/tune_pen_hanging.pkl")
+        default="_output/%s/sampling_seed0/sum_states_20/extra_steps_1/tune_pen_hanging.pkl")
     parser.add_argument(
         '--folder',
         type=str,
@@ -27,7 +28,8 @@ def parse_args(args):
     parser.add_argument(
         '--fishies',
         type=str,
-        default="ADR1,ADR2,dome1,30hpf_v6_5,3day1")
+        #default="ADR1,ADR2,dome1,30hpf_v6_3,3day1")
+        default="ADR1,ADR2,dome1,3day1")
     parser.set_defaults()
     args = parser.parse_args(args)
     args.fishies = parse_comma_str(args.fishies, str)

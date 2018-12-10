@@ -37,7 +37,23 @@ def parse_args(args):
     parser.add_argument(
         '--num-rands',
         type=int,
-        default=20) #000)
+        default=2000)
+    parser.add_argument(
+        '--obs-file',
+        type=str,
+        default="analyze_gestalt/_output/%s/sampling_seed0/fish_data_restrict.pkl")
+    parser.add_argument(
+        '--mle-template',
+        type=str,
+        default="analyze_gestalt/_output/%s/sampling_seed0/sum_states_20/extra_steps_1/tune_pen_hanging.pkl")
+    parser.add_argument(
+        '--chronos-template',
+        type=str,
+        default="analyze_gestalt/_output/%s/sampling_seed0/chronos_fitted.pkl")
+    parser.add_argument(
+        '--nj-template',
+        type=str,
+        default="analyze_gestalt/_output/%s/sampling_seed0/nj_fitted.pkl")
     parser.add_argument(
         '--null-method',
         type=str,
@@ -104,6 +120,7 @@ def plot_distance_to_num_germ_layers(
     pyplot.xlim(0,1)
     pyplot.ylabel("Number of germ layers")
     pyplot.xlabel("Distance from root")
+    pyplot.tight_layout()
     pyplot.savefig(out_plot_file)
 
 def get_distance_to_num_cell_states(
@@ -155,6 +172,7 @@ def plot_distance_to_num_cell_states(
     pyplot.xlim(0,1)
     pyplot.ylabel("Number of descendant cell types")
     pyplot.xlabel("Distance from root")
+    pyplot.tight_layout()
     pyplot.savefig(out_plot_file)
 
 
@@ -219,16 +237,17 @@ def main(args=sys.argv[1:]):
     np.random.seed(1)
     fishies = ["ADR1", "ADR2"]
     methods = ["PMLE", "chronos", "nj"]
+    sns.set_context("paper", font_scale=1.5)
     for method in methods:
         print("METHOD", method)
         null_method = method if args.null_method is None else args.null_method
         for fish in fishies:
             print("FISH", fish)
-            null_tree, _ = load_fish(fish, null_method)
+            null_tree, _ = load_fish(fish, args, null_method)
             assign_rand_tree_lengths(null_tree, 1)
             null_tree.label_dist_to_roots()
 
-            tree, obs_dict = load_fish(fish, method)
+            tree, obs_dict = load_fish(fish, args, method)
             tree.label_dist_to_roots()
 
             allele_to_cell_state, cell_state_dict = get_allele_to_cell_states(obs_dict)
