@@ -69,16 +69,24 @@ def discretize_tree_as_graph(
             graph_nodes[node_id].add(node_clt.node_id)
 
     end_idx = int(curr_clt.dist_to_root * num_discretize)
-    start_cell_type_str = start_clt.cell_type_str
-    if curr_idx != end_idx:
-        for i in range(curr_idx, end_idx - 1):
-            source_node_id = (start_cell_type_str, i)
-            target_node_id = (start_cell_type_str, i + 1)
-            _create_link(start_clt, start_clt, source_node_id, target_node_id)
-
-        source_node_id = (start_cell_type_str, end_idx - 1)
-        target_node_id = (curr_clt.cell_type_str, end_idx)
+    if curr_idx == end_idx - 1:
+        source_node_id = (start_clt.cell_type_str, curr_idx)
+        target_node_id = (curr_clt.cell_type_str, curr_idx + 1)
         _create_link(start_clt, curr_clt, source_node_id, target_node_id)
+        new_clt = curr_clt
+    elif curr_idx < end_idx - 1:
+        halfway_idx = curr_idx + int((end_idx - curr_idx)/2)
+        for i in range(curr_idx, halfway_idx):
+            source_node_id = (start_clt.cell_type_str, i)
+            target_node_id = (start_clt.cell_type_str, i + 1)
+            _create_link(start_clt, curr_clt, source_node_id, target_node_id)
+        source_node_id = (start_clt.cell_type_str, halfway_idx)
+        target_node_id = (curr_clt.cell_type_str, halfway_idx + 1)
+        _create_link(start_clt, curr_clt, source_node_id, target_node_id)
+        for i in range(halfway_idx + 1, end_idx):
+            source_node_id = (curr_clt.cell_type_str, i)
+            target_node_id = (curr_clt.cell_type_str, i + 1)
+            _create_link(curr_clt, curr_clt, source_node_id, target_node_id)
         new_clt = curr_clt
     else:
         new_clt = start_clt

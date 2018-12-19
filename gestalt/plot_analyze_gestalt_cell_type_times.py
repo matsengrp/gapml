@@ -1,4 +1,5 @@
 import sys
+import argparse
 import subprocess
 import matplotlib
 matplotlib.use('Agg')
@@ -32,11 +33,25 @@ HEART_TYPES = [
 ORGAN_TYPES = [
     "Brain",
     "Eyes",
-    "Int",
     "Gills",
-    "Blood",
     "Heart",
+    "Int",
 ]
+def parse_args(args):
+    parser = argparse.ArgumentParser(
+            description="""
+            Plot alluvial in ggplot
+            """)
+    parser.add_argument(
+        '--obs-file',
+        type=str,
+        default="analyze_gestalt/_output/%s/sampling_seed0/fish_data_restrict.pkl")
+    parser.add_argument(
+        '--mle-template',
+        type=str,
+        default="analyze_gestalt/_output/%s/sampling_seed0/sum_states_20/extra_steps_1/tune_pen_hanging.pkl")
+    args = parser.parse_args(args)
+    return args
 
 def label_tree_cell_types(fitted_bifurc_tree, organ_dict, allele_to_cell_state):
     for node in fitted_bifurc_tree.traverse('postorder'):
@@ -134,13 +149,14 @@ def plot_flow(flow_df, out_plot):
     print("resss", res)
 
 def main(args=sys.argv[1:]):
+    args = parse_args(args)
     sns.set_context('poster')
     fishies = ["ADR1", "ADR2"]
     methods = ["PMLE"]
     all_dfs = {}
     for method in methods:
         for fish_idx, fish in enumerate(fishies):
-            tree, obs_dict = load_fish(fish, method)
+            tree, obs_dict = load_fish(fish, args, method)
             tree.label_dist_to_roots()
             organ_dict = obs_dict["organ_dict"]
             allele_to_cell_state, _ = get_allele_to_cell_states(obs_dict)
