@@ -1,0 +1,42 @@
+[
+  {
+    "name": "ADR2 -- Brain",
+    "tree_file" :"ADR2_Brain_graph_d3.json"
+  },
+  {
+    "name": "ADR2 -- Eyes",
+    "tree_file" :"ADR2_Eyes_graph_d3.json"
+  },
+  {
+    "name": "ADR2 -- Gills",
+    "tree_file" :"ADR2_Gills_graph_d3.json"
+  },
+  {
+    "name": "ADR2 -- Heart",
+    "tree_file" :"ADR2_Heart_graph_d3.json"
+  },
+  {
+    "name": "ADR2 -- Intestinal",
+    "tree_file" :"ADR2_Int_graph_d3.json"
+  },
+  {
+    "name": "ADR2 -- Brain",
+    "tree_file" :"ADR2_Brain_graph_d3.json"
+  },
+  {
+    "name": "ADR2 -- Eyes",
+    "tree_file" :"ADR2_Eyes_graph_d3.json"
+  },
+  {
+    "name": "ADR2 -- Gills",
+    "tree_file" :"ADR2_Gills_graph_d3.json"
+  },
+  {
+    "name": "ADR2 -- Heart",
+    "tree_file" :"ADR2_Heart_graph_d3.json"
+  },
+  {
+    "name": "ADR2 -- Intestinal",
+    "tree_file" :"ADR2_Int_graph_d3.json"
+  }
+]

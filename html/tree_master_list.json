@@ -12,5 +12,19 @@
   "membershipBarWidth": 4,
   "countsBarWidth": 120,
   "barSpacer": 3
+},
+{
+  "name": "ADR2",
+  "tree_file" :"ADR2_tree.json",
+  "height": 3800,
+  "barheight": 7,
+  "width": 280,
+  "offset": 100,
+  "startRegion": 0,
+  "endRegion": 333,
+  "barWidth": 100,
+  "membershipBarWidth": 4,
+  "countsBarWidth": 120,
+  "barSpacer": 3
 }
 ]
