@@ -1,4 +1,4 @@
-var legend_width = 100;
+var legend_width = 300;
 var legend_height = 150;
 // legend spacer between individual entries
 var legendSpace = 20
