@@ -727,7 +727,6 @@ sidebarHeight = 800
 // populate the tree list
 var allTrees = ""
 $.ajax({
-  // url: 'file:///Users/jeanfeng/Documents/Research/Cas9FateMapping/plots/phylogeny/master_list.json',
   url: 'master_list.json',
   async: false,
   dataType: 'json',
