@@ -747,11 +747,6 @@ $.ajax({
 });
 
 function updateData() {
-
-
-  // finally trigger layout of the panel
-  // $( "#mypanel" ).trigger( "updatelayout" );
-
   var optionSelected = $("#dataSelect").val();
   allTrees.forEach(function(entry) {
     if (entry.tree_file == optionSelected)

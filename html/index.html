@@ -10,6 +10,7 @@
   <script src="https://d3js.org/d3-path.v1.min.js"></script>
   <script src="https://d3js.org/d3-shape.v1.min.js"></script>
   <script src="https://d3js.org/d3-force.v2.min.js"></script>
+  <script src="https://underscorejs.org/underscore-min.js"></script>
 
   <style type="text/css" media="screen">
     body { font-family: "Helvetica Neue", Helvetica, sans-serif; font-size: 12px;}
@@ -27,7 +28,14 @@
   <h3><a href="tree.html">Go to tree plots instead</a></h3>
   <div id="selectors" style="width:100%;">
     Data set:
-    <select id="dataSelect">
+    <select id="dataSelect"></select>
+    Organ:
+    <select id="organSelect">
+      <option>Brain</option>
+      <option>Eyes</option>
+      <option selected>Gills</option>
+      <option>Heart</option>
+      <option>Int</option>
     </select>
     <button onclick="updateData()">View</button>
   </div>
@@ -37,6 +45,8 @@
   <script>
   updateData();
   </script>
+
+  <div id="graph"></div>
 
 </body>
 
