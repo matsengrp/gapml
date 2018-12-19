@@ -235,7 +235,7 @@ function update_plots(data, options, organSelected) {
 // populate the dropdown with options
 var allTrees = "";
 $.ajax({
-  graph_master_list.json',
+  url: "graph_master_list.json",
   async: false,
   dataType: 'json',
   success: function (response) {
