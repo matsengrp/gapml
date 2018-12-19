@@ -1,0 +1,16 @@
+[
+{
+  "name": "ADR1",
+  "tree_file" :"ADR1_tree.json",
+  "height": 6500,
+  "barheight": 5,
+  "width": 300,
+  "offset": 100,
+  "startRegion": 0,
+  "endRegion": 333,
+  "barWidth": 100,
+  "membershipBarWidth": 4,
+  "countsBarWidth": 120,
+  "barSpacer": 3
+}
+]
