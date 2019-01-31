@@ -1,17 +1,24 @@
-var legend_width = 100;
+var legend_width = 300;
 var legend_height = 150;
 // legend spacer between individual entries
 var legendSpace = 20
 var legendOffset = 10
 
+// Size of svg
 var width = 6400;
 var height = 4800;
+
+// Offsets between nodes
 var time_offset = 100;
 var y_pos_offset = 100;
+
+// Offset from side of the window
 var x_offset = 100;
 var y_offset = 100;
-var node_radius = 30;
-var pie_radius = 5;
+var pie_radius_unit = 5;
+var stroke_width_unit = pie_radius_unit;
+
+var TOTAL_TISSUES = 5;
 var COLORS = [
   "#4F6128", //Brain
   "#77933C", //Eye
@@ -19,6 +26,14 @@ var COLORS = [
   "#632523", //Heart
   "#558ED5", //Intestinal
 ];
+
+var ORGAN_INDICES = {
+  "Brain": 0,
+  "Eyes": 1,
+  "Gills": 2,
+  "Heart": 3,
+  "Int": 4,
+}
 
 function drawLegend(sorted_tissues) {
   var colorMap = {};
@@ -70,14 +85,9 @@ function drawLegend(sorted_tissues) {
     });
 };
 
-function build_graph(data, options) {
-  drawLegend(data.tissues);
-
+function build_graph(data, svg, organSelected) {
   var nodes = data.nodes;
   var links = data.links;
-  var svg = d3.select('body').append('svg')
-    .attr('width', width)
-    .attr('height', height);
 
   // Is the primary calculator for placement of graph
   var force = d3.layout.force()
@@ -91,10 +101,8 @@ function build_graph(data, options) {
     .enter()
     .append('line')
     .attr('class', 'link')
-    .attr("stroke", "#999")
-    .attr("stroke-opacity", 0.6)
     .attr("stroke-width", function(d){
-      return d.value;
+      return (Math.log(d.value) + 1) * stroke_width_unit;
     });
 
   // Associate nodes with data
@@ -130,7 +138,7 @@ function build_graph(data, options) {
       .data(function(d) {
         pie_gen = pie(d.tissues);
         pie_gen.forEach(function(pg) {
-          pg.radius = (Math.log(d.num_uniqs) + 1) * pie_radius;
+          pg.radius = (Math.log(d.num_uniqs) + 1) * pie_radius_unit;
         })
         return pie_gen;
       })
@@ -146,20 +154,88 @@ function build_graph(data, options) {
       });
 
     // update link locations between nodes
-    link.attr('x1', function(d) { return d.source.time_idx * time_offset + x_offset; })
-        .attr('y1', function(d) { return d.source.yPos * y_pos_offset + y_offset; })
-        .attr('x2', function(d) { return d.target.time_idx * time_offset + x_offset; })
-        .attr('y2', function(d) { return d.target.yPos * y_pos_offset + y_offset; });
+    link.attr("stroke", function(d){
+        var organ_idx = ORGAN_INDICES[organSelected];
+        var containsSelected = d.source.tissues[organ_idx] > 0;
+        if (containsSelected) {
+          return COLORS[organ_idx];
+        } else {
+          return "#999";
+        }
+      }).attr("stroke-opacity", function(d){
+        var num_tissues = d.source.name.split("_")[0].length;
+        var organ_idx = ORGAN_INDICES[organSelected];
+        var containsSelected = d.source.tissues[organ_idx] > 0;
+        if (containsSelected) {
+          return 0.95 * 1/num_tissues;
+        } else {
+          return 0.3;
+        }
+      }).attr('x1', function(d) { return d.source.time_idx * time_offset + x_offset; })
+      .attr('y1', function(d) { return d.source.yPos * y_pos_offset + y_offset; })
+      .attr('x2', function(d) { return d.target.time_idx * time_offset + x_offset; })
+      .attr('y2', function(d) { return d.target.yPos * y_pos_offset + y_offset; });
 
   });
 
   force.start();
 }
 
+function label_graph(data, svg){
+  var time_max = _.max(data.nodes, function(node){
+    return node.time_idx;
+  }).time_idx;
+  var y_max = _.max(data.nodes, function(node){
+    return node.yPos;
+  }).yPos;
+
+  var yPos_labels = {};
+  data.nodes.forEach(function(node_dict){
+    progenitor_type = node_dict.name.split("_")[0];
+    yPos_labels[progenitor_type] = node_dict.yPos;
+  });
+
+  svg.selectAll("p.ylabel")
+    .data(d3.entries(yPos_labels))
+    .enter()
+    .append("text")
+    .attr("transform",function(d) {
+      var xPos = (time_max + 1) * time_offset + x_offset;
+      var yPos = d.value * y_pos_offset + y_offset;
+      return "translate("+ xPos + "," + yPos + ")";
+    })
+    .text(function(d,i){
+      return d.key;
+    });
+
+  svg.selectAll("p.xlabel")
+    .data(_.range(time_max + 1))
+    .enter()
+    .append("text")
+    .attr("transform",function(d) {
+      var xPos = d * time_offset + x_offset;
+      var yPos = (y_max + 1) * y_pos_offset + y_offset;
+      return "translate("+ xPos + "," + yPos + ")";
+    })
+    .text(function(d){
+      return d;
+    });
+}
+
+function update_plots(data, options, organSelected) {
+  var svg = d3.select('#graph')
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height);
+  drawLegend(data.tissues);
+  label_graph(data, svg);
+  build_graph(data, svg, organSelected);
+}
+
 // populate the dropdown with options
 var allTrees = "";
 $.ajax({
-  url: 'test_master_list.json',
+  url: "graph_master_list.json",
   async: false,
   dataType: 'json',
   success: function (response) {
@@ -180,6 +256,7 @@ $.ajax({
 function updateData() {
   // Figure out which setting we selected
   var optionSelected = $("#dataSelect").val();
+  var organSelected = $("#organSelect").val();
   allTrees.forEach(function(entry) {
     if (entry.tree_file == optionSelected){
       current_data_settings = entry;
@@ -187,10 +264,10 @@ function updateData() {
   })
 
   // First clean up the canvas
-  d3.select("svg").remove();
+  d3.select('#graph').selectAll("*").remove();
 
   // Now load data and draw
   d3.json(current_data_settings.tree_file , function(error, treeData) {
-    build_graph(treeData, current_data_settings);
+    update_plots(treeData, current_data_settings, organSelected);
   });
 };

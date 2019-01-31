@@ -699,8 +699,8 @@ function legendToColorRec(rootNode,colorMap) {
 // ----------------------------------------------------------------------
 
 function load() {
-  d3.select("svg").remove();
-  d3.select("vis").remove();
+  // First clean up the canvas
+  d3.select(selector).selectAll("*").remove();
 
   //load the external data -- cell_culture_parsimony_tree.json
   d3.json(current_data.tree_file , function(error, treeData) {
@@ -727,8 +727,7 @@ sidebarHeight = 800
 // populate the tree list
 var allTrees = ""
 $.ajax({
-  // url: 'file:///Users/jeanfeng/Documents/Research/Cas9FateMapping/plots/phylogeny/master_list.json',
-  url: 'master_list.json',
+  url: 'tree_master_list.json',
   async: false,
   dataType: 'json',
   success: function (response) {
@@ -748,11 +747,6 @@ $.ajax({
 });
 
 function updateData() {
-
-
-  // finally trigger layout of the panel
-  // $( "#mypanel" ).trigger( "updatelayout" );
-
   var optionSelected = $("#dataSelect").val();
   allTrees.forEach(function(entry) {
     if (entry.tree_file == optionSelected)

@@ -1,2 +1,5 @@
 run:
 `python -m SimpleHTTPServer`
+
+index.html is the webpage for viewing graphs
+tree.html is the webpage for viewing trees
