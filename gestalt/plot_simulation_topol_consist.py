@@ -12,6 +12,8 @@ from tree_distance import BHVDistanceMeasurer, InternalCorrMeasurer, UnrootRFDis
 from common import parse_comma_str
 import file_readers
 
+# Note: the different defaults below correspond to using simulation_topol_consist vs simulation_compare.
+#       For whichever folder, uncomment the same line
 
 def parse_args(args):
     parser = argparse.ArgumentParser(
@@ -23,8 +25,8 @@ def parse_args(args):
     parser.add_argument(
         '--mle-file-template',
         type=str,
-        #default="_output/model_seed%d/%d/%s/phantom0/num_barcodes%d/sum_states_30/extra_steps_2/tune_fitted_new.pkl")
-        default="_output/model_seed%d/%d/%s/phantom0/num_barcodes%d/sum_states_20/extra_steps_1/tune_fitted.pkl")
+        default="_output/model_seed%d/%d/%s/phantom0/num_barcodes%d/sum_states_30/extra_steps_2/tune_fitted_new.pkl")
+        #default="_output/model_seed%d/%d/%s/phantom0/num_barcodes%d/sum_states_20/extra_steps_1/tune_fitted.pkl")
     parser.add_argument(
         '--chronos-file-template',
         type=str,
@@ -36,22 +38,22 @@ def parse_args(args):
     parser.add_argument(
         '--simulation-folder',
         type=str,
-        #default="simulation_topol_consist")
-        default="simulation_compare")
+        default="simulation_topol_consist")
+        #default="simulation_compare")
     parser.add_argument(
         '--model-seed',
         type=int,
-        #default=101)
-        default=100)
+        default=101)
+        #default=100)
     parser.add_argument(
         '--data-seeds',
         type=str,
-        #default=",".join(map(str, range(20,40))))
-        default=",".join(map(str, range(300,320))))
+        default=",".join(map(str, range(20,40))))
+        #default=",".join(map(str, range(300,320))))
     parser.add_argument(
         '--out-plot',
         type=str,
-        default="_output/%s_plot.png")
+        default="_output/%s_plot_test.png")
     parser.add_argument(
         '--scratch-dir',
         type=str,
@@ -229,7 +231,11 @@ def main(args=sys.argv[1:]):
             col_wrap=1,
             col_order=[LABEL_DICT[k] for k in plot_perf_measures],
             sharey=False)
-    sns_plot.set_titles("{col_name}")
+    print(sns_plot.axes)
+    sns_plot.axes[0].set_ylabel("BHV")
+    sns_plot.axes[1].set_ylabel("1 - Internal corr")
+    sns_plot.axes[2].set_ylabel("RF")
+    sns_plot.set_titles("")
     sns_plot.savefig(args.out_plot % args.simulation_folder)
 
 

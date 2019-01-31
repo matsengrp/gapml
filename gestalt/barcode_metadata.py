@@ -78,8 +78,8 @@ class BarcodeMetadata:
         end_spacer = BARCODE_V7[-1]
         target_seq = BARCODE_V7[1]
         btw_target_spacer = BARCODE_V7[2]
-        bcode = (start_spacer, target_seq)
+        bcode = [start_spacer, target_seq]
         for i in range(num_targets - 1):
-            bcode += (btw_target_spacer, target_seq)
-        bcode += (end_spacer,)
+            bcode += [btw_target_spacer, target_seq]
+        bcode += [end_spacer]
         return bcode

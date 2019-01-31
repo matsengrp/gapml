@@ -8,7 +8,7 @@ import argparse
 import logging
 import random
 import numpy as np
-
+import time
 
 from clt_chronos_estimator import CLTChronosEstimator
 from common import create_directory
@@ -89,6 +89,7 @@ def main(args=sys.argv[1:]):
 
     true_model_dict, assessor = read_true_model_files(args, bcode_meta.num_barcodes)
 
+    st_time = time.time()
     chronos_est = CLTChronosEstimator(
         tree,
         bcode_meta,
@@ -113,9 +114,11 @@ def main(args=sys.argv[1:]):
         results.append(res)
 
     # Save results
+    tot_time = time.time() - st_time
     with open(args.out_model_file, "wb") as f:
         six.moves.cPickle.dump(results, f, protocol=2)
     logging.info("Complete!!!")
+    logging.info("Total time %d", tot_time)
 
 
 if __name__ == "__main__":

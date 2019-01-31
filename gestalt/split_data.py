@@ -83,7 +83,9 @@ def _pick_random_leaves_from_mulifurcs(
 
         # Randomly pick out leaves for validation set weighted by their abundance
         # We want to pick out all the leaves with the same target tract status
-        leaf_groups = list(leaf_target_tract_tuples.values())
+        leaf_groups = [leaves for leaves in leaf_target_tract_tuples.values() if sum([leaf.abundance for leaf in leaves]) > 0]
+        if len(leaf_groups) == 0:
+            continue
         abundances = [sum([leaf.abundance for leaf in leaves]) for leaves in leaf_groups]
         weights = np.array(abundances)/np.sum(abundances)
         chosen_leaf_group_idxs = np.random.choice(

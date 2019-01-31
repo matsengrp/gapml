@@ -24,9 +24,9 @@ GROWTH_DICT = {
         "death_lambda": 0.5,
         "birth_decay": -85,
         "birth_min": 4,
-        "lambda_sequence": [0.5, 0.55, 0.9, 0.55, 0.45, 0.35, 0.6, 0.45, 1.6, 0.35],
+        "lambda_sequence": [0.1, 0.6, 0.3, 0.5, 0.2, 0.55, 0.45, 0.4, 0.9, 0.35],
         "target_decay": 0,
-        "double": 0.05,
+        "double": 0.04,
         "min_leaves": 150,
         "max_leaves": 270,
     },
@@ -40,14 +40,22 @@ nest.add(
 
 nest.add(
     'seed',
-    [303],
+    # 300 - 301 done!
+    #range(301,311), # quokka
+    #range(311,320), # quoll
+    range(320,321), # quokka
 )
 
 nest.add(
     'growth_stage',
+    ["30hpf"])
+
+nest.add(
+    'phantom',
     [
-       '30hpf',
-    ])
+       False
+    ],
+    label_func=lambda c: 'phantom%d' % c)
 
 @nest.add_target_with_env(localenv)
 def generate(env, outdir, c):
@@ -93,11 +101,12 @@ def generate(env, outdir, c):
         GROWTH_DICT[c['growth_stage']]['target_decay'],
         '--trim-zero-probs 0.1 0.05 0.1 0.05',
         '--trim-params 1.5 -0.1 1 0.1',
-        '--trim-long-factor 0.1 0.1',
+        '--trim-long-factor 0.07 0.1',
         '--insert-zero-prob 0.4',
         '--insert-params 1.5 0',
         '--perturb-target-lambdas-variance 0',
         '--max-tries 20',
+        '--add-phantom-leaf' if c['phantom'] else '',
     ]
     return env.Command(
         [
@@ -207,7 +216,7 @@ def run_neighbor_joining(env, outdir, c):
 
 nest.add(
     'sum_states',
-    [30],
+    [20],
     label_func=lambda c: "sum_states_%d" % c,
 )
 
@@ -217,10 +226,26 @@ nest.add(
     label_func=lambda c: "extra_steps_%d" % c,
 )
 
+nest.add(
+    'pen',
+    ["again"],
+    label_func=lambda c: "pen_%s" % c,
+)
+
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = "4096,1024,256"
-    target_lam_penalty_params = "32,16"
+    if c["pen"] == "0":
+	penalty_params = "0.000001"
+	target_lam_penalty_params = "0.0000001"
+        max_chad_tune_search = 1
+        num_chad_tune_iters = 1
+        num_chad_stop = 1
+    else:
+        penalty_params = "512,128,32"
+        target_lam_penalty_params = "16,4,1"
+        max_chad_tune_search = 15
+        num_chad_tune_iters = 8
+        num_chad_stop = 10
 
     # Best pen params something like
     # RUNNING branch pen param 256.000000 target lam pen param 1.000000
@@ -246,11 +271,11 @@ def run_MLE(env, outdir, c):
         '--max-fit-splits',
         4,
         '--num-chad-tune-iters',
-        15,
+        num_chad_tune_iters,
         '--num-chad-stop',
-        10,
+        num_chad_stop,
         '--max-chad-tune-search',
-        8,
+        max_chad_tune_search,
         '--max-sum-states',
         c['sum_states'],
         '--max-extra-steps',
@@ -262,7 +287,7 @@ def run_MLE(env, outdir, c):
         4,
         '--lambda-decay-known',
         '--num-init-random-rearrange',
-        NUM_RANDOM_REARRANGE if c['num_barcodes'] == 1 else 0,
+        NUM_RANDOM_REARRANGE,
         '--scratch-dir',
 	join('simulation_compare', outdir, 'scratch'),
     ]
@@ -271,7 +296,7 @@ def run_MLE(env, outdir, c):
         'python execute.py',
         '--clusters',
         localenv['clusters'],
-        '--aws-machine compute',
+        '--aws-machine mem',
         "${TARGETS[0]}",
         cmd_arg_str]
     return env.Command(

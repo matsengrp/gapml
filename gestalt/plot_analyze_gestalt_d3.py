@@ -11,30 +11,30 @@ import collapsed_tree
 
 COLLAPSE_DIST = 0.001
 ORGAN_TRANSLATION = {
-    "7B_Brain": "Brain",
-    "7B_Eye1": "Left eye",
-    "7B_Eye2": "Right eye",
-    "7B_Gills": "Gills",
-    "7B_Intestine": "Intestinal bulb",
-    "7B_Upper_GI": "Post intestine",
-    "7B_Blood": "Blood",
-    "7B_Heart_chunk": "Heart",
-    "7B_Heart_diss": "DHC",
-    "7B_Heart_GFP-": "NC",
-    "7B_Heart_GFP+": "Cardiomyocytes",
+    "Brain": "Brain",
+    "Eye1": "Left eye",
+    "Eye2": "Right eye",
+    "Gills": "Gills",
+    "Intestine": "Intestinal bulb",
+    "Upper_GI": "Post intestine",
+    "Blood": "Blood",
+    "Heart_chunk": "Heart",
+    "Heart_diss": "DHC",
+    "Heart_GFP-": "NC",
+    "Heart_GFP+": "Cardiomyocytes",
 }
 ORGAN_COLORS = {
-        "7B_Brain": "#4F6128",
-        "7B_Eye1": "#77933C",
-        "7B_Eye2": "#C3D69B",
-        "7B_Gills": "#FFC000",
-        "7B_Blood": "#FF0000",
-        "7B_Heart_chunk": "#632523",
-        "7B_Heart_GFP+": "#D99795",
-        "7B_Heart_GFP-": "#E6B9B8",
-        "7B_Heart_diss": "#943735",
-        "7B_Upper_GI": "#558ED5",
-        "7B_Intestine": "#8EB3E3",
+        "Brain": "#4F6128",
+        "Eye1": "#77933C",
+        "Eye2": "#C3D69B",
+        "Gills": "#FFC000",
+        "Blood": "#FF0000",
+        "Heart_chunk": "#632523",
+        "Heart_GFP+": "#D99795",
+        "Heart_GFP-": "#E6B9B8",
+        "Heart_diss": "#943735",
+        "Upper_GI": "#558ED5",
+        "Intestine": "#8EB3E3",
 }
 
 def parse_args(args):
@@ -153,9 +153,8 @@ def convert_to_json_recurse(
             "organProportions": {"test": 1},
             "consistency": "NOTWT" if not curr_node.is_root() else "WT"
     }
-    print(node_dict["is_spine"])
     if curr_node.is_leaf():
-        organ = organ_dict[str(curr_node.cell_state)]
+        organ = organ_dict[str(curr_node.cell_state)].replace("7B_", "")
         node_dict["sample"] = ORGAN_TRANSLATION[organ]
         node_dict["color"] = ORGAN_COLORS[organ]
         node_dict["event"] = convert_allele_events_to_event_str(curr_node, bcode_meta)
@@ -181,7 +180,6 @@ def collapse_short_dists(fitted_bifurc_tree):
     return col_tree
 
 def make_organ_tot_counts(tree, organ_dict):
-    print(organ_dict.keys())
     organ_tot_counts = {organ: 0 for organ in organ_dict.values()}
     for leaf in tree:
         organ = organ_dict[str(leaf.cell_state)]
@@ -190,7 +188,6 @@ def make_organ_tot_counts(tree, organ_dict):
 
 def main(args=sys.argv[1:]):
     args = parse_args(args)
-    print(args)
     tree, obs_dict = load_fish(args.fish, args, method="PMLE", folder=args.folder)
     allele_to_cell_state, cell_state_dict = get_allele_to_cell_states(obs_dict)
     organ_dict = obs_dict["organ_dict"]

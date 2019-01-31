@@ -43,25 +43,26 @@ class PenaltyTuneResult:
         """
         pen_param_scores = np.array([r.score for r in self.results])
         logging.info("Tuning scores %s", pen_param_scores)
-        max_targ_pen_param = np.max([
-            r.fit_results[0].fit_params["target_lam_pen_param"]
+        max_branch_pen_param = np.max([
+            r.fit_results[0].fit_params["branch_pen_param"]
             for r in self.results])
         # A hacky way to order the penalty parameters from largest to smallest
         pen_param_array = np.array([
-            r.fit_results[0].fit_params["branch_pen_param"] * max_targ_pen_param
-            + r.fit_results[0].fit_params["target_lam_pen_param"]
+            r.fit_results[0].fit_params["target_lam_pen_param"] * max_branch_pen_param
+            + r.fit_results[0].fit_params["branch_pen_param"]
             for r in self.results])
 
         # The best penalty parameters is the first one before the score decreases
-        sorted_idxs = np.argsort(-pen_param_array)
-        best_idx = sorted_idxs[0]
-        best_score = pen_param_scores[sorted_idxs[0]]
-        for idx in sorted_idxs[1:]:
-            if best_score < pen_param_scores[idx]:
-                best_score = pen_param_scores[idx]
-                best_idx = idx
-            else:
-                break
+        best_idx = np.argmax(pen_param_scores)
+        #sorted_idxs = np.argsort(-pen_param_array)
+        #best_idx = sorted_idxs[0]
+        #best_score = pen_param_scores[sorted_idxs[0]]
+        #for idx in sorted_idxs[1:]:
+        #    if best_score < pen_param_scores[idx]:
+        #        best_score = pen_param_scores[idx]
+        #        best_idx = idx
+        #    else:
+        #        break
 
         best_pen_result = self.results[best_idx]
         chosen_best_res = best_pen_result.fit_results[warm_idx]

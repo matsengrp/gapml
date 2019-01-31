@@ -9,6 +9,7 @@ import logging
 import numpy as np
 import random
 from typing import Dict
+import time
 
 from cell_lineage_tree import CellLineageTree
 from optim_settings import KnownModelParams
@@ -434,13 +435,15 @@ def main(args=sys.argv[1:]):
     logging.info(tree.get_ascii(attributes=["node_id"]))
     logging.info("Abundance...")
     logging.info(tree.get_ascii(attributes=["abundance"]))
-    for leaf in tree:
-        assert leaf.abundance >= 1
+    # there might be a phantom leaf we inserted with zero abundance
+    # just for penalization. all other leaves should have at least abundance 1
+    assert(np.sum([leaf.abundance == 0 for leaf in tree]) <= 1)
 
     for node in tree.traverse():
         assert node.node_id is not None
 
     # Begin tuning
+    st_time = time.time()
     tuning_history = []
     recent_chads = set()
     num_stable = 0
@@ -553,6 +556,7 @@ def main(args=sys.argv[1:]):
     else:
         final_fit = best_res
 
+    tot_time = time.time() - st_time
     # Save results
     with open(args.out_model_file, "wb") as f:
         result = {
@@ -561,6 +565,7 @@ def main(args=sys.argv[1:]):
         }
         six.moves.cPickle.dump(result, f, protocol=2)
     logging.info("Complete!!!")
+    logging.info("Total time: %d", tot_time)
 
 
 if __name__ == "__main__":

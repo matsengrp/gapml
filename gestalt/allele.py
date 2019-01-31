@@ -15,6 +15,7 @@ class AlleleList:
     (and we know exactly which allele is which)
     """
     def __init__(self, allele_strs: List[List[str]], bcode_meta: BarcodeMetadata):
+        self.allele_strs = allele_strs
         self.alleles = [Allele(a, bcode_meta) for a in allele_strs]
         self.bcode_meta = bcode_meta
 

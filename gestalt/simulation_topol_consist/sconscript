@@ -46,15 +46,15 @@ GROWTH_DICT = {
 
 nest.add(
     'model_seed',
-    [100],
+    [101],
     label_func=lambda c: 'model_seed%d' % c,
 )
 
 nest.add(
     'seed',
-    # starts from 10
-    #range(20,22),
-    [21],
+    # 20 to 32
+    #range(25,32), barcode 2 and 4 on beagle
+    range(32, 40),
 )
 
 nest.add(
@@ -62,6 +62,13 @@ nest.add(
     [
        'small'
     ])
+
+nest.add(
+    'phantom',
+    [
+       False
+    ],
+    label_func=lambda c: 'phantom%d' % c)
 
 @nest.add_target_with_env(localenv)
 def generate(env, outdir, c):
@@ -115,6 +122,7 @@ def generate(env, outdir, c):
         '--insert-params 1 0.3',
         '--perturb-target-lambdas-variance 0',
         '--max-tries 20',
+        '--add-phantom-leaf' if c['phantom'] else '',
     ]
     return env.Command(
         targets,
@@ -123,7 +131,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [1,2,4],
+    [2,4],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -229,15 +237,15 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    penalty_params = "512,128,32,8"
-    target_lam_penalty_params = "1"
     if c['num_barcodes'] == 1:
-        penalty_params = "2048,512,128"
-        target_lam_penalty_params = "16,8"
+        penalty_params = "2048,1024,512"
+        target_lam_penalty_params = "32,16"
     elif c['num_barcodes'] == 2:
+    	penalty_params = "512,256,128,64"
         target_lam_penalty_params = "8,2"
     elif c['num_barcodes'] == 4:
-        target_lam_penalty_params = "8,2"
+    	penalty_params = "256,128,64,32"
+        target_lam_penalty_params = "4,1"
 
     targets = [
                 join(outdir, 'tune_fitted_new.pkl'),
@@ -289,14 +297,15 @@ def run_MLE(env, outdir, c):
 	join('simulation_topol_consist', outdir, 'scratch'),
     ]
     cmd_arg_str = "'%s'" % ' '.join(map(str, cmd_arg))
+    #cmd = [
+    #    'python execute.py',
+    #    '--clusters',
+    #    localenv['clusters'],
+    #    '--aws-machine compute',
+    #    "${TARGETS[0]}",
+    #    cmd_arg_str,
+    #    ]
     cmd = [
-        'python execute.py',
-        '--clusters',
-        localenv['clusters'],
-        '--aws-machine mem',
-        "${TARGETS[0]}",
-        cmd_arg_str,
-        #'srun -p matsen_e,campus',
-        #'--cpus-per-task 8',
-        ]
+        'srun -p matsen_e,campus',
+        '--cpus-per-task 8'] + cmd_arg
     return env.Command(targets, sources, ' '.join(map(str, cmd)))

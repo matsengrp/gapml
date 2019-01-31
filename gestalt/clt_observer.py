@@ -121,6 +121,8 @@ class CLTObserver:
             allele_list_with_errors = self._observe_leaf_with_error(leaf)
             allele_events_list_with_errors = allele_list_with_errors.get_event_encoding()
 
+            # TODO: i dont think this observes cell state correctly
+            # But then again, all te simulations with cell state are broekn probably
             if observe_cell_state:
                 collapse_id = (leaf.allele_events_list_str, str(leaf.cell_state))
             else:

@@ -20,6 +20,8 @@ localenv = env.Clone()
 # Set up state
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
+NUM_BARCODES = 1
+
 nest.add(
     'seed',
     #range(5,6),
@@ -29,7 +31,8 @@ nest.add(
 
 nest.add(
     'setting',
-    ['oracle'])
+    ['none'])
+    #['oracle'])
     #['one_leaf'])
 
 @nest.add_target_with_env(localenv)
@@ -38,7 +41,7 @@ def generate(env, outdir, c):
         'python generate_data.py',
         "--is-%s" % c['setting'].replace("_", "-") if c['setting'] == 'one_leaf' else '',
         '--sampling',
-        0.2,
+        1 if c['setting'] == 'one_leaf' else 0.2,
         '--model-seed',
         c['seed'],
         '--data-seed',
@@ -47,13 +50,13 @@ def generate(env, outdir, c):
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
         #'--target-lambda 0.003,0.003',
-        '--double 0.3',
-        '--target-lambda 0.9,0.6,0.2,0.5,0.3',
+        '--double 0.05',
+        '--target-lambda 0.9,0.6,1.4',
         '--insert-zero-prob 0.1',
         '--trim-zero-prob 0.2 0.1 0.2 0.1',
         '--time 1',
         '--num-barcodes',
-        10,
+        NUM_BARCODES,
         '--birth-sync-rounds 3',
         '--birth-sync-time 0.1',
         '--birth-decay -5',
@@ -64,6 +67,7 @@ def generate(env, outdir, c):
         2000,
         '--max-abundance 1000',
         '--perturb-target 0',
+        '' if c['setting'] == 'one_leaf' else '--add-phantom',
         #'--use-poisson',
     ]
     return env.Command(
@@ -76,7 +80,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [10],
+    [NUM_BARCODES],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -153,7 +157,7 @@ def run_MLE(env, outdir, c):
         '--branch-pen',
         '1', #100,20',
         '--target-lam-pen',
-        '0.5',
+        '0.005',
         '--max-sum-states 10',
         '--max-extra-steps 1',
         '--max-iters 25000',
@@ -164,7 +168,7 @@ def run_MLE(env, outdir, c):
         '--num-init-random-rearrange 0',
         '--tot-time-known',
         #'--lambda-known',
-        #'--lambda-decay-known',
+        '--lambda-decay-known',
         '--num-processes 3'
         #'--use-poisson',
     ]

@@ -253,7 +253,7 @@ def main(args=sys.argv[1:]):
         obs_leaves,
         args,
         bcode_meta)
-    logging.info("Finished getting parsimony trees %d", time.time() - st_time)
+    logging.info("Total time: %d", time.time() - st_time)
 
     if args.max_best_multifurc or args.max_best:
         # Get the trees based on distance to the true tree

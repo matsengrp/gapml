@@ -269,7 +269,8 @@ def main(args=sys.argv[1:]):
     np.random.seed(0)
 
     fishies = ["ADR1", "ADR2"]
-    methods = ["PMLE"]#, "chronos", "nj"]
+    methods = ["PMLE", "chronos", "nj"]
+    #methods = ["nj"]
     method_plotting_values = {
             "PMLE": [0.2, 0.8],
             "chronos": [0, 0.6],

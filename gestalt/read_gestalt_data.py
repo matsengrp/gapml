@@ -10,6 +10,7 @@ import time
 import logging
 import six
 
+from allele import AlleleList
 from barcode_metadata import BarcodeMetadata
 from clt_observer import ObservedAlignedSeq
 from read_seq_data import process_event_format7B
@@ -72,6 +73,10 @@ def parse_args():
         type=int,
         default=8,
         help='if events are within this many basepairs of each other, then merge as single event')
+    parser.add_argument(
+        '--add-phantom-leaf',
+        action='store_true',
+        help="add phantom leaf with no events")
     return parser.parse_args()
 
 def process_observed_seq_format7B(
@@ -424,6 +429,16 @@ def main():
     print("Number of uniq allele cell state pairs", len(obs_leaves_cell_state))
 
     obs_leaves = merge_by_allele(obs_leaves_cell_state)
+    # inserting a no evt observation for "penalization" too
+    if args.add_phantom_leaf:
+        no_evt_obs_seq = ObservedAlignedSeq(
+            allele_list=AlleleList([bcode_meta.unedited_barcode], bcode_meta),
+            allele_events_list=[AlleleEvents(num_targets=bcode_meta.n_targets)],
+            cell_state=None,
+            abundance=0,
+        )
+        print("NO EVT", no_evt_obs_seq)
+        obs_leaves.append(no_evt_obs_seq)
 
     # Check trim length assignments
     # Check all indels are disjoin in terms of what targets they deactivate

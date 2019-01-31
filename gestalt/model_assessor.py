@@ -25,12 +25,12 @@ class ModelAssessor:
         @param leaf_key: the attribute to use for aligning leaves between trees
         """
         self.ref_tree = ref_tree
-        self.ref_collapsed_tree = collapsed_tree.collapse_ultrametric(ref_tree)
-        self.ref_collapsed_tree.label_node_ids()
+        #self.ref_collapsed_tree = collapsed_tree.collapse_ultrametric(ref_tree)
+        #self.ref_collapsed_tree.label_node_ids()
         logging.info("num leaves not collapsed version %d", len(self.ref_tree))
-        logging.info("num leaves collapsed version %d", len(self.ref_collapsed_tree))
-        logging.info(self.ref_collapsed_tree.get_ascii(attributes=["dist"]))
-        logging.info(self.ref_collapsed_tree.get_ascii(attributes=[leaf_key]))
+        #logging.info("num leaves collapsed version %d", len(self.ref_collapsed_tree))
+        #logging.info(self.ref_collapsed_tree.get_ascii(attributes=["dist"]))
+        #logging.info(self.ref_collapsed_tree.get_ascii(attributes=[leaf_key]))
 
         self.leaf_key = leaf_key
         for leaf in ref_tree:
@@ -46,17 +46,26 @@ class ModelAssessor:
             "targ_corr": self._target_lams_corr,
             "double": self._compare_double_cut}
 
+    def _prune_tree_to_match(self, tree1, tree2):
+        """
+        @return pruned version of tree1 based on shared leaves in tree2
+        """
+        # If the other tree has a different set of leaves, figure out which subset of leaves to compare
+        # against in the reference tree
+        tree2_leaf_strs = set([getattr(l, self.leaf_key) for l in tree2])
+        keep_leaf_ids = set()
+        for leaf in tree1:
+            if getattr(leaf, self.leaf_key) in tree2_leaf_strs:
+                keep_leaf_ids.add(leaf.node_id)
+        assert len(keep_leaf_ids) > 1
+        tree1_pruned = CellLineageTree.prune_tree(tree1, keep_leaf_ids)
+        return tree1_pruned
+
     def _get_full_tree_assessor(self, other_tree):
         # Compare to no collapse tree
         # If the other tree has a different set of leaves, figure out which subset of leaves to compare
         # against in the reference tree
-        other_tree_leaf_strs = set([getattr(l, self.leaf_key) for l in other_tree])
-        keep_leaf_ids = set()
-        for leaf in self.ref_tree:
-            if getattr(leaf, self.leaf_key) in other_tree_leaf_strs:
-                keep_leaf_ids.add(leaf.node_id)
-        assert len(keep_leaf_ids) > 1
-        ref_tree_pruned = CellLineageTree.prune_tree(self.ref_tree, keep_leaf_ids)
+        ref_tree_pruned = self._prune_tree_to_match(self.ref_tree, other_tree)
 
         # Actually do the comparison
         tree_assessor = TreeDistanceMeasurerAgg.create_single_abundance_measurer(
@@ -120,18 +129,20 @@ class ModelAssessor:
         # Compare to no collapse tree
         # If the other tree has a different set of leaves, figure out which subset of leaves to compare
         # against in the reference tree
-        tree_assessor = self._get_full_tree_assessor(other_tree)
-        full_dist_dict = tree_assessor.get_tree_dists([other_tree])[0]
+        other_tree_pruned = self._prune_tree_to_match(other_tree, self.ref_tree)
+        logging.info("other_tree num leaves %d", len(other_tree_pruned))
+        tree_assessor = self._get_full_tree_assessor(other_tree_pruned)
+        full_dist_dict = tree_assessor.get_tree_dists([other_tree_pruned])[0]
         # Copy over results
         for k, v in full_dist_dict.items():
             dist_dict["full_%s" % k] = v
 
         # Compare to collapsed tree
-        tree_collapse_assessor, other_tree_collapsed = self._get_collapse_tree_assessor(other_tree)
-        collapse_dist_dict = tree_collapse_assessor.get_tree_dists([other_tree_collapsed])[0]
-        # Copy over results
-        for k, v in collapse_dist_dict.items():
-            dist_dict["collapse_%s" % k] = v
+        #tree_collapse_assessor, other_tree_collapsed = self._get_collapse_tree_assessor(other_tree_pruned)
+        #collapse_dist_dict = tree_collapse_assessor.get_tree_dists([other_tree_collapsed])[0]
+        ## Copy over results
+        #for k, v in collapse_dist_dict.items():
+        #    dist_dict["collapse_%s" % k] = v
 
         # Calculate the other assessment measures now
         if other_param_dict is not None:

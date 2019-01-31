@@ -321,7 +321,6 @@ class BHVDistanceMeasurer(TreeDistanceMeasurer):
                 bhv_out_file,
                 tree_in_file,
                 verbose_out_file)
-        print(bhv_cmd)
         try:
             subprocess.check_output(
                 bhv_cmd,

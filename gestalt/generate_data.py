@@ -2,6 +2,7 @@
 A simulation engine to create cell lineage tree and data samples
 """
 import sys
+import copy
 import random
 import numpy as np
 import argparse
@@ -11,13 +12,15 @@ import logging
 import six
 import os
 
+from allele import AlleleList
+from allele_events import AlleleEvents
 from cell_state import CellTypeTree
 from cell_state_simulator import CellTypeSimulator
 from clt_simulator import CLTSimulatorBifurcating
 from clt_simulator_simple import CLTSimulatorSimpler, CLTSimulatorSimplest
 from clt_likelihood_model import CLTLikelihoodModel
 from allele_simulator_simult import AlleleSimulatorSimultaneous
-from clt_observer import CLTObserver
+from clt_observer import CLTObserver, ObservedAlignedSeq
 from optim_settings import KnownModelParams
 from barcode_metadata import BarcodeMetadata
 
@@ -123,7 +126,7 @@ def parse_args():
     parser.add_argument(
         '--birth-sync-time', type=float, default=0.1, help='amount of time between syncronous birth rounds')
     parser.add_argument(
-        '--birth-decay', type=float, default=-0.3, help='birth rate decay')
+        '--birth-decay', type=float, default=-1, help='birth rate decay')
     parser.add_argument(
         '--birth-min', type=float, default=2, help='birth rate minimum')
     parser.add_argument(
@@ -172,6 +175,10 @@ def parse_args():
         '--use-poisson',
         action='store_true',
         help="trims follow poisson")
+    parser.add_argument(
+        '--add-phantom-leaf',
+        action='store_true',
+        help="add phantom leaf with no events")
 
     parser.set_defaults()
     args = parser.parse_args()
@@ -363,6 +370,32 @@ def main(args=sys.argv[1:]):
     logging.info("Number of uniq obs alleles %d", len(obs_leaves))
     print("Number of uniq obs alleles %d" % len(obs_leaves))
 
+    # inserting a no evt observation for "penalization" if there is no node with no events
+    min_num_events_bcode0 = [len(obs.allele_events_list[0].events) for obs in obs_leaves]
+    logging.info("min num events %d", np.min(min_num_events_bcode0))
+    print("min num events %d", np.min(min_num_events_bcode0))
+    if args.add_phantom_leaf and np.min(min_num_events_bcode0) > 0:
+        assert len(obs_leaves) > 10
+        logging.info("adding phantom leaf")
+        argmin_leaf_idx = np.argmin(min_num_events_bcode0)
+        argmin_leaf = obs_leaves[argmin_leaf_idx]
+
+        new_allele_strs = copy.deepcopy(argmin_leaf.allele_list.allele_strs)
+        new_allele_strs[0] = list(bcode_meta.unedited_barcode)
+
+        new_allele_events = list(copy.deepcopy(argmin_leaf.allele_events_list))
+        print(new_allele_events)
+        new_allele_events = [AlleleEvents(num_targets=args.num_targets)] + new_allele_events[1:]
+
+        no_evt_obs_seq = ObservedAlignedSeq(
+            allele_list=AlleleList(new_allele_strs, bcode_meta),
+            allele_events_list=new_allele_events,
+            cell_state=None,
+            abundance=0,
+        )
+        print("NO EVT", no_evt_obs_seq)
+        obs_leaves.append(no_evt_obs_seq)
+
     # Save the observed data
     with open(args.out_obs_file, "wb") as f:
         out_dict = {
@@ -370,7 +403,7 @@ def main(args=sys.argv[1:]):
             "obs_leaves": obs_leaves,
             "time": args.time,
         }
-        six.moves.cPickle.dump(out_dict, f, protocol = 2)
+        six.moves.cPickle.dump(out_dict, f, protocol=2)
 
     # Save the true data
     with open(args.out_model_file, "wb") as f:
@@ -381,7 +414,7 @@ def main(args=sys.argv[1:]):
             "bcode_meta": bcode_meta,
             "time": args.time,
             "args": args}
-        six.moves.cPickle.dump(out_dict, f, protocol = 2)
+        six.moves.cPickle.dump(out_dict, f, protocol=2)
 
 if __name__ == "__main__":
     main()

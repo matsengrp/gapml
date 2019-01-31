@@ -4,6 +4,7 @@ Neighbor joining tree inference
 import sys
 import six
 import os
+import time
 import argparse
 import logging
 import random
@@ -76,6 +77,7 @@ def main(args=sys.argv[1:]):
                                     args,
                                     bcode_meta.num_barcodes)
 
+    st_time = time.time()
     neighbor_joining_est = CLTNeighborJoiningEstimator(bcode_meta,
                                                        args.scratch_dir,
                                                        obs_data_dict["obs_leaves"])
@@ -114,10 +116,11 @@ def main(args=sys.argv[1:]):
         }
         results.append(res)
 
+    tot_time = time.time() - st_time
     with open(args.out_model_file, "wb") as f:
         six.moves.cPickle.dump(results, f, protocol=2)
     logging.info("Complete!!!")
-
+    logging.info("Total time: %d", tot_time)
 
 
 if __name__ == "__main__":
