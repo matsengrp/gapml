@@ -146,10 +146,13 @@ nest.add(
 def make_less_parsimonious(env, outdir, c):
     targets = [
             join(outdir, 'tree.pkl')]
-    sources = c['run_topology']
+    sources = [
+        c['restrict_observed_alleles'][0],
+        c['run_topology']]
     cmd = [
         'python get_less_parsimonious_tree.py',
-        '--parsimony-topology-file ${SOURCES[0]}',
+        '--obs-file ${SOURCES[0]}',
+        '--parsimony-topology-file ${SOURCES[1]}',
         '--out-tree-file ${TARGETS[0]}',
         '--seed',
         c['model_seed'] + 3,

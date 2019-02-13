@@ -46,10 +46,11 @@ def get_tree_parsimony_score(tree: CellLineageTree, bcode_meta: BarcodeMetadata)
     return ancestral_events_finder.get_parsimony_score(tree)
 
 def do_spr_move(tree: CellLineageTree, bcode_meta: BarcodeMetadata):
-    orig_pars_score = get_tree_parsimony_score(tree, bcode_meta)
     num_leaves = len(tree)
     max_node_id = tree.label_node_ids()
+    orig_pars_score = get_tree_parsimony_score(tree, bcode_meta)
     while True:
+        max_node_id = tree.label_node_ids()
         rand_node_source, rand_node_target = np.random.choice(np.arange(2, max_node_id), size=2, replace=False)
         source_node = tree.search_nodes(node_id=rand_node_source)[0]
         target_node = tree.search_nodes(node_id=rand_node_target)[0]
