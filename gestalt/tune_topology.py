@@ -495,6 +495,7 @@ def main(args=sys.argv[1:]):
         recent_chads.add(rand_chad_id)
 
         # Now tune the hanging chads!
+        chad_st_time = time.time()
         logging.info(
                 "Iter %d: Tuning chad %s",
                 i,
@@ -519,6 +520,7 @@ def main(args=sys.argv[1:]):
         # just for fun... check that the number of leaves match
         assert len(tree) == num_old_leaves
 
+        logging.info("Iter %d, chad time %d", i, time.time() - chad_st_time)
         if assessor is not None:
             logging.info(
                     "Iter %d, begin dists %s, log lik %f %f",

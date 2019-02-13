@@ -761,7 +761,8 @@ def tune(
             None,
             args.scratch_dir,
             args.num_processes)
-    worker_results = [w[0][0] for w in job_manager.run()]
+    worker_results = [w[0][0] for w in job_manager.run(successful_only=True)]
+    assert len(worker_results) > 0
 
     # Aggregate the results
     chad_tune_res = _create_chad_results(

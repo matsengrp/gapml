@@ -1,0 +1,247 @@
+# Test if we have any sort of consistency
+# This simulates a larger tree and performs a topology search
+
+import os
+
+from os.path import join
+from nestly.scons import SConsWrap
+from nestly import Nest
+from SCons.Script import Environment, Command, AddOption
+import numpy as np
+
+Import('env')
+localenv = env.Clone()
+
+nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
+
+GROWTH_DICT = {
+    "sampling_rate": 0.08,
+    "birth_sync_rounds": 5,
+    "birth_sync_time": 0.06,
+    "death_lambda": 0.3,
+    "birth_decay": -18,
+    "birth_min": 6,
+    "lambda_sequence": [.75, .7, .65, .6, .55, .5, .45],
+    "target_decay": 0,
+    "double": 0.05,
+    "min_leaves": 70,
+    "max_leaves": 110,
+}
+
+nest.add_aggregate("fitted_trees", list)
+nest.add_aggregate("fitted_tree_seeds", list)
+nest.add_aggregate("obs_files", list)
+
+nest.add(
+    'model_seed',
+    [10],
+    label_func=lambda c: 'model_seed%d' % c,
+)
+
+@nest.add_target_with_env(localenv)
+def generate(env, outdir, c):
+    targ_lambdas = ",".join(map(str, GROWTH_DICT['lambda_sequence']))
+
+    targets = [
+        join(outdir, 'obs_data.pkl'),
+        join(outdir, 'true_model.pkl'),
+        join(outdir, 'log.txt')]
+    cmd = [
+        'python generate_data.py',
+        '--out-obs-file ${TARGETS[0]}',
+        '--out-model-file ${TARGETS[1]}',
+        '--log-file ${TARGETS[2]}',
+        '--sampling-rate',
+        GROWTH_DICT['sampling_rate'],
+        '--model-seed',
+        c['model_seed'],
+        '--data-seed',
+        c['model_seed'],
+        '--time 1',
+        '--birth-sync-rounds',
+        GROWTH_DICT['birth_sync_rounds'],
+        '--birth-sync-time',
+        GROWTH_DICT['birth_sync_time'],
+        '--birth-decay',
+        GROWTH_DICT['birth_decay'],
+        '--birth-min',
+        GROWTH_DICT['birth_min'],
+        '--death-lambda',
+        GROWTH_DICT['death_lambda'],
+        '--max-clt-leaves',
+        int(GROWTH_DICT['max_leaves']/GROWTH_DICT['sampling_rate'] * 1.1),
+        '--num-barcodes',
+        4,
+        '--min-uniq-alleles',
+        GROWTH_DICT['min_leaves'],
+        '--max-uniq-alleles',
+        GROWTH_DICT['max_leaves'],
+        '--max-abundance 20000',
+        '--double-cut-weight',
+        GROWTH_DICT['double'],
+        '--target-lambdas',
+        targ_lambdas,
+        '--target-lam-decay',
+        GROWTH_DICT['target_decay'],
+        '--trim-zero-probs 0.15 0.1 0.15 0.1',
+        '--trim-params 1.35 -0.1 1.2 0.1',
+        '--trim-long-factor 0.08 0.08',
+        '--insert-zero-prob 0.5',
+        '--insert-params 1 0.3',
+        '--perturb-target-lambdas-variance 0',
+        '--max-tries 20',
+    ]
+    return env.Command(
+        targets,
+        [],
+        ' '.join(map(str, cmd)))
+
+nest.add(
+    'num_barcodes',
+    [1],
+    label_func=lambda c: "num_barcodes%d" % c,
+)
+
+@nest.add_target_with_env(localenv)
+def restrict_observed_alleles(env, outdir, c):
+    sources = c['generate']
+    targets = [
+	join(outdir, 'obs_data.pkl'),
+	join(outdir, 'log_restrict.txt')]
+    cmd = [
+        'python restrict_observed_barcodes.py',
+        '--obs-file ${SOURCES[0]}',
+        '--out-obs-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+        '--num-barcodes',
+        c['num_barcodes'],
+    ]
+    return env.Command(
+        targets,
+        sources,
+        ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def run_topology(env, outdir, c):
+    targets = [
+            join(outdir, 'parsimony_tree0.pkl'),
+            join(outdir, 'log_parsimony.txt')]
+    sources = c['restrict_observed_alleles']
+    cmd = [
+        'python get_parsimony_topologies.py',
+        '--obs-file ${SOURCES[0]}',
+        '--out-template-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+        '--max-random',
+        0,
+        '--max-random-multifurc',
+        1,
+        '--num-jumbles 1',
+        '--max-trees 1',
+    ]
+    return env.Command(
+        targets,
+        sources,
+        ' '.join(map(str, cmd)))
+
+nest.add(
+    'num_spr_moves',
+    range(3),
+    label_func=lambda c: "spr_moves_%d" % c,
+)
+
+@nest.add_target_with_env(localenv)
+def make_less_parsimonious(env, outdir, c):
+    targets = [
+            join(outdir, 'tree.pkl')]
+    sources = c['run_topology']
+    cmd = [
+        'python get_less_parsimonious_tree.py',
+        '--parsimony-topology-file ${SOURCES[0]}',
+        '--out-tree-file ${TARGETS[0]}',
+        '--seed',
+        c['model_seed'] + 3,
+        '--num-spr-moves',
+        c['num_spr_moves'],
+    ]
+    return env.Command(
+        targets,
+        sources,
+        ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def run_MLE(env, outdir, c):
+    if c['num_barcodes'] == 1:
+        penalty_params = "1024"
+    if c['num_barcodes'] == 2:
+    	penalty_params = "256"
+
+    targets = [
+                join(outdir, 'tune_fitted.pkl'),
+                join(outdir, 'tune_fitted.txt')]
+    sources = [
+                c['restrict_observed_alleles'][0],
+                c['make_less_parsimonious'][0],
+                c['generate'][1]]
+    cmd_arg = [
+        'python tune_topology.py',
+        '--obs-file ${SOURCES[0]}',
+        '--topology-file ${SOURCES[1]}',
+        '--true-model-file ${SOURCES[2]}',
+        '--out-model-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+        '--seed',
+        c['model_seed'] + 30,
+        '--branch-pen-params',
+        penalty_params,
+        '--target-lam-pen-params 0.0001',
+        '--num-penalty-tune-iters 1',
+        '--num-chad-tune-iters 1',
+        '--num-chad-stop 0',
+        '--max-chad-tune-search 0',
+        '--max-sum-states 20',
+        '--max-extra-steps 2',
+        '--max-iters 5',
+        '--num-inits 1',
+        '--tot-time-known',
+        '--num-processes',
+        4,
+        '--num-init-random-rearrange 0',
+        '--lambda-known',
+        '--lambda-decay-known',
+        '--scratch-dir',
+	join('simulation_parsimony_vs_likelihood', outdir, 'scratch'),
+    ]
+    cmd = cmd_arg
+    #cmd_arg_str = "'%s'" % ' '.join(map(str, cmd_arg))
+    #cmd = [
+    #    'srun -p matsen_e,campus',
+    #    '--cpus-per-task 8'] + cmd_arg
+    c['fitted_trees'].append(targets[0])
+    c['fitted_tree_seeds'].append(c['model_seed'])
+    c['obs_files'].append(c['restrict_observed_alleles'][0])
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
+
+nest.pop('num_spr_moves')
+nest.pop('model_seed')
+
+@nest.add_target_with_env(localenv)
+def aggregate_results(env, outdir, c):
+    sources = [
+        c['fitted_trees'],
+        c['obs_files']]
+    targets = [join(outdir, "test.pkl")]
+    num_to_agg = len(c['fitted_trees'])
+    fitted_file_names = ",".join(["${SOURCES[%d]}" % i for i in range(num_to_agg)])
+    obs_file_names = ",".join(["${SOURCES[%d]}" % (i + num_to_agg) for i in range(num_to_agg)])
+
+    cmd = [
+        'python plot_simulation_parsimony_vs_likelihood.py',
+        '--tree-idxs',
+        ",".join(map(str, c['fitted_tree_seeds'])),
+        '--tree-files',
+        fitted_file_names,
+        '--obs-files',
+        obs_file_names,
+        '--out-plot ${TARGETS[0]}']
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
