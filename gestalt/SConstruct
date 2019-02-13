@@ -32,6 +32,9 @@ sc.SConscript(flag + '/sconscript', exports=['flag'])
 flag = 'simulation_parsimony_vs_likelihood'
 sc.SConscript(flag + '/sconscript', exports=['flag'])
 
+flag = 'simulation_many_vs_one_bcode'
+sc.SConscript(flag + '/sconscript', exports=['flag'])
+
 flag = 'simulation_compare'
 sc.SConscript(flag + '/sconscript', exports=['flag'])
 
