@@ -34,7 +34,7 @@ nest.add_aggregate("obs_files", list)
 
 nest.add(
     'model_seed',
-    [10],
+    range(10,12),
     label_func=lambda c: 'model_seed%d' % c,
 )
 
@@ -201,7 +201,7 @@ def run_MLE(env, outdir, c):
         '--max-chad-tune-search 0',
         '--max-sum-states 20',
         '--max-extra-steps 2',
-        '--max-iters 5',
+        '--max-iters 5000',
         '--num-inits 1',
         '--tot-time-known',
         '--num-processes',

@@ -77,6 +77,14 @@ def main(args=sys.argv[1:]):
 
     all_results = pd.DataFrame(all_results)
     print(all_results)
+    argmin_pars_score = all_results.groupby('idx')['parsimony_score'].idxmin()
+    argmin_pars_score = argmin_pars_score.reset_index().rename(
+            index=str,
+            columns={"parsimony_score": "argmin_pars"})
+    merged_df = all_results.merge(argmin_pars_score, on="idx")
+    pll_min_pars = merged_df['pen_log_lik'].values[merged_df['argmin_pars']]
+    merged_df['pll_delta'] = merged_df['pen_log_lik'] - pll_min_pars
+    print(merged_df)
 
 
 if __name__ == "__main__":
