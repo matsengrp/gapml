@@ -95,25 +95,18 @@ def generate(env, outdir, c):
         [],
         ' '.join(map(str, cmd)))
 
-nest.add(
-    'num_barcodes',
-    [1],
-    label_func=lambda c: "num_barcodes%d" % c,
-)
-
 @nest.add_target_with_env(localenv)
 def restrict_observed_alleles(env, outdir, c):
     sources = c['generate']
     targets = [
-	join(outdir, 'obs_data.pkl'),
+	join(outdir, 'restrict_obs_data.pkl'),
 	join(outdir, 'log_restrict.txt')]
     cmd = [
         'python restrict_observed_barcodes.py',
         '--obs-file ${SOURCES[0]}',
         '--out-obs-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
-        '--num-barcodes',
-        c['num_barcodes'],
+        '--num-barcodes 1',
     ]
     return env.Command(
         targets,
@@ -170,10 +163,7 @@ def make_less_parsimonious(env, outdir, c):
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    if c['num_barcodes'] == 1:
-        penalty_params = "1024"
-    if c['num_barcodes'] == 2:
-    	penalty_params = "256"
+    penalty_params = "1024"
 
     targets = [
                 join(outdir, 'tune_fitted.pkl'),
