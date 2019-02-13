@@ -1,5 +1,4 @@
-# Test if we have any sort of consistency
-# This simulates a larger tree and performs a topology search
+# Show how the max parsimony trees tend to have the highest likelihoods
 
 import os
 
@@ -34,7 +33,7 @@ nest.add_aggregate("obs_files", list)
 
 nest.add(
     'model_seed',
-    range(10,12),
+    range(10,20),
     label_func=lambda c: 'model_seed%d' % c,
 )
 
@@ -212,11 +211,13 @@ def run_MLE(env, outdir, c):
         '--scratch-dir',
 	join('simulation_parsimony_vs_likelihood', outdir, 'scratch'),
     ]
-    cmd = cmd_arg
-    #cmd_arg_str = "'%s'" % ' '.join(map(str, cmd_arg))
-    #cmd = [
-    #    'srun -p matsen_e,campus',
-    #    '--cpus-per-task 8'] + cmd_arg
+    # Run locally
+    #cmd = cmd_arg
+    # Submit jobs instead
+    cmd_arg_str = "'%s'" % ' '.join(map(str, cmd_arg))
+    cmd = [
+        'srun -p matsen_e,campus',
+        '--cpus-per-task 4'] + cmd_arg
     c['fitted_trees'].append(targets[0])
     c['fitted_tree_seeds'].append(c['model_seed'])
     c['obs_files'].append(c['restrict_observed_alleles'][0])
@@ -230,7 +231,7 @@ def aggregate_results(env, outdir, c):
     sources = [
         c['fitted_trees'],
         c['obs_files']]
-    targets = [join(outdir, "test.pkl")]
+    targets = [join(outdir, "plot_parsimony_pen_log_lik.png")]
     num_to_agg = len(c['fitted_trees'])
     fitted_file_names = ",".join(["${SOURCES[%d]}" % i for i in range(num_to_agg)])
     obs_file_names = ",".join(["${SOURCES[%d]}" % (i + num_to_agg) for i in range(num_to_agg)])

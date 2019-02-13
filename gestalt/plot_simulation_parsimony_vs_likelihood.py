@@ -1,9 +1,20 @@
+"""
+Plot the results of simulation_parsimony_vs_likelihood.
+X-axis: parsimony score
+Y-axis: delta from the pen log lik of the max parsimony tree
+"""
+
 import sys
 import argparse
 import random
 import six
 import numpy as np
 import pandas as pd
+
+import matplotlib
+matplotlib.use('Agg')
+from matplotlib import pyplot
+import seaborn as sns
 
 import ancestral_events_finder
 from cell_lineage_tree import CellLineageTree
@@ -51,6 +62,9 @@ def parse_args(args):
 
 
 def get_tree_parsimony_score(tree: CellLineageTree, bcode_meta: BarcodeMetadata):
+    """
+    @return the parsimony score for the given tree
+    """
     ancestral_events_finder.annotate_ancestral_states(tree, bcode_meta)
     return ancestral_events_finder.get_parsimony_score(tree)
 
@@ -60,6 +74,7 @@ def main(args=sys.argv[1:]):
     np.random.seed(args.seed)
     random.seed(args.seed)
 
+    # Read out the results
     all_results = []
     for tree_idx, tree_file, obs_file in zip(args.tree_idxs, args.tree_files, args.obs_files):
         with open(obs_file, "rb") as f:
@@ -75,6 +90,8 @@ def main(args=sys.argv[1:]):
             "pen_log_lik": pen_log_lik,
             "parsimony_score": pars_score})
 
+    # Some massaging of data to get the difference between penalized log lik
+    # of the less parsimonious trees and the most parsimonious tree
     all_results = pd.DataFrame(all_results)
     print(all_results)
     argmin_pars_score = all_results.groupby('idx')['parsimony_score'].idxmin()
@@ -83,8 +100,21 @@ def main(args=sys.argv[1:]):
             columns={"parsimony_score": "argmin_pars"})
     merged_df = all_results.merge(argmin_pars_score, on="idx")
     pll_min_pars = merged_df['pen_log_lik'].values[merged_df['argmin_pars']]
+    min_pars = merged_df['parsimony_score'].values[merged_df['argmin_pars']]
     merged_df['pll_delta'] = merged_df['pen_log_lik'] - pll_min_pars
+    merged_df['parsimony_score_delta'] = merged_df['parsimony_score'] - min_pars
     print(merged_df)
+
+    # Actually make the plot
+    sns.lineplot(
+            x="parsimony_score_delta",
+            y="pll_delta",
+            hue="idx",
+            data=merged_df,
+            legend=False)
+    pyplot.ylabel("Difference in penalized log lik")
+    pyplot.xlabel("Difference in parsimony score")
+    pyplot.savefig(args.out_plot)
 
 
 if __name__ == "__main__":
