@@ -102,6 +102,17 @@ def collapse_obs_leaves_by_first_alleles(
 
     return list(obs_dict.values())
 
+def logging_for_double_cuts(obs_leaves: List):
+    # Look at double cut propotion
+    evt_set = set()
+    for obs in obs_leaves:
+        for evts_list in obs.allele_events_list:
+            for evt in evts_list.events:
+                evt_set.add(evt)
+    logging.info("Num uniq events %d", len(evt_set))
+    logging.info("Proportion of double cuts %f", np.mean([e.min_target != e.max_target for e in evt_set]))
+    abundances = [obs.abundance for obs in obs_leaves]
+    logging.info("Range of abundance vals %d %d (mean %f)", np.min(abundances), np.max(abundances), np.mean(abundances))
 
 def main(args=sys.argv[1:]):
     args = parse_args()
@@ -165,15 +176,7 @@ def main(args=sys.argv[1:]):
     logging.info("deact bin weights %s", n_target_used_count/np.sum(n_target_used_count))
 
     # Look at double cut propotion
-    evt_set = set()
-    for obs in obs_data_dict["obs_leaves"]:
-        for evts_list in obs.allele_events_list:
-            for evt in evts_list.events:
-                evt_set.add(evt)
-    logging.info("Num uniq events %d", len(evt_set))
-    logging.info("Proportion of double cuts %f", np.mean([e.min_target != e.max_target for e in evt_set]))
-    abundances = [obs.abundance for obs in obs_data_dict["obs_leaves"]]
-    logging.info("Range of abundance vals %d %d (mean %f)", np.min(abundances), np.max(abundances), np.mean(abundances))
+    logging_for_double_cuts(obs_data_dict["obs_leaves"])
 
     save_data(obs_data_dict, args.out_obs_file)
 

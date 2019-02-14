@@ -1,6 +1,9 @@
 # Compare two bcode designs:
 # 1. many targets in a single bcode
 # 2. small num targets in multiple IID bcodes
+# Because our simulator is a bit slow (due to its generality),
+# we must use the special case where all target lambdas are the same
+# and there are no long cuts. This is very quick to simulate from.
 
 import os
 
@@ -15,6 +18,7 @@ localenv = env.Clone()
 
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
+MAX_BCODES = 6
 GROWTH_DICT = {
     "sampling_rate": 0.08,
     "birth_sync_rounds": 5,
@@ -22,24 +26,108 @@ GROWTH_DICT = {
     "death_lambda": 0.3,
     "birth_decay": -18,
     "birth_min": 6,
-    "lambda_sequence": [.75, .7, .65, .6, .55, .5, .45],
+    "lambda_sequence": [.6, .6, .6, .6, .6, .6],
     "target_decay": 0,
-    "double": 0.05,
-    "min_leaves": 70,
-    "max_leaves": 110,
+    "double_many": 0.06,
+    "double_one": [None, 0.06, 0.035, 0.03, 0.025, 0.02],
+    "min_leaves": 200,
+    "max_leaves": 400,
 }
 
-nest.add(
-    'num_bcodes',
-    [3],
-    label_func=lambda c: 'num_bcodes%d' % c,
-)
+nest.add_aggregate("obs_file_idxs", list)
+nest.add_aggregate("obs_files_many", list)
+nest.add_aggregate("obs_files_one", list)
 
 nest.add(
     'model_seed',
-    range(1),
+    range(5),
     label_func=lambda c: 'model_seed%d' % c,
 )
+
+nest.add(
+    'num_bcodes',
+    range(1,MAX_BCODES),
+    label_func=lambda c: 'num_bcodes%d' % c,
+)
+
+@nest.add_target_with_env(localenv)
+def generate_many_bcodes(env, outdir, c):
+    targ_lambdas = ",".join(map(str, GROWTH_DICT['lambda_sequence']))
+
+    targets = [
+        join(outdir, 'obs_data_many.pkl'),
+        join(outdir, 'true_model_many.pkl'),
+        join(outdir, 'log_many.txt')]
+    cmd = [
+        'python generate_data.py',
+        '--out-obs-file ${TARGETS[0]}',
+        '--out-model-file ${TARGETS[1]}',
+        '--log-file ${TARGETS[2]}',
+        '--sampling-rate',
+        GROWTH_DICT['sampling_rate'],
+        '--model-seed',
+        c['model_seed'],
+        '--data-seed',
+        c['model_seed'],
+        '--time 1',
+        '--birth-sync-rounds',
+        GROWTH_DICT['birth_sync_rounds'],
+        '--birth-sync-time',
+        GROWTH_DICT['birth_sync_time'],
+        '--birth-decay',
+        GROWTH_DICT['birth_decay'],
+        '--birth-min',
+        GROWTH_DICT['birth_min'],
+        '--death-lambda',
+        GROWTH_DICT['death_lambda'],
+        '--max-clt-leaves',
+        int(GROWTH_DICT['max_leaves']/GROWTH_DICT['sampling_rate'] * 1.1),
+        '--num-barcodes',
+        c['num_bcodes'],
+        '--min-uniq-alleles',
+        GROWTH_DICT['min_leaves'],
+        '--max-uniq-alleles',
+        GROWTH_DICT['max_leaves'],
+        '--max-abundance 20000',
+        '--double-cut-weight',
+        GROWTH_DICT['double_many'],
+        '--target-lambdas',
+        targ_lambdas,
+        '--target-lam-decay',
+        GROWTH_DICT['target_decay'],
+        '--trim-zero-probs 0.15 0.1 0.15 0.1',
+        '--trim-params 1.35 -0.1 1.2 0.1',
+        '--trim-long-factor 0.00000001 0.0000001',
+        '--insert-zero-prob 0.5',
+        '--insert-params 1 0.3',
+        '--perturb-target-lambdas-variance 0',
+        '--max-tries 20',
+        '--same-lambdas-no-long-fast'
+    ]
+    c['obs_files_many'].append(targets[0])
+    return env.Command(
+        targets,
+        [],
+        ' '.join(map(str, cmd)))
+#@nest.add_target_with_env(localenv)
+#def restrict_observed_alleles(env, outdir, c):
+#    sources = c['generate_many_bcodes']
+#    targets = [
+#	join(outdir, 'restrict_obs_data.pkl'),
+#	join(outdir, 'log_restrict.txt')]
+#    cmd = [
+#        'python restrict_observed_barcodes.py',
+#        '--obs-file ${SOURCES[0]}',
+#        '--out-obs-file ${TARGETS[0]}',
+#        '--log-file ${TARGETS[1]}',
+#        '--num-barcodes',
+#        c['num_bcodes'],
+#    ]
+#    c['obs_files_many'].append(targets[0])
+#    return env.Command(
+#        targets,
+#        sources,
+#        ' '.join(map(str, cmd)))
 
 @nest.add_target_with_env(localenv)
 def generate_one_big_bcode(env, outdir, c):
@@ -80,78 +168,51 @@ def generate_one_big_bcode(env, outdir, c):
         GROWTH_DICT['max_leaves'],
         '--max-abundance 20000',
         '--double-cut-weight',
-        GROWTH_DICT['double'],
+        GROWTH_DICT['double_one'][c['num_bcodes']],
         '--target-lambdas',
         targ_lambdas,
         '--target-lam-decay',
         GROWTH_DICT['target_decay'],
         '--trim-zero-probs 0.15 0.1 0.15 0.1',
         '--trim-params 1.35 -0.1 1.2 0.1',
-        '--trim-long-factor 0.08 0.08',
+        '--trim-long-factor 0.00000001 0.0000001',
         '--insert-zero-prob 0.5',
         '--insert-params 1 0.3',
         '--perturb-target-lambdas-variance 0',
         '--max-tries 20',
+        '--same-lambdas-no-long-fast'
     ]
+    c['obs_files_one'].append(targets[0])
+    c['obs_file_idxs'].append(c['model_seed'])
     return env.Command(
         targets,
         [],
         ' '.join(map(str, cmd)))
+
+nest.pop('num_bcodes')
+nest.pop('model_seed')
 
 @nest.add_target_with_env(localenv)
-def generate_many_bcodes(env, outdir, c):
-    targ_lambdas = ",".join(map(str, GROWTH_DICT['lambda_sequence']))
+def aggregate_results(env, outdir, c):
+    sources = [
+        c['obs_files_one'],
+        c['obs_files_many']]
+    targets = [join(outdir, "plot_many_vs_one_bcode.png")]
 
-    targets = [
-        join(outdir, 'obs_data_many.pkl'),
-        join(outdir, 'true_model_many.pkl'),
-        join(outdir, 'log_many.txt')]
+    num_sources = len(c['obs_files_one'])
+    obs_file_names_one = ",".join(["${SOURCES[%d]}" % i for i in range(num_sources)])
+    start_source_idx = num_sources
+    num_sources = len(c['obs_files_many'])
+    obs_file_names_many = ",".join(["${SOURCES[%d]}" % (i + start_source_idx) for i in range(num_sources)])
+    obs_file_idxs = ",".join(map(str, c['obs_file_idxs']))
+
     cmd = [
-        'python generate_data.py',
-        '--out-obs-file ${TARGETS[0]}',
-        '--out-model-file ${TARGETS[1]}',
-        '--log-file ${TARGETS[2]}',
-        '--sampling-rate',
-        GROWTH_DICT['sampling_rate'],
-        '--model-seed',
-        c['model_seed'],
-        '--data-seed',
-        c['model_seed'],
-        '--time 1',
-        '--birth-sync-rounds',
-        GROWTH_DICT['birth_sync_rounds'],
-        '--birth-sync-time',
-        GROWTH_DICT['birth_sync_time'],
-        '--birth-decay',
-        GROWTH_DICT['birth_decay'],
-        '--birth-min',
-        GROWTH_DICT['birth_min'],
-        '--death-lambda',
-        GROWTH_DICT['death_lambda'],
-        '--max-clt-leaves',
-        int(GROWTH_DICT['max_leaves']/GROWTH_DICT['sampling_rate'] * 1.1),
-        '--num-barcodes',
-	c['num_bcodes'],
-        '--min-uniq-alleles',
-        GROWTH_DICT['min_leaves'],
-        '--max-uniq-alleles',
-        GROWTH_DICT['max_leaves'],
-        '--max-abundance 20000',
-        '--double-cut-weight',
-        GROWTH_DICT['double'],
-        '--target-lambdas',
-        targ_lambdas,
-        '--target-lam-decay',
-        GROWTH_DICT['target_decay'],
-        '--trim-zero-probs 0.15 0.1 0.15 0.1',
-        '--trim-params 1.35 -0.1 1.2 0.1',
-        '--trim-long-factor 0.08 0.08',
-        '--insert-zero-prob 0.5',
-        '--insert-params 1 0.3',
-        '--perturb-target-lambdas-variance 0',
-        '--max-tries 20',
-    ]
-    return env.Command(
-        targets,
-        [],
-        ' '.join(map(str, cmd)))
+        'python plot_simulation_many_vs_one_bcode.py',
+        '--idxs',
+        obs_file_idxs,
+        '--obs-files-many',
+        obs_file_names_many,
+        '--obs-files-one',
+        obs_file_names_one,
+        '--out-plot ${TARGETS[0]}']
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))

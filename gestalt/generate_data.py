@@ -23,6 +23,7 @@ from allele_simulator_simult import AlleleSimulatorSimultaneous
 from clt_observer import CLTObserver, ObservedAlignedSeq
 from optim_settings import KnownModelParams
 from barcode_metadata import BarcodeMetadata
+from restrict_observed_barcodes import logging_for_double_cuts
 
 from common import create_directory
 from constants import NUM_BARCODE_V7_TARGETS, BARCODE_V7
@@ -176,6 +177,13 @@ def parse_args():
         action='store_true',
         help="trims follow poisson")
     parser.add_argument(
+        '--same-lambdas-no-long-fast',
+        action='store_true',
+        help="""
+        Assume the target rates are all the same and there are no long cuts.
+        In that case, we can generate data much faster.
+        """)
+    parser.add_argument(
         '--add-phantom-leaf',
         action='store_true',
         help="add phantom leaf with no events")
@@ -210,7 +218,9 @@ def create_cell_type_tree(args):
     return cell_type_tree
 
 def create_simulators(args, clt_model):
-    allele_simulator = AlleleSimulatorSimultaneous(clt_model)
+    allele_simulator = AlleleSimulatorSimultaneous(
+            clt_model,
+            same_lams_no_long=args.same_lambdas_no_long_fast)
     cell_type_simulator = CellTypeSimulator(clt_model.cell_type_tree)
     if args.is_one_leaf:
         clt_simulator = CLTSimulatorSimplest(
@@ -341,7 +351,8 @@ def main(args=sys.argv[1:]):
             cell_type_tree = cell_type_tree,
             tot_time = args.time,
             tot_time_extra = 1e-10,
-            use_poisson=args.use_poisson)
+            use_poisson=args.use_poisson,
+            do_shortcut=args.same_lambdas_no_long_fast)
     tf.global_variables_initializer().run()
     logging.info("Done creating model")
 
@@ -398,12 +409,13 @@ def main(args=sys.argv[1:]):
 
     # Save the observed data
     with open(args.out_obs_file, "wb") as f:
-        out_dict = {
+        obs_data_dict = {
             "bcode_meta": bcode_meta,
             "obs_leaves": obs_leaves,
             "time": args.time,
         }
-        six.moves.cPickle.dump(out_dict, f, protocol=2)
+        logging_for_double_cuts(obs_leaves)
+        six.moves.cPickle.dump(obs_data_dict, f, protocol=2)
 
     # Save the true data
     with open(args.out_model_file, "wb") as f:

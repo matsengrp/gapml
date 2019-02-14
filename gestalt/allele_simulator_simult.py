@@ -21,21 +21,21 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
     """
     def __init__(self,
         model: CLTLikelihoodModel,
+        same_lams_no_long: bool = False,
         boost_len: int = 1):
         """
         @param model
-        @param boost_probs: a 3-dim array that indicates the probability of a boost in length
-                        being applied to the insertion, left del, right del distributions.
-                        The boost will shift the insertion dist by `boost_len`.
-                        The boost will change the minimum left del len to `boost_len` (but doesn't
-                        shift the max length -- poiss distributions are properly normalized).
-                        Likewise for the right del dist.
-                        Note that boosts are not applied if the left or right deletions are long.
+        @param same_lams_no_long: True means all the target rates are the same and there are no
+                long cuts. In that case, we can quickly generate data without using the hazards
+                calculated by the model.
+                False means we will query the model for cut rates for all possible cuts.
         @param boost_len: the amount to boost up the length of the indel
         """
         self.bcode_meta = model.bcode_meta
         self.model = model
-        self.all_target_tract_hazards = model.get_all_target_tract_hazards()
+        self.same_lams_no_long = same_lams_no_long
+        if not self.same_lams_no_long:
+            self.all_target_tract_hazards = model.get_all_target_tract_hazards()
         self.insert_zero_prob = self.model.insert_zero_prob.eval()
         self.trim_zero_prob_dict = self.model.trim_zero_prob_dict.eval()
 
@@ -139,8 +139,28 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
                             if no event happens, then returns None
         """
         targ_stat = allele.get_target_status()
-        target_tracts = targ_stat.get_possible_target_tracts(self.bcode_meta)
-        if len(target_tracts):
+        active_targets = targ_stat.get_active_targets(self.bcode_meta)
+        num_active = len(active_targets)
+        if num_active == 0:
+            race_winner = None
+            min_time = None
+        elif self.same_lams_no_long:
+            targ_lam = self.model.target_lams.eval()[0]
+            double_cut_weight = self.model.double_cut_weight.eval()
+            single_tot_haz = num_active * targ_lam
+            double_tot_haz = num_active * (num_active - 1)/2 * double_cut_weight * (targ_lam + targ_lam)
+            all_haz_sum = single_tot_haz + double_tot_haz
+            min_time = expon.rvs(scale=1.0/all_haz_sum)
+            race_winner = np.random.choice(2, p=np.array([single_tot_haz, double_tot_haz])/all_haz_sum)
+            if race_winner == 0:
+                # Is a single cut -- pick a random target
+                cut_targ = np.random.choice(active_targets)
+                race_winner = TargetTract(cut_targ, cut_targ, cut_targ, cut_targ)
+            else:
+                cut_targ_left, cut_targ_right = np.sort(np.random.choice(active_targets, size=2, replace=False))
+                race_winner = TargetTract(cut_targ_left, cut_targ_left, cut_targ_right, cut_targ_right)
+        else:
+            target_tracts = targ_stat.get_possible_target_tracts(self.bcode_meta)
             all_hazards = [
                 self.all_target_tract_hazards[self.model.target_tract_dict[tt]] * scale_hazard
                 for tt in target_tracts]
@@ -148,9 +168,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             min_time = expon.rvs(scale=1.0/all_haz_sum)
             race_winner = target_tracts[
                 np.random.choice(len(target_tracts), p=np.array(all_hazards)/all_haz_sum)]
-            return race_winner, min_time
-        else:
-            return None, None
+        return race_winner, min_time
 
     def simulate(self,
             init_allele: Allele,

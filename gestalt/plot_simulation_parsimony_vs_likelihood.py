@@ -24,7 +24,7 @@ from common import parse_comma_str
 
 def parse_args(args):
     parser = argparse.ArgumentParser(
-            description='make a less parsimonious tree')
+            description='plot how pen log lik varies with parsimony score')
     parser.add_argument(
         '--seed',
         type=int,

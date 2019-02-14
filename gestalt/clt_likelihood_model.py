@@ -61,7 +61,8 @@ class CLTLikelihoodModel:
             boost_len: int = 1,
             abundance_weight: float = 0,
             step_size: float = 0.01,
-            use_poisson: bool = True):
+            use_poisson: bool = True,
+            do_shortcut: bool = False):
         """
         @param topology: provides a topology only (ignore any branch lengths in this tree)
         @param boost_softmax_weights: vals to plug into softmax to get the probability of boosting
@@ -83,7 +84,6 @@ class CLTLikelihoodModel:
             self.num_nodes = self.topology.get_num_nodes()
         self.bcode_meta = bcode_meta
         self.cell_type_tree = cell_type_tree
-        self.targ_stat_transitions_dict, _ = TargetStatus.get_all_transitions(self.bcode_meta)
 
         self.num_targets = bcode_meta.n_targets
         self.boost_len = boost_len
@@ -145,13 +145,16 @@ class CLTLikelihoodModel:
 
         self.tot_time = tf.constant(tot_time, dtype=tf.float64)
 
-        # Calculcate the hazards for all the target tracts beforehand. Speeds up computation in the future.
-        self.target_tract_hazards, self.target_tract_dict = self._create_all_target_tract_hazards()
-        # Dictionary for storing hazards between target statuses -- assuming all moves are possible
-        self.targ_stat_transition_hazards_dict = {
-            start_target_status: {} for start_target_status in self.targ_stat_transitions_dict.keys()}
-        # Calculate hazard for transitioning away from all target statuses beforehand. Speeds up future computation.
-        self.hazard_away_dict = self._create_hazard_away_dict()
+        self.do_shortcut = do_shortcut
+        if not do_shortcut:
+            self.targ_stat_transitions_dict, _ = TargetStatus.get_all_transitions(self.bcode_meta)
+            # Calculcate the hazards for all the target tracts beforehand. Speeds up computation in the future.
+            self.target_tract_hazards, self.target_tract_dict = self._create_all_target_tract_hazards()
+            # Dictionary for storing hazards between target statuses -- assuming all moves are possible
+            self.targ_stat_transition_hazards_dict = {
+                start_target_status: {} for start_target_status in self.targ_stat_transitions_dict.keys()}
+            # Calculate hazard for transitioning away from all target statuses beforehand. Speeds up future computation.
+            self.hazard_away_dict = self._create_hazard_away_dict()
 
         if self.topology:
             assert not self.topology.is_leaf()
