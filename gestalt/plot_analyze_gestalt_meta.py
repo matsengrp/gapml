@@ -19,23 +19,7 @@ Create distance matrices between cell types in adult fish 1 and 2
 Also calculates the correlation between the distance matrices
 """
 
-def get_allele_to_cell_states(obs_dict):
-    # Create allele string to cell state
-    allele_to_cell_state = {}
-    cell_state_dict = {}
-    for obs in obs_dict["obs_leaves_by_allele_cell_state"]:
-        allele_str_key = CellLineageTree._allele_list_to_str(obs.allele_events_list)
-        if allele_str_key in allele_to_cell_state:
-            if str(obs.cell_state) not in allele_to_cell_state:
-                allele_to_cell_state[allele_str_key][str(obs.cell_state)] = obs.abundance
-        else:
-            allele_to_cell_state[allele_str_key] = {str(obs.cell_state): obs.abundance}
-
-        if str(obs.cell_state) not in cell_state_dict:
-            cell_state_dict[str(obs.cell_state)] = obs.cell_state
-
-    return allele_to_cell_state, cell_state_dict
-
+FILTER_BLOOD = True
 ORGAN_ORDER = {
     "Brain": 0,
     "Eye1": 1,
@@ -43,11 +27,11 @@ ORGAN_ORDER = {
     "Gills": 3,
     "Intestine": 4,
     "Upper_GI": 5,
-    "Blood": 6,
-    "Heart_GFP+": 7,
-    "Heart_chunk": 8,
-    "Heart_GFP-": 9,
-    "Heart_diss": 10,
+    "Heart_GFP+": 6,
+    "Heart_chunk": 7,
+    "Heart_GFP-": 8,
+    "Heart_diss": 9,
+    "Blood": 10,
 }
 ORGAN_LABELS = [
     "Brain",
@@ -56,13 +40,13 @@ ORGAN_LABELS = [
     "Gills",
     "Intestinal bulb",
     "Post intestine",
-    "Blood",
     "Cardiomyocytes",
     "Heart",
     "NC",
     "DHC",
+    "Blood",
 ]
-NUM_ORGANS = len(ORGAN_LABELS)
+NUM_ORGANS = len(ORGAN_LABELS) - int(FILTER_BLOOD)
 
 def parse_args(args):
     parser = argparse.ArgumentParser(
@@ -88,7 +72,7 @@ def parse_args(args):
     parser.add_argument(
         '--num-rand-permute',
         type=int,
-        default=2)
+        default=2000)
     parser.add_argument(
         '--null-method',
         type=str,
@@ -97,7 +81,33 @@ def parse_args(args):
     args = parser.parse_args(args)
     return args
 
-def create_distance_matrix(fitted_bifurc_tree, organ_dict, allele_to_cell_state):
+def get_allele_to_cell_states(obs_dict):
+    # Create allele string to cell state
+    allele_to_cell_state = {}
+    cell_state_dict = {}
+    for obs in obs_dict["obs_leaves_by_allele_cell_state"]:
+        allele_str_key = CellLineageTree._allele_list_to_str(obs.allele_events_list)
+        if allele_str_key in allele_to_cell_state:
+            if str(obs.cell_state) not in allele_to_cell_state:
+                allele_to_cell_state[allele_str_key][str(obs.cell_state)] = obs.abundance
+        else:
+            allele_to_cell_state[allele_str_key] = {str(obs.cell_state): obs.abundance}
+
+        if str(obs.cell_state) not in cell_state_dict:
+            cell_state_dict[str(obs.cell_state)] = obs.cell_state
+
+    return allele_to_cell_state, cell_state_dict
+
+def create_distance_matrix(fitted_bifurc_tree, organ_dict, allele_to_cell_state, filter_blood=False):
+    fitted_bifurc_tree = fitted_bifurc_tree.copy()
+    if filter_blood:
+        for leaf in fitted_bifurc_tree:
+            allele_str = leaf.allele_events_list_str
+            cell_types = allele_to_cell_state[allele_str].keys()
+            cell_types = [organ_dict[x].replace("7B_", "") for x in cell_types]
+            if "Blood" in cell_types:
+                leaf.delete(preserve_branch_length=True)
+
     for node in fitted_bifurc_tree.traverse('postorder'):
         if node.is_leaf():
             allele_str = node.allele_events_list_str
@@ -105,11 +115,13 @@ def create_distance_matrix(fitted_bifurc_tree, organ_dict, allele_to_cell_state)
             node.add_feature(
                 "cell_types",
                 set([ORGAN_ORDER[organ_dict[x].replace("7B_", "")] for x in cell_types]))
+            #print(set([organ_dict[x].replace("7B_", "") for x in cell_types]))
             #assert len(cell_types) == len(node.cell_types)
         else:
             node.add_feature("cell_types", set())
             for child in node.children:
                 node.cell_types.update(child.cell_types)
+        assert 10 not in node.cell_types
 
     X_matrix = np.zeros((NUM_ORGANS,NUM_ORGANS))
     tot_path_abundances = np.zeros((NUM_ORGANS, NUM_ORGANS))
@@ -172,8 +184,8 @@ def plot_distance_matrix(sym_X_matrix, out_plot_file=None, ax=None, cbar=True, c
     #print(np.min(sym_X_matrix[np.triu_indices(sym_X_matrix.shape[0], k=1)]))
     #assert np.max(sym_X_matrix) < VMAX
     sns.heatmap(sym_X_matrix,
-            xticklabels=ORGAN_LABELS,
-            yticklabels=ORGAN_LABELS,
+            xticklabels=ORGAN_LABELS[:NUM_ORGANS],
+            yticklabels=ORGAN_LABELS[:NUM_ORGANS],
             mask=mask,
             #annot=np.array(annot_mat),
             #fmt='',
@@ -270,7 +282,6 @@ def main(args=sys.argv[1:]):
 
     fishies = ["ADR1", "ADR2"]
     methods = ["PMLE", "chronos", "nj"]
-    #methods = ["nj"]
     method_plotting_values = {
             "PMLE": [0.2, 0.8],
             "chronos": [0, 0.6],
@@ -289,8 +300,8 @@ def main(args=sys.argv[1:]):
             tree.label_dist_to_roots()
             organ_dict = obs_dict["organ_dict"]
             allele_to_cell_state, _ = get_allele_to_cell_states(obs_dict)
-            _, sym_X_matrix = create_distance_matrix(tree, organ_dict, allele_to_cell_state)
-            out_plot_file = "_output/sym_heat_%s_%s.png" % (fish, method)
+            _, sym_X_matrix = create_distance_matrix(tree, organ_dict, allele_to_cell_state, filter_blood=FILTER_BLOOD)
+            out_plot_file = "_output/sym_heat_%s_%s_test.png" % (fish, method)
             plt.clf()
             plt.figure(figsize=(6,5))
             plot_distance_matrix(
@@ -312,9 +323,10 @@ def main(args=sys.argv[1:]):
                 _, rand_permut_X_matrix = create_distance_matrix(
                         null_tree,
                         organ_dict,
-                        allele_to_cell_state_random)
+                        allele_to_cell_state_random,
+                        filter_blood=FILTER_BLOOD)
                 random_permute_X_matrices[fish_idx].append(rand_permut_X_matrix)
-        out_plot_file = "_output/sym_heat_%s.png" % (method)
+        out_plot_file = "_output/sym_heat_%s_test.png" % (method)
         plot_two_distance_matrices(
                 sym_X_matrices,
                 out_plot_file,
