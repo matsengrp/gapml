@@ -107,7 +107,12 @@ def parse_args():
         #default=[np.log(4)] * 2,
         nargs=4,
         default=[np.log(3),0] * 2,
-        help='neg binom parameter for left and right trims, until we observe this many failures, same for long and short'
+        help="""
+        neg binom parameter for left and right trims, until we observe this many failures, same for long and short
+        Format: left neg binom params, right neg binom params
+        neg binom param format: log(num failures), logit(prob of success)
+        The RV is the number of successes
+        """
     )
     parser.add_argument(
         '--insert-zero-prob',

@@ -19,17 +19,17 @@ USE_AWS = False
 NUM_RANDOM_REARRANGE = 10
 GROWTH_DICT = {
     "dome": {
-        "sampling_rate": 0.06,
+        "sampling_rate": 0.1,
         "birth_sync_rounds": 9,
         "birth_sync_time": 0.081,
         "death_lambda": 0.1,
         "birth_decay": -1,
         "birth_min": 0.1,
-        "lambda_sequence": [3.8, 0.5, 0.05, 0.7, 0.2, 0.5, 1.53, 0.07, 1.5, 0.07],
-        "target_decay": .01,
-        "double": 0.06,
-        "min_leaves": 200,
-        "max_leaves": 500,
+        "lambda_sequence": [3.6, 0.2, 0.0225, 0.75, 0.25, 0.5, 1.53, 0.07, 1.5, 0.01],
+        "target_decay": 0.01,
+        "double": 0.04,
+        "min_leaves": 500,
+        "max_leaves": 800,
     },
 }
 
@@ -41,7 +41,7 @@ nest.add(
 
 nest.add(
     'seed',
-    [0],
+    range(1,11),
 )
 
 nest.add(
@@ -92,11 +92,12 @@ def generate(env, outdir, c):
         targ_lambdas,
         '--target-lam-decay',
         GROWTH_DICT[c['growth_stage']]['target_decay'],
-        '--trim-zero-probs 0.1 0.1',
-        '--trim-poissons 4 4',
-        '--trim-long-factor 0.02 0.2',
+        '--boost 1 2 2',
+        '--trim-zero-probs 0.1 0.1 0.5 0.2',
+        '--trim-params 0.2 1 0.2 1',
+        '--trim-long-factor 0.1 0.1',
         '--insert-zero-prob 0.1',
-        '--insert-poisson 1',
+        '--insert-param 0 1',
         '--perturb-target-lambdas-variance 0',
         '--max-tries 20',
     ]
