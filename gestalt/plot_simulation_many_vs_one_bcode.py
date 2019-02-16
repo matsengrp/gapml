@@ -101,6 +101,7 @@ def main(args=sys.argv[1:]):
     print(all_results)
 
     # Actually make the plot
+    sns.set_context("paper", font_scale=1.4)
     sns.lineplot(
             x="num_targets",
             y="num_obs_delta",
@@ -109,6 +110,8 @@ def main(args=sys.argv[1:]):
             legend=False)
     pyplot.ylabel("Difference in number of unique alleles")
     pyplot.xlabel("Number of targets")
+    pyplot.xticks(np.arange(6, 36, step=6))
+    pyplot.tight_layout(pad=1.2)
     pyplot.savefig(args.out_plot)
 
 

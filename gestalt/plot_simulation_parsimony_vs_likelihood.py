@@ -106,6 +106,7 @@ def main(args=sys.argv[1:]):
     print(merged_df)
 
     # Actually make the plot
+    sns.set_context("paper", font_scale=1.4)
     sns.lineplot(
             x="parsimony_score_delta",
             y="pll_delta",
@@ -114,6 +115,7 @@ def main(args=sys.argv[1:]):
             legend=False)
     pyplot.ylabel("Difference in penalized log lik")
     pyplot.xlabel("Difference in parsimony score")
+    pyplot.tight_layout(pad=1.2)
     pyplot.savefig(args.out_plot)
 
 
