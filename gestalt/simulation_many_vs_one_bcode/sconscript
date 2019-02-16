@@ -20,9 +20,9 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 MAX_BCODES = 6
 GROWTH_DICT = {
-    "sampling_rate": 0.08,
-    "birth_sync_rounds": 5,
-    "birth_sync_time": 0.06,
+    "sampling_rate": 0.999,
+    "birth_sync_rounds": 9,
+    "birth_sync_time": 0.1,
     "death_lambda": 0.3,
     "birth_decay": -18,
     "birth_min": 6,
@@ -30,8 +30,8 @@ GROWTH_DICT = {
     "target_decay": 0,
     "double_many": 0.06,
     "double_one": [None, 0.06, 0.035, 0.03, 0.025, 0.02],
-    "min_leaves": 200,
-    "max_leaves": 400,
+    "min_leaves": 1000,
+    "max_leaves": 2000,
 }
 
 nest.add_aggregate("obs_file_idxs", list)
@@ -40,7 +40,7 @@ nest.add_aggregate("obs_files_one", list)
 
 nest.add(
     'model_seed',
-    range(5),
+    range(10),
     label_func=lambda c: 'model_seed%d' % c,
 )
 

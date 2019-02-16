@@ -15,7 +15,7 @@ from anc_state import AncState
 
 def parse_args(args):
     parser = argparse.ArgumentParser(
-            description='tune over topologies and fit model parameters')
+            description='plot descriptive stats of real data vs. simulated data')
     parser.add_argument(
         '--real-data',
         type=str,
