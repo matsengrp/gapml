@@ -16,11 +16,13 @@
 //
 // ************************************************************************************************************************
 
-// the next two function allow for either square or zig-zag lines to be drawn
-var diagonal = d3.svg.diagonal()
-.source(function(d) { return {"x":d.source.x, "y":d.source.y}; })
-.target(function(d) { return {"x":d.target.x, "y":d.target.y}; })
-.projection(function(d) { return [d.y, d.x]; });
+// the next three function allow for a variety of different tree branch structures
+function diagonal(d, i) {
+    return "M" + d.source.y + "," + d.source.x
+      + "C" + (d.source.y + d.target.y) / 2 + "," + d.source.x
+      + " " + (d.source.y + d.target.y) / 2 + "," + d.target.x
+      + " " + d.target.y + "," + d.target.x;
+}
 
 function elbow(d, i) {
   midpointX = (d.source.x + d.target.x) / 2.0
@@ -29,7 +31,14 @@ function elbow(d, i) {
   + "H" + midpointY + "V" + d.target.x + "H" + d.target.y;
 }
 
+function caterpillar(d, i) {
+  midpointX = (d.source.x + d.target.x) / 2.0
+  midpointY = (d.source.y + d.target.y) / 2.0
+  return "M" + d.source.y + "," + d.source.x
+  + "V" + d.target.x + "H" + d.target.y;
+}
 
+// recursively scale branch length
 function scaleBranchLengths(nodes, w) {
   // Visit all nodes and adjust y pos width distance metric
   var visitPreOrder = function (root, callback) {
@@ -91,7 +100,7 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
   var barHeight = options.barheight
   var event_location = options.width - (options.offset - options.barSpacer);
 
-  var circleSize = 3 // radius
+  var circleSize = 1.5 // radius
   var circleFill = "gray"
   var circleOutline = "black"
   var circleHighlight = "red"
@@ -140,110 +149,119 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
 
 
 
-  // what's the initial zoom level we should have? we want to scale it so the whole tree fits in view, which is the
-  // max of the
+  // what's the initial zoom level we should have? we want to scale it so the whole tree fits in view
   var initialScaleZoom = 2000.0 / Math.max(options.width,options.height);
-  // var initialScaleZoom = 800.0 / Math.max(options.width,options.height);
 
-  // the main canvas that we're drawing onto
-  // scale(.5,.5)
-  // zoom from https://bl.ocks.org/mbostock/6123708 and http://jsfiddle.net/LYuta/2/
+    // zoom from https://bl.ocks.org/mbostock/6123708 and http://jsfiddle.net/LYuta/2/
   vis = d3.select(selector).append("svg:svg")
-  .attr("width", "100%")
-  .attr("height", "100%")
-  .append("svg:g")
-  .attr("viewBox", "0 0 " + boxWidth + " " + boxHeight) // this should be parameterized at some point
-  .attr("transform", "translate(30, 30)scale(" + initialScaleZoom + "," + initialScaleZoom + ")")
-  .append("g")
-  .call(d3.behavior.zoom().scaleExtent([0, 10]).on("zoom", zoomed))
-  .append("g");
-
-  // make a rectangle that catches the zoom mouse movements; otherwise we can
+	.attr("width", "100%")
+	.attr("height", "100%")
+	.append("svg:g")
+	.attr("viewBox", "0 0 " + boxWidth + " " + boxHeight) // this should be parameterized at some point
+	.attr("transform", "translate(30, 30)scale(" + initialScaleZoom + "," + initialScaleZoom + ")")
+	.append("g")
+	.call(d3.behavior.zoom().scaleExtent([0, 10]).on("zoom", zoomed))
+	.append("g");
+    
+    // make a rectangle that catches the zoom mouse movements; otherwise we can
   // only zoom over specific objects in the plot, which is really confusing to the user
-  var catcher = vis.append("rect")
-  .attr("width", "100%")
-  .attr("height", "100%")
-  .style("fill", "none")
-  .style("pointer-events", "all");
-
-  //respond to mouse, even when transparent
-  // we need to reference vis in the function
-  function zoomed() {
-    vis.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
-  }
-
-  // put the axis on the plot at the top and the bottom
-  vis.append("g")
-  .attr("transform", "translate(" + (barplot_location) + "," + ( h + 2) + ")")
-  .call(xAxis)
-  .style("fill","none")
-  .style("stroke","#000")
-  .style("shape-rendering","crispEdges")
-  .selectAll("text")
-  .style("fill","black")
-  .style("stroke-width",0)
-  .style("shape-rendering","crispEdges")
-
-  vis.append("g")
-  .attr("transform", "translate(" + (barplot_location) + "," + ( -2 ) + ")")
-  .call(xAxis2)
-  .style("fill","none")
-  .style("stroke","#000")
-  .style("shape-rendering","crispEdges")
-  .selectAll("text")
-  .style("fill","black")
-  .style("stroke-width",0)
-  .style("shape-rendering","crispEdges")
-
-  if (options.skipBranchLengthScaling) {
-    var yscale = d3.scale.linear()
-    .domain([0, w])
-    .range([0, w]);
-  } else {
-    var yscale = scaleBranchLengths(nodes, w)
-  }
-
-  // add the links between nodes on the tree -- we use solid lines for normal nodes,
-  // dashed lines for lines that lead to nodes that are duplicates when two organs have
-  // the same allele
-  var link = vis.selectAll("path.link")
-  .data(tree.links(nodes))
-  .enter().append("svg:path")
-  .attr("class", "link")
-  .attr("d", diagonal) // elbow
-  .attr("fill", "none")
-  .style("stroke", "black")
-  .attr("stroke-width", function(d) {
-      if (!d.target.is_spine){
-        return "1.4px";
-      } else {
-        return "4px";
-      }
-  })
-  .style("stroke-dasharray", function(d) {
-    if (!d.target.justOrganSplit || d.target.justOrganSplit == "false") {
-      return ("0, 0");
+    var catcher = vis.append("rect")
+	.attr("width", "100%")
+	.attr("height", "100%")
+	.style("fill", "none")
+	.style("pointer-events", "all");
+    
+    //respond to mouse, even when transparent
+    // we need to reference vis in the function
+    function zoomed() {
+	vis.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
+    }
+    
+    // put the axis on the plot at the top and the bottom
+    vis.append("g")
+	.attr("transform", "translate(" + (barplot_location) + "," + ( h + 2) + ")")
+	.call(xAxis)
+	.style("fill","none")
+	.style("stroke","#000")
+	.style("shape-rendering","crispEdges")
+	.selectAll("text")
+	.style("fill","black")
+	.style("stroke-width",0)
+	.style("shape-rendering","crispEdges")
+    
+    vis.append("g")
+	.attr("transform", "translate(" + (barplot_location) + "," + ( -2 ) + ")")
+	.call(xAxis2)
+	.style("fill","none")
+	.style("stroke","#000")
+	.style("shape-rendering","crispEdges")
+	.selectAll("text")
+	.style("fill","black")
+	.style("stroke-width",0)
+	.style("shape-rendering","crispEdges")
+    
+    if (options.skipBranchLengthScaling) {
+	var yscale = d3.scale.linear()
+	    .domain([0, w])
+	    .range([0, w]);
     } else {
-      return ("2, 2");
-    }});
-
+	var yscale = scaleBranchLengths(nodes, w)
+    }
+    
+    // add the links between nodes on the tree -- we use solid lines for normal nodes,
+    // dashed lines for lines that lead to nodes that are duplicates when two organs have
+    // the same allele
+    var link = vis.selectAll("path.link")
+	.data(tree.links(nodes))
+	.enter().append("svg:path")
+	.attr("class", "link")
+	.attr("d", function(d,i) {
+	    if (!d.target.is_spine){
+		return diagonal(d,i)
+	    } else {
+		return caterpillar(d,i)
+	    }
+	})
+	.attr("fill", "none")
+	.style("stroke", function(d) {
+	    if (d.target.is_spine){
+		return "black"; // optionally set it to a different color to highlight caterpillar branches
+	    } else {
+		return "black";
+	    }
+	})
+	.attr("stroke-width", function(d) {
+	    if (!d.target.is_spine){
+		return "1.4px";
+	    } else {
+		return "3px";
+	    }
+	})
+    
+	.style("stroke-dasharray", function(d) {
+	    //if (!d.target.justOrganSplit || d.target.justOrganSplit == "false") {
+	    if (!d.target.is_spine) { // remove if you don't want dashes for the caterpillar branches
+		return ("0, 0");
+	    } else {
+		return ("1, 2");
+	    }});
+    
     // add all the non-tree data: reads, proportions, blood membership
     var drawNonTreeData = vis.selectAll("g.node")
-    .data(nodes)
-    .enter().append("rect")
-    .filter(function(d) {return ! d.children })
-    .each(function(nd) {
-      if (!nd.name.startsWith("internal")) {
-        var event = nd.event// taxaToObj(d.name).event
-        var eventArray = padWithMatches(hmidToEvents(nd.event),options.startRegion,options.endRegion)
-        drawDottedConnector(nd)
-        drawEditStrings(eventArray,nd, options.barWidth, options.endRegion-options.startRegion,barHeight)
-        drawMembership(nd, barHeight,options.membershipBarWidth)
-        // drawBloodProp(nd,barHeight,barWidth,maxBlood)
-        drawCounts(nd,scaleCounts, barHeight)
-      }
-    });
-
+	.data(nodes)
+	.enter().append("rect")
+	.filter(function(d) {return ! d.children })
+	.each(function(nd) {
+	    if (!nd.name.startsWith("internal")) {
+		var event = nd.event// taxaToObj(d.name).event
+		var eventArray = padWithMatches(hmidToEvents(nd.event),options.startRegion,options.endRegion)
+		drawDottedConnector(nd)
+		drawEditStrings(eventArray,nd, options.barWidth, options.endRegion-options.startRegion,barHeight)
+		drawMembership(nd, barHeight,options.membershipBarWidth)
+		drawCounts(nd,scaleCounts, barHeight)
+	    }
+	});
+    
     // add a histogram for the proporiton of reads for this sample
     function drawCounts(d, scaleValue, barHeight) {
       var rectangle = vis.append("rect")
@@ -434,12 +452,11 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
     var cirColor = d3.scale.category20();
 
     drawNodeCircles.each(function (d, i) {
-      selection = d3.select(this);
+	selection = d3.select(this);
+	
       var circle = selection.append("circle")
-      // .filter(function(d) {return d.children })
       .attr("r", function(d) {
         if (d.parent == "null") {
-          // This is the root node
           return circleSize * 3;
         } else {
           return circleSize;
@@ -461,23 +478,6 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
         return d.y
       });
     });
-
-    // ------------------------------------------------------------------------
-    // handle the mouse over bits for node highlighting
-    // ------------------------------------------------------------------------
-    //   drawNodeCircles.on("click", function(d) {
-    // $( "#fixeddivinfo" ).empty();
-    //
-    //       // draw out barplots
-    //       drawHoverBarChart(d, d3.event.pageX, d3.event.pageY, 280, 280)
-    //
-    //   })
-    //       .on("mouseleave", function(d) {
-    //     $( ".tooltip" ).remove();
-    //
-    //     d3.select(this).select("circle")
-    //               .style("stroke", circleOutline);
-    // });
 
     // ------------------------------------------------------------------------
     // given a node object name, get the organ proportion under this node
@@ -575,7 +575,7 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
 
 
   // ********************************************************************************************************
-  // process the encoded HMID strings into a series of object for D3 to draw on the screen
+  // process the encoded GESTALT strings into a series of object for D3 to draw on the screen
   // ********************************************************************************************************
   function padWithMatches(eventObjectArray, start, end) {
     var resultsArray = [];
