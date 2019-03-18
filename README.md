@@ -1,4 +1,7 @@
-# Installing things!
+# GAPML: GESTALT analysis using penalized maximum likelihood
+Associated paper: Feng et al, "Estimation of cell lineage trees by maximum-likelihood phylogenetics" (submitted for review)
+
+# Installation
 You will need to have PHYLIP mix installed so that you can call `mix` on the command line.
 http://evolution.genetics.washington.edu/phylip/
 
@@ -14,16 +17,6 @@ Then activate the virtual environment and then run `scons ___`.
 
 You need to create a file `constant_paths.py` in the `gestalt` folder that provides the paths to the different executables. (mix and bhv distance calculators)
 
-# Running tests
-To run all the tests:
-```
-python3 -m unittest
-```
-To run specific test module tests/test\_me.py:
-```
-python3 -m unittest tests.<test_me>
-```
-
 # GESTALT pipeline
 
 `generate_data.py`: make data
@@ -37,7 +30,16 @@ python3 -m unittest tests.<test_me>
 # Fitting the trees via alternative methods
 `fit_chronos.py`: uses Sanderson 2002, the `chronos` function in R package `ape`
 
+# Running analyses in the paper
+We do this using scons.
+For example: `scons simulation_topol_consist/ -n --clusters=beagle`
 
-# Running SCONS
-Example:
-`scons simulation_topol_consist/ -n --clusters=beagle`
+# Running tests
+To run all the tests:
+```
+python3 -m unittest
+```
+To run specific test module tests/test\_me.py:
+```
+python3 -m unittest tests.<test_me>
+```
