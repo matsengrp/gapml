@@ -326,7 +326,7 @@ def main(args=sys.argv[1:]):
                         allele_to_cell_state_random,
                         filter_blood=FILTER_BLOOD)
                 random_permute_X_matrices[fish_idx].append(rand_permut_X_matrix)
-        out_plot_file = "_output/sym_heat_%s_test.png" % (method)
+        out_plot_file = "_output/sym_heat_%s.png" % (method)
         plot_two_distance_matrices(
                 sym_X_matrices,
                 out_plot_file,

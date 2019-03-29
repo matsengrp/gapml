@@ -35,19 +35,18 @@ def parse_args(args):
     parser.add_argument(
         '--fish-names',
         type=str,
-        default="30hpf")
-        #default="4.3hpf")
+        #default="30hpf")
+        default="4.3hpf")
         #default="3day")
         #default="30hpf+3day")
     parser.add_argument(
         '--fishies',
         type=str,
         #default="ADR1,ADR2")
-        default="30hpf_v6_1,30hpf_v6_2,30hpf_v6_3,30hpf_v6_4,30hpf_v6_5,30hpf_v6_6,30hpf_v6_7,30hpf_v6_8")
+        #default="30hpf_v6_4,30hpf_v6_5,30hpf_v6_6,30hpf_v6_8")
         #default="epi90_2,epi90_5,epi90_8,epi90_9,epi90_10,epi90_12")
-        #default="dome1,dome3,dome5,dome8,dome10")
+        default="dome1,dome3,dome8,dome10")
         #default="3day1,3day2,3day3,3day4,3day5,3day6")
-        #default="30hpf_v6_1,30hpf_v6_2,30hpf_v6_3,30hpf_v6_4,30hpf_v6_5,30hpf_v6_6,30hpf_v6_7,30hpf_v6_8+3day1,3day2,3day3,3day4,3day5,3day6")
     parser.add_argument(
         '--out-plot-file',
         type=str,

@@ -25,22 +25,18 @@ def parse_args(args):
     parser.add_argument(
         '--mle-file-template',
         type=str,
-        #default="_output/model_seed%d/%d/%s/phantom0/num_barcodes%d/sum_states_30/extra_steps_2/tune_fitted_new.pkl")
         default="_output/model_seed%d/%d/%s/phantom0/num_barcodes%d/sum_states_20/extra_steps_1/tune_fitted.pkl")
     parser.add_argument(
         '--simulation-folder',
         type=str,
-        #default="simulation_topol_consist")
         default="simulation_compare")
     parser.add_argument(
         '--model-seed',
         type=int,
-        #default=101)
         default=100)
     parser.add_argument(
         '--data-seeds',
         type=str,
-        #default=",".join(map(str, range(20,40))))
         default=",".join(map(str, range(300,301))))
     parser.add_argument(
         '--pmle-plot',

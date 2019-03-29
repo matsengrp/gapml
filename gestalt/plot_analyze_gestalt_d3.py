@@ -67,9 +67,13 @@ def parse_args(args):
         type=str,
         default="")
     parser.add_argument(
+        '--method',
+        type=str,
+        choices=["chronos", "nj", "PMLE"])
+    parser.add_argument(
         '--out-json',
         type=str,
-        default="_output/%s_tree.json")
+        default="_output/%s_%s_tree.json")
     args = parser.parse_args(args)
     return args
 
@@ -180,6 +184,8 @@ def collapse_short_dists(fitted_bifurc_tree):
     return col_tree
 
 def make_organ_tot_counts(tree, organ_dict):
+    organ_dict = {key: val.replace("7B_", "") for key, val in organ_dict.items()}
+    print(organ_dict)
     organ_tot_counts = {organ: 0 for organ in organ_dict.values()}
     for leaf in tree:
         organ = organ_dict[str(leaf.cell_state)]
@@ -188,7 +194,7 @@ def make_organ_tot_counts(tree, organ_dict):
 
 def main(args=sys.argv[1:]):
     args = parse_args(args)
-    tree, obs_dict = load_fish(args.fish, args, method="PMLE", folder=args.folder)
+    tree, obs_dict = load_fish(args.fish, args, method=args.method, folder=args.folder)
     allele_to_cell_state, cell_state_dict = get_allele_to_cell_states(obs_dict)
     organ_dict = obs_dict["organ_dict"]
     bcode_meta = obs_dict["bcode_meta"]
@@ -198,6 +204,7 @@ def main(args=sys.argv[1:]):
     tree.label_node_ids()
     tree.label_dist_to_roots()
     organ_tot_counts = make_organ_tot_counts(tree, organ_dict)
+    print(organ_tot_counts)
     tree_json = convert_to_json_recurse(
         tree,
         bcode_meta,
@@ -206,7 +213,7 @@ def main(args=sys.argv[1:]):
         allele_to_cell_state,
         cell_state_dict)
 
-    with open(args.out_json % args.fish,"w") as out2:
+    with open(args.out_json % (args.fish, args.method),"w") as out2:
         out2.write("[" + json.dumps(tree_json,sort_keys=False,indent=4) + "]\n")
 
 

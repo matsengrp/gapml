@@ -29,7 +29,8 @@ def parse_args(args):
         '--fishies',
         type=str,
         #default="ADR1,ADR2,dome1,30hpf_v6_3,3day1")
-        default="ADR1,ADR2,dome1,3day1")
+        #default="ADR1,ADR2,dome1,3day1")
+        default="30hpf_v6_4,30hpf_v6_5,30hpf_v6_6,30hpf_v6_8,dome1,dome3,dome8,dome10,3day1,3day2,3day3,3day4,3day5,3day6")
     parser.set_defaults()
     args = parser.parse_args(args)
     args.fishies = parse_comma_str(args.fishies, str)
@@ -117,7 +118,11 @@ def main(args=sys.argv[1:]):
             # Load our estimated target rates
             file_name = os.path.join(args.folder, args.mle_file_template % fish)
             with open(file_name, "rb") as f:
-                res = six.moves.cPickle.load(f)["final_fit"]
+                fitted_data = six.moves.cPickle.load(f)
+                if "final_fit" in fitted_data:
+                    res = fitted_data["final_fit"]
+                else:
+                    res = fitted_data[-1]["best_res"]
                 all_model_params = res.model_params_dict
 
             # Fit a simple target rate thing

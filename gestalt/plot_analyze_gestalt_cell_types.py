@@ -118,7 +118,7 @@ def plot_distance_to_num_germ_layers(
             orient='h',
             color=".25")
     pyplot.xlim(0,1)
-    pyplot.ylabel("Number of germ layers")
+    pyplot.ylabel("Number of descendant germ layers")
     pyplot.xlabel("Distance from root")
     pyplot.tight_layout()
     pyplot.savefig(out_plot_file)
