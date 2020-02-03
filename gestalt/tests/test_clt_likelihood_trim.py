@@ -17,11 +17,13 @@ class CLTTrimProbTestCase(unittest.TestCase):
         self.bcode_meta = BarcodeMetadata()
         self.known_params = KnownModelParams(tot_time=True)
         self.sess = tf.InteractiveSession()
-        self.trim_short_poiss = np.array([10, 4, 8, 6])
-        self.trim_long_poiss = np.array([6, 5, 9, 3])
+        #self.trim_short_params = np.array([10, 4, 8, 6])
+        #self.trim_long_params = np.array([6, 5, 9, 3])
+        self.trim_short_params = np.array([10, 4])
+        self.trim_long_params = np.array([6, 5])
         self.trim_long_factor = np.array([0.5, 0.3, 0.3, 0.1])
         self.trim_zero_probs = np.array([0.25, 0.35, 0.08, 0.1])
-        self.insert_poiss = np.array([1])
+        self.insert_params = np.array([1])
         self.insert_zero_prob = np.array([0.1])
         self.boost_softmax_weights = np.array([0.5,1,0.5])
         self.boost_probs = np.exp(self.boost_softmax_weights)/np.sum(np.exp(self.boost_softmax_weights))
@@ -34,10 +36,11 @@ class CLTTrimProbTestCase(unittest.TestCase):
                 boost_softmax_weights = self.boost_softmax_weights,
                 trim_long_factor = self.trim_long_factor,
                 trim_zero_probs = self.trim_zero_probs,
-                trim_short_poiss = self.trim_short_poiss,
-                trim_long_poiss = self.trim_long_poiss,
-                insert_poiss = self.insert_poiss,
-                insert_zero_prob = self.insert_zero_prob)
+                trim_short_params = self.trim_short_params,
+                trim_long_params = self.trim_long_params,
+                insert_params = self.insert_params,
+                insert_zero_prob = self.insert_zero_prob,
+                use_poisson=True)
         tf.global_variables_initializer().run()
         self.mdl._create_trim_insert_distributions(1)
 
@@ -50,19 +53,20 @@ class CLTTrimProbTestCase(unittest.TestCase):
                 max_target = 0,
                 max_deact_target = 0)
         left_trim, right_trim = sg.get_trim_lens(self.bcode_meta)
-        left_del_prob = self.mdl._create_left_del_probs([sg], left_boost_len=0).eval()
+        left_del_prob = self.mdl._create_left_del_probs_short([sg], boost=0).eval()
         left_del_dist = ZeroInflatedBoundedPoisson(
                 0,
                 self.bcode_meta.left_long_trim_min[0] - 1,
-                self.trim_short_poiss[0])
+                self.trim_short_params[0])
         left_del = (1 - self.trim_zero_probs[0]) * left_del_dist.pmf(left_trim)
+        print(left_del, left_del_prob)
         self.assertTrue(np.isclose(left_del, left_del_prob))
 
         left_boost_del_prob = self.mdl._create_left_del_probs([sg], left_boost_len=1).eval()
         left_boost_del_dist = PaddedBoundedPoisson(
                 1,
                 self.bcode_meta.left_long_trim_min[0] - 1,
-                self.trim_short_poiss[0])
+                self.trim_short_params[0])
         left_boost_del = left_boost_del_dist.pmf(left_trim)
         self.assertTrue(np.isclose(left_boost_del, left_boost_del_prob))
 
@@ -70,7 +74,7 @@ class CLTTrimProbTestCase(unittest.TestCase):
         right_del_dist = ZeroInflatedBoundedPoisson(
                 0,
                 self.bcode_meta.right_long_trim_min[0] - 1,
-                self.trim_short_poiss[2])
+                self.trim_short_params[2])
         right_del = (1 - self.trim_zero_probs[2]) * right_del_dist.pmf(right_trim)
         self.assertTrue(np.isclose(right_del, right_del_prob))
 
@@ -78,12 +82,12 @@ class CLTTrimProbTestCase(unittest.TestCase):
         right_boost_del_dist = PaddedBoundedPoisson(
                 1,
                 self.bcode_meta.right_long_trim_min[0] - 1,
-                self.trim_short_poiss[2])
+                self.trim_short_params[2])
         right_boost_del = right_boost_del_dist.pmf(right_trim)
         self.assertTrue(np.isclose(right_boost_del, right_boost_del_prob))
 
         insert_prob = self.mdl._create_insert_probs([sg], insert_boost_len=0).eval()
-        insert_dist = poisson(self.insert_poiss)
+        insert_dist = poisson(self.insert_params)
         insert = self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_dist.pmf(sg.insert_len)
         self.assertTrue(np.isclose(insert, insert_prob))
 
@@ -108,7 +112,7 @@ class CLTTrimProbTestCase(unittest.TestCase):
         left_del_dist = ZeroInflatedBoundedPoisson(
                 0,
                 self.bcode_meta.left_long_trim_min[9] - 1,
-                self.trim_short_poiss[0])
+                self.trim_short_params[0])
         left_del = self.trim_zero_probs[0] + (1 - self.trim_zero_probs[0]) * left_del_dist.pmf(left_trim)
         self.assertTrue(np.isclose(left_del, left_del_prob[0]))
 
@@ -116,18 +120,18 @@ class CLTTrimProbTestCase(unittest.TestCase):
         right_del_dist = ZeroInflatedBoundedPoisson(
                 0,
                 self.bcode_meta.right_long_trim_min[9] - 1,
-                self.trim_short_poiss[2])
+                self.trim_short_params[2])
         right_del = (1 - self.trim_zero_probs[2]) * right_del_dist.pmf(right_trim)
         self.assertTrue(np.isclose(right_del, right_del_prob[0]))
 
         right_boost_del_dist = PaddedBoundedPoisson(
                 1,
                 self.bcode_meta.right_long_trim_min[9] - 1,
-                self.trim_short_poiss[2])
+                self.trim_short_params[2])
         right_boost_del = right_boost_del_dist.pmf(right_trim)
 
         insert_prob = self.mdl._create_insert_probs([sg], insert_boost_len=0).eval()
-        insert_dist = poisson(self.insert_poiss)
+        insert_dist = poisson(self.insert_params)
         insert = (1 - self.insert_zero_prob) * insert_dist.pmf(sg.insert_len) * 1./np.power(4,4)
         self.assertTrue(np.isclose(insert, insert_prob[0]))
 
@@ -152,24 +156,25 @@ class CLTTrimProbTestCase(unittest.TestCase):
                 max_deact_target = 9,
                 insert_str="ATAC")
         left_trim, right_trim = sg.get_trim_lens(self.bcode_meta)
-        left_del_prob = self.mdl._create_left_del_probs([sg], is_intertarget=True).eval()
+        left_del_prob = self.mdl._create_left_del_probs_short([sg], boost=False).eval()
         left_del_dist = ZeroInflatedBoundedPoisson(
                 0,
                 self.bcode_meta.left_long_trim_min[8] - 1,
-                self.trim_short_poiss[1])
+                self.trim_short_params[1])
         left_del = (1 - self.trim_zero_probs[1]) * left_del_dist.pmf(left_trim)
+        print(left_del, left_del_prob)
         self.assertTrue(np.isclose(left_del, left_del_prob))
 
-        right_del_prob = self.mdl._create_right_del_probs([sg], is_intertarget=True).eval()
+        right_del_prob = self.mdl._create_right_del_probs_any_long([sg]).eval()
         right_del_dist = ZeroInflatedBoundedPoisson(
                 0,
                 self.bcode_meta.right_long_trim_min[9] - 1,
-                self.trim_short_poiss[3])
+                self.trim_short_params[3])
         right_del = (1 - self.trim_zero_probs[3]) * right_del_dist.pmf(right_trim)
         self.assertTrue(np.isclose(right_del, right_del_prob))
 
         insert_prob = self.mdl._create_insert_probs([sg]).eval()
-        insert_dist = poisson(self.insert_poiss)
+        insert_dist = poisson(self.insert_params)
         insert = (1 - self.insert_zero_prob) * insert_dist.pmf(sg.insert_len) * 1./np.power(4,4)
         self.assertTrue(np.isclose(insert, insert_prob))
 
@@ -195,7 +200,7 @@ class CLTTrimProbTestCase(unittest.TestCase):
         left_del_dist = PaddedBoundedPoisson(
                 self.bcode_meta.left_long_trim_min[1],
                 self.bcode_meta.left_max_trim[1],
-                self.trim_long_poiss[0])
+                self.trim_long_params[0])
         left_del = left_del_dist.pmf(left_trim)
         print(left_del, left_del_prob)
         self.assertTrue(np.isclose(left_del, left_del_prob))
@@ -204,13 +209,13 @@ class CLTTrimProbTestCase(unittest.TestCase):
         right_del_dist = PaddedBoundedPoisson(
                 self.bcode_meta.right_long_trim_min[1],
                 self.bcode_meta.right_max_trim[1],
-                self.trim_long_poiss[2])
+                self.trim_long_params[2])
         right_del = right_del_dist.pmf(right_trim)
         print(right_del, right_del_prob)
         self.assertTrue(np.isclose(right_del, right_del_prob))
 
         insert_prob = self.mdl._create_insert_probs([sg], insert_boost_len=0).eval()
-        insert_dist = poisson(self.insert_poiss)
+        insert_dist = poisson(self.insert_params)
         insert = self.insert_zero_prob + (1 - self.insert_zero_prob) * insert_dist.pmf(sg.insert_len)
         self.assertTrue(np.isclose(insert, insert_prob))
 
