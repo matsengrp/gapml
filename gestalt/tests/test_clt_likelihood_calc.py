@@ -55,13 +55,13 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
                 branch_len_offsets_proportion = 1e-20 * np.ones(num_nodes), # dummy!!!
                 target_lams = target_lams,
                 known_params = self.known_params,
-                trim_long_factor = 0.1 * np.ones(4),
+                trim_long_factor = 0.1 * np.ones(2),
                 trim_zero_probs = 0.5 * np.ones(4),
-                trim_short_poissons = np.ones(4),
-                trim_long_poissons = np.ones(4),
-                insert_zero_prob = [0.5],
-                insert_poisson = [2],
-                double_cut_weight = [double_cut_weight],
+                trim_short_params = np.ones(2),
+                trim_long_params = np.ones(2),
+                insert_zero_prob = np.array([0.5]),
+                insert_params = np.array([2]),
+                double_cut_weight = np.array([double_cut_weight]),
                 tot_time = tot_time)
         tf.global_variables_initializer().run()
         return model
@@ -90,12 +90,12 @@ class LikelihoodCalculationTestCase(unittest.TestCase):
                 target_lams = target_lams,
                 known_params = self.known_params,
                 trim_long_factor = 0.1 * np.ones(2),
-                trim_zero_probs = 0.5 * np.ones(2),
-                trim_short_poissons = np.ones(2),
-                trim_long_poissons = np.ones(2),
-                insert_zero_prob = [0.5],
-                insert_poisson = [2],
-                double_cut_weight = [double_cut_weight],
+                trim_zero_probs = 0.5 * np.ones(4),
+                trim_short_params = np.ones(2),
+                trim_long_params = np.ones(2),
+                insert_zero_prob = np.array([0.5]),
+                insert_params = np.array([2]),
+                double_cut_weight = np.array([double_cut_weight]),
                 tot_time = tot_time)
         tf.global_variables_initializer().run()
         return model, target_lams

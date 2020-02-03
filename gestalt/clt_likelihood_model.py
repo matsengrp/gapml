@@ -3,9 +3,7 @@ import logging
 import numpy as np
 import tensorflow as tf
 from tensorflow import Tensor
-# Do not use tensorflow probability since some nodes in AWS will just crash...
-# Old machines are not compatible with tensorflow_probability, I think
-#import tensorflow_probability as tfp
+import tensorflow_probability as tfp
 
 from typing import List, Dict
 from numpy import ndarray

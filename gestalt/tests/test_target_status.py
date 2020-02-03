@@ -94,7 +94,7 @@ class CollapsedTreeTestCase(unittest.TestCase):
             unedited_barcode = ("AA", "ATCGATCG", "ACTG", "ATCGATCG", "ACTG", "TGACTAGC", "TT"),
             cut_site = 3,
             crucial_pos_len = [3,3])
-        all_transitions = TargetStatus.get_all_transitions(bcode_meta)
+        all_transitions, _ = TargetStatus.get_all_transitions(bcode_meta)
         self.assertEqual(len(all_transitions.keys()), 8)
 
         self.assertEqual(all_transitions[TargetStatus(TargetDeactTract(0,2))], {})
