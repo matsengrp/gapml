@@ -1,7 +1,7 @@
 import unittest
 
 import numpy as np
-from bounded_poisson import PaddedBoundedPoisson, ZeroInflatedBoundedPoisson
+from bounded_distributions import PaddedBoundedPoisson, ZeroInflatedBoundedPoisson
 
 class BoundedPoissonTestCase(unittest.TestCase):
     def setUp(self):
