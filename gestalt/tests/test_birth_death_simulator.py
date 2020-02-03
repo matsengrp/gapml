@@ -8,7 +8,10 @@ from barcode_metadata import BarcodeMetadata
 class BirthDeathSimulatorTestCase(unittest.TestCase):
     def setUp(self):
         self.birth_death_simulator = BirthDeathTreeSimulator(
-            birth_rate=0.5,
+            birth_sync_rounds=5,
+            birth_sync_time=1,
+            birth_decay=0,
+            birth_min=1,
             death_rate=0.1)
 
     def test_basic(self):
@@ -17,7 +20,7 @@ class BirthDeathSimulatorTestCase(unittest.TestCase):
         tree = self.birth_death_simulator.simulate(
                 AlleleList([], BarcodeMetadata()),
                 simulation_time,
-                max_nodes=300)
+                max_leaves=40)
         farthest_node, farthest_dist = tree.get_farthest_node()
         self.assertTrue(np.isclose(farthest_dist, simulation_time))
 
