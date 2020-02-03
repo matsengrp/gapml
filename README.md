@@ -23,7 +23,7 @@ You need to create a file `constant_paths.py` in the `gestalt` folder that provi
 
 `restrict_observed_barcodes.py`: restrict to observing the first K alleles
 
-`get_parsimony_trees.py` or `get_collapsed_oracle.py`: create tree topologies to fit to
+`get_parsimony_topologies.py` or `get_collapsed_oracle.py`: create tree topologies to fit to
 
 `tune_topology.py`: to select the best topology given a set of possible topologies
 
