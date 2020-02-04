@@ -12,9 +12,6 @@ from tree_distance import BHVDistanceMeasurer, InternalCorrMeasurer, UnrootRFDis
 from common import parse_comma_str
 import file_readers
 
-# Note: the different defaults below correspond to using simulation_topol_consist vs simulation_compare.
-#       For whichever folder, uncomment the same line
-
 def parse_args(args):
     parser = argparse.ArgumentParser(
             description='plot tree fitting method results wrt number of barcodes')
