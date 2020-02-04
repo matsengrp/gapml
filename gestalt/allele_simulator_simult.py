@@ -21,11 +21,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
     """
     Allele cut/repair simulator where the cut/repair are simultaneous
     """
-    def __init__(self,
-        model: CLTLikelihoodModel):
-        """
-        @param model
-        """
+    def __init__(self, model: CLTLikelihoodModel):
         self.bcode_meta = model.bcode_meta
         self.model = model
         self.insert_zero_prob = self.model.insert_zero_prob.eval()
@@ -76,7 +72,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         @param long_binom_m: neg binom parameter for long trims, number of failures
 
         @return bounded poisson distributions for each target, for long, short , boosted-short trims
-                List[Dict[bool, BoundedNegativeBinomial]]
+                List[Dict[bool indicating long trim, BoundedNegativeBinomial]]
         """
         dstns = []
         for i in range(self.bcode_meta.n_targets):
@@ -108,7 +104,7 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         @param long_binom_m: neg binom parameter for long trims, number of failures
 
         @return bounded poisson distributions for each target, for long, short , boosted-short trims
-                List[Dict[bool, BoundedPoisson]]
+                List[Dict[bool indicating long trim, BoundedPoisson]]
         """
         dstns = []
         for i in range(self.bcode_meta.n_targets):
@@ -152,8 +148,10 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
             time_incr: float = 0.025):
         """
         @param init_allele: the initial state of the allele
+        @param node: node to perform allele mutation from (this is the beginning node)
         @param scale_hazard_func: a function that takes in the current time in the tree
                         and returns how much to scale the cut rates
+        @param time_incr: how much time to simulate allele mutation for
 
         @return allele after the simulation procedure
         """
@@ -182,6 +180,10 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         Repairs allele per the target_tract
         NOTE: if this tries to delete an already-deleted position,
               this simulation will keep the next non-deleted position
+
+        Updates the allele in place. also returns the event descriptors
+
+        @return left del len, right del len, insertion str
         """
         target1 = target_tract.min_target
         target2 = target_tract.max_target
