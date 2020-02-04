@@ -14,7 +14,10 @@ localenv = env.Clone()
 
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
+MAX_NUM_BARCODES = 6
+NUM_BCODES = [1,2,4,6]
 NUM_RANDOM_REARRANGE = 20
+SEEDS = range(20,40)
 GROWTH_DICT = {
     "small": {
         "sampling_rate": 0.08,
@@ -50,11 +53,14 @@ nest.add(
     label_func=lambda c: 'model_seed%d' % c,
 )
 
+nest.add_aggregate('MLE_res', list)
+nest.add_aggregate('chronos_res', list)
+nest.add_aggregate('NJ_res', list)
+nest.add_aggregate('model_list', list)
+
 nest.add(
     'seed',
-    # 20 to 32
-    #range(25,32), barcode 2 and 4 on beagle
-    range(32, 40),
+    SEEDS,
 )
 
 nest.add(
@@ -103,7 +109,7 @@ def generate(env, outdir, c):
         '--max-clt-leaves',
         int(GROWTH_DICT[c['growth_stage']]['max_leaves']/GROWTH_DICT[c['growth_stage']]['sampling_rate'] * 1.1),
         '--num-barcodes',
-        4,
+        MAX_NUM_BARCODES,
         '--min-uniq-alleles',
         GROWTH_DICT[c['growth_stage']]['min_leaves'],
         '--max-uniq-alleles',
@@ -124,6 +130,7 @@ def generate(env, outdir, c):
         '--max-tries 20',
         '--add-phantom-leaf' if c['phantom'] else '',
     ]
+    c['model_list'].append(targets[1])
     return env.Command(
         targets,
         [],
@@ -131,7 +138,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [2,4],
+    [1,2,4,6],
     label_func=lambda c: "num_barcodes%d" % c,
 )
 
@@ -199,6 +206,7 @@ def run_chronos(env, outdir, c):
         '--scratch-dir',
 	join('simulation_topol_consist', outdir, 'scratch'),
     ]
+    c['chronos_res'].append(targets[0])
     return env.Command(targets, sources, ' '.join(map(str, cmd)))
 
 @nest.add_target_with_env(localenv)
@@ -221,6 +229,7 @@ def run_neighbor_joining(env, outdir, c):
         '--scratch-dir',
 	join('simulation_topol_consist', outdir, 'scratch'),
     ]
+    c['NJ_res'].append(targets[0])
     return env.Command(targets, sources, ' '.join(map(str, cmd)))
 
 nest.add(
@@ -246,6 +255,9 @@ def run_MLE(env, outdir, c):
     elif c['num_barcodes'] == 4:
     	penalty_params = "256,128,64,32"
         target_lam_penalty_params = "4,1"
+    elif c['num_barcodes'] == 6:
+    	penalty_params = "128,64,32,16"
+        target_lam_penalty_params = "2,0.5"
 
     targets = [
                 join(outdir, 'tune_fitted_new.pkl'),
@@ -308,4 +320,44 @@ def run_MLE(env, outdir, c):
     cmd = [
         'srun -p matsen_e,campus',
         '--cpus-per-task 8'] + cmd_arg
+    #cmd = cmd_arg
+    c['MLE_res'].append(targets[0])
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
+
+nest.pop("seed")
+
+@nest.add_target_with_env(localenv)
+def plot_res(env, outdir, c):
+    targets = [
+        join(outdir, 'plot_tree_dist.png')]
+    sources = [
+                c['model_list'],
+                c['MLE_res'],
+                c['chronos_res'],
+                c['NJ_res'],
+              ]
+    TEMPLATES  = [
+                c['MLE_res'][0].replace("/20/", "/%d/").replace("num_barcodes1","num_barcodes%d"),
+                c['chronos_res'][0].replace("/20/", "/%d/").replace("num_barcodes1","num_barcodes%d"),
+                c['NJ_res'][0].replace("/20/", "/%d/").replace("num_barcodes1","num_barcodes%d"),
+                c['model_list'][0].replace("/20/", "/%d/").replace("num_barcodes1","num_barcodes%d")
+    ]
+    cmd = [
+        'python plot_simulation_topol_consist_new.py',
+        '--n-bcodes-list',
+        ",".join(map(str, NUM_BCODES)),
+        '--mle-file',
+        join("simulation_topol_consist", TEMPLATES[0]),
+        '--chronos-file',
+        join("simulation_topol_consist", TEMPLATES[1]),
+        '--nj-file',
+        join("simulation_topol_consist", TEMPLATES[2]),
+        '--true-model-file',
+        join("simulation_topol_consist", TEMPLATES[3]),
+        '--data-seeds',
+        ",".join(map(str, SEEDS)),
+        '--out-plot ${TARGETS[0]}',
+        '--scratch-dir',
+	join("simulation_topol_consist", outdir, 'scratch'),
+    ]
     return env.Command(targets, sources, ' '.join(map(str, cmd)))
