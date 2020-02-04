@@ -188,10 +188,6 @@ def parse_args():
         Assume the target rates are all the same and there are no long cuts.
         In that case, we can generate data much faster.
         """)
-    parser.add_argument(
-        '--add-phantom-leaf',
-        action='store_true',
-        help="add phantom leaf with no events")
 
     parser.set_defaults()
     args = parser.parse_args()
@@ -390,27 +386,6 @@ def main(args=sys.argv[1:]):
     min_num_events_bcode0 = [len(obs.allele_events_list[0].events) for obs in obs_leaves]
     logging.info("min num events %d", np.min(min_num_events_bcode0))
     print("min num events %d", np.min(min_num_events_bcode0))
-    if args.add_phantom_leaf and np.min(min_num_events_bcode0) > 0:
-        assert len(obs_leaves) > 10
-        logging.info("adding phantom leaf")
-        argmin_leaf_idx = np.argmin(min_num_events_bcode0)
-        argmin_leaf = obs_leaves[argmin_leaf_idx]
-
-        new_allele_strs = copy.deepcopy(argmin_leaf.allele_list.allele_strs)
-        new_allele_strs[0] = list(bcode_meta.unedited_barcode)
-
-        new_allele_events = list(copy.deepcopy(argmin_leaf.allele_events_list))
-        print(new_allele_events)
-        new_allele_events = [AlleleEvents(num_targets=args.num_targets)] + new_allele_events[1:]
-
-        no_evt_obs_seq = ObservedAlignedSeq(
-            allele_list=AlleleList(new_allele_strs, bcode_meta),
-            allele_events_list=new_allele_events,
-            cell_state=None,
-            abundance=0,
-        )
-        print("NO EVT", no_evt_obs_seq)
-        obs_leaves.append(no_evt_obs_seq)
 
     # Save the observed data
     with open(args.out_obs_file, "wb") as f:
