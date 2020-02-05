@@ -967,7 +967,7 @@ class CLTLikelihoodModel:
         return tf_common.ifelse(
             tf_common.equal_float(insert_lens, 0),
             self.insert_zero_prob,
-            (1 - self.insert_zero_prob) * insert_len_prob * insert_seq_prob)
+            (1 - self.insert_zero_prob) * insert_len_prob) # * insert_seq_prob)
 
     """
     LOG LIKELIHOOD CALCULATION section
