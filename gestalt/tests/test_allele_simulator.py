@@ -10,6 +10,7 @@ from optim_settings import KnownModelParams
 from cell_lineage_tree import CellLineageTree
 from indel_sets import TargetTract
 from bounded_distributions import ConditionalBoundedNegativeBinomial, ShiftedNegativeBinomial
+from bounded_distributions import ConditionalBoundedPoisson
 
 
 class AlleleSimulatorTestCase(unittest.TestCase):
@@ -75,6 +76,9 @@ class AlleleSimulatorTestCase(unittest.TestCase):
         self.assertEqual(new_allele.get_target_status(), TargetStatus(TargetDeactTract(0,9)))
 
     def test_neg_beta_right_del_focal(self):
+        """
+        Check trim and insertion lengths match up when focal cut with short trims
+        """
         trim_zero_probs = np.array([0.1,0.2,0.4,0.2])
         trim_zero_probs_reshape = trim_zero_probs.reshape([2,-1])
         trim_short_params = np.array([1,0.3,1,0.1])
@@ -161,9 +165,12 @@ class AlleleSimulatorTestCase(unittest.TestCase):
         self.assertTrue(np.mean(insert_lens) + 2 * np.sqrt(np.var(insert_lens)/num_replicates) > insert_mean_true)
 
     def test_neg_beta_right_del_long(self):
+        """
+        Check trim and insertion lengths match up when focal cut with long trims
+        """
         trim_zero_probs = np.array([0.1,0.2,0.4,0.2])
         trim_zero_probs_reshape = trim_zero_probs.reshape([2,-1])
-        trim_long_params = np.array([1,0.3,1,0.1])
+        trim_long_params = np.array([0.1,0.3])
         trim_long_params_reshape = trim_long_params.reshape([2,-1])
         insert_zero_prob = np.array([0.4])
         insert_params = np.array([0.5,0.5])
@@ -174,7 +181,6 @@ class AlleleSimulatorTestCase(unittest.TestCase):
                 known_params = self.known_params,
                 target_lams = 1 + np.arange(self.bcode_meta.n_targets),
                 trim_zero_probs = trim_zero_probs,
-                trim_short_params = trim_long_params,
                 trim_long_params = trim_long_params,
                 insert_zero_prob = insert_zero_prob,
                 insert_params = insert_params,
@@ -204,11 +210,10 @@ class AlleleSimulatorTestCase(unittest.TestCase):
 
         # Test left
         dist_index = 0
-        trim_left_dist = ConditionalBoundedNegativeBinomial(
+        trim_left_dist = ConditionalBoundedPoisson(
                 self.bcode_meta.left_long_trim_min[1],
                 self.bcode_meta.left_max_trim[1],
-                np.exp(trim_long_params_reshape[dist_index,0]),
-                trim_long_params_reshape[dist_index,1])
+                np.exp(trim_long_params_reshape[dist_index,0]))
         left_trim_range = range(self.bcode_meta.left_long_trim_min[1], self.bcode_meta.left_max_trim[1] + 1)
         left_trim_mean_true = np.sum([k * trim_left_dist.pmf(k) for k in left_trim_range])
 
@@ -219,11 +224,10 @@ class AlleleSimulatorTestCase(unittest.TestCase):
 
         # Test right
         dist_index = 1
-        trim_right_dist = ConditionalBoundedNegativeBinomial(
+        trim_right_dist = ConditionalBoundedPoisson(
                 self.bcode_meta.right_long_trim_min[1],
                 self.bcode_meta.right_max_trim[1],
-                np.exp(trim_long_params_reshape[dist_index,0]),
-                trim_long_params_reshape[dist_index,1])
+                np.exp(trim_long_params_reshape[dist_index,0]))
         right_trim_range = range(self.bcode_meta.right_long_trim_min[1], self.bcode_meta.right_max_trim[1] + 1)
         right_trim_mean_true = np.sum([k * trim_right_dist.pmf(k) for k in right_trim_range])
 

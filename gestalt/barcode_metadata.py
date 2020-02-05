@@ -66,8 +66,8 @@ class BarcodeMetadata:
 
         # Max length of any trim for target i -- right
         self.right_max_trim = [
-            self.abs_cut_sites[i + 1] - self.abs_cut_sites[i] for i in range(self.n_targets - 1)]
-        self.right_max_trim += [self.orig_length - self.abs_cut_sites[-1]]
+            self.abs_cut_sites[i + 1] - self.abs_cut_sites[i] - 1 for i in range(self.n_targets - 1)]
+        self.right_max_trim += [self.orig_length - self.abs_cut_sites[-1] - 1]
         # note that for the last target, we can never have long cuts. therefore the min long trim is max trim + 1
         self.right_long_trim_min += [self.right_max_trim[-1]]
 

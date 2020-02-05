@@ -89,10 +89,8 @@ def parse_args():
         default=[0.5] * 4,
         help='probability of doing no deletion during repair')
     parser.add_argument(
-        '--trim-params',
+        '--trim-short-params',
         type=float,
-        #nargs=2,
-        #default=[np.log(4)] * 2,
         nargs=4,
         default=[np.log(3),0] * 2,
         help="""
@@ -100,6 +98,15 @@ def parse_args():
         Format: left neg binom params, right neg binom params
         neg binom param format: log(num failures), logit(prob of success)
         The RV is the number of successes
+        """
+    )
+    parser.add_argument(
+        '--trim-long-params',
+        type=float,
+        nargs=2,
+        default=[np.log(3),np.log(3)],
+        help="""
+        poisson parameter for left and right trims, until we observe this many failures, same for long and short
         """
     )
     parser.add_argument(
@@ -168,7 +175,7 @@ def parse_args():
     parser.add_argument(
         '--use-poisson',
         action='store_true',
-        help="trims follow poisson")
+        help="short trims follow poisson")
 
     parser.set_defaults()
     args = parser.parse_args()
@@ -323,8 +330,8 @@ def main(args=sys.argv[1:]):
             target_lam_decay_rate = np.array([args.target_lam_decay_rate]),
             trim_long_factor = np.array(args.trim_long_factor),
             trim_zero_probs = np.array(args.trim_zero_probs),
-            trim_short_params = np.array(args.trim_params),
-            trim_long_params = np.array(args.trim_params),
+            trim_short_params = np.array(args.trim_short_params),
+            trim_long_params = np.array(args.trim_long_params),
             insert_zero_prob = np.array([args.insert_zero_prob]),
             insert_params = np.array(args.insert_params),
             double_cut_weight = [args.double_cut_weight],

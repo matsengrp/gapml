@@ -9,9 +9,8 @@ from allele import Allele, AlleleList
 from indel_sets import TargetTract
 from cell_lineage_tree import CellLineageTree
 from allele_simulator import AlleleSimulator
-from bounded_distributions import PaddedBoundedPoisson
 from bounded_distributions import ShiftedPoisson
-from bounded_distributions import ConditionalBoundedNegativeBinomial
+from bounded_distributions import ConditionalBoundedNegativeBinomial, ConditionalBoundedPoisson
 from bounded_distributions import ShiftedNegativeBinomial
 
 from common import sigmoid
@@ -30,29 +29,23 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         self.all_target_tract_hazards = model.get_all_target_tract_hazards()
 
         insert_params = self.model.insert_params.eval()
+        self.left_del_dist = self._create_bounded_dists(
+            min_vals = self.bcode_meta.left_long_trim_min,
+            max_vals = self.bcode_meta.left_max_trim,
+            short_params = self.model.trim_short_params_reshaped[0,:].eval(),
+            long_params = self.model.trim_long_params_reshaped[0,:].eval(),
+            # Always use poisson for the long trims
+            distributions=[self.model.use_poisson, True])
+        self.right_del_dist = self._create_bounded_dists(
+            min_vals = self.bcode_meta.right_long_trim_min,
+            max_vals = self.bcode_meta.right_max_trim,
+            short_params = self.model.trim_short_params_reshaped[1,:].eval(),
+            long_params = self.model.trim_long_params_reshaped[1,:].eval(),
+            # Always use poisson for the long trims
+            distributions=[self.model.use_poisson, True])
         if self.model.use_poisson:
-            self.left_del_dist = self._create_bounded_poissons(
-                min_vals = self.bcode_meta.left_long_trim_min,
-                max_vals = self.bcode_meta.left_max_trim,
-                short_poiss = self.model.trim_short_params[0].eval(),
-                long_poiss = self.model.trim_long_params[0].eval())
-            self.right_del_dist = self._create_bounded_poissons(
-                min_vals = self.bcode_meta.right_long_trim_min,
-                max_vals = self.bcode_meta.right_max_trim,
-                short_poiss = self.model.trim_short_params[1].eval(),
-                long_poiss = self.model.trim_long_params[1].eval())
             self.insertion_distribution = ShiftedPoisson(1, np.exp(insert_params[0]))
         else:
-            self.left_del_dist = self._create_bounded_nbinoms(
-                min_vals = self.bcode_meta.left_long_trim_min,
-                max_vals = self.bcode_meta.left_max_trim,
-                short_params = self.model.trim_short_params_reshaped[0,:].eval(),
-                long_params = self.model.trim_long_params_reshaped[0,:].eval())
-            self.right_del_dist = self._create_bounded_nbinoms(
-                min_vals = self.bcode_meta.right_long_trim_min,
-                max_vals = self.bcode_meta.right_max_trim,
-                short_params = self.model.trim_short_params_reshaped[1,:].eval(),
-                long_params = self.model.trim_long_params_reshaped[1,:].eval())
             self.insertion_distribution = ShiftedNegativeBinomial(1, np.exp(insert_params[0]), insert_params[1])
 
     def get_root(self):
@@ -60,60 +53,49 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
                 [self.bcode_meta.unedited_barcode] * self.bcode_meta.num_barcodes,
                 self.bcode_meta)
 
-    def _create_bounded_nbinoms(self,
+    def _create_bounded_dists(self,
             min_vals: List[float],
             max_vals: List[float],
             short_params: ndarray,
-            long_params: ndarray):
+            long_params: ndarray,
+            distributions: List[bool]):
         """
         @param min_vals: the min long trim length for this target (left or right)
         @param max_vals: the max trim length for this target (left or right)
-        @param short_binom_m: neg binom parameter for short trims, number of failures
-        @param long_binom_m: neg binom parameter for long trims, number of failures
+        @param short_params: distribution parameter for short trims
+        @param long_params: dstirbution parameter for long trims
+        @param distributions:
 
-        @return bounded poisson distributions for each target, for long, short , boosted-short trims
-                List[Dict[bool indicating long trim, BoundedNegativeBinomial]]
+        @return bounded distributions for each target, for long and short
+                List[Dict[bool indicating long trim, Distribution]]
         """
         dstns = []
         for i in range(self.bcode_meta.n_targets):
-            long_short_dstns = [
-                    # Short trim
+            # Short trim
+            short_dstn= (
+                    ConditionalBoundedPoisson(
+                        1,
+                        min_vals[i] - 1,
+                        np.exp(short_params[0])) if distributions[0] else
                     ConditionalBoundedNegativeBinomial(
                         1,
                         min_vals[i] - 1,
                         np.exp(short_params[0]),
-                        short_params[1]),
-                    # Long trim
+                        short_params[1])
+                    )
+            # Long trim
+            long_dstn= (
+                    ConditionalBoundedPoisson(
+                        min_vals[i],
+                        max_vals[i],
+                        np.exp(long_params[0])) if distributions[1] else
                     ConditionalBoundedNegativeBinomial(
                         min_vals[i],
                         max_vals[i],
                         np.exp(long_params[0]),
-                        long_params[1])]
-            dstns.append(long_short_dstns)
-        return dstns
-
-    def _create_bounded_poissons(self,
-            min_vals: List[float],
-            max_vals: List[float],
-            short_poiss: float,
-            long_poiss: float):
-        """
-        @param min_vals: the min long trim length for this target (left or right)
-        @param max_vals: the max trim length for this target (left or right)
-        @param short_binom_m: neg binom parameter for short trims, number of failures
-        @param long_binom_m: neg binom parameter for long trims, number of failures
-
-        @return bounded poisson distributions for each target, for long, short , boosted-short trims
-                List[Dict[bool indicating long trim, BoundedPoisson]]
-        """
-        dstns = []
-        for i in range(self.bcode_meta.n_targets):
-            long_short_dstns = [
-                    # Short trim
-                    PaddedBoundedPoisson(1, min_vals[i] - 1, np.exp(short_poiss)),
-                    # Long trim
-                    PaddedBoundedPoisson(min_vals[i], max_vals[i], np.exp(long_poiss))]
-            dstns.append(long_short_dstns)
+                        long_params[1])
+                    )
+            dstns.append([short_dstn, long_dstn])
         return dstns
 
     def _race_target_tracts(self, allele: Allele, scale_hazard: float):

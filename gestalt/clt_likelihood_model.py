@@ -42,7 +42,7 @@ class CLTLikelihoodModel:
             trim_long_factor: ndarray = 0.05 * np.ones(2),
             trim_zero_probs: ndarray = 0.5 * np.ones(4),
             trim_short_params: ndarray = np.array([1,0] * 2),
-            trim_long_params: ndarray = np.array([1,0] * 2),
+            trim_long_params: ndarray = np.array([1,1]),
             insert_zero_prob: ndarray = np.array([0.5]),
             insert_params: ndarray = np.array([1, 0]),
             double_cut_weight: ndarray = np.array([1.0]),
@@ -99,7 +99,7 @@ class CLTLikelihoodModel:
         self.num_trim_short_types = 2
         self.num_trim_long_types = 2
         assert trim_short_params.size == self.num_trim_short_types * (1 if use_poisson else 2)
-        assert trim_long_params.size == self.num_trim_long_types * (1 if use_poisson else 2)
+        assert trim_long_params.size == self.num_trim_long_types
 
         assert np.all(trim_long_factor < 1)
         # Create all the variables
@@ -265,8 +265,8 @@ class CLTLikelihoodModel:
         NOTE: Requires the number of singletons because tensorflow refuses to properly broadcast for
         the negative binomial distribution for some awful reason
         """
-        def make_del_dist(params, n_trim_types):
-            if self.use_poisson:
+        def make_del_dist(params, n_trim_types, use_poisson):
+            if use_poisson:
                 del_dist_list = [tfp.distributions.Poisson(tf.exp(params[i])) for i in range(n_trim_types)]
             else:
                 del_dist_list = [
@@ -276,8 +276,8 @@ class CLTLikelihoodModel:
                         logits=params[i, 1] * tf.constant(np.ones(num_singletons), dtype=tf.float64))
                     for i in range(n_trim_types)]
             return del_dist_list
-        self.del_short_dist = make_del_dist(self.trim_short_params_reshaped, self.num_trim_short_types)
-        self.del_long_dist = make_del_dist(self.trim_long_params_reshaped, self.num_trim_long_types)
+        self.del_short_dist = make_del_dist(self.trim_short_params_reshaped, self.num_trim_short_types, use_poisson=self.use_poisson)
+        self.del_long_dist = make_del_dist(self.trim_long_params_reshaped, self.num_trim_long_types, use_poisson=True)
         if self.use_poisson:
             self.insert_dist = tfp.distributions.Poisson(tf.exp(self.insert_params[0]))
         else:
@@ -987,10 +987,7 @@ class CLTLikelihoodModel:
         # Penalize target lambdas from being too different
         log_targ_lams = tf.log(self.target_lams)
         self.target_lam_pen = tf.reduce_sum(tf.pow(log_targ_lams - tf.reduce_mean(log_targ_lams), 2))
-        self.all_param_pen = self.crazy_pen_param_ph * (
-                tf.reduce_mean(tf.pow(self.trim_long_params - self.trim_short_params, 2))
-                + tf.pow(self.double_cut_weight, 2)
-                + tf.reduce_mean(tf.pow(self.trim_long_factor, 2)))
+        self.all_param_pen = self.crazy_pen_param_ph * tf.reduce_mean(tf.pow(self.all_but_branch_lens, 2))
 
         # Make our penalized log likelihood
         self.smooth_log_lik = (
