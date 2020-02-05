@@ -36,12 +36,9 @@ class CLTSimulatorSimpler(CLTSimulator):
     a simple tree:
     root -- child -- leaf1, leaf2, leaf3, leaf4
     """
-    def simulate(self,
-            tree_seed: int,
-            data_seed: int,
+    def simulate_full_skeleton(self,
             tot_time: float,
-            max_nodes: int = 10):
-        np.random.seed(tree_seed)
+            max_leaves: int = None):
         root_allele = self.allele_simulator.get_root()
         root_cell_state = self.cell_state_simulator.get_root()
 
@@ -79,10 +76,6 @@ class CLTSimulatorSimpler(CLTSimulator):
         logging.info("CHILD DIST %f tot time %f", child_dist, tot_time)
         print("CHILD DIST", child_dist, "tot time", tot_time)
 
-        np.random.seed(data_seed)
-        # Run the simulation to create the alleles along the tree topology
-        self._simulate_alleles(tree)
-        self._simulate_cell_states(tree)
         return tree
 
 class CLTSimulatorSimple(CLTSimulator):
@@ -98,7 +91,6 @@ class CLTSimulatorSimple(CLTSimulator):
             data_seed: int,
             tot_time: float,
             max_nodes: int = 10):
-        np.random.seed(tree_seed)
         root_allele = self.allele_simulator.get_root()
         root_cell_state = self.cell_state_simulator.get_root()
 

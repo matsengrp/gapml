@@ -272,10 +272,8 @@ class CLTLikelihoodModel:
                 del_dist_list = [
                     #tfp.distributions.NegativeBinomial(
                     tf.contrib.distributions.NegativeBinomial(
-                        tf.exp(params[i, 0]),
-                        logits=params[i, 1])
-                        #tf.exp(params[i, 0]) * tf.constant(np.ones(num_singletons), dtype=tf.float64),
-                        #logits=params[i, 1] * tf.constant(np.ones(num_singletons), dtype=tf.float64))
+                        tf.exp(params[i, 0]) * tf.constant(np.ones(num_singletons), dtype=tf.float64),
+                        logits=params[i, 1] * tf.constant(np.ones(num_singletons), dtype=tf.float64))
                     for i in range(n_trim_types)]
             return del_dist_list
         self.del_short_dist = make_del_dist(self.trim_short_params_reshaped, self.num_trim_short_types)
@@ -842,8 +840,8 @@ class CLTLikelihoodModel:
             insert_prob = self._create_insert_probs(singletons)
 
             # Combine everything
-            all_probs = tf.log(left_del_prob) + tf.log(right_del_prob) + tf.log(insert_prob)
-            short_trim_focal_normalization = tf.log(1 -
+            all_log_probs = tf.log(left_del_prob) + tf.log(right_del_prob) + tf.log(insert_prob)
+            log_short_focal_normalization = tf.log(1 -
                     (self.trim_zero_prob_dict[0,0]  # left zero focal prob
                         * self.trim_zero_prob_dict[1,0]  # right zero focal prob
                         * self.insert_zero_prob)  # insert zero prob
@@ -852,7 +850,7 @@ class CLTLikelihoodModel:
             any_long = tf.constant(
                 [sg.is_intertarget or sg.is_left_long or sg.is_right_long for sg in singletons], dtype=tf.float64)
 
-            return tf_common.ifelse(any_long, all_log_probs, all_log_probs - log_short_trim_focal_normalization)
+            return tf_common.ifelse(any_long, all_log_probs, all_log_probs - log_short_focal_normalization)
 
     def _create_del_probs(self,
             trim_len,
@@ -881,13 +879,13 @@ class CLTLikelihoodModel:
 
         # probability of a long trim
         del_long_dist = self.del_long_dist[is_right]
-        long_prob = del_short_dist.prob(tf.maximum(trim_len - trim_mins, 0))/del_long_dist.cdf(trim_maxs - trim_mins)
+        long_prob = del_short_dist.prob(tf.maximum(trim_len - trim_mins, 0))/del_long_dist.cdf(tf.maximum(trim_maxs - trim_mins, 0))
 
         return tf_common.ifelse(
                 tf_common.equal_float(trim_len, 0),
                 trim_zero_prob,
                 tf_common.ifelse(
-                    is_long,
+                    is_longs,
                     long_prob,
                     short_nonzero_prob))
 
@@ -909,11 +907,10 @@ class CLTLikelihoodModel:
         # Compute conditional prob of deletion for a singleton
         min_target_sites = tf.constant([self.bcode_meta.abs_cut_sites[mt] for mt in min_targets], dtype=tf.float64)
         left_trim_len = min_target_sites - start_posns
-
         left_trim_long_min = tf.constant([self.bcode_meta.left_long_trim_min[mt] for mt in min_targets], dtype=tf.float64)
         left_trim_long_max = tf.constant([self.bcode_meta.left_max_trim[mt] for mt in min_targets], dtype=tf.float64)
 
-        return self._create_del_probs_any_long(
+        return self._create_del_probs(
             left_trim_len,
             is_left_longs,
             is_intertargets,
@@ -943,7 +940,7 @@ class CLTLikelihoodModel:
         right_trim_long_min = tf.constant([self.bcode_meta.right_long_trim_min[mt] for mt in max_targets], dtype=tf.float64)
         right_trim_long_max = tf.constant([self.bcode_meta.right_max_trim[mt] for mt in max_targets], dtype=tf.float64)
 
-        return self._create_del_probs_any_long(
+        return self._create_del_probs(
             right_trim_len,
             is_right_longs,
             is_intertargets,
@@ -990,6 +987,8 @@ class CLTLikelihoodModel:
         # Penalize target lambdas from being too different
         log_targ_lams = tf.log(self.target_lams)
         self.target_lam_pen = tf.reduce_sum(tf.pow(log_targ_lams - tf.reduce_mean(log_targ_lams), 2))
+
+        self.all_param_pen = self.crazy_pen_param_ph * tf.reduce_mean(tf.pow(self.all_but_branch_lens, 2))
 
         # Make our penalized log likelihood
         self.smooth_log_lik = (
@@ -1242,6 +1241,7 @@ class CLTLikelihoodModel:
 
         # Get the trim probabilities
         trim_probs_left = self._create_trim_instant_prob_matrix_left(transition_wrapper)
+        trim_probs_left = tf.verify_tensor_all_finite(trim_probs_left, "trim prob problem")
 
         # Combine the trim probs with marginal transition rates
         q_matrix = targ_tract_left * trim_probs_left
@@ -1252,6 +1252,7 @@ class CLTLikelihoodModel:
                 tf.reduce_sum(q_matrix, axis=1),
                 [matrix_len, 1])
         q_matrix_full = tf.concat([q_matrix, hazard_impossible_states], axis=1)
+
         return q_matrix_full, trim_probs_left
 
     @profile

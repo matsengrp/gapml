@@ -77,18 +77,6 @@ def parse_args():
         default=0.4,
         help='Weight for double cuts')
     parser.add_argument(
-        '--boost-weights',
-        type=float,
-        nargs=3,
-        default=[1, 2, 2],
-        help="""
-        probability of boosting the insertion, left deletion, right deletion lengths.
-        This boost is mutually exclusive -- the boost can be only applied to one of these categories.
-        The boost is of length one right now.
-        The boost is to ensure the target lambdas indicate the hazard of introducing a positive indel,
-        not a no-op indel.
-        """)
-    parser.add_argument(
         '--trim-long-factor',
         type=float,
         nargs=2,
@@ -181,13 +169,6 @@ def parse_args():
         '--use-poisson',
         action='store_true',
         help="trims follow poisson")
-    parser.add_argument(
-        '--same-lambdas-no-long-fast',
-        action='store_true',
-        help="""
-        Assume the target rates are all the same and there are no long cuts.
-        In that case, we can generate data much faster.
-        """)
 
     parser.set_defaults()
     args = parser.parse_args()
@@ -220,8 +201,7 @@ def create_cell_type_tree(args):
 
 def create_simulators(args, clt_model):
     allele_simulator = AlleleSimulatorSimultaneous(
-            clt_model,
-            same_lams_no_long=args.same_lambdas_no_long_fast)
+            clt_model)
     cell_type_simulator = CellTypeSimulator(clt_model.cell_type_tree)
     if args.is_one_leaf:
         clt_simulator = CLTSimulatorSimplest(
@@ -341,7 +321,6 @@ def main(args=sys.argv[1:]):
             known_params = known_params,
             target_lams = np.array(args.target_lambdas),
             target_lam_decay_rate = np.array([args.target_lam_decay_rate]),
-            boost_softmax_weights = np.array(args.boost_weights),
             trim_long_factor = np.array(args.trim_long_factor),
             trim_zero_probs = np.array(args.trim_zero_probs),
             trim_short_params = np.array(args.trim_params),
@@ -352,8 +331,7 @@ def main(args=sys.argv[1:]):
             cell_type_tree = cell_type_tree,
             tot_time = args.time,
             tot_time_extra = 1e-10,
-            use_poisson=args.use_poisson,
-            do_shortcut=args.same_lambdas_no_long_fast)
+            use_poisson=args.use_poisson)
     tf.global_variables_initializer().run()
     logging.info("Done creating model")
 
