@@ -879,7 +879,7 @@ class CLTLikelihoodModel:
 
         # probability of a long trim
         del_long_dist = self.del_long_dist[is_right]
-        long_prob = del_short_dist.prob(tf.maximum(trim_len - trim_mins, 0))/del_long_dist.cdf(tf.maximum(trim_maxs - trim_mins, 0))
+        long_prob = del_long_dist.prob(tf.maximum(trim_len - trim_mins, 0))/del_long_dist.cdf(tf.maximum(trim_maxs - trim_mins, 0))
 
         return tf_common.ifelse(
                 tf_common.equal_float(trim_len, 0),
@@ -987,15 +987,17 @@ class CLTLikelihoodModel:
         # Penalize target lambdas from being too different
         log_targ_lams = tf.log(self.target_lams)
         self.target_lam_pen = tf.reduce_sum(tf.pow(log_targ_lams - tf.reduce_mean(log_targ_lams), 2))
-
-        self.all_param_pen = self.crazy_pen_param_ph * tf.reduce_mean(tf.pow(self.all_but_branch_lens, 2))
+        self.all_param_pen = self.crazy_pen_param_ph * (
+                tf.reduce_mean(tf.pow(self.trim_long_params - self.trim_short_params, 2))
+                + tf.pow(self.double_cut_weight, 2)
+                + tf.reduce_mean(tf.pow(self.trim_long_factor, 2)))
 
         # Make our penalized log likelihood
         self.smooth_log_lik = (
                 self.log_lik/self.bcode_meta.num_barcodes
                 - self.branch_pen * self.branch_pen_param_ph
                 - self.target_lam_pen * self.target_lam_pen_param_ph
-                - self.crazy_pen_param_ph * tf.reduce_mean(tf.pow(self.all_but_branch_lens, 2)))
+                - self.all_param_pen)
 
         if create_gradient:
             logging.info("Computing gradients....")
@@ -1198,6 +1200,7 @@ class CLTLikelihoodModel:
                             # No need to reorder
                             ch_id = child_wrapper.key_dict[TargetStatus()]
                             down_probs = ch_ordered_down_probs[ch_id]
+                        down_probs = tf.maximum(tf.constant(0, dtype=tf.float64), down_probs)
 
                         down_probs_dict[child.node_id] = down_probs
                         if child.is_leaf():
@@ -1209,8 +1212,7 @@ class CLTLikelihoodModel:
 
                         # Add protection against states with zero probability for the given set of transitions
                         has_pos_prob *= tf_common.greater_equal_float(down_probs, 0)
-                        log_Lprob_node = log_Lprob_node + tf.log(tf_common.ifelse(
-                                has_pos_prob, down_probs, down_probs + eps)) * leaf_abundance_weight
+                        log_Lprob_node = log_Lprob_node + tf.log(down_probs + (1 - has_pos_prob) * eps) * leaf_abundance_weight
 
                 # Handle numerical underflow
                 log_scaling_term = tf.reduce_max(log_Lprob_node)
