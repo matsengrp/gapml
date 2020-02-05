@@ -1130,7 +1130,8 @@ class CLTLikelihoodModel:
     def _create_topology_log_lik_barcode(
             self,
             transition_wrappers: Dict[int, List[TransitionWrapper]],
-            bcode_idx: int):
+            bcode_idx: int,
+            eps: float = 1e-30):
         """
         @param transition_wrappers: dictionary mapping node id to list of TransitionWrapper -- carries useful information
                                     for deciding how to calculate the transition probabilities
@@ -1158,7 +1159,7 @@ class CLTLikelihoodModel:
             else:
                 transition_wrapper = transition_wrappers[node.node_id][bcode_idx]
                 log_Lprob_node = self._initialize_lower_log_prob(transition_wrapper, node)
-
+                has_pos_prob = tf.constant(1, dtype=tf.float64)
                 for child in node.children:
                     child_wrapper = transition_wrappers[child.node_id][bcode_idx]
                     with tf.name_scope("Transition_matrix%d" % node.node_id):
@@ -1205,13 +1206,17 @@ class CLTLikelihoodModel:
                                 dtype=tf.float64)
                         else:
                             leaf_abundance_weight = tf.constant(1, dtype=tf.float64)
-                        log_Lprob_node = log_Lprob_node + tf.log(down_probs) * leaf_abundance_weight
+
+                        # Add protection against states with zero probability for the given set of transitions
+                        has_pos_prob *= tf_common.greater_equal_float(down_probs, 0)
+                        log_Lprob_node = log_Lprob_node + tf.log(tf_common.ifelse(
+                                has_pos_prob, down_probs, down_probs + eps)) * leaf_abundance_weight
 
                 # Handle numerical underflow
                 log_scaling_term = tf.reduce_max(log_Lprob_node)
                 Lprob[node.node_id] = tf.verify_tensor_all_finite(
                         tf.exp(log_Lprob_node - log_scaling_term, name="scaled_down_prob"),
-                        "lprob%d has problem" % node.node_id)
+                        "lprob%d has problem" % node.node_id) * has_pos_prob
                 log_scaling_terms[node.node_id] = log_scaling_term
 
         with tf.name_scope("alleles_log_lik"):
