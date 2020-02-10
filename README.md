@@ -27,6 +27,8 @@ You need to create a file `constant_paths.py` in the `gestalt` folder that provi
 
 `tune_topology.py`: to select the best topology given a set of possible topologies
 
+`convert_to_newick.py`: output the fitted tree in newick format
+
 # Fitting the trees via alternative methods
 `fit_chronos.py`: uses Sanderson 2002, the `chronos` function in R package `ape`
 
