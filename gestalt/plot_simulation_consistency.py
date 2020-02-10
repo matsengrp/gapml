@@ -101,7 +101,7 @@ def main(args=sys.argv[1:]):
                     assert true_val.size == mle_estimate.size
                     all_perfs.append({
                         "Param": k,
-                        "Error": np.linalg.norm(mle_estimate - true_val),
+                        "Error": np.mean(np.power(mle_estimate - true_val, 2))/np.mean(np.power(true_val, 2)),
                         "Number of barcodes": n_bcodes,
                     })
             except FileNotFoundError:
