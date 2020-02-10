@@ -45,6 +45,8 @@ class BarcodeMetadata:
             right = min(self.orig_length - 1, cut_site + crucial_pos_len[1] - 1)
             left = max(0, cut_site - crucial_pos_len[0])
             self.pos_sites.append((left, right))
+            assert left <= cut_site
+            assert right >= cut_site
 
         # Min length of a long trim for target i -- left
         self.left_long_trim_min = [
@@ -60,14 +62,14 @@ class BarcodeMetadata:
         self.left_max_trim = [self.abs_cut_sites[0]] + self.left_max_trim
         # Min length of a long trim for target i -- left
         # note that for the 0th target, we can never have long cuts. therefore the min long trim is max trim + 1
-        self.left_long_trim_min = [self.left_max_trim[0] + 1] + self.left_long_trim_min
+        self.left_long_trim_min = [self.left_max_trim[0]] + self.left_long_trim_min
 
         # Max length of any trim for target i -- right
         self.right_max_trim = [
-            self.abs_cut_sites[i + 1] - self.abs_cut_sites[i] for i in range(self.n_targets - 1)]
-        self.right_max_trim += [self.orig_length - self.abs_cut_sites[-1]]
+            self.abs_cut_sites[i + 1] - self.abs_cut_sites[i] - 1 for i in range(self.n_targets - 1)]
+        self.right_max_trim += [self.orig_length - self.abs_cut_sites[-1] - 1]
         # note that for the last target, we can never have long cuts. therefore the min long trim is max trim + 1
-        self.right_long_trim_min += [self.right_max_trim[-1] + 1]
+        self.right_long_trim_min += [self.right_max_trim[-1]]
 
     @staticmethod
     def create_fake_barcode_str(num_targets: int):

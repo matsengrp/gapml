@@ -9,8 +9,8 @@ from clt_likelihood_model import CLTLikelihoodModel
 from optim_settings import KnownModelParams
 from cell_lineage_tree import CellLineageTree
 from indel_sets import TargetTract
-from bounded_distributions import ZeroInflatedBoundedPoisson, PaddedBoundedPoisson
-from bounded_distributions import ZeroInflatedBoundedNegativeBinomial, PaddedBoundedNegativeBinomial
+from bounded_distributions import ConditionalBoundedNegativeBinomial, ShiftedNegativeBinomial
+from bounded_distributions import ConditionalBoundedPoisson
 
 
 class AlleleSimulatorTestCase(unittest.TestCase):
@@ -76,12 +76,15 @@ class AlleleSimulatorTestCase(unittest.TestCase):
         self.assertEqual(new_allele.get_target_status(), TargetStatus(TargetDeactTract(0,9)))
 
     def test_neg_beta_right_del_focal(self):
+        """
+        Check trim and insertion lengths match up when focal cut with short trims
+        """
         trim_zero_probs = np.array([0.1,0.2,0.4,0.2])
+        trim_zero_probs_reshape = trim_zero_probs.reshape([2,-1])
         trim_short_params = np.array([1,0.3,1,0.1])
         trim_short_params_reshape = trim_short_params.reshape([2,-1])
-        boost_weight = np.array([1,2,2])
-        boost_prob = np.exp(boost_weight)/np.sum(np.exp(boost_weight))
-        print(trim_short_params_reshape)
+        insert_zero_prob = np.array([0.4])
+        insert_params = np.array([0.5,0.5])
         mdl = CLTLikelihoodModel(
                 None,
                 self.bcode_meta,
@@ -90,12 +93,13 @@ class AlleleSimulatorTestCase(unittest.TestCase):
                 target_lams = 1 + np.arange(self.bcode_meta.n_targets),
                 trim_zero_probs = trim_zero_probs,
                 trim_short_params = trim_short_params,
-                boost_softmax_weights = boost_weight,
+                insert_zero_prob = insert_zero_prob,
+                insert_params = insert_params,
                 use_poisson = False)
         self._create_simulator(mdl)
 
         target_tract = TargetTract(1,1,1,1)
-        num_replicates = 10000
+        num_replicates = 2000
         left_trims = []
         right_trims = []
         insert_lens = []
@@ -113,21 +117,133 @@ class AlleleSimulatorTestCase(unittest.TestCase):
             left_trims.append(left_trim)
             insert_lens.append(insert_len)
 
-        dist_index = 1
-        trim_right_zero_prob = trim_zero_probs[dist_index]
-        max_trim_len = self.bcode_meta.right_long_trim_min[1] - 1
-        trim_right_dist = PaddedBoundedNegativeBinomial(
-                0,
-                max_trim_len,
-                np.exp(trim_short_params_reshape[dist_index,0]),
-                trim_short_params_reshape[dist_index,1])
-        trim_boost_right_dist = PaddedBoundedNegativeBinomial(
+        # Normalization term is for having some allele effect
+        normalization = 1 - (trim_zero_probs_reshape[0,0] * trim_zero_probs_reshape[1,0] * insert_zero_prob)
+
+        # Test left
+        dist_index = 0
+        trim_left_zero_prob = trim_zero_probs_reshape[dist_index, 0]
+        max_trim_len = self.bcode_meta.left_long_trim_min[1] - 1
+        trim_left_dist = ConditionalBoundedNegativeBinomial(
                 1,
                 max_trim_len,
                 np.exp(trim_short_params_reshape[dist_index,0]),
                 trim_short_params_reshape[dist_index,1])
-        right_trim_mean_true = (
-            boost_prob[2] * np.sum([k * trim_boost_right_dist.pmf(k) for k in range(1, max_trim_len + 1)])
-            + (1 - boost_prob[2]) * (1 - trim_right_zero_prob) * np.sum([k * trim_right_dist.pmf(k) for k in range(1, max_trim_len + 1)]))
+        left_trim_mean_true = (1 - trim_left_zero_prob) * np.sum([k * trim_left_dist.pmf(k) for k in range(1, max_trim_len + 1)])/normalization
 
-        self.assertTrue(np.isclose(np.mean(right_trims), right_trim_mean_true, atol=0.1))
+        # Check prob distribution sums to 1
+        self.assertTrue(np.isclose(1, np.sum([trim_left_dist.pmf(k) for k in range(1, max_trim_len + 1)])))
+        # Check the means match
+        self.assertTrue(np.mean(left_trims) + 2 * np.sqrt(np.var(left_trims)/num_replicates) > left_trim_mean_true)
+
+        # Test right
+        dist_index = 1
+        trim_right_zero_prob = trim_zero_probs_reshape[dist_index, 0]
+        max_trim_len = self.bcode_meta.right_long_trim_min[1] - 1
+        trim_right_dist = ConditionalBoundedNegativeBinomial(
+                1,
+                max_trim_len,
+                np.exp(trim_short_params_reshape[dist_index,0]),
+                trim_short_params_reshape[dist_index,1])
+        right_trim_mean_true = (1 - trim_right_zero_prob) * np.sum([k * trim_right_dist.pmf(k) for k in range(1, max_trim_len + 1)])/normalization
+
+        # Check prob distribution sums to 1
+        self.assertTrue(np.isclose(1, np.sum([trim_right_dist.pmf(k) for k in range(1, max_trim_len + 1)])))
+        # Check the means match
+        self.assertTrue(np.mean(right_trims) + 2 * np.sqrt(np.var(right_trims)/num_replicates) > right_trim_mean_true)
+
+        # Test insertion len
+        insert_dist = ShiftedNegativeBinomial(
+                1,
+                np.exp(insert_params[0]),
+                insert_params[1])
+        insert_mean_true = (1 - insert_zero_prob) * np.sum([k * insert_dist.pmf(k) for k in range(1, 10000)])/normalization
+
+        # Check prob distribution sums to 1
+        self.assertTrue(np.isclose(1, np.sum([insert_dist.pmf(k) for k in range(1, 1000000)])))
+        # Check the means match
+        self.assertTrue(np.mean(insert_lens) + 2 * np.sqrt(np.var(insert_lens)/num_replicates) > insert_mean_true)
+
+    def test_neg_beta_right_del_long(self):
+        """
+        Check trim and insertion lengths match up when focal cut with long trims
+        """
+        trim_zero_probs = np.array([0.1,0.2,0.4,0.2])
+        trim_zero_probs_reshape = trim_zero_probs.reshape([2,-1])
+        trim_long_params = np.array([0.1,0.3])
+        trim_long_params_reshape = trim_long_params.reshape([2,-1])
+        insert_zero_prob = np.array([0.4])
+        insert_params = np.array([0.5,0.5])
+        mdl = CLTLikelihoodModel(
+                None,
+                self.bcode_meta,
+                self.sess,
+                known_params = self.known_params,
+                target_lams = 1 + np.arange(self.bcode_meta.n_targets),
+                trim_zero_probs = trim_zero_probs,
+                trim_long_params = trim_long_params,
+                insert_zero_prob = insert_zero_prob,
+                insert_params = insert_params,
+                use_poisson = False)
+        self._create_simulator(mdl)
+
+        target_tract = TargetTract(0,1,1,2)
+        num_replicates = 2000
+        left_trims = []
+        right_trims = []
+        insert_lens = []
+        for i in range(num_replicates):
+            allele = self.allele_sim.get_root().alleles[0]
+            left_trim_raw, right_trim_raw, insert_str_raw = self.allele_sim._do_repair(allele, target_tract)
+            allele_events = allele.get_event_encoding()
+            evt = allele_events.events[0]
+            left_trim, right_trim = evt.get_trim_lens(self.bcode_meta)
+            insert_len = evt.insert_len
+            self.assertTrue(right_trim >= self.bcode_meta.right_long_trim_min[1])
+            self.assertTrue(left_trim >= self.bcode_meta.left_long_trim_min[1])
+            self.assertTrue(right_trim == right_trim_raw)
+            self.assertTrue(left_trim == left_trim_raw)
+            self.assertTrue(insert_len == len(insert_str_raw))
+            right_trims.append(right_trim)
+            left_trims.append(left_trim)
+            insert_lens.append(insert_len)
+
+        # Test left
+        dist_index = 0
+        trim_left_dist = ConditionalBoundedPoisson(
+                self.bcode_meta.left_long_trim_min[1],
+                self.bcode_meta.left_max_trim[1],
+                np.exp(trim_long_params_reshape[dist_index,0]))
+        left_trim_range = range(self.bcode_meta.left_long_trim_min[1], self.bcode_meta.left_max_trim[1] + 1)
+        left_trim_mean_true = np.sum([k * trim_left_dist.pmf(k) for k in left_trim_range])
+
+        # Check prob distribution sums to 1
+        self.assertTrue(np.isclose(1, np.sum([trim_left_dist.pmf(k) for k in left_trim_range])))
+        # Check the means match
+        self.assertTrue(np.mean(left_trims) + 2 * np.sqrt(np.var(left_trims)/num_replicates) > left_trim_mean_true)
+
+        # Test right
+        dist_index = 1
+        trim_right_dist = ConditionalBoundedPoisson(
+                self.bcode_meta.right_long_trim_min[1],
+                self.bcode_meta.right_max_trim[1],
+                np.exp(trim_long_params_reshape[dist_index,0]))
+        right_trim_range = range(self.bcode_meta.right_long_trim_min[1], self.bcode_meta.right_max_trim[1] + 1)
+        right_trim_mean_true = np.sum([k * trim_right_dist.pmf(k) for k in right_trim_range])
+
+        # Check prob distribution sums to 1
+        self.assertTrue(np.isclose(1, np.sum([trim_right_dist.pmf(k) for k in right_trim_range])))
+        # Check the means match
+        self.assertTrue(np.mean(right_trims) + 2 * np.sqrt(np.var(right_trims)/num_replicates) > right_trim_mean_true)
+
+        # Test insertion len
+        insert_dist = ShiftedNegativeBinomial(
+                1,
+                np.exp(insert_params[0]),
+                insert_params[1])
+        insert_mean_true = (1 - insert_zero_prob) * np.sum([k * insert_dist.pmf(k) for k in range(1, 10000)])
+
+        # Check prob distribution sums to 1
+        self.assertTrue(np.isclose(1, np.sum([insert_dist.pmf(k) for k in range(1, 1000000)])))
+        # Check the means match
+        self.assertTrue(np.mean(insert_lens) + 2 * np.sqrt(np.var(insert_lens)/num_replicates) > insert_mean_true)

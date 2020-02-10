@@ -77,18 +77,6 @@ def parse_args():
         default=0.4,
         help='Weight for double cuts')
     parser.add_argument(
-        '--boost-weights',
-        type=float,
-        nargs=3,
-        default=[1, 2, 2],
-        help="""
-        probability of boosting the insertion, left deletion, right deletion lengths.
-        This boost is mutually exclusive -- the boost can be only applied to one of these categories.
-        The boost is of length one right now.
-        The boost is to ensure the target lambdas indicate the hazard of introducing a positive indel,
-        not a no-op indel.
-        """)
-    parser.add_argument(
         '--trim-long-factor',
         type=float,
         nargs=2,
@@ -101,10 +89,8 @@ def parse_args():
         default=[0.5] * 4,
         help='probability of doing no deletion during repair')
     parser.add_argument(
-        '--trim-params',
+        '--trim-short-params',
         type=float,
-        #nargs=2,
-        #default=[np.log(4)] * 2,
         nargs=4,
         default=[np.log(3),0] * 2,
         help="""
@@ -112,6 +98,15 @@ def parse_args():
         Format: left neg binom params, right neg binom params
         neg binom param format: log(num failures), logit(prob of success)
         The RV is the number of successes
+        """
+    )
+    parser.add_argument(
+        '--trim-long-params',
+        type=float,
+        nargs=2,
+        default=[np.log(3),np.log(3)],
+        help="""
+        poisson parameter for left and right trims, until we observe this many failures, same for long and short
         """
     )
     parser.add_argument(
@@ -180,18 +175,7 @@ def parse_args():
     parser.add_argument(
         '--use-poisson',
         action='store_true',
-        help="trims follow poisson")
-    parser.add_argument(
-        '--same-lambdas-no-long-fast',
-        action='store_true',
-        help="""
-        Assume the target rates are all the same and there are no long cuts.
-        In that case, we can generate data much faster.
-        """)
-    parser.add_argument(
-        '--add-phantom-leaf',
-        action='store_true',
-        help="add phantom leaf with no events")
+        help="short trims follow poisson")
 
     parser.set_defaults()
     args = parser.parse_args()
@@ -224,8 +208,7 @@ def create_cell_type_tree(args):
 
 def create_simulators(args, clt_model):
     allele_simulator = AlleleSimulatorSimultaneous(
-            clt_model,
-            same_lams_no_long=args.same_lambdas_no_long_fast)
+            clt_model)
     cell_type_simulator = CellTypeSimulator(clt_model.cell_type_tree)
     if args.is_one_leaf:
         clt_simulator = CLTSimulatorSimplest(
@@ -345,19 +328,17 @@ def main(args=sys.argv[1:]):
             known_params = known_params,
             target_lams = np.array(args.target_lambdas),
             target_lam_decay_rate = np.array([args.target_lam_decay_rate]),
-            boost_softmax_weights = np.array(args.boost_weights),
             trim_long_factor = np.array(args.trim_long_factor),
             trim_zero_probs = np.array(args.trim_zero_probs),
-            trim_short_params = np.array(args.trim_params),
-            trim_long_params = np.array(args.trim_params),
+            trim_short_params = np.array(args.trim_short_params),
+            trim_long_params = np.array(args.trim_long_params),
             insert_zero_prob = np.array([args.insert_zero_prob]),
             insert_params = np.array(args.insert_params),
             double_cut_weight = [args.double_cut_weight],
             cell_type_tree = cell_type_tree,
             tot_time = args.time,
             tot_time_extra = 1e-10,
-            use_poisson=args.use_poisson,
-            do_shortcut=args.same_lambdas_no_long_fast)
+            use_poisson=args.use_poisson)
     tf.global_variables_initializer().run()
     logging.info("Done creating model")
 
@@ -390,27 +371,6 @@ def main(args=sys.argv[1:]):
     min_num_events_bcode0 = [len(obs.allele_events_list[0].events) for obs in obs_leaves]
     logging.info("min num events %d", np.min(min_num_events_bcode0))
     print("min num events %d", np.min(min_num_events_bcode0))
-    if args.add_phantom_leaf and np.min(min_num_events_bcode0) > 0:
-        assert len(obs_leaves) > 10
-        logging.info("adding phantom leaf")
-        argmin_leaf_idx = np.argmin(min_num_events_bcode0)
-        argmin_leaf = obs_leaves[argmin_leaf_idx]
-
-        new_allele_strs = copy.deepcopy(argmin_leaf.allele_list.allele_strs)
-        new_allele_strs[0] = list(bcode_meta.unedited_barcode)
-
-        new_allele_events = list(copy.deepcopy(argmin_leaf.allele_events_list))
-        print(new_allele_events)
-        new_allele_events = [AlleleEvents(num_targets=args.num_targets)] + new_allele_events[1:]
-
-        no_evt_obs_seq = ObservedAlignedSeq(
-            allele_list=AlleleList(new_allele_strs, bcode_meta),
-            allele_events_list=new_allele_events,
-            cell_state=None,
-            abundance=0,
-        )
-        print("NO EVT", no_evt_obs_seq)
-        obs_leaves.append(no_evt_obs_seq)
 
     # Save the observed data
     with open(args.out_obs_file, "wb") as f:

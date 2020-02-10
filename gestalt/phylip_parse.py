@@ -13,6 +13,8 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio.Data.IUPACData import ambiguous_dna_values
 
+import numpy as np
+
 
 # iterate over recognized sections in the phylip output file.
 def sections(fh):
@@ -38,15 +40,21 @@ def parse_seqdict(fh):
     # key: edge, val: diff between top and bottom node
     edges = {}
     pattern0 = re.compile(
-        "^\s*(?P<from>[a-zA-Z0-9>_-]+)\s+(?P<id>[a-zA-Z0-9>_.-]+)\s+(yes\s+|no\s+|maybe\s+)?(?P<seq>[01?. \-]+)"
+        "^\s*(?P<from>[a-zA-Z0-9>_-]+)\s+(?P<id>[a-zA-Z0-9>_.-]+)\s+(?P<steps>[yes|no|maybe]+)\s+(?P<seq>[01?. \-]+)"
     )
     pattern_cont = re.compile("^(?P<seq>[01?. \-]+)")
     fh.readline()
     last_group_id = None
+    is_matched = False
     for line in fh:
         m = pattern0.match(line)
         m_cont = pattern_cont.match(line)
         if m:
+            is_matched = True
+            lengths = [len(v) for k, v in edges.items()]
+            if len(lengths):
+                assert np.unique(lengths).size == 1
+
             last_blank = False
             last_edge_id = (m.group("from"), m.group("id"))
             edges[last_edge_id] = m.group("seq").replace(" ", "").upper()
@@ -60,6 +68,7 @@ def parse_seqdict(fh):
                 last_blank = True
                 continue
         else:
+            assert not is_matched
             break
 
     return edges
