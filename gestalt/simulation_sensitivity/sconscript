@@ -13,7 +13,7 @@ localenv = env.Clone()
 
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
-MAX_NUM_BARCODES = 6
+MAX_NUM_BARCODES = 1
 NUM_BCODES = [1]
 ERROR_RATES = [0.1]
 NUM_RANDOM_REARRANGE = 20
@@ -62,6 +62,7 @@ nest.add(
 nest.add(
     'error_rate',
     ERROR_RATES,
+    label_func=lambda c: 'error_rate_%.2f' % c,
 )
 
 nest.add_aggregate('MLE_res', list)
@@ -198,7 +199,7 @@ nest.add(
 def run_MLE(env, outdir, c):
     if c['num_barcodes'] == 1:
         penalty_params = "1024"
-        target_lam_penalty_params = "16"
+        target_lam_penalty_params = "32"
     elif c['num_barcodes'] == 2:
     	penalty_params = "128"
         target_lam_penalty_params = "2"
@@ -242,7 +243,7 @@ def run_MLE(env, outdir, c):
         c['sum_states'],
         '--max-extra-steps',
         c['extra_steps'],
-        '--max-iters 50000',
+        '--max-iters 50',
         '--num-inits 1',
         '--tot-time-known',
         '--num-processes',
@@ -252,21 +253,20 @@ def run_MLE(env, outdir, c):
         '--count-chads' if c['num_barcodes'] == 1 else '',
         '--lambda-decay-known',
         '--scratch-dir',
-        #'_output/scratch',
-	join('simulation_topol_consist', outdir, 'scratch'),
+	join('simulation_sensitivity', outdir, 'scratch'),
     ]
     cmd_arg_str = "'%s'" % ' '.join(map(str, cmd_arg))
-    #cmd = [
-    #    'python execute.py',
-    #    '--clusters',
-    #    localenv['clusters'],
-    #    '--aws-machine compute',
-    #    "${TARGETS[0]}",
-    #    cmd_arg_str,
-    #    ]
     cmd = [
-        'srun -p matsen_e,campus',
-        '--cpus-per-task 8'] + cmd_arg
+        'python execute.py',
+        '--clusters',
+        localenv['clusters'],
+        '--aws-machine compute',
+        "${TARGETS[0]}",
+        cmd_arg_str,
+        ]
+    #cmd = [
+    #    'srun -p matsen_e,campus',
+    #    '--cpus-per-task 8'] + cmd_arg
     #cmd = cmd_arg
     c['MLE_res'].append(targets[0])
     return env.Command(targets, sources, ' '.join(map(str, cmd)))
@@ -282,21 +282,21 @@ def plot_mle_res(env, outdir, c):
                 c['MLE_res'],
               ]
     TEMPLATES  = [
-                c['MLE_res'][0].replace("/20/", "/%d/").replace("num_barcodes1","num_barcodes%d"),
-                c['model_list'][0].replace("/20/", "/%d/").replace("num_barcodes1","num_barcodes%d")
+                c['MLE_res'][0].replace("/0/", "/%d/").replace("num_barcodes1","num_barcodes%d"),
+                c['model_list'][0].replace("/0/", "/%d/").replace("num_barcodes1","num_barcodes%d")
     ]
     cmd = [
         'python plot_simulation_consistency.py',
         '--n-bcodes-list',
         ",".join(map(str, NUM_BCODES)),
         '--mle-file',
-        join("simulation_topol_consist", TEMPLATES[0]),
+        join("simulation_sensitivity", TEMPLATES[0]),
         '--true-model-file',
-        join("simulation_topol_consist", TEMPLATES[1]),
+        join("simulation_sensitivity", TEMPLATES[1]),
         '--data-seeds',
         ",".join(map(str, SEEDS)),
         '--out-plot ${TARGETS[0]}',
         '--scratch-dir',
-	join("simulation_topol_consist", outdir, 'scratch'),
+	join("simulation_sensitivity", outdir, 'scratch'),
     ]
     return env.Command(targets, sources, ' '.join(map(str, cmd)))

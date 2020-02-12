@@ -146,6 +146,15 @@ class CLTObserver:
         if len(observations) == 0:
             raise RuntimeError('all lineages extinct, nothing to observe')
 
+        if self.error_rate > 0:
+            self._make_errors(observations)
+
+        obs_vals = [obs[0] for obs in observations.values()]
+        obs_idx_to_leaves = [obs[1] for obs in observations.values()]
+
+        return obs_vals, obs_idx_to_leaves
+
+    def _make_errors(observations):
         # Introduce errors when observing the indel
         all_error_maps = []
         for i in range(self.bcode_meta.num_barcodes):
@@ -197,11 +206,6 @@ class CLTObserver:
                     allele_list = AlleleList(
                             [a.allele for a in alleles],
                             self.bcode_meta)
+                    print("ORGINIAL", obs_seq)
                     obs_seq.set_allele_list(allele_list)
-                    #observations[k] = (new_obs_seq, node_ids)
-
-
-        obs_vals = [obs[0] for obs in observations.values()]
-        obs_idx_to_leaves = [obs[1] for obs in observations.values()]
-
-        return obs_vals, obs_idx_to_leaves
+                    print("NEW ERROR", obs_seq)
