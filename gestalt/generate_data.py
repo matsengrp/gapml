@@ -125,7 +125,7 @@ def parse_args():
     parser.add_argument(
         '--birth-sync-rounds', type=float, default=2, help='number of syncronous birth rounds before async begins')
     parser.add_argument(
-        '--birth-sync-time', type=float, default=0.1, help='amount of time between syncronous birth rounds')
+        '--birth-sync-time', type=float, default=0.2, help='amount of time between syncronous birth rounds')
     parser.add_argument(
         '--birth-decay', type=float, default=-1, help='birth rate decay')
     parser.add_argument(

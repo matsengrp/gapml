@@ -219,7 +219,7 @@ class LikelihoodScorer(ParallelWorker):
             res_model,
             self.transition_wrap_maker,
             self.max_iters,
-            min_iters = self.max_iters / 2)
+            min_iters = int(min(100, (self.max_iters + 2)/2)))
 
         # Fit for each fit-param setting
         result_list = []

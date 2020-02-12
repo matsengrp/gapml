@@ -21,8 +21,10 @@ FISH_DATA = {
         "path": "/fh/fast/matsen_e/gestalt/fish_7B_UMI_collapsed_reads/fish_7B_UMI_collapsed_reads.txt",
         "bcode_min_pos": 122,
         "format": 0,
-        "branch_pen_params": "512,128,32",
-        "target_lam_pen_params": "0.5,0.25,0.125",
+        #"branch_pen_params": "512,128,32",
+        #"target_lam_pen_params": "0.5,0.25,0.125",
+        "branch_pen_params": "512",
+        "target_lam_pen_params": "0.125",
         "merge": 4,
     },
     "ADR2": {
@@ -260,7 +262,7 @@ FISH_DATA = {
 nest.add(
     'data',
     [
-        #"ADR1",
+        "ADR1",
         #"ADR2",
         #"30hpf_v6_1",
         #"30hpf_v6_2",
@@ -448,7 +450,7 @@ def run_MLE(env, outdir, c):
         c['extra_steps'],
         '--max-sum-states',
         c['sum_states'],
-        '--max-iters 50000',
+        '--max-iters 5000',
         '--num-inits 1',
         '--tot-time-known',
         '--lambda-decay-fixed 0',
@@ -457,17 +459,18 @@ def run_MLE(env, outdir, c):
         '--scratch-dir',
 	join('analyze_gestalt', outdir, 'scratch'),
     ]
-    cmd_arg_str = "'%s'" % ' '.join(map(str, cmd_arg))
-    cmd = [
-        'python execute.py',
-        '--clusters',
-        localenv['clusters'],
-        "${TARGETS[0]}",
-        cmd_arg_str]
+    #cmd_arg_str = "'%s'" % ' '.join(map(str, cmd_arg))
+    #cmd = [
+    #    'python execute.py',
+    #    '--clusters',
+    #    localenv['clusters'],
+    #    "${TARGETS[0]}",
+    #    cmd_arg_str]
+    cmd = cmd_arg
     return env.Command(
         [
-            join(outdir, 'tune_pen_hanging.pkl'),
-            join(outdir, 'tune_pen_hanging.txt'),
+            join(outdir, 'gapml.pkl'),
+            join(outdir, 'gapml.txt'),
 	],
         [
             c['restrict_observed_alleles'][0],

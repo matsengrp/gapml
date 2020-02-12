@@ -82,8 +82,10 @@ def main(args=sys.argv[1:]):
             try:
                 print("mle")
                 mle_params, mle_tree = get_mle_result(args, seed, n_bcodes)
+                mle_estimates = []
+                true_vals = []
                 for k, mle_estimate in mle_params.items():
-                    if k in ["tot_time", "tot_time_extra", "target_lam_decay_rate", "trim_long_params"]:
+                    if k in ["tot_time", "tot_time_extra", "target_lam_decay_rate"]:
                         continue
 
                     print(k)
@@ -91,10 +93,8 @@ def main(args=sys.argv[1:]):
                     if true_val.size == 0:
                         continue
 
-                    if k == "boost_softmax_weights":
-                        true_val = np.exp(true_val)/np.sum(np.exp(true_val))
-                        mle_estimate = np.exp(mle_estimate)/np.sum(np.exp(mle_estimate))
-
+                    true_vals.append(true_val.flatten())
+                    mle_estimates.append(mle_estimate.flatten())
                     print("TRUE VAL", true_val)
                     print("MLE VAL", mle_estimate)
 
@@ -104,6 +104,13 @@ def main(args=sys.argv[1:]):
                         "Error": np.mean(np.power(mle_estimate - true_val, 2))/np.mean(np.power(true_val, 2)),
                         "Number of barcodes": n_bcodes,
                     })
+                true_vals = np.concatenate(true_vals)
+                mle_estimates = np.concatenate(mle_estimates)
+                all_perfs.append({
+                    "Param": "all",
+                    "Error": np.mean(np.power(mle_estimates - true_vals, 2))/np.mean(np.power(true_vals, 2)),
+                    "Number of barcodes": n_bcodes,
+                })
             except FileNotFoundError:
                 print("not found mle", n_bcodes, seed)
 
