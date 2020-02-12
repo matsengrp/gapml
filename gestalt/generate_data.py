@@ -140,6 +140,11 @@ def parse_args():
         default=1.0,
         help='proportion cells sampled/alleles successfully sequenced')
     parser.add_argument(
+        '--error-rate',
+        type=float,
+        default=0,
+        help='proportion of times we observe an error')
+    parser.add_argument(
         '--debug', action='store_true', help='debug tensorflow')
     parser.add_argument(
         '--model-seed',
@@ -230,7 +235,7 @@ def create_simulators(args, clt_model):
             cell_type_simulator,
             allele_simulator,
             scale_hazard_func=lambda t: 1 - (t/args.time) * args.target_lam_decay_rate)
-    observer = CLTObserver()
+    observer = CLTObserver(clt_model.bcode_meta, args.error_rate)
     return clt_simulator, observer
 
 def create_cell_lineage_tree(

@@ -1,0 +1,302 @@
+# Test if incorrectly resolving indels results in poor tree estimates
+
+import os
+
+from os.path import join
+from nestly.scons import SConsWrap
+from nestly import Nest
+from SCons.Script import Environment, Command, AddOption
+import numpy as np
+
+Import('env')
+localenv = env.Clone()
+
+nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
+
+MAX_NUM_BARCODES = 6
+NUM_BCODES = [1]
+ERROR_RATES = [0.1]
+NUM_RANDOM_REARRANGE = 20
+SEEDS = [1]
+GROWTH_DICT = {
+    "small": {
+        "sampling_rate": 0.08,
+        "birth_sync_rounds": 5,
+        "birth_sync_time": 0.04,
+        "death_lambda": 0.3,
+        "birth_decay": -18,
+        "birth_min": 6,
+        "lambda_sequence": [.75, .7, .65, .6, .55, .5, .45],
+        "target_decay": 0,
+        "double": 0.05,
+        "min_leaves": 70,
+        "max_leaves": 110,
+    },
+    "mini": {
+        "sampling_rate": 0.1,
+        "birth_sync_rounds": 5,
+        "birth_sync_time": 0.07,
+        "death_lambda": 0.2,
+        "birth_decay": -1,
+        "birth_min": 2,
+        "lambda_sequence": [1.2, 0.9, .8, .75, .7, .65],
+        "target_decay": .6,
+        "double": 0.03,
+        "min_leaves": 20,
+        "max_leaves": 100,
+    },
+}
+
+nest.add(
+    'growth_stage',
+    [
+       'mini'
+    ])
+
+nest.add(
+    'model_seed',
+    [1],
+    label_func=lambda c: 'model_seed%d' % c,
+)
+
+nest.add(
+    'error_rate',
+    ERROR_RATES,
+)
+
+nest.add_aggregate('MLE_res', list)
+nest.add_aggregate('model_list', list)
+
+nest.add(
+    'seed',
+    SEEDS,
+)
+
+@nest.add_target_with_env(localenv)
+def generate(env, outdir, c):
+    targ_lambdas = ",".join(map(str, GROWTH_DICT[c['growth_stage']]['lambda_sequence']))
+
+    targets = [
+        join(outdir, 'obs_data.pkl'),
+        join(outdir, 'true_model.pkl'),
+        join(outdir, 'log.txt')]
+    cmd = [
+        'python generate_data.py',
+        '--out-obs-file ${TARGETS[0]}',
+        '--out-model-file ${TARGETS[1]}',
+        '--log-file ${TARGETS[2]}',
+        '--error-rate',
+        c['error_rate'],
+        '--sampling-rate',
+        GROWTH_DICT[c['growth_stage']]['sampling_rate'],
+        '--model-seed',
+        c['model_seed'],
+        '--data-seed',
+        c['seed'],
+        '--time 1',
+        '--birth-sync-rounds',
+        GROWTH_DICT[c['growth_stage']]['birth_sync_rounds'],
+        '--birth-sync-time',
+        GROWTH_DICT[c['growth_stage']]['birth_sync_time'],
+        '--birth-decay',
+        GROWTH_DICT[c['growth_stage']]['birth_decay'],
+        '--birth-min',
+        GROWTH_DICT[c['growth_stage']]['birth_min'],
+        '--death-lambda',
+        GROWTH_DICT[c['growth_stage']]['death_lambda'],
+        '--max-clt-leaves',
+        int(GROWTH_DICT[c['growth_stage']]['max_leaves']/GROWTH_DICT[c['growth_stage']]['sampling_rate'] * 1.1),
+        '--num-barcodes',
+        MAX_NUM_BARCODES,
+        '--min-uniq-alleles',
+        GROWTH_DICT[c['growth_stage']]['min_leaves'],
+        '--max-uniq-alleles',
+        GROWTH_DICT[c['growth_stage']]['max_leaves'],
+        '--max-abundance 20000',
+        '--double-cut-weight',
+        GROWTH_DICT[c['growth_stage']]['double'],
+        '--target-lambdas',
+        targ_lambdas,
+        '--target-lam-decay',
+        GROWTH_DICT[c['growth_stage']]['target_decay'],
+        '--trim-zero-probs 0.15 0.1 0.15 0.1',
+        '--trim-params 1.35 -0.1 1.2 0.1',
+        '--trim-long-factor 0.08 0.08',
+        '--insert-zero-prob 0.5',
+        '--insert-params 1 0.3',
+        '--perturb-target-lambdas-variance 0',
+        '--max-tries 20',
+        '--add-phantom-leaf' if c['phantom'] else '',
+    ]
+    c['model_list'].append(targets[1])
+    return env.Command(
+        targets,
+        [],
+        ' '.join(map(str, cmd)))
+
+nest.add(
+    'num_barcodes',
+    NUM_BCODES,
+    label_func=lambda c: "num_barcodes%d" % c,
+)
+
+@nest.add_target_with_env(localenv)
+def restrict_observed_alleles(env, outdir, c):
+    sources = c['generate']
+    targets = [
+	join(outdir, 'obs_data.pkl'),
+	join(outdir, 'log_restrict.txt')]
+    cmd = [
+        'python restrict_observed_barcodes.py',
+        '--obs-file ${SOURCES[0]}',
+        '--out-obs-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+        '--num-barcodes',
+        c['num_barcodes'],
+    ]
+    return env.Command(
+        targets,
+        sources,
+        ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def run_topology(env, outdir, c):
+    targets = [
+            join(outdir, 'parsimony_tree0.pkl'),
+            join(outdir, 'log_parsimony.txt')]
+    sources = c['restrict_observed_alleles']
+    cmd = [
+        'python get_parsimony_topologies.py',
+        '--obs-file ${SOURCES[0]}',
+        '--out-template-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+        '--max-random',
+        0,
+        '--max-random-multifurc',
+        1,
+        '--num-jumbles 1',
+        '--max-trees 1',
+    ]
+    return env.Command(
+        targets,
+        sources,
+        ' '.join(map(str, cmd)))
+
+nest.add(
+    'sum_states',
+    [30],
+    label_func=lambda c: "sum_states_%d" % c,
+)
+
+nest.add(
+    'extra_steps',
+    [2],
+    label_func=lambda c: "extra_steps_%d" % c,
+)
+
+@nest.add_target_with_env(localenv)
+def run_MLE(env, outdir, c):
+    if c['num_barcodes'] == 1:
+        penalty_params = "1024"
+        target_lam_penalty_params = "16"
+    elif c['num_barcodes'] == 2:
+    	penalty_params = "128"
+        target_lam_penalty_params = "2"
+    elif c['num_barcodes'] == 4:
+    	penalty_params = "32"
+        target_lam_penalty_params = "1"
+
+    targets = [
+                join(outdir, 'gapml.pkl'),
+                join(outdir, 'gapml.txt')]
+    sources = [
+                c['restrict_observed_alleles'][0],
+                c['run_topology'][0],
+                c['generate'][1]]
+    cmd_arg = [
+        'python tune_topology.py',
+        '--obs-file ${SOURCES[0]}',
+        '--topology-file ${SOURCES[1]}',
+        '--true-model-file ${SOURCES[2]}',
+        '--out-model-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+        '--seed',
+        c['seed'] + 30,
+        '--branch-pen-params',
+        penalty_params,
+        '--target-lam-pen-params',
+        target_lam_penalty_params,
+        '--num-penalty-tune-iters',
+        1,
+        '--num-penalty-tune-splits',
+        4 if c['num_barcodes'] == 1 else 2,
+        '--max-fit-splits',
+        4 if c['num_barcodes'] == 1 else 4,
+        '--num-chad-tune-iters',
+        15,
+        '--num-chad-stop',
+        5,
+        '--max-chad-tune-search',
+        15 if c['num_barcodes'] == 1 else 0,
+        '--max-sum-states',
+        c['sum_states'],
+        '--max-extra-steps',
+        c['extra_steps'],
+        '--max-iters 50000',
+        '--num-inits 1',
+        '--tot-time-known',
+        '--num-processes',
+        4,
+        '--num-init-random-rearrange',
+        NUM_RANDOM_REARRANGE if c['num_barcodes'] == 1 else 0,
+        '--count-chads' if c['num_barcodes'] == 1 else '',
+        '--lambda-decay-known',
+        '--scratch-dir',
+        #'_output/scratch',
+	join('simulation_topol_consist', outdir, 'scratch'),
+    ]
+    cmd_arg_str = "'%s'" % ' '.join(map(str, cmd_arg))
+    #cmd = [
+    #    'python execute.py',
+    #    '--clusters',
+    #    localenv['clusters'],
+    #    '--aws-machine compute',
+    #    "${TARGETS[0]}",
+    #    cmd_arg_str,
+    #    ]
+    cmd = [
+        'srun -p matsen_e,campus',
+        '--cpus-per-task 8'] + cmd_arg
+    #cmd = cmd_arg
+    c['MLE_res'].append(targets[0])
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
+
+nest.pop("seed")
+
+@nest.add_target_with_env(localenv)
+def plot_mle_res(env, outdir, c):
+    targets = [
+        join(outdir, 'plot_mle_res.png')]
+    sources = [
+                c['model_list'],
+                c['MLE_res'],
+              ]
+    TEMPLATES  = [
+                c['MLE_res'][0].replace("/20/", "/%d/").replace("num_barcodes1","num_barcodes%d"),
+                c['model_list'][0].replace("/20/", "/%d/").replace("num_barcodes1","num_barcodes%d")
+    ]
+    cmd = [
+        'python plot_simulation_consistency.py',
+        '--n-bcodes-list',
+        ",".join(map(str, NUM_BCODES)),
+        '--mle-file',
+        join("simulation_topol_consist", TEMPLATES[0]),
+        '--true-model-file',
+        join("simulation_topol_consist", TEMPLATES[1]),
+        '--data-seeds',
+        ",".join(map(str, SEEDS)),
+        '--out-plot ${TARGETS[0]}',
+        '--scratch-dir',
+	join("simulation_topol_consist", outdir, 'scratch'),
+    ]
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
