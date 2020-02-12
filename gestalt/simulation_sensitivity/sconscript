@@ -22,7 +22,7 @@ GROWTH_DICT = {
     "small": {
         "sampling_rate": 0.08,
         "birth_sync_rounds": 5,
-        "birth_sync_time": 0.04,
+        "birth_sync_time": 0.1,
         "death_lambda": 0.3,
         "birth_decay": -18,
         "birth_min": 6,
@@ -35,14 +35,14 @@ GROWTH_DICT = {
     "mini": {
         "sampling_rate": 0.1,
         "birth_sync_rounds": 5,
-        "birth_sync_time": 0.07,
+        "birth_sync_time": 0.15,
         "death_lambda": 0.2,
         "birth_decay": -1,
         "birth_min": 2,
         "lambda_sequence": [1.2, 0.9, .8, .75, .7, .65],
         "target_decay": .6,
         "double": 0.03,
-        "min_leaves": 20,
+        "min_leaves": 10,
         "max_leaves": 100,
     },
 }
@@ -120,13 +120,13 @@ def generate(env, outdir, c):
         '--target-lam-decay',
         GROWTH_DICT[c['growth_stage']]['target_decay'],
         '--trim-zero-probs 0.15 0.1 0.15 0.1',
-        '--trim-params 1.35 -0.1 1.2 0.1',
+        '--trim-short-params 1.35 -0.1 1.2 0.1',
+        '--trim-long-params 0.5 0.5',
         '--trim-long-factor 0.08 0.08',
         '--insert-zero-prob 0.5',
         '--insert-params 1 0.3',
         '--perturb-target-lambdas-variance 0',
         '--max-tries 20',
-        '--add-phantom-leaf' if c['phantom'] else '',
     ]
     c['model_list'].append(targets[1])
     return env.Command(
