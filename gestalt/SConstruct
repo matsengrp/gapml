@@ -32,6 +32,9 @@ sc.SConscript(flag + '/sconscript', exports=['flag'])
 flag = 'simulation_consistency'
 sc.SConscript(flag + '/sconscript', exports=['flag'])
 
+flag = 'simulation_sensitivity'
+sc.SConscript(flag + '/sconscript', exports=['flag'])
+
 flag = 'simulation_parsimony_vs_likelihood'
 sc.SConscript(flag + '/sconscript', exports=['flag'])
 

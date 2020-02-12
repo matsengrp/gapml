@@ -6,6 +6,7 @@ from allele import AlleleList
 from allele_events import AlleleEvents
 from cell_state import CellState
 from cell_lineage_tree import CellLineageTree
+from barcode_metadata import BarcodeMetadata
 from alignment import Aligner
 import collapsed_tree
 
@@ -37,11 +38,13 @@ class ObservedAlignedSeq:
 
 class CLTObserver:
     def __init__(self,
-                 error_rate: float = 0,
-                 aligner: Aligner = None):
+            bcode_meta: BarcodeMetadata,
+            error_rate: float = 0,
+            aligner: Aligner = None):
         """
         @param error_rate: sequencing error, introduce alternative bases uniformly at this rate
         """
+        self.bcode_meta = bcode_meta
         assert (0 <= error_rate <= 1)
         self.error_rate = error_rate
         self.aligner = aligner
@@ -81,7 +84,7 @@ class CLTObserver:
         Observes its alleles with error, updates the leaf node's attributes per the actually-observed events
         @return the AlleleList that was observed with errors for this node
         """
-        allele_list_with_errors = leaf.allele_list.observe_with_errors(self.error_rate)
+        allele_list_with_errors = leaf.allele_list.observe_with_errors(error_rate=0)
         allele_list_with_errors_events = allele_list_with_errors.get_event_encoding(aligner=self.aligner)
         events_per_bcode = [
                 [(event.start_pos,
@@ -142,6 +145,57 @@ class CLTObserver:
 
         if len(observations) == 0:
             raise RuntimeError('all lineages extinct, nothing to observe')
+
+        # Introduce errors when observing the indel
+        all_error_maps = []
+        for i in range(self.bcode_meta.num_barcodes):
+            unique_events = set([evt for obs_seq, _ in observations.values() for evt in obs_seq.allele_events_list[i]])
+            error_map = {}
+            all_error_maps.append(error_map)
+            for evt in unique_events:
+                if np.random.rand() < self.error_rate:
+                    if np.random.rand() < 0.5:
+                        insert_str_perturb = evt.insert_str[:evt.insert_len//2]
+                    else:
+                        insert_str_perturb = evt.insert_str + evt.insert_str[:evt.insert_len//2]
+
+                start_pos_perturb = evt.start_pos
+                if np.random.rand() < self.error_rate:
+                    min_start = self.bcode_meta.abs_cut_sites[self.min_target - 1] if self.min_target > 0 else 0
+                    max_start = self.bcode_meta.abs_cut_sites[self.min_target]
+                    start_pos_perturb = np.random.randint(min_start, max_start)
+
+                del_len_perturb = evt.del_len
+                if np.random.rand() < self.error_rate:
+                    min_end = self.bcode_meta.abs_cut_sites[self.max_target]
+                    max_end = self.bcode_meta.abs_cut_sites[self.max_target + 1] if self.max_target < self.bcode_meta.num_barcodes - 1 else self.orig_length
+                    end_len_perturb = np.random.randint(min_end, max_end)
+                    del_len_perturb = end_len_perturb - start_pos_perturb
+
+                    error_with_evt = Event(
+                            start_pos_perturb,
+                            del_len_perturb,
+                            evt.min_target,
+                            evt.max_target,
+                            insert_str_perturb)
+                    error_map[evt] = error_with_evt
+
+        for i in range(self.bcode_meta.num_barcodes):
+            for k, (obs_seq, node_ids) in observations.items():
+                allele = obs_seq.allele_list[i]
+                allele_evts = obs_seq.allele_events_list[i]
+                any_diffs = any([evt != error_map[evt] for evt in allele_evts.events])
+                if any_diffs:
+                    perturbed_allele = Allele(self.bcode_meta.unedited_barcode, self.bcode_meta)
+                    perturbed_allele.process_events([error_map[evt] for evt in allele_evts.events])
+                    new_obs_seq = ObservedAlignedSeq(
+                        allele_list=obs_seq.allele_list[:i] + [perturbed_allele] + obs_seq.allele_list[i + 1:],
+                        allele_events_list=obs_seq.allele_events_list[:i] +  [perturbed_allele.get_event_encoding()] + obs_seq.allele_events_list[i + 1:],
+                        cell_state=obs_seq.cell_state,
+                        abundance=obs_seq.abundance,
+                    )
+                    observations[k] = (new_obs_seq, node_ids)
+
 
         obs_vals = [obs[0] for obs in observations.values()]
         obs_idx_to_leaves = [obs[1] for obs in observations.values()]
