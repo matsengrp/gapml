@@ -784,3 +784,33 @@ def plot_restriction_trends(env, outdir, c):
         '--methods PMLE,chronos,nj',
     ]
     return env.Command(targets, sources, ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def print_fitted_params(env, outdir, c):
+    targets = [
+        join(outdir, 'fitted_params.tex'),
+    ]
+    sources = [
+                c['obs_files'],
+                c['MLE_res'],
+              ]
+    PREFIX_LEN = len(outdir)
+
+    def extract_template(path_list):
+        adr_fish = [path for path in path_list if "ADR1" in path][0]
+        return join(FOLDER_NAME, outdir, "%s", adr_fish.replace("_output/ADR1/", ""))
+
+    obs_template = extract_template(c['obs_files'])
+    mle_template = extract_template(c['MLE_res'])
+
+    cmd = [
+        'python plot_analyze_gestalt_fitted_params.py',
+        '--obs-file',
+        obs_template,
+        '--mle-template',
+        mle_template,
+        '--fishies',
+        "ADR1,ADR2,dome1,30hpf_v6_3,3day1",
+        '--out-table ${TARGETS[0]}',
+    ]
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
