@@ -1,5 +1,5 @@
-# Test if we have any sort of consistency
-# This simulates a larger tree and performs a topology search
+# Test if we have any sort of consistency in terms of topology.
+# For evaluating finite sample performance.
 
 import os
 
@@ -17,7 +17,7 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 MAX_NUM_BARCODES = 6
 NUM_BCODES = [1,2,4,6]
 NUM_RANDOM_REARRANGE = 20
-SEEDS = range(20,40)
+SEEDS = range(20,21) # range(20,40)
 GROWTH_DICT = {
     "small": {
         "sampling_rate": 0.08,
@@ -31,19 +31,6 @@ GROWTH_DICT = {
         "double": 0.05,
         "min_leaves": 70,
         "max_leaves": 110,
-    },
-    "mini": {
-        "sampling_rate": 0.1,
-        "birth_sync_rounds": 5,
-        "birth_sync_time": 0.07,
-        "death_lambda": 0.2,
-        "birth_decay": -1,
-        "birth_min": 2,
-        "lambda_sequence": [1.2, 0.9, .8, .75, .7, .65],
-        "target_decay": .6,
-        "double": 0.03,
-        "min_leaves": 20,
-        "max_leaves": 100,
     },
 }
 
@@ -68,13 +55,6 @@ nest.add(
     [
        'small'
     ])
-
-nest.add(
-    'phantom',
-    [
-       False
-    ],
-    label_func=lambda c: 'phantom%d' % c)
 
 @nest.add_target_with_env(localenv)
 def generate(env, outdir, c):
@@ -122,13 +102,13 @@ def generate(env, outdir, c):
         '--target-lam-decay',
         GROWTH_DICT[c['growth_stage']]['target_decay'],
         '--trim-zero-probs 0.15 0.1 0.15 0.1',
-        '--trim-params 1.35 -0.1 1.2 0.1',
+        '--trim-short-params 1.35 -0.1 1.2 0.1',
+        '--trim-long-params 0.5 0.8',
         '--trim-long-factor 0.08 0.08',
         '--insert-zero-prob 0.5',
         '--insert-params 1 0.3',
         '--perturb-target-lambdas-variance 0',
         '--max-tries 20',
-        '--add-phantom-leaf' if c['phantom'] else '',
     ]
     c['model_list'].append(targets[1])
     return env.Command(
@@ -138,7 +118,7 @@ def generate(env, outdir, c):
 
 nest.add(
     'num_barcodes',
-    [1,2,4,6],
+    NUM_BCODES,
     label_func=lambda c: "num_barcodes%d" % c,
 )
 

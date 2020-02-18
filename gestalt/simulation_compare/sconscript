@@ -1,5 +1,4 @@
-# Test if we have any sort of consistency
-# This simulates a larger tree and performs a topology search
+# Run a larger simulation comparing the different approaches
 
 import os
 
@@ -50,13 +49,6 @@ nest.add(
     'growth_stage',
     ["30hpf"])
 
-nest.add(
-    'phantom',
-    [
-       False
-    ],
-    label_func=lambda c: 'phantom%d' % c)
-
 @nest.add_target_with_env(localenv)
 def generate(env, outdir, c):
     targ_lambdas = ",".join(map(str,
@@ -100,13 +92,13 @@ def generate(env, outdir, c):
         '--target-lam-decay',
         GROWTH_DICT[c['growth_stage']]['target_decay'],
         '--trim-zero-probs 0.1 0.05 0.1 0.05',
-        '--trim-params 1.5 -0.1 1 0.1',
+        '--trim-short-params 1.5 -0.1 1 0.1',
+        '--trim-long-arams 0.5 0.8',
         '--trim-long-factor 0.07 0.1',
         '--insert-zero-prob 0.4',
         '--insert-params 1.5 0',
         '--perturb-target-lambdas-variance 0',
         '--max-tries 20',
-        '--add-phantom-leaf' if c['phantom'] else '',
     ]
     return env.Command(
         [

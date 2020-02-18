@@ -162,7 +162,7 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
 	.append("g")
 	.call(d3.behavior.zoom().scaleExtent([0, 10]).on("zoom", zoomed))
 	.append("g");
-    
+
     // make a rectangle that catches the zoom mouse movements; otherwise we can
   // only zoom over specific objects in the plot, which is really confusing to the user
     var catcher = vis.append("rect")
@@ -170,13 +170,13 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
 	.attr("height", "100%")
 	.style("fill", "none")
 	.style("pointer-events", "all");
-    
+
     //respond to mouse, even when transparent
     // we need to reference vis in the function
     function zoomed() {
 	vis.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
     }
-    
+
     // put the axis on the plot at the top and the bottom
     vis.append("g")
 	.attr("transform", "translate(" + (barplot_location) + "," + ( h + 2) + ")")
@@ -188,7 +188,7 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
 	.style("fill","black")
 	.style("stroke-width",0)
 	.style("shape-rendering","crispEdges")
-    
+
     vis.append("g")
 	.attr("transform", "translate(" + (barplot_location) + "," + ( -2 ) + ")")
 	.call(xAxis2)
@@ -199,7 +199,7 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
 	.style("fill","black")
 	.style("stroke-width",0)
 	.style("shape-rendering","crispEdges")
-    
+
     if (options.skipBranchLengthScaling) {
 	var yscale = d3.scale.linear()
 	    .domain([0, w])
@@ -207,7 +207,7 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
     } else {
 	var yscale = scaleBranchLengths(nodes, w)
     }
-    
+
     // add the links between nodes on the tree -- we use solid lines for normal nodes,
     // dashed lines for lines that lead to nodes that are duplicates when two organs have
     // the same allele
@@ -237,7 +237,7 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
 		return "3px";
 	    }
 	})
-    
+
 	.style("stroke-dasharray", function(d) {
 	    //if (!d.target.justOrganSplit || d.target.justOrganSplit == "false") {
 	    if (!d.target.is_spine) { // remove if you don't want dashes for the caterpillar branches
@@ -245,7 +245,7 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
 	    } else {
 		return ("1, 2");
 	    }});
-    
+
     // add all the non-tree data: reads, proportions, blood membership
     var drawNonTreeData = vis.selectAll("g.node")
 	.data(nodes)
@@ -261,7 +261,7 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
 		drawCounts(nd,scaleCounts, barHeight)
 	    }
 	});
-    
+
     // add a histogram for the proporiton of reads for this sample
     function drawCounts(d, scaleValue, barHeight) {
       var rectangle = vis.append("rect")
@@ -453,7 +453,7 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
 
     drawNodeCircles.each(function (d, i) {
 	selection = d3.select(this);
-	
+
       var circle = selection.append("circle")
       .attr("r", function(d) {
         if (d.parent == "null") {
@@ -702,7 +702,7 @@ function load() {
   // First clean up the canvas
   d3.select(selector).selectAll("*").remove();
 
-  //load the external data -- cell_culture_parsimony_tree.json
+  //load the external data
   d3.json(current_data.tree_file , function(error, treeData) {
     newick = treeData;
 

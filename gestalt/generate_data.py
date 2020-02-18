@@ -117,8 +117,6 @@ def parse_args():
     parser.add_argument(
         '--insert-params',
         type=float,
-        #nargs=1,
-        #default=[2],
         nargs=2,
         default=[1,0.3],
         help='neg binom parameter for insertion length, until we observe this many failures')

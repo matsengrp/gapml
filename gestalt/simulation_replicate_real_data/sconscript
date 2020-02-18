@@ -1,5 +1,4 @@
-# Test if we have any sort of consistency
-# This simulates a larger tree and performs a topology search
+# Try to replicate the summary statistics seem in real data using our own simulation engine
 
 import os
 
@@ -94,7 +93,8 @@ def generate(env, outdir, c):
         GROWTH_DICT[c['growth_stage']]['target_decay'],
         '--boost 1 2 2',
         '--trim-zero-probs 0.1 0.1 0.5 0.2',
-        '--trim-params 0.2 1 0.2 1',
+        '--trim-short-params 0.2 1 0.2 1',
+        '--trim-long-params 0.6 0.6',
         '--trim-long-factor 0.1 0.1',
         '--insert-zero-prob 0.1',
         '--insert-param 0 1',

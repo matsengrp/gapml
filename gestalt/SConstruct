@@ -23,9 +23,6 @@ sc.Export('env')
 
 env.SConsignFile()
 
-flag = 'simulation_sanity'
-sc.SConscript(flag + '/sconscript', exports=['flag'])
-
 flag = 'simulation_topol_consist'
 sc.SConscript(flag + '/sconscript', exports=['flag'])
 
