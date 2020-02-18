@@ -731,3 +731,56 @@ def plot_btw_3day_fish_target_rates(env, outdir, c):
         ",".join(fishies),
     ]
     return env.Command(targets, sources, ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def plot_restriction_trends(env, outdir, c):
+    targets = [
+        join(outdir, 'plot_time_to_germ_layer_ADR1_PMLE.png'),
+        join(outdir, 'plot_time_to_germ_layer_ADR1_chronos.png'),
+        join(outdir, 'plot_time_to_germ_layer_ADR1_nj.png'),
+        join(outdir, 'plot_time_to_germ_layer_ADR2_PMLE.png'),
+        join(outdir, 'plot_time_to_germ_layer_ADR2_chronos.png'),
+        join(outdir, 'plot_time_to_germ_layer_ADR2_nj.png'),
+        join(outdir, 'plot_time_to_cell_type_ADR1_PMLE.png'),
+        join(outdir, 'plot_time_to_cell_type_ADR1_chronos.png'),
+        join(outdir, 'plot_time_to_cell_type_ADR1_nj.png'),
+        join(outdir, 'plot_time_to_cell_type_ADR2_PMLE.png'),
+        join(outdir, 'plot_time_to_cell_type_ADR2_chronos.png'),
+        join(outdir, 'plot_time_to_cell_type_ADR2_nj.png'),
+    ]
+    sources = [
+                c['obs_files'],
+                c['MLE_res'],
+                c['chronos_res'],
+                c['nj_res'],
+              ]
+    PREFIX_LEN = len(outdir)
+
+    def extract_template(path_list):
+        adr_fish = [path for path in path_list if "ADR1" in path][0]
+        return join(FOLDER_NAME, outdir, "%s", adr_fish.replace("_output/ADR1/", ""))
+
+    obs_template = extract_template(c['obs_files'])
+    mle_template = extract_template(c['MLE_res'])
+    chronos_template = extract_template(c['chronos_res'])
+    nj_template = extract_template(c['nj_res'])
+
+    plot_templates = [
+        join(FOLDER_NAME, outdir, "plot_time_to_germ_layer_%s_%s.png"),
+        join(FOLDER_NAME, outdir, "plot_time_to_cell_type_%s_%s.png")]
+
+    cmd = [
+        'python plot_analyze_gestalt_cell_types.py',
+        '--obs-file',
+        obs_template,
+        '--mle-template',
+        mle_template,
+        '--out-germ',
+        plot_templates[0],
+        '--out-cell',
+        plot_templates[1],
+        '--num-rand 2000',
+        '--fishies ADR1,ADR2',
+        '--methods PMLE,chronos,nj',
+    ]
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
