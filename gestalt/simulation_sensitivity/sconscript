@@ -13,11 +13,7 @@ localenv = env.Clone()
 
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
-<<<<<<< HEAD
 MAX_NUM_BARCODES = 1
-=======
-MAX_NUM_BARCODES = 6
->>>>>>> 6d734d9d4543c13265b51a066834dc9822e62ffc
 NUM_BCODES = [1]
 ERROR_RATES = [0.1]
 NUM_RANDOM_REARRANGE = 20
