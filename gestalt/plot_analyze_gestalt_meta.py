@@ -94,10 +94,13 @@ def parse_args(args):
         default="PMLE,chronos,nj",
         help="methods to compare, comma separated")
     parser.add_argument(
+        '--out-fish-plot-template',
+        type=str,
+        help="The path to store plot file for each fish and method.")
+    parser.add_argument(
         '--out-plot-template',
         type=str,
-        default=None,
-        help="The path to store plot files.")
+        help="The path to store plot files for each method (each plot has all fish).")
     args = parser.parse_args(args)
 
     args.fishies = parse_comma_str(args.fishies, str)
@@ -319,7 +322,7 @@ def main(args=sys.argv[1:]):
             organ_dict = obs_dict["organ_dict"]
             allele_to_cell_state, _ = get_allele_to_cell_states(obs_dict)
             _, sym_X_matrix = create_distance_matrix(tree, organ_dict, allele_to_cell_state, filter_blood=FILTER_BLOOD)
-            out_plot_file = "_output/sym_heat_%s_%s_test.png" % (fish, method)
+            out_plot_file = args.out_fish_plot_template % (fish, method)
             plt.clf()
             plt.figure(figsize=(6,5))
             plot_distance_matrix(
@@ -344,7 +347,6 @@ def main(args=sys.argv[1:]):
                         allele_to_cell_state_random,
                         filter_blood=FILTER_BLOOD)
                 random_permute_X_matrices[fish_idx].append(rand_permut_X_matrix)
-        #out_plot_file = "_output/sym_heat_%s.png" % (method)
         out_plot_file = args.out_plot_template % method
         plot_two_distance_matrices(
                 sym_X_matrices,
