@@ -12,7 +12,7 @@ from cell_lineage_tree import CellLineageTree
 from matplotlib import pyplot as plt
 from scipy.stats import rankdata
 
-from common import assign_rand_tree_lengths
+from common import assign_rand_tree_lengths, parse_comma_str
 
 """
 Create distance matrices between cell types in adult fish 1 and 2
@@ -47,6 +47,11 @@ ORGAN_LABELS = [
     "Blood",
 ]
 NUM_ORGANS = len(ORGAN_LABELS) - int(FILTER_BLOOD)
+METHOD_PLOTTING_VALS = {
+        "PMLE": [0.2, 0.8],
+        "chronos": [0, 0.6],
+        "nj": [0, 0.35],
+}
 
 def parse_args(args):
     parser = argparse.ArgumentParser(
@@ -78,7 +83,27 @@ def parse_args(args):
         type=str,
         default=None,
         help="If none, use the method itself as reference. Otherwise always use this method as reference.")
+    parser.add_argument(
+        '--fishies',
+        type=str,
+        default="ADR1,ADR2",
+        help="fish to compare, comma separated")
+    parser.add_argument(
+        '--methods',
+        type=str,
+        default="PMLE,chronos,nj",
+        help="methods to compare, comma separated")
+    parser.add_argument(
+        '--out-plot-template',
+        type=str,
+        default=None,
+        help="The path to store plot files.")
     args = parser.parse_args(args)
+
+    args.fishies = parse_comma_str(args.fishies, str)
+    args.methods = parse_comma_str(args.methods, str)
+    for m in args.methods:
+        assert m in METHOD_PLOTTING_VALS.keys()
     return args
 
 def get_allele_to_cell_states(obs_dict):
@@ -280,18 +305,11 @@ def main(args=sys.argv[1:]):
     random.seed(0)
     np.random.seed(0)
 
-    fishies = ["ADR1", "ADR2"]
-    methods = ["PMLE", "chronos", "nj"]
-    method_plotting_values = {
-            "PMLE": [0.2, 0.8],
-            "chronos": [0, 0.6],
-            "nj": [0, 0.35],
-    }
     sns.set_context("paper", font_scale=1.7)
-    for method in methods:
+    for method in args.methods:
         sym_X_matrices = []
         random_permute_X_matrices = [[],[]]
-        for fish_idx, fish in enumerate(fishies):
+        for fish_idx, fish in enumerate(args.fishies):
             print("FISH", fish)
             null_method = method if args.null_method is None else args.null_method
             null_tree, _ = load_fish(fish, args, null_method)
@@ -308,7 +326,7 @@ def main(args=sys.argv[1:]):
                     sym_X_matrix,
                     out_plot_file,
                     ax=None,
-                    vrange=method_plotting_values[method])
+                    vrange=METHOD_PLOTTING_VALS[method])
             sym_X_matrices.append(sym_X_matrix)
 
             # Now compare against the "null distribution" where the cell type and abundance
@@ -326,11 +344,12 @@ def main(args=sys.argv[1:]):
                         allele_to_cell_state_random,
                         filter_blood=FILTER_BLOOD)
                 random_permute_X_matrices[fish_idx].append(rand_permut_X_matrix)
-        out_plot_file = "_output/sym_heat_%s.png" % (method)
+        #out_plot_file = "_output/sym_heat_%s.png" % (method)
+        out_plot_file = args.out_plot_template % method
         plot_two_distance_matrices(
                 sym_X_matrices,
                 out_plot_file,
-                vrange=method_plotting_values[method])
+                vrange=METHOD_PLOTTING_VALS[method])
 
         print(method)
         do_hypothesis_test(sym_X_matrices, random_permute_X_matrices)
