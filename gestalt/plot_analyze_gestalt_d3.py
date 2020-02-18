@@ -73,7 +73,7 @@ def parse_args(args):
     parser.add_argument(
         '--out-json',
         type=str,
-        default="_output/%s_%s_tree.json")
+        help="output json file")
     args = parser.parse_args(args)
     return args
 
@@ -213,7 +213,7 @@ def main(args=sys.argv[1:]):
         allele_to_cell_state,
         cell_state_dict)
 
-    with open(args.out_json % (args.fish, args.method),"w") as out2:
+    with open(args.out_json,"w") as out2:
         out2.write("[" + json.dumps(tree_json,sort_keys=False,indent=4) + "]\n")
 
 

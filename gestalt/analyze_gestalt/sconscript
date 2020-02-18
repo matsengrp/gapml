@@ -814,3 +814,75 @@ def print_fitted_params(env, outdir, c):
         '--out-table ${TARGETS[0]}',
     ]
     return env.Command(targets, sources, ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def make_ADR1_d3_files(env, outdir, c):
+    targets = [
+        join(outdir, 'ADR1_PMLE_tree.json'),
+    ]
+    sources = [
+                c['obs_files'],
+                c['MLE_res'],
+    ]
+    PREFIX_LEN = len(outdir)
+
+    def extract_template(path_list):
+        adr_fish = [path for path in path_list if "ADR1" in path][0]
+        return join(FOLDER_NAME, outdir, "%s", adr_fish.replace("_output/ADR1/", ""))
+
+    obs_template = extract_template(c['obs_files'])
+    mle_template = extract_template(c['MLE_res'])
+    chronos_template = extract_template(c['chronos_res'])
+    nj_template = extract_template(c['nj_res'])
+
+    cmd = [
+        'python plot_analyze_gestalt_d3.py',
+        '--obs-file',
+        obs_template,
+        '--mle-template',
+        mle_template,
+        '--chronos-template',
+        chronos_template,
+        '--nj-template',
+        nj_template,
+        '--method PMLE',
+        '--fish ADR1',
+        '--out-json ${TARGETS[0]}',
+    ]
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def make_ADR2_d3_files(env, outdir, c):
+    targets = [
+        join(outdir, 'ADR2_PMLE_tree.json'),
+    ]
+    sources = [
+                c['obs_files'],
+                c['MLE_res'],
+    ]
+    PREFIX_LEN = len(outdir)
+
+    def extract_template(path_list):
+        adr_fish = [path for path in path_list if "ADR2" in path][0]
+        return join(FOLDER_NAME, outdir, "%s", adr_fish.replace("_output/ADR2/", ""))
+
+    obs_template = extract_template(c['obs_files'])
+    mle_template = extract_template(c['MLE_res'])
+    chronos_template = extract_template(c['chronos_res'])
+    nj_template = extract_template(c['nj_res'])
+
+    cmd = [
+        'python plot_analyze_gestalt_d3.py',
+        '--obs-file',
+        obs_template,
+        '--mle-template',
+        mle_template,
+        '--chronos-template',
+        chronos_template,
+        '--nj-template',
+        nj_template,
+        '--method PMLE',
+        '--fish ADR2',
+        '--out-json ${TARGETS[0]}',
+    ]
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
