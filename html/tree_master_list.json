@@ -1,7 +1,7 @@
 [
 {
   "name": "ADR1",
-  "tree_file" :"ADR1_tree.json",
+  "tree_file" :"jsons/ADR1_tree.json",
   "height": 6500,
   "barheight": 5,
   "width": 300,
@@ -15,7 +15,7 @@
 },
 {
   "name": "ADR2",
-  "tree_file" :"ADR2_tree.json",
+  "tree_file" :"jsons/ADR2_tree.json",
   "height": 3800,
   "barheight": 7,
   "width": 280,
