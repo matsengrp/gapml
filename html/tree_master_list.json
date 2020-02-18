@@ -26,5 +26,61 @@
   "membershipBarWidth": 4,
   "countsBarWidth": 120,
   "barSpacer": 3
+},
+{
+  "name": "ADR1_chronos",
+  "tree_file" :"jsons/ADR1_chronos_tree.json",
+  "height": 6500,
+  "barheight": 5,
+  "width": 300,
+  "offset": 100,
+  "startRegion": 0,
+  "endRegion": 333,
+  "barWidth": 100,
+  "membershipBarWidth": 4,
+  "countsBarWidth": 120,
+  "barSpacer": 3
+},
+{
+  "name": "ADR1_nj",
+  "tree_file" :"jsons/ADR1_nj_tree.json",
+  "height": 6500,
+  "barheight": 5,
+  "width": 300,
+  "offset": 100,
+  "startRegion": 0,
+  "endRegion": 333,
+  "barWidth": 100,
+  "membershipBarWidth": 4,
+  "countsBarWidth": 120,
+  "barSpacer": 3
+},
+{
+  "name": "ADR2_chronos",
+  "tree_file" :"jsons/ADR2_chronos_tree.json",
+  "height": 6500,
+  "barheight": 5,
+  "width": 300,
+  "offset": 100,
+  "startRegion": 0,
+  "endRegion": 333,
+  "barWidth": 100,
+  "membershipBarWidth": 4,
+  "countsBarWidth": 120,
+  "barSpacer": 3
+},
+{
+  "name": "ADR2_nj",
+  "tree_file" :"jsons/ADR2_nj_tree.json",
+  "height": 6500,
+  "barheight": 5,
+  "width": 300,
+  "offset": 100,
+  "startRegion": 0,
+  "endRegion": 333,
+  "barWidth": 100,
+  "membershipBarWidth": 4,
+  "countsBarWidth": 120,
+  "barSpacer": 3
 }
 ]

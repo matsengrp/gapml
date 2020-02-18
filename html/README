@@ -1,6 +1,8 @@
-run:
-`python -m SimpleHTTPServer`
+Data location:
+On your local computer, copy the tree json files from analyze_gestalt into a jsons folder.
+The tree_master_list.json file should specify the paths to the json file for each fish.
+
+To visualize the data:
+Run `python -m SimpleHTTPServer`
 
 Go to: http://127.0.0.1:8000/index.html
-
-index.html is the webpage for viewing trees
