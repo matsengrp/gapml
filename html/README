@@ -1,5 +1,8 @@
 run:
 `python -m SimpleHTTPServer`
 
+
+Go to: http://127.0.0.1:8000/tree.html
+
 index.html is the webpage for viewing graphs
 tree.html is the webpage for viewing trees
