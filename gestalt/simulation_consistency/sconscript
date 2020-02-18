@@ -15,9 +15,9 @@ localenv = env.Clone()
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 MAX_NUM_BARCODES = 256
-NUM_BCODES = [64,256]
+NUM_BCODES = [16,64,256]
 NUM_RANDOM_REARRANGE = 20
-SEEDS = range(2,3)
+SEEDS = range(10)
 GROWTH_DICT = {
     "tiny": {
         "sampling_rate": 1,
@@ -257,19 +257,19 @@ def run_MLE(env, outdir, c):
 	join('simulation_consistency', outdir, 'scratch'),
     ]
     #cmd = cmd_arg
-    cpus = 16 if c['num_barcodes'] > 128 else 8
+    #cpus = 16 if c['num_barcodes'] > 128 else 8
     cmd_arg_str = "'%s'" % ' '.join(map(str, cmd_arg))
-    #cmd = [
-    #    'python execute.py',
-    #    '--clusters',
-    #    localenv['clusters'],
-    #    '--aws-machine compute',
-    #    "${TARGETS[0]}",
-    #    cmd_arg_str,
-    #    ]
     cmd = [
-        'srun -p matsen_e,campus',
-        '--cpus-per-task %d' % cpus] + cmd_arg
+        'python execute.py',
+        '--clusters',
+        localenv['clusters'],
+        '--aws-machine compute' if c['num_barcodes'] <= 64 else '--aws-machine mem',
+        "${TARGETS[0]}",
+        cmd_arg_str,
+        ]
+    #cmd = [
+    #    'srun -p matsen_e,campus',
+    #    '--cpus-per-task %d' % cpus] + cmd_arg
     c['MLE_res'].append(targets[0])
     return env.Command(targets, sources, ' '.join(map(str, cmd)))
 
