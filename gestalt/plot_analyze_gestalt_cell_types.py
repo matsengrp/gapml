@@ -1,3 +1,7 @@
+"""
+Plot internal node times corresponding to different numbers of descendant cell types and germ layers
+"""
+
 import sys
 import random
 import argparse
@@ -11,7 +15,7 @@ import pandas as pd
 from scipy import stats
 
 from common import assign_rand_tree_lengths
-from plot_analyze_gestalt_meta import load_fish, get_allele_to_cell_states, create_shuffled_cell_state_abund_labels
+from plot_analyze_gestalt_meta import load_fish, get_allele_to_cell_states, create_shuffled_cell_state_abund_labels, parse_comma_str
 
 ECTO = 0
 NEURAL_CREST = 1
@@ -67,7 +71,19 @@ def parse_args(args):
         '--out-cell-type-plot-template',
         type=str,
         default="_output/time_to_cell_type_%s_%s.png")
+    parser.add_argument(
+        '--fishies',
+        type=str,
+        default="ADR1,ADR2",
+        help="fish to compare, comma separated")
+    parser.add_argument(
+        '--methods',
+        type=str,
+        default="PMLE,chronos,nj",
+        help="methods to compare, comma separated")
     args = parser.parse_args(args)
+    args.fishies = parse_comma_str(args.fishies, str)
+    args.methods = parse_comma_str(args.methods, str)
     return args
 
 def get_distance_to_num_germ_layers(
@@ -235,13 +251,11 @@ def main(args=sys.argv[1:]):
     args = parse_args(args)
     random.seed(1)
     np.random.seed(1)
-    fishies = ["ADR1", "ADR2"]
-    methods = ["PMLE", "chronos", "nj"]
     sns.set_context("paper", font_scale=1.5)
-    for method in methods:
+    for method in args.methods:
         print("METHOD", method)
         null_method = method if args.null_method is None else args.null_method
-        for fish in fishies:
+        for fish in args.fishies:
             print("FISH", fish)
             null_tree, _ = load_fish(fish, args, null_method)
             assign_rand_tree_lengths(null_tree, 1)

@@ -11,7 +11,7 @@ import SCons.Script as sc
 
 # Command line options
 
-sc.AddOption('--clusters', type='string', help="Clusters to submit to. Default is local execution.", default='local')
+sc.AddOption('--clusters', type='string', help="Clusters to submit to. Default is local execution.", default='beagle')
 sc.AddOption('--output', type='string', help="output folder", default='_output')
 
 env = sc.Environment(

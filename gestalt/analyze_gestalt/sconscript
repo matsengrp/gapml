@@ -13,7 +13,7 @@ localenv = env.Clone()
 
 # Set up state
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
-
+FOLDER_NAME = "analyze_gestalt"
 MAX_LEAVES = 400
 
 FISH_DATA = {
@@ -259,40 +259,52 @@ FISH_DATA = {
     },
 }
 
+def extract_template(path_list, fishies, outdir):
+    fish_ex = [path for path in path_list if any([fish in path for fish in fishies])][0]
+    return join(FOLDER_NAME, outdir, "%s", fish_ex.replace("_output/%s/" % fishies[0], ""))
+
+nest.add_aggregate('obs_files', list)
+nest.add_aggregate('MLE_res', list)
+nest.add_aggregate('chronos_res', list)
+nest.add_aggregate('nj_res', list)
+
 nest.add(
     'data',
     [
-        "ADR1",
-        #"ADR2",
-        #"30hpf_v6_1",
-        #"30hpf_v6_2",
-        #"30hpf_v6_3",
-        #"30hpf_v6_4",
-        #"30hpf_v6_5",
-        #"30hpf_v6_6",
-        #"30hpf_v6_7",
-        #"30hpf_v6_8",
-        #"dome1",
-        #"dome3",
-        #"dome5",
-        #"dome8",
-        #"dome10",
-        #"epi90_2",
-        #"epi90_5",
-        #"epi90_8",
-        #"epi90_9",
-        #"epi90_12",
-        #"3day1",
-        #"3day2",
-        #"3day3",
-        #"3day4",
-        #"3day5",
-        #"3day6",
+        "ADR1", # DONE
+        "ADR2", # DONE
+        #"30hpf_v6_1", # failed?
+        #"30hpf_v6_2", # failed?
+        #"30hpf_v6_3", # failed?
+        #"30hpf_v6_4", # failed
+        "30hpf_v6_5", # DONE
+        ##"30hpf_v6_6", # DONE
+        #"30hpf_v6_7", # failed
+        #"30hpf_v6_8", # failed?
+        "dome1", # DONE
+        ##"dome3", # DONE
+        ##"dome5",  # running
+        ##"dome8",  # DONE
+        #"dome10", # failed
+        "epi90_2", # DONE
+        ##"epi90_5", # DONE
+        ##"epi90_8", # DONE
+        #"epi90_9", # failed
+        ##"epi90_12", # DONE
+        #"3day1", # failed
+        "3day2", # DONE
+        ##"3day3", # DONE
+        ##"3day4",  ## running
+        ##"3day5", ## running
+        #"3day6", # FAILED
     ],
 )
 
 @nest.add_target_with_env(localenv)
 def read_gestalt(env, outdir, c):
+    targets = [
+            join(outdir, 'fish_data.pkl'),
+            join(outdir, 'log.txt')]
     cmd = [
         'python3 read_gestalt_data.py',
         '--seed 0',
@@ -309,10 +321,9 @@ def read_gestalt(env, outdir, c):
 	'--merge',
         FISH_DATA[c['data']]['merge'],
     ]
+    c['obs_files'].append(targets[0])
     return env.Command(
-        [
-            join(outdir, 'fish_data.pkl'),
-            join(outdir, 'log.txt')],
+        targets,
         [],
         ' '.join(map(str, cmd)))
 
@@ -366,48 +377,52 @@ def run_parsimony(env, outdir, c):
         c['restrict_observed_alleles'],
         ' '.join(map(str, cmd)))
 
-#@nest.add_target_with_env(localenv)
-#def run_chronos(env, outdir, c):
-#    cmd = [
-#        'python3 fit_chronos.py',
-#        '--seed 1',
-#        '--lambdas',
-#        '0.0001,0.001,0.01,0.1,1',
-#        '--obs-file ${SOURCES[0]}',
-#        '--topology-file ${SOURCES[1]}',
-#        '--out-model-file ${TARGETS[0]}',
-#        '--log-file ${TARGETS[1]}',
-#        '--num-init-random-rearrange 0',
-#        '--scratch-dir',
-#	join('analyze_gestalt', outdir, 'scratch'),
-#    ]
-#    return env.Command(
-#        [
-#            join(outdir, 'chronos_fitted.pkl'),
-#            join(outdir, 'chronos_fitted.txt')],
-#        [
-#            c['restrict_observed_alleles'][0],
-#            c['run_parsimony'][0]],
-#        ' '.join(map(str, cmd)))
-#
-#@nest.add_target_with_env(localenv)
-#def run_neighbor_joining(env, outdir, c):
-#    cmd = [
-#        'python3 fit_neighbor_joining.py',
-#        '--seed 1',
-#        '--obs-file ${SOURCES[0]}',
-#        '--out-model-file ${TARGETS[0]}',
-#        '--log-file ${TARGETS[1]}',
-#        '--scratch-dir',
-#	join('analyze_gestalt', outdir, 'scratch'),
-#    ]
-#    return env.Command(
-#        [
-#            join(outdir, 'nj_fitted.pkl'),
-#            join(outdir, 'nj_fitted.txt')],
-#        [
-#            c['restrict_observed_alleles'][0]],
-#        ' '.join(map(str, cmd)))
+@nest.add_target_with_env(localenv)
+def run_chronos(env, outdir, c):
+    targets = [
+            join(outdir, 'chronos_fitted.pkl'),
+            join(outdir, 'chronos_fitted.txt')]
+    cmd = [
+        'python3 fit_chronos.py',
+        '--seed 1',
+        '--lambdas',
+        '0.0001,0.001,0.01,0.1,1',
+        '--obs-file ${SOURCES[0]}',
+        '--topology-file ${SOURCES[1]}',
+        '--out-model-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+        '--num-init-random-rearrange 0',
+        '--scratch-dir',
+	join('analyze_gestalt', outdir, 'scratch'),
+    ]
+    c['chronos_res'].append(targets[0])
+    return env.Command(
+        targets,
+        [
+            c['restrict_observed_alleles'][0],
+            c['run_parsimony'][0]],
+        ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def run_neighbor_joining(env, outdir, c):
+    targets = [
+            join(outdir, 'nj_fitted.pkl'),
+            join(outdir, 'nj_fitted.txt')]
+    cmd = [
+        'python3 fit_neighbor_joining.py',
+        '--seed 1',
+        '--obs-file ${SOURCES[0]}',
+        '--out-model-file ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}',
+        '--scratch-dir',
+	join('analyze_gestalt', outdir, 'scratch'),
+    ]
+    c['nj_res'].append(targets[0])
+    return env.Command(
+        targets,
+        [
+            c['restrict_observed_alleles'][0]],
+        ' '.join(map(str, cmd)))
 
 nest.add(
     'sum_states',
@@ -423,6 +438,10 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
+    targets = [
+            join(outdir, 'gapml.pkl'),
+            join(outdir, 'gapml.txt'),
+    ]
     cmd_arg = [
         'python3 tune_topology.py',
         '--obs-file ${SOURCES[0]}',
@@ -467,13 +486,403 @@ def run_MLE(env, outdir, c):
     #    "${TARGETS[0]}",
     #    cmd_arg_str]
     cmd = cmd_arg
+    c['MLE_res'].append(targets[0])
     return env.Command(
-        [
-            join(outdir, 'gapml.pkl'),
-            join(outdir, 'gapml.txt'),
-	],
-        [
+        targets, [
             c['restrict_observed_alleles'][0],
             c['run_parsimony'][0],
 	],
         ' '.join(map(str, cmd)))
+
+nest.pop('data')
+
+@nest.add_target_with_env(localenv)
+def plot_ADR_meta(env, outdir, c):
+    targets = [
+        join(outdir, 'plot_sym_heat_PMLE.png'),
+        join(outdir, 'plot_sym_heat_chronos.png'),
+        join(outdir, 'plot_sym_heat_nj.png'),
+        join(outdir, 'plot_sym_heat_ADR1_PMLE.png'),
+        join(outdir, 'plot_sym_heat_ADR1_chronos.png'),
+        join(outdir, 'plot_sym_heat_ADR1_nj.png'),
+        join(outdir, 'plot_sym_heat_ADR2_PMLE.png'),
+        join(outdir, 'plot_sym_heat_ADR2_chronos.png'),
+        join(outdir, 'plot_sym_heat_ADR2_nj.png'),
+    ]
+    sources = [
+                c['obs_files'],
+                c['MLE_res'],
+                c['chronos_res'],
+                c['nj_res'],
+              ]
+    PREFIX_LEN = len(outdir)
+
+    def extract_template(path_list):
+        adr_fish = [path for path in path_list if "ADR1" in path][0]
+        return join(FOLDER_NAME, outdir, "%s", adr_fish.replace("_output/ADR1/", ""))
+
+    obs_template = extract_template(c['obs_files'])
+    mle_template = extract_template(c['MLE_res'])
+    chronos_template = extract_template(c['chronos_res'])
+    nj_template = extract_template(c['nj_res'])
+
+    plot_templates = [
+        join(FOLDER_NAME, outdir, "plot_sym_head_%s.png"),
+        join(FOLDER_NAME, outdir, "plot_sym_head_%s_%s.png")]
+
+    cmd = [
+        'python plot_analyze_gestalt_meta.py',
+        '--obs-file',
+        obs_template,
+        '--mle-template',
+        mle_template,
+        '--chronos-template',
+        chronos_template,
+        '--nj-template',
+        nj_template,
+        '--out-plot-template',
+        plot_templates[0],
+        '--out-fish-plot-template',
+        plot_templates[1],
+        '--num-rand-permute 2000',
+        '--fishies ADR1,ADR2',
+        '--methods PMLE,chronos,nj',
+    ]
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def plot_btw_ADR_fish_target_rates(env, outdir, c):
+    fish_name = "ADR"
+    fishies = ["ADR1", "ADR2"]
+    targets = [
+        join(outdir, 'target_lam_compare_%s.png' % fish_name),
+    ]
+    sources = [
+                c['obs_files'],
+                c['MLE_res'],
+                c['chronos_res'],
+                c['nj_res'],
+              ]
+    PREFIX_LEN = len(outdir)
+
+    obs_template = extract_template(c['obs_files'], fishies, outdir)
+    mle_template = extract_template(c['MLE_res'], fishies, outdir)
+
+    plot_template = join(FOLDER_NAME, outdir, "target_lam_compare_%s.png")
+
+    cmd = [
+        'python plot_analyze_gestalt_btw_fish.py',
+        '--obs-file',
+        obs_template,
+        '--mle-template',
+        mle_template,
+        '--out-plot-template',
+        plot_template,
+        '--num-rand 2000',
+        '--fish-names',
+        fish_name,
+        '--fishies',
+        ",".join(fishies),
+    ]
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def plot_btw_dome_fish_target_rates(env, outdir, c):
+    fish_name = "4.3hpf"
+    fishies = [key for key in FISH_DATA.keys() if "dome" in key]
+    #fishies = ["dome1", "dome3", "dome8", "dome10"]
+    targets = [
+        join(outdir, 'target_lam_compare_%s.png' % fish_name),
+    ]
+    sources = [
+                c['obs_files'],
+                c['MLE_res'],
+                c['chronos_res'],
+                c['nj_res'],
+              ]
+    PREFIX_LEN = len(outdir)
+
+    obs_template = extract_template(c['obs_files'], fishies, outdir)
+    mle_template = extract_template(c['MLE_res'], fishies, outdir)
+
+    plot_template = join(FOLDER_NAME, outdir, "target_lam_compare_%s.png")
+
+    cmd = [
+        'python plot_analyze_gestalt_btw_fish.py',
+        '--obs-file',
+        obs_template,
+        '--mle-template',
+        mle_template,
+        '--out-plot-template',
+        plot_template,
+        '--num-rand 2000',
+        '--fish-names',
+        fish_name,
+        '--fishies',
+        ",".join(fishies),
+    ]
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def plot_btw_30hpf_fish_target_rates(env, outdir, c):
+    fish_name = "30hpf"
+    fishies = [key for key in FISH_DATA.keys() if "30hpf" in key]
+    targets = [
+        join(outdir, 'plot_target_lam_compare_%s.png'),
+    ]
+    sources = [
+                c['obs_files'],
+                c['MLE_res'],
+                c['chronos_res'],
+                c['nj_res'],
+              ]
+    PREFIX_LEN = len(outdir)
+
+    obs_template = extract_template(c['obs_files'], fishies, outdir)
+    mle_template = extract_template(c['MLE_res'], fishies, outdir)
+
+    plot_template = join(FOLDER_NAME, outdir, "target_lam_compare_%s.png")
+
+    cmd = [
+        'python plot_analyze_gestalt_btw_fish.py',
+        '--obs-file',
+        obs_template,
+        '--mle-template',
+        mle_template,
+        '--out-plot-template',
+        plot_template,
+        '--num-rand 2000',
+        '--fish-names',
+        fish_name,
+        '--fishies',
+        ",".join(fishies),
+    ]
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def plot_btw_epi90_fish_target_rates(env, outdir, c):
+    # 90% epiboly/bud stage, 9 hpf
+    fish_name = "9hpf"
+    fishies = [key for key in FISH_DATA.keys() if "epi90" in key]
+    targets = [
+        join(outdir, 'target_lam_compare_%s.png' % fish_name),
+    ]
+    sources = [
+                c['obs_files'],
+                c['MLE_res'],
+                c['chronos_res'],
+                c['nj_res'],
+              ]
+    PREFIX_LEN = len(outdir)
+
+    obs_template = extract_template(c['obs_files'], fishies, outdir)
+    mle_template = extract_template(c['MLE_res'], fishies, outdir)
+
+    plot_template = join(FOLDER_NAME, outdir, "target_lam_compare_%s.png")
+
+    cmd = [
+        'python plot_analyze_gestalt_btw_fish.py',
+        '--obs-file',
+        obs_template,
+        '--mle-template',
+        mle_template,
+        '--out-plot-template',
+        plot_template,
+        '--num-rand 2000',
+        '--fish-names',
+        fish_name,
+        '--fishies',
+        ",".join(fishies),
+    ]
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def plot_btw_3day_fish_target_rates(env, outdir, c):
+    fish_name = "72hpf"
+    fishies = [key for key in FISH_DATA.keys() if "3day" in key]
+    targets = [
+        join(outdir, 'target_lam_compare_%s.png') % fish_name,
+    ]
+    sources = [
+                c['obs_files'],
+                c['MLE_res'],
+                c['chronos_res'],
+                c['nj_res'],
+              ]
+    PREFIX_LEN = len(outdir)
+
+    obs_template = extract_template(c['obs_files'], fishies, outdir)
+    mle_template = extract_template(c['MLE_res'], fishies, outdir)
+
+    plot_template = join(FOLDER_NAME, outdir, "target_lam_compare_%s.png")
+
+    cmd = [
+        'python plot_analyze_gestalt_btw_fish.py',
+        '--obs-file',
+        obs_template,
+        '--mle-template',
+        mle_template,
+        '--out-plot-template',
+        plot_template,
+        '--num-rand 2000',
+        '--fish-names',
+        fish_name,
+        '--fishies',
+        ",".join(fishies),
+    ]
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def plot_restriction_trends(env, outdir, c):
+    targets = [
+        join(outdir, 'plot_time_to_germ_layer_ADR1_PMLE.png'),
+        join(outdir, 'plot_time_to_germ_layer_ADR1_chronos.png'),
+        join(outdir, 'plot_time_to_germ_layer_ADR1_nj.png'),
+        join(outdir, 'plot_time_to_germ_layer_ADR2_PMLE.png'),
+        join(outdir, 'plot_time_to_germ_layer_ADR2_chronos.png'),
+        join(outdir, 'plot_time_to_germ_layer_ADR2_nj.png'),
+        join(outdir, 'plot_time_to_cell_type_ADR1_PMLE.png'),
+        join(outdir, 'plot_time_to_cell_type_ADR1_chronos.png'),
+        join(outdir, 'plot_time_to_cell_type_ADR1_nj.png'),
+        join(outdir, 'plot_time_to_cell_type_ADR2_PMLE.png'),
+        join(outdir, 'plot_time_to_cell_type_ADR2_chronos.png'),
+        join(outdir, 'plot_time_to_cell_type_ADR2_nj.png'),
+    ]
+    sources = [
+                c['obs_files'],
+                c['MLE_res'],
+                c['chronos_res'],
+                c['nj_res'],
+              ]
+    PREFIX_LEN = len(outdir)
+
+    def extract_template(path_list):
+        adr_fish = [path for path in path_list if "ADR1" in path][0]
+        return join(FOLDER_NAME, outdir, "%s", adr_fish.replace("_output/ADR1/", ""))
+
+    obs_template = extract_template(c['obs_files'])
+    mle_template = extract_template(c['MLE_res'])
+    chronos_template = extract_template(c['chronos_res'])
+    nj_template = extract_template(c['nj_res'])
+
+    plot_templates = [
+        join(FOLDER_NAME, outdir, "plot_time_to_germ_layer_%s_%s.png"),
+        join(FOLDER_NAME, outdir, "plot_time_to_cell_type_%s_%s.png")]
+
+    cmd = [
+        'python plot_analyze_gestalt_cell_types.py',
+        '--obs-file',
+        obs_template,
+        '--mle-template',
+        mle_template,
+        '--out-germ',
+        plot_templates[0],
+        '--out-cell',
+        plot_templates[1],
+        '--num-rand 2000',
+        '--fishies ADR1,ADR2',
+        '--methods PMLE,chronos,nj',
+    ]
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def print_fitted_params(env, outdir, c):
+    targets = [
+        join(outdir, 'fitted_params.tex'),
+    ]
+    sources = [
+                c['obs_files'],
+                c['MLE_res'],
+              ]
+    PREFIX_LEN = len(outdir)
+
+    def extract_template(path_list):
+        adr_fish = [path for path in path_list if "ADR1" in path][0]
+        return join(FOLDER_NAME, outdir, "%s", adr_fish.replace("_output/ADR1/", ""))
+
+    obs_template = extract_template(c['obs_files'])
+    mle_template = extract_template(c['MLE_res'])
+
+    cmd = [
+        'python plot_analyze_gestalt_fitted_params.py',
+        '--obs-file',
+        obs_template,
+        '--mle-template',
+        mle_template,
+        '--fishies',
+        "ADR1,ADR2,dome1,30hpf_v6_3,3day1",
+        '--out-table ${TARGETS[0]}',
+    ]
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def make_ADR1_d3_files(env, outdir, c):
+    targets = [
+        join(outdir, 'ADR1_PMLE_tree.json'),
+    ]
+    sources = [
+                c['obs_files'],
+                c['MLE_res'],
+    ]
+    PREFIX_LEN = len(outdir)
+
+    def extract_template(path_list):
+        adr_fish = [path for path in path_list if "ADR1" in path][0]
+        return join(FOLDER_NAME, outdir, "%s", adr_fish.replace("_output/ADR1/", ""))
+
+    obs_template = extract_template(c['obs_files'])
+    mle_template = extract_template(c['MLE_res'])
+    chronos_template = extract_template(c['chronos_res'])
+    nj_template = extract_template(c['nj_res'])
+
+    cmd = [
+        'python plot_analyze_gestalt_d3.py',
+        '--obs-file',
+        obs_template,
+        '--mle-template',
+        mle_template,
+        '--chronos-template',
+        chronos_template,
+        '--nj-template',
+        nj_template,
+        '--method PMLE',
+        '--fish ADR1',
+        '--out-json ${TARGETS[0]}',
+    ]
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def make_ADR2_d3_files(env, outdir, c):
+    targets = [
+        join(outdir, 'ADR2_PMLE_tree.json'),
+    ]
+    sources = [
+                c['obs_files'],
+                c['MLE_res'],
+    ]
+    PREFIX_LEN = len(outdir)
+
+    def extract_template(path_list):
+        adr_fish = [path for path in path_list if "ADR2" in path][0]
+        return join(FOLDER_NAME, outdir, "%s", adr_fish.replace("_output/ADR2/", ""))
+
+    obs_template = extract_template(c['obs_files'])
+    mle_template = extract_template(c['MLE_res'])
+    chronos_template = extract_template(c['chronos_res'])
+    nj_template = extract_template(c['nj_res'])
+
+    cmd = [
+        'python plot_analyze_gestalt_d3.py',
+        '--obs-file',
+        obs_template,
+        '--mle-template',
+        mle_template,
+        '--chronos-template',
+        chronos_template,
+        '--nj-template',
+        nj_template,
+        '--method PMLE',
+        '--fish ADR2',
+        '--out-json ${TARGETS[0]}',
+    ]
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))

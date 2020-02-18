@@ -1,3 +1,8 @@
+"""
+Plot the target cut rates for the different fish for comparison.
+Also runs hypothesis tests using bootstrap
+"""
+
 import six
 import sys
 import argparse
@@ -21,13 +26,9 @@ def parse_args(args):
         type=str,
         default="_output/%s/sampling_seed0/fish_data_restrict.pkl")
     parser.add_argument(
-        '--mle-file-templates',
+        '--mle-templates',
         type=str,
         default="_output/%s/sampling_seed0/sum_states_20/extra_steps_1/tune_pen_hanging.pkl")
-    parser.add_argument(
-        '--folder',
-        type=str,
-        default="analyze_gestalt")
     parser.add_argument(
         '--num-rands',
         type=int,
@@ -48,7 +49,7 @@ def parse_args(args):
         default="dome1,dome3,dome8,dome10")
         #default="3day1,3day2,3day3,3day4,3day5,3day6")
     parser.add_argument(
-        '--out-plot-file',
+        '--out-plot-template',
         type=str,
         default="_output/target_lam_compare_%s.png")
     parser.set_defaults()
@@ -60,7 +61,7 @@ def parse_args(args):
     else:
         args.fishies = [parse_comma_str(args.fishies, str)]
         args.fish_names = [args.fish_names]
-    args.mle_file_templates = parse_comma_str(args.mle_file_templates, str)
+    args.mle_templates = parse_comma_str(args.mle_templates, str)
     return args
 
 def load_ADR_fish_params(fish):
@@ -182,8 +183,8 @@ def load_my_fish(fish, args):
     print(fish)
     if fish not in ["ADR1", "ADR2"]:
         # Load our estimated target rates
-        for mle_file_template in args.mle_file_templates:
-            file_name = os.path.join(args.folder, mle_file_template % fish)
+        for mle_file_template in args.mle_templates:
+            file_name = mle_file_template % fish
             if os.path.exists(file_name):
                 break
         with open(file_name, "rb") as f:
@@ -195,7 +196,7 @@ def load_my_fish(fish, args):
             fitted_param = res.model_params_dict["target_lams"]
 
         # Fit a simple target rate thing
-        file_name = os.path.join(args.folder, args.obs_file_template % fish)
+        file_name = args.obs_file_template % fish
         with open(file_name, "rb") as f:
             obs_data_dict = six.moves.cPickle.load(f)
     else:
@@ -256,7 +257,7 @@ def main(args=sys.argv[1:]):
         plt.yscale("log")
         plt.title(fish_name)
         plt.tight_layout()
-        plt.savefig(args.out_plot_file % fish_name.replace(" ","_"))
+        plt.savefig(args.out_plot_template % fish_name.replace(" ","_"))
 
     if len(args.fishies) == 2:
         print("TWO SAMPLE STUFF NOW")
