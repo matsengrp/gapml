@@ -271,32 +271,32 @@ nest.add_aggregate('nj_res', list)
 nest.add(
     'data',
     [
-        "ADR1", # DONE
-        "ADR2", # DONE
+        #"ADR1", # DONE
+        #"ADR2", # DONE
         #"30hpf_v6_1", # failed?
-        #"30hpf_v6_2", # failed?
-        #"30hpf_v6_3", # failed?
-        #"30hpf_v6_4", # failed
-        "30hpf_v6_5", # DONE
-        ##"30hpf_v6_6", # DONE
-        #"30hpf_v6_7", # failed
-        #"30hpf_v6_8", # failed?
-        "dome1", # DONE
+        "30hpf_v6_2", # failed?
+        "30hpf_v6_3", # failed?
+        "30hpf_v6_4", # failed
+        #"30hpf_v6_5", # DONE
+        #"30hpf_v6_6", # DONE
+        "30hpf_v6_7", # failed
+        "30hpf_v6_8", # failed?
+        #"dome1", # DONE
         ##"dome3", # DONE
         ##"dome5",  # running
         ##"dome8",  # DONE
-        #"dome10", # failed
-        "epi90_2", # DONE
+        "dome10", # failed
+        #"epi90_2", # DONE
         ##"epi90_5", # DONE
         ##"epi90_8", # DONE
-        #"epi90_9", # failed
-        ##"epi90_12", # DONE
-        #"3day1", # failed
-        "3day2", # DONE
-        ##"3day3", # DONE
-        ##"3day4",  ## running
-        ##"3day5", ## running
-        #"3day6", # FAILED
+        "epi90_9", # failed
+        #"epi90_12", # DONE
+        "3day1", # failed
+        #"3day2", # DONE
+        #"3day3", # DONE
+        #"3day4",  ## running
+        #"3day5", ## running
+        "3day6", # FAILED
     ],
 )
 

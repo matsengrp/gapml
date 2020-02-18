@@ -17,7 +17,7 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 MAX_NUM_BARCODES = 6
 NUM_BCODES = [1,2,4,6]
 NUM_RANDOM_REARRANGE = 20
-SEEDS = range(20,21) # range(20,40)
+SEEDS = range(20,40)
 GROWTH_DICT = {
     "small": {
         "sampling_rate": 0.08,

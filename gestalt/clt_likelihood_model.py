@@ -3,7 +3,7 @@ import logging
 import numpy as np
 import tensorflow as tf
 from tensorflow import Tensor
-import tensorflow_probability as tfp
+#import tensorflow_probability as tfp
 
 from typing import List, Dict
 from numpy import ndarray
@@ -267,7 +267,8 @@ class CLTLikelihoodModel:
         """
         def make_del_dist(params, n_trim_types, use_poisson):
             if use_poisson:
-                del_dist_list = [tfp.distributions.Poisson(tf.exp(params[i])) for i in range(n_trim_types)]
+                #del_dist_list = [tfp.distributions.Poisson(tf.exp(params[i])) for i in range(n_trim_types)]
+                del_dist_list = [tf.contrib.distributions.Poisson(tf.exp(params[i])) for i in range(n_trim_types)]
             else:
                 del_dist_list = [
                     #tfp.distributions.NegativeBinomial(
@@ -279,7 +280,8 @@ class CLTLikelihoodModel:
         self.del_short_dist = make_del_dist(self.trim_short_params_reshaped, self.num_trim_short_types, use_poisson=self.use_poisson)
         self.del_long_dist = make_del_dist(self.trim_long_params_reshaped, self.num_trim_long_types, use_poisson=True)
         if self.use_poisson:
-            self.insert_dist = tfp.distributions.Poisson(tf.exp(self.insert_params[0]))
+            #self.insert_dist = tfp.distributions.Poisson(tf.exp(self.insert_params[0]))
+            self.insert_dist = tf.contrib.distributions.Poisson(tf.exp(self.insert_params[0]))
         else:
             #self.insert_dist = tfp.distributions.NegativeBinomial(
             self.insert_dist = tf.contrib.distributions.NegativeBinomial(
