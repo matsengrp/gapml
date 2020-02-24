@@ -183,7 +183,7 @@ class CLTObserver:
                 if np.random.rand() < self.error_rate:
                     # TODO: Be careful about deactivating other targets
                     min_end = self.bcode_meta.abs_cut_sites[evt.max_target]
-                    max_end = self.bcode_meta.abs_cut_sites[evt.max_target + 1] if evt.max_target < self.bcode_meta.num_barcodes - 1 else self.bcode_meta.orig_length - 1
+                    max_end = self.bcode_meta.abs_cut_sites[evt.max_target + 1] if evt.max_target < self.bcode_meta.n_targets - 1 else self.bcode_meta.orig_length - 1
                     end_len_perturb = np.random.randint(min_end, max_end)
                     del_len_perturb = end_len_perturb - start_pos_perturb
 
