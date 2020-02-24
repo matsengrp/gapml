@@ -201,10 +201,10 @@ def run_MLE(env, outdir, c):
         penalty_params = "1024"
         target_lam_penalty_params = "16"
     elif c['num_barcodes'] == 2:
-    	penalty_params = "128"
+        penalty_params = "128"
         target_lam_penalty_params = "2"
     elif c['num_barcodes'] == 4:
-    	penalty_params = "32"
+        penalty_params = "32"
         target_lam_penalty_params = "1"
 
     targets = [
@@ -246,8 +246,8 @@ def run_MLE(env, outdir, c):
         '--max-iters 50',
         '--num-inits 1',
         '--tot-time-known',
-        '--num-processes',
-        4,
+        '--ref-leaf-key allele_events_list_str_error',
+        '--num-processes 1',
         '--num-init-random-rearrange',
         NUM_RANDOM_REARRANGE if c['num_barcodes'] == 1 else 0,
         '--count-chads' if c['num_barcodes'] == 1 else '',
@@ -255,19 +255,7 @@ def run_MLE(env, outdir, c):
         '--scratch-dir',
 	join('simulation_sensitivity', outdir, 'scratch'),
     ]
-    cmd_arg_str = "'%s'" % ' '.join(map(str, cmd_arg))
-    cmd = [
-        'python execute.py',
-        '--clusters',
-        localenv['clusters'],
-        '--aws-machine compute',
-        "${TARGETS[0]}",
-        cmd_arg_str,
-        ]
-    #cmd = [
-    #    'srun -p matsen_e,campus',
-    #    '--cpus-per-task 8'] + cmd_arg
-    #cmd = cmd_arg
+    cmd = cmd_arg
     c['MLE_res'].append(targets[0])
     return env.Command(targets, sources, ' '.join(map(str, cmd)))
 

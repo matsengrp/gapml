@@ -295,6 +295,7 @@ def create_cell_lineage_tree(
 
     true_subtree.label_tree_with_strs()
     logging.info(true_subtree.get_ascii(attributes=["allele_events_list_str"], show_internal=True))
+    logging.info(true_subtree.get_ascii(attributes=["allele_events_list_str_error"]))
     logging.info(true_subtree.get_ascii(attributes=["node_id"], show_internal=True))
     logging.info(true_subtree.get_ascii(attributes=["dist"], show_internal=True))
 

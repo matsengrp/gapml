@@ -193,19 +193,19 @@ nest.add(
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
     if c['num_barcodes'] == 16:
-    	penalty_params = "8"
+        penalty_params = "8"
         target_lam_penalty_params = "0.4"
     if c['num_barcodes'] == 32:
-    	penalty_params = "4"
+        penalty_params = "4"
         target_lam_penalty_params = "0.2"
     elif c['num_barcodes'] == 64:
-    	penalty_params = "2"
+        penalty_params = "2"
         target_lam_penalty_params = "0.1"
     elif c['num_barcodes'] == 128:
-    	penalty_params = "1"
+        penalty_params = "1"
         target_lam_penalty_params = "0.05"
     elif c['num_barcodes'] == 256:
-    	penalty_params = "0.5"
+        penalty_params = "0.5"
         target_lam_penalty_params = "0.025"
 
     targets = [

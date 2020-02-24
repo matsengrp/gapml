@@ -250,13 +250,13 @@ def run_MLE(env, outdir, c):
         penalty_params = "2048,1024,512"
         target_lam_penalty_params = "32,16"
     elif c['num_barcodes'] == 2:
-    	penalty_params = "512,256,128,64"
+        penalty_params = "512,256,128,64"
         target_lam_penalty_params = "8,2"
     elif c['num_barcodes'] == 4:
-    	penalty_params = "256,128,64,32"
+        penalty_params = "256,128,64,32"
         target_lam_penalty_params = "4,1"
     elif c['num_barcodes'] == 6:
-    	penalty_params = "128,64,32,16"
+        penalty_params = "128,64,32,16"
         target_lam_penalty_params = "2,0.5"
 
     targets = [

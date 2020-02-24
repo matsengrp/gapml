@@ -1424,6 +1424,7 @@ class CLTLikelihoodModel:
             self.tot_time])
 
         scratch_tree = self.topology.copy("deepcopy")
+
         for node in scratch_tree.traverse("preorder"):
             node.add_feature("spine_children", [node])
 

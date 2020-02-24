@@ -46,16 +46,16 @@ class ModelAssessor:
             "targ_corr": self._target_lams_corr,
             "double": self._compare_double_cut}
 
-    def _prune_tree_to_match(self, tree1, tree2):
+    def _prune_tree_to_match(self, tree1, tree2, key1, key2):
         """
         @return pruned version of tree1 based on shared leaves in tree2
         """
         # If the other tree has a different set of leaves, figure out which subset of leaves to compare
         # against in the reference tree
-        tree2_leaf_strs = set([getattr(l, self.leaf_key) for l in tree2])
+        tree2_leaf_strs = set([getattr(l, key2) for l in tree2])
         keep_leaf_ids = set()
         for leaf in tree1:
-            if getattr(leaf, self.leaf_key) in tree2_leaf_strs:
+            if getattr(leaf, key1) in tree2_leaf_strs:
                 keep_leaf_ids.add(leaf.node_id)
         assert len(keep_leaf_ids) > 1
         tree1_pruned = CellLineageTree.prune_tree(tree1, keep_leaf_ids)
@@ -65,7 +65,11 @@ class ModelAssessor:
         # Compare to no collapse tree
         # If the other tree has a different set of leaves, figure out which subset of leaves to compare
         # against in the reference tree
-        ref_tree_pruned = self._prune_tree_to_match(self.ref_tree, other_tree)
+        ref_tree_pruned = self._prune_tree_to_match(
+                self.ref_tree,
+                other_tree,
+                key1=self.leaf_key,
+                key2=self.leaf_key)
 
         # Actually do the comparison
         tree_assessor = TreeDistanceMeasurerAgg.create_single_abundance_measurer(
@@ -129,7 +133,13 @@ class ModelAssessor:
         # Compare to no collapse tree
         # If the other tree has a different set of leaves, figure out which subset of leaves to compare
         # against in the reference tree
-        other_tree_pruned = self._prune_tree_to_match(other_tree, self.ref_tree)
+        for leaf in other_tree:
+            print(leaf.__dict__)
+        other_tree_pruned = self._prune_tree_to_match(
+                other_tree,
+                self.ref_tree,
+                key1=self.leaf_key,
+                key2=self.leaf_key)
         logging.info("other_tree num leaves %d", len(other_tree_pruned))
         tree_assessor = self._get_full_tree_assessor(other_tree_pruned)
         full_dist_dict = tree_assessor.get_tree_dists([other_tree_pruned])[0]

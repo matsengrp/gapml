@@ -235,8 +235,8 @@ nest.add(
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
     if c["pen"] == "0":
-	penalty_params = "0.000001"
-	target_lam_penalty_params = "0.0000001"
+        penalty_params = "0.000001"
+        target_lam_penalty_params = "0.0000001"
         max_chad_tune_search = 1
         num_chad_tune_iters = 1
         num_chad_stop = 1

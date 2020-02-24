@@ -162,6 +162,11 @@ def parse_args(args):
         default=0,
         help='number of times we randomly rearrange tree at the beginning')
     parser.add_argument(
+        '--ref-leaf-key',
+        type=str,
+        default='allele_events_list_str',
+        help='string for leaf key for comparing to oracle tree, ref')
+    parser.add_argument(
         '--scratch-dir',
         type=str,
         default=None)
@@ -258,7 +263,9 @@ def read_data(args):
     """
     Read the data files...
     """
-    tree, obs_data_dict = file_readers.read_data(args.obs_file, args.topology_file)
+    tree, obs_data_dict = file_readers.read_data(
+            args.obs_file,
+            args.topology_file)
     bcode_meta = obs_data_dict["bcode_meta"]
 
     # This section just prints interesting things...
@@ -291,7 +298,8 @@ def read_true_model_files(args, num_barcodes, measurer_classes=None):
             args.true_model_file,
             num_barcodes,
             measurer_classes=measurer_classes,
-            scratch_dir=args.scratch_dir)
+            scratch_dir=args.scratch_dir,
+            ref_leaf_id=args.ref_leaf_key)
 
     return true_model_dict, assessor
 
