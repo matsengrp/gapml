@@ -261,30 +261,30 @@ def run_MLE(env, outdir, c):
 
 nest.pop("seed")
 
-@nest.add_target_with_env(localenv)
-def plot_mle_res(env, outdir, c):
-    targets = [
-        join(outdir, 'plot_mle_res.png')]
-    sources = [
-                c['model_list'],
-                c['MLE_res'],
-              ]
-    TEMPLATES  = [
-                c['MLE_res'][0].replace("/0/", "/%d/").replace("num_barcodes1","num_barcodes%d"),
-                c['model_list'][0].replace("/0/", "/%d/").replace("num_barcodes1","num_barcodes%d")
-    ]
-    cmd = [
-        'python plot_simulation_consistency.py',
-        '--n-bcodes-list',
-        ",".join(map(str, NUM_BCODES)),
-        '--mle-file',
-        join("simulation_sensitivity", TEMPLATES[0]),
-        '--true-model-file',
-        join("simulation_sensitivity", TEMPLATES[1]),
-        '--data-seeds',
-        ",".join(map(str, SEEDS)),
-        '--out-plot ${TARGETS[0]}',
-        '--scratch-dir',
-	join("simulation_sensitivity", outdir, 'scratch'),
-    ]
-    return env.Command(targets, sources, ' '.join(map(str, cmd)))
+#@nest.add_target_with_env(localenv)
+#def plot_mle_res(env, outdir, c):
+#    targets = [
+#        join(outdir, 'plot_mle_res.png')]
+#    sources = [
+#                c['model_list'],
+#                c['MLE_res'],
+#              ]
+#    TEMPLATES  = [
+#                c['MLE_res'][0].replace("/0/", "/%d/").replace("num_barcodes1","num_barcodes%d"),
+#                c['model_list'][0].replace("/0/", "/%d/").replace("num_barcodes1","num_barcodes%d")
+#    ]
+#    cmd = [
+#        'python plot_simulation_consistency.py',
+#        '--n-bcodes-list',
+#        ",".join(map(str, NUM_BCODES)),
+#        '--mle-file',
+#        join("simulation_sensitivity", TEMPLATES[0]),
+#        '--true-model-file',
+#        join("simulation_sensitivity", TEMPLATES[1]),
+#        '--data-seeds',
+#        ",".join(map(str, SEEDS)),
+#        '--out-plot ${TARGETS[0]}',
+#        '--scratch-dir',
+#	join("simulation_sensitivity", outdir, 'scratch'),
+#    ]
+#    return env.Command(targets, sources, ' '.join(map(str, cmd)))
