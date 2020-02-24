@@ -64,17 +64,6 @@ def parse_args(args):
     args.mle_templates = parse_comma_str(args.mle_templates, str)
     return args
 
-def load_ADR_fish_params(fish):
-    obs_file = "analyze_gestalt/_output/%s/sampling_seed0/fish_data_restrict.pkl" % fish
-    with open(obs_file, "rb") as f:
-        obs_dict = six.moves.cPickle.load(f)
-
-    fitted_tree_file = "analyze_gestalt/_output/%s/sampling_seed0/sum_states_25/extra_steps_1/tune_pen_hanging.pkl" % fish
-    with open(fitted_tree_file, "rb") as f:
-        params = six.moves.cPickle.load(f)["final_fit"].model_params_dict
-
-    return params["target_lams"], obs_dict
-
 def _estimate_targ_rate_simple(obs_data_dict):
     """
     Just count up the number of times the outermost target was cut
@@ -181,26 +170,23 @@ def _get_summary_two_sample_bootstrap(all_corrs, num_rands=5, ci_limits=[2.5, 97
 
 def load_my_fish(fish, args):
     print(fish)
-    if fish not in ["ADR1", "ADR2"]:
-        # Load our estimated target rates
-        for mle_file_template in args.mle_templates:
-            file_name = mle_file_template % fish
-            if os.path.exists(file_name):
-                break
-        with open(file_name, "rb") as f:
-            fitted_data = six.moves.cPickle.load(f)
-            if "final_fit" in fitted_data:
-                res = fitted_data["final_fit"]
-            else:
-                res = fitted_data[-1]["best_res"]
-            fitted_param = res.model_params_dict["target_lams"]
+    # Load our estimated target rates
+    for mle_file_template in args.mle_templates:
+        file_name = mle_file_template % fish
+        if os.path.exists(file_name):
+            break
+    with open(file_name, "rb") as f:
+        fitted_data = six.moves.cPickle.load(f)
+        if "final_fit" in fitted_data:
+            res = fitted_data["final_fit"]
+        else:
+            res = fitted_data[-1]["best_res"]
+        fitted_param = res.model_params_dict["target_lams"]
 
-        # Fit a simple target rate thing
-        file_name = args.obs_file_template % fish
-        with open(file_name, "rb") as f:
-            obs_data_dict = six.moves.cPickle.load(f)
-    else:
-        fitted_param, obs_data_dict = load_ADR_fish_params(fish)
+    # Fit a simple target rate thing
+    file_name = args.obs_file_template % fish
+    with open(file_name, "rb") as f:
+        obs_data_dict = six.moves.cPickle.load(f)
     return fitted_param, obs_data_dict
 
 def _get_target_lam_cis(param_vals):

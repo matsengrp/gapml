@@ -121,18 +121,23 @@ def get_long_trim_length_mean_sd(all_model_params, bcode_meta, is_left):
 
 def main(args=sys.argv[1:]):
     args = parse_args(args)
+    fishes_found = []
     fish_param_dicts = []
     for fish in args.fishies:
         print(fish)
         # Load our estimated target rates
         file_name = args.mle_template % fish
-        with open(file_name, "rb") as f:
-            fitted_data = six.moves.cPickle.load(f)
-            if "final_fit" in fitted_data:
-                res = fitted_data["final_fit"]
-            else:
-                res = fitted_data[-1]["best_res"]
-            all_model_params = res.model_params_dict
+        try:
+            with open(file_name, "rb") as f:
+                fitted_data = six.moves.cPickle.load(f)
+                if "final_fit" in fitted_data:
+                    res = fitted_data["final_fit"]
+                else:
+                    res = fitted_data[-1]["best_res"]
+                all_model_params = res.model_params_dict
+        except Exception as e:
+            print("file issue", e)
+            continue
 
         # Fit a simple target rate thing
         file_name = args.obs_file_template % fish
@@ -148,30 +153,31 @@ def main(args=sys.argv[1:]):
         fish_param_dict = {}
         for idx, target_lam in enumerate(all_model_params["target_lams"]):
             fish_param_dict["Target%d" % (idx + 1)] = target_lam
+        fishes_found.append(fish)
         fish_param_dict["Double cut rate"] = all_model_params["double_cut_weight"][0]
         fish_param_dict["Long factor left"] = all_model_params["trim_long_factor"][0]
         fish_param_dict["Long factor right"] = all_model_params["trim_long_factor"][1]
-        mean, sd = get_short_trim_length_mean_sd(all_model_params, bcode_meta, is_left=True)
+        mean, sd = get_short_trim_length_mean_sd(all_model_params, bcode_meta, is_left=1)
         fish_param_dict["Left short trim length mean"] = mean
         fish_param_dict["Left short trim length sd"] = sd
-        mean, sd = get_short_trim_length_mean_sd(all_model_params, bcode_meta, is_left=False)
+        mean, sd = get_short_trim_length_mean_sd(all_model_params, bcode_meta, is_left=0)
         fish_param_dict["Right short trim length mean"] = mean
         fish_param_dict["Right short trim length sd"] = sd
-        mean, sd = get_long_trim_length_mean_sd(all_model_params, bcode_meta, is_left=True)
+        mean, sd = get_long_trim_length_mean_sd(all_model_params, bcode_meta, is_left=1)
         fish_param_dict["Left long trim length mean"] = mean
         fish_param_dict["Left long trim length sd"] = sd
-        mean, sd = get_long_trim_length_mean_sd(all_model_params, bcode_meta, is_left=False)
+        mean, sd = get_long_trim_length_mean_sd(all_model_params, bcode_meta, is_left=0)
         fish_param_dict["Right long trim length mean"] = mean
         fish_param_dict["Right long trim length sd"] = sd
-        fish_param_dict["Left short trim zero prob"] = get_trim_zero_prob(all_model_params, is_left=True)
-        fish_param_dict["Right short trim zero prob"] = get_trim_zero_prob(all_model_params, is_left=False)
+        fish_param_dict["Left short trim zero prob"] = get_trim_zero_prob(all_model_params, is_left=1)
+        fish_param_dict["Right short trim zero prob"] = get_trim_zero_prob(all_model_params, is_left=0)
         fish_param_dict["Insertion zero prob"] = get_insert_zero_prob(all_model_params)
         mean, sd = get_insert_length_mean_sd(all_model_params)
         fish_param_dict["Insertion length mean"] = mean
         fish_param_dict["Insertion length sd"] = sd
         fish_param_dicts.append(fish_param_dict)
 
-    df = pd.DataFrame(fish_param_dicts, index=args.fishies)
+    df = pd.DataFrame(fish_param_dicts, index=fishes_found)
     latex_str = df.transpose().to_latex(float_format=lambda x: '%.3f' % x)
     print(latex_str)
     with open(args.out_table, "w") as f:
