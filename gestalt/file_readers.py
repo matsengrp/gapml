@@ -40,7 +40,7 @@ def read_true_model(
         n_bcodes: int,
         measurer_classes: List = [],
         scratch_dir: str = None,
-        ref_leaf_id: str = "allele_events_list_str",
+        use_error_prone_alleles: bool = False,
         leaf_key: str = "leaf_key"):
     """
     @param n_bcodes: the number of barcodes to restrict to when loading the true model
@@ -54,15 +54,19 @@ def read_true_model(
     if len(measurer_classes):
         true_tree = true_model["true_subtree"]
 
+        # If we are using an alternate reference leaf key, copy over the relevant quantities
+        if use_error_prone_alleles:
+            for leaf in true_tree:
+                leaf.allele_events_list = leaf.allele_events_list
+                leaf.allele_list = leaf.allele_list
+
         # Restrict the number of observed barcodes
         true_tree.restrict_barcodes(range(n_bcodes))
 
         # Mark the leaves with a unique id for when we compare the fitted
         # against the true tree
         for leaf in true_tree:
-            print(leaf.allele_events_list_str_error)
-            print(leaf.allele_events_list_str)
-            leaf.add_feature(leaf_key, getattr(leaf, ref_leaf_id))
+            leaf.add_feature(leaf_key, leaf.allele_events_list_str)
 
         assessor = ModelAssessor(
             true_model["true_model_params"],

@@ -162,10 +162,9 @@ def parse_args(args):
         default=0,
         help='number of times we randomly rearrange tree at the beginning')
     parser.add_argument(
-        '--ref-leaf-key',
-        type=str,
-        default='allele_events_list_str',
-        help='string for leaf key for comparing to oracle tree, ref')
+        '--use-error-prone-alleles',
+        action='store_true',
+        help='whether to compare against the leaf ids as defined by error-prone alleles')
     parser.add_argument(
         '--scratch-dir',
         type=str,
@@ -299,7 +298,7 @@ def read_true_model_files(args, num_barcodes, measurer_classes=None):
             num_barcodes,
             measurer_classes=measurer_classes,
             scratch_dir=args.scratch_dir,
-            ref_leaf_id=args.ref_leaf_key)
+            use_error_prone_alleles=args.use_error_prone_alleles)
 
     return true_model_dict, assessor
 

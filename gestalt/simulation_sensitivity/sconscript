@@ -13,7 +13,7 @@ localenv = env.Clone()
 
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
-MAX_NUM_BARCODES = 1
+MAX_NUM_BARCODES = 5
 NUM_BCODES = [1]
 ERROR_RATES = [0.1]
 NUM_RANDOM_REARRANGE = 20
@@ -246,7 +246,7 @@ def run_MLE(env, outdir, c):
         '--max-iters 50',
         '--num-inits 1',
         '--tot-time-known',
-        '--ref-leaf-key allele_events_list_str_error',
+        '--use-error-prone',
         '--num-processes 1',
         '--num-init-random-rearrange',
         NUM_RANDOM_REARRANGE if c['num_barcodes'] == 1 else 0,

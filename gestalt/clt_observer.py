@@ -210,13 +210,14 @@ class CLTObserver:
                     allele_list = AlleleList(
                             [a.allele for a in alleles],
                             self.bcode_meta)
-                    print("ORGINIAL", obs_seq)
                     obs_seq.set_allele_list(allele_list)
-                    print("NEW ERROR", obs_seq)
 
         # Label the true subtree with the error leaves
         for k, (obs_seq, _, nodes) in observations.items():
             for node in nodes:
                 node.add_feature(
-                    "allele_events_list_str_error",
-                    CellLineageTree._allele_list_to_str(obs_seq.allele_events_list))
+                    "allele_events_list_error",
+                    obs_seq.allele_events_list)
+                node.add_feature(
+                    "allele_list_error",
+                    obs_seq.allele_list)
