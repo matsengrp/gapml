@@ -35,7 +35,7 @@ GROWTH_DICT = {
     "mini": {
         "sampling_rate": 0.1,
         "birth_sync_rounds": 5,
-        "birth_sync_time": 0.15,
+        "birth_sync_time": 0.12,
         "death_lambda": 0.2,
         "birth_decay": -1,
         "birth_min": 2,

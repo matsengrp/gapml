@@ -57,8 +57,8 @@ def read_true_model(
         # If we are using an alternate reference leaf key, copy over the relevant quantities
         if use_error_prone_alleles:
             for leaf in true_tree:
-                leaf.allele_events_list = leaf.allele_events_list
-                leaf.allele_list = leaf.allele_list
+                leaf.allele_events_list = leaf.allele_events_list_error
+                leaf.allele_list = leaf.allele_list_error
 
         # Restrict the number of observed barcodes
         true_tree.restrict_barcodes(range(n_bcodes))
