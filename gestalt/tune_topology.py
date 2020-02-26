@@ -164,7 +164,10 @@ def parse_args(args):
     parser.add_argument(
         '--use-error-prone-alleles',
         action='store_true',
-        help='whether to compare against the leaf ids as defined by error-prone alleles')
+        help="""
+        if True, compare the estimated tree to the oracle tree, but use the leaves as labeled by the error.
+        You should set this to True if the true tree is observed with error
+        """)
     parser.add_argument(
         '--scratch-dir',
         type=str,
@@ -291,7 +294,7 @@ def read_true_model_files(args, num_barcodes, measurer_classes=None):
         return None, None
 
     if measurer_classes == None:
-        measurer_classes = [BHVDistanceMeasurer, InternalCorrMeasurer]
+        measurer_classes = [InternalCorrMeasurer]
 
     true_model_dict, assessor = file_readers.read_true_model(
             args.true_model_file,

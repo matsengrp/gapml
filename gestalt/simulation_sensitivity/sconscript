@@ -13,8 +13,8 @@ localenv = env.Clone()
 
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
-MAX_NUM_BARCODES = 5
-NUM_BCODES = [1]
+MAX_NUM_BARCODES = 10
+NUM_BCODES = [4]
 ERROR_RATES = [0.1]
 NUM_RANDOM_REARRANGE = 20
 SEEDS = [1]
@@ -234,11 +234,11 @@ def run_MLE(env, outdir, c):
         '--max-fit-splits',
         4 if c['num_barcodes'] == 1 else 4,
         '--num-chad-tune-iters',
-        15,
+        1,
         '--num-chad-stop',
         5,
         '--max-chad-tune-search',
-        15 if c['num_barcodes'] == 1 else 0,
+        0,
         '--max-sum-states',
         c['sum_states'],
         '--max-extra-steps',
@@ -249,7 +249,7 @@ def run_MLE(env, outdir, c):
         '--use-error-prone',
         '--num-processes 1',
         '--num-init-random-rearrange',
-        NUM_RANDOM_REARRANGE if c['num_barcodes'] == 1 else 0,
+        0, #NUM_RANDOM_REARRANGE if c['num_barcodes'] == 1 else 0,
         '--count-chads' if c['num_barcodes'] == 1 else '',
         '--lambda-decay-known',
         '--scratch-dir',
