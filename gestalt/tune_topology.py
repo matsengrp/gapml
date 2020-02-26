@@ -183,7 +183,7 @@ def parse_args(args):
         action='store_true',
         help="Use poisson distribution")
 
-    parser.set_defaults(tot_time_known=True)
+    parser.set_defaults(tot_time_known=True, use_error_prone_alleles=False)
     args = parser.parse_args(args)
 
     args.branch_pen_params = list(sorted(
@@ -294,7 +294,7 @@ def read_true_model_files(args, num_barcodes, measurer_classes=None):
         return None, None
 
     if measurer_classes == None:
-        measurer_classes = [InternalCorrMeasurer]
+        measurer_classes = [BHVDistanceMeasurer, InternalCorrMeasurer]
 
     true_model_dict, assessor = file_readers.read_true_model(
             args.true_model_file,

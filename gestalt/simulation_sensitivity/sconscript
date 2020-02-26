@@ -15,25 +15,12 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 MAX_NUM_BARCODES = 10
 NUM_BCODES = [4]
-ERROR_RATES = [0.1]
+ERROR_RATES = [0, 0.1]
 NUM_RANDOM_REARRANGE = 20
-SEEDS = [1]
+SEEDS = range(2)
 GROWTH_DICT = {
-    "small": {
-        "sampling_rate": 0.08,
-        "birth_sync_rounds": 5,
-        "birth_sync_time": 0.1,
-        "death_lambda": 0.3,
-        "birth_decay": -18,
-        "birth_min": 6,
-        "lambda_sequence": [.75, .7, .65, .6, .55, .5, .45],
-        "target_decay": 0,
-        "double": 0.05,
-        "min_leaves": 70,
-        "max_leaves": 110,
-    },
     "mini": {
-        "sampling_rate": 0.1,
+        "sampling_rate": 0.05,
         "birth_sync_rounds": 5,
         "birth_sync_time": 0.12,
         "death_lambda": 0.2,
@@ -59,14 +46,14 @@ nest.add(
     label_func=lambda c: 'model_seed%d' % c,
 )
 
+nest.add_aggregate('MLE_res', list)
+nest.add_aggregate('model_list', list)
+
 nest.add(
     'error_rate',
     ERROR_RATES,
     label_func=lambda c: 'error_rate_%.2f' % c,
 )
-
-nest.add_aggregate('MLE_res', list)
-nest.add_aggregate('model_list', list)
 
 nest.add(
     'seed',
@@ -198,11 +185,8 @@ nest.add(
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
     if c['num_barcodes'] == 1:
-        penalty_params = "1024"
-        target_lam_penalty_params = "16"
-    elif c['num_barcodes'] == 2:
-        penalty_params = "128"
-        target_lam_penalty_params = "2"
+        penalty_params = "32"
+        target_lam_penalty_params = "1"
     elif c['num_barcodes'] == 4:
         penalty_params = "32"
         target_lam_penalty_params = "1"
@@ -229,10 +213,8 @@ def run_MLE(env, outdir, c):
         target_lam_penalty_params,
         '--num-penalty-tune-iters',
         1,
-        '--num-penalty-tune-splits',
-        4 if c['num_barcodes'] == 1 else 2,
-        '--max-fit-splits',
-        4 if c['num_barcodes'] == 1 else 4,
+        '--num-penalty-tune-splits 2',
+        '--max-fit-splits 4',
         '--num-chad-tune-iters',
         1,
         '--num-chad-stop',
@@ -243,14 +225,12 @@ def run_MLE(env, outdir, c):
         c['sum_states'],
         '--max-extra-steps',
         c['extra_steps'],
-        '--max-iters 50',
+        '--max-iters 500',
+        '--use-error-prone',
         '--num-inits 1',
         '--tot-time-known',
-        '--use-error-prone',
         '--num-processes 1',
-        '--num-init-random-rearrange',
-        0, #NUM_RANDOM_REARRANGE if c['num_barcodes'] == 1 else 0,
-        '--count-chads' if c['num_barcodes'] == 1 else '',
+        '--num-init-random-rearrange 0',
         '--lambda-decay-known',
         '--scratch-dir',
 	join('simulation_sensitivity', outdir, 'scratch'),
@@ -260,31 +240,38 @@ def run_MLE(env, outdir, c):
     return env.Command(targets, sources, ' '.join(map(str, cmd)))
 
 nest.pop("seed")
+nest.pop("error_rate")
 
-#@nest.add_target_with_env(localenv)
-#def plot_mle_res(env, outdir, c):
-#    targets = [
-#        join(outdir, 'plot_mle_res.png')]
-#    sources = [
-#                c['model_list'],
-#                c['MLE_res'],
-#              ]
-#    TEMPLATES  = [
-#                c['MLE_res'][0].replace("/0/", "/%d/").replace("num_barcodes1","num_barcodes%d"),
-#                c['model_list'][0].replace("/0/", "/%d/").replace("num_barcodes1","num_barcodes%d")
-#    ]
-#    cmd = [
-#        'python plot_simulation_consistency.py',
-#        '--n-bcodes-list',
-#        ",".join(map(str, NUM_BCODES)),
-#        '--mle-file',
-#        join("simulation_sensitivity", TEMPLATES[0]),
-#        '--true-model-file',
-#        join("simulation_sensitivity", TEMPLATES[1]),
-#        '--data-seeds',
-#        ",".join(map(str, SEEDS)),
-#        '--out-plot ${TARGETS[0]}',
-#        '--scratch-dir',
-#	join("simulation_sensitivity", outdir, 'scratch'),
-#    ]
-#    return env.Command(targets, sources, ' '.join(map(str, cmd)))
+@nest.add_target_with_env(localenv)
+def plot_mle_res(env, outdir, c):
+    targets = [
+        join(outdir, 'plot_mle_res.png')]
+    sources = [
+                c['model_list'],
+                c['MLE_res'],
+              ]
+    TEMPLATES  = [
+                c['MLE_res'][0].replace("/0/", "/%d/").replace(
+                      "num_barcodes%d" % NUM_BCODES[0],"num_barcodes%d").replace(
+                      "error_rate_0.00", "error_rate_%.2f"),
+                c['model_list'][0].replace("/0/", "/%d/").replace(
+                      "num_barcodes%d" % NUM_BCODES[0], "num_barcodes%d").replace(
+                      "error_rate_0.00", "error_rate_%.2f")
+    ]
+    cmd = [
+        'python plot_simulation_sensitivity.py',
+        '--n-bcodes-list',
+        ",".join(map(str, NUM_BCODES)),
+        '--mle-file',
+        join("simulation_sensitivity", TEMPLATES[0]),
+        '--true-model-file',
+        join("simulation_sensitivity", TEMPLATES[1]),
+        '--error',
+        ",".join(map(str, ERROR_RATES)),
+        '--data-seeds',
+        ",".join(map(str, SEEDS)),
+        '--out-plot ${TARGETS[0]}',
+        '--scratch-dir',
+	join("simulation_sensitivity", outdir, 'scratch'),
+    ]
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
