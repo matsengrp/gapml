@@ -16,6 +16,9 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 FOLDER_NAME = "analyze_gestalt"
 MAX_LEAVES = 400
 
+BIG_FISH = [
+    "3day6", "30hpf_v6_1", "30hpf_v6_2", "30hpf_v6_7", "epi90_9"
+]
 FISH_DATA = {
     "ADR1": {
         "path": "/fh/fast/matsen_e/gestalt/fish_7B_UMI_collapsed_reads/fish_7B_UMI_collapsed_reads.txt",
@@ -69,10 +72,11 @@ FISH_DATA = {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171801_embryos_1_4_v6.stats.txt",
         "bcode_min_pos": 126,
         "format": 2,
-        "branch_pen_params": "2048,512,128",
-        "target_lam_pen_params": "8,2",
-        #"branch_pen_params": "2048",
-        #"target_lam_pen_params": "2",
+        "branch_pen_params": "128",
+        "target_lam_pen_params": "2",
+        # Selected pen param above
+        #"branch_pen_params": "2048,512,128",
+        #"target_lam_pen_params": "8,2",
         "merge": 4,
     },
     "30hpf_v6_5": {
@@ -133,8 +137,11 @@ FISH_DATA = {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171793_Dome_5_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
-        "branch_pen_params": "2048,512,128",
-        "target_lam_pen_params": "8,2",
+        "branch_pen_params": "2048",
+        "target_lam_pen_params": "2",
+        # Chose best pen params from below
+        #"branch_pen_params": "2048,512,128",
+        #"target_lam_pen_params": "8,2",
         "merge": 4,
     },
     "dome8": {
@@ -186,8 +193,11 @@ FISH_DATA = {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171819_epi90_9_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
-        "branch_pen_params": "512,128,32",
-        "target_lam_pen_params": "16,8,4",
+        "branch_pen_params": "512",
+        "target_lam_pen_params": "4",
+        # Selected penalty params above from those below
+        #"branch_pen_params": "512,128,32",
+        #"target_lam_pen_params": "16,8,4",
         "merge": 4,
     },
     "epi90_10": {
@@ -245,23 +255,29 @@ FISH_DATA = {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171733_3d_5_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
-        "branch_pen_params": "512,128",
-        "target_lam_pen_params": "8,2",
+        "branch_pen_params": "512",
+        "target_lam_pen_params": "2",
+        # Selected pen param from below
+        #"branch_pen_params": "512,128",
+        #"target_lam_pen_params": "8,2",
         "merge": 5,
     },
     "3day6": {
         "path": "/fh/fast/matsen_e/gestalt/GSM2171735_3d_6_1x.stats.txt",
         "bcode_min_pos": 122,
         "format": 2,
-        "branch_pen_params": "512,128",
-        "target_lam_pen_params": "8,2",
+        "branch_pen_params": "128",
+        "target_lam_pen_params": "8",
+        # Selected pen param above from the ones below
+        #"branch_pen_params": "512,128",
+        #"target_lam_pen_params": "8,2",
         "merge": 5,
     },
 }
 
 def extract_template(path_list, fishies, outdir):
     fish_ex = [path for path in path_list if any([fish in path for fish in fishies])][0]
-    return join(FOLDER_NAME, outdir, "%s", fish_ex.replace("_output/%s/" % fishies[0], ""))
+    return join(FOLDER_NAME, outdir, "%s", "/".join(fish_ex.split("/")[2:]))
 
 nest.add_aggregate('obs_files', list)
 nest.add_aggregate('MLE_res', list)
@@ -273,30 +289,30 @@ nest.add(
     [
         #"ADR1", # DONE
         #"ADR2", # DONE
-        #"30hpf_v6_1", # failed?
-        "30hpf_v6_2", # failed?
-        "30hpf_v6_3", # failed?
-        "30hpf_v6_4", # failed
+        #"30hpf_v6_1", # failed from weird things
+        #"30hpf_v6_2", # running
+        #"30hpf_v6_3", # running
+        "30hpf_v6_4", # failed chad
         #"30hpf_v6_5", # DONE
         #"30hpf_v6_6", # DONE
-        "30hpf_v6_7", # failed
-        "30hpf_v6_8", # failed?
+        #"30hpf_v6_7", # failed tuning pen
+        #"30hpf_v6_8", # DONE
         #"dome1", # DONE
-        ##"dome3", # DONE
-        ##"dome5",  # running
-        ##"dome8",  # DONE
-        "dome10", # failed
+        #"dome3", # DONE
+        #"dome5",  # running
+        #"dome8",  # DONE
+        "dome10", # failed chad tuning
         #"epi90_2", # DONE
-        ##"epi90_5", # DONE
-        ##"epi90_8", # DONE
-        "epi90_9", # failed
+        #"epi90_5", # DONE
+        #"epi90_8", # DONE
+        #"epi90_9", # failed
         #"epi90_12", # DONE
-        "3day1", # failed
+        #"3day1", # DONE
         #"3day2", # DONE
         #"3day3", # DONE
-        #"3day4",  ## running
-        #"3day5", ## running
-        "3day6", # FAILED
+        #"3day4",  # DONE
+        #"3day5", # DONE
+        #"3day6", # running
     ],
 )
 
@@ -473,19 +489,22 @@ def run_MLE(env, outdir, c):
         '--num-inits 1',
         '--tot-time-known',
         '--lambda-decay-fixed 0',
-        '--num-processes 2',
+        '--num-processes',
+        1 if c['data'] in BIG_FISH else 2,
         '--num-init-random-rearrange 5',
         '--scratch-dir',
 	join('analyze_gestalt', outdir, 'scratch'),
     ]
-    #cmd_arg_str = "'%s'" % ' '.join(map(str, cmd_arg))
-    #cmd = [
-    #    'python execute.py',
-    #    '--clusters',
-    #    localenv['clusters'],
-    #    "${TARGETS[0]}",
-    #    cmd_arg_str]
-    cmd = cmd_arg
+    cmd_arg_str = "'%s'" % ' '.join(map(str, cmd_arg))
+    cmd = [
+        'python execute.py',
+        #'--aws-machine',
+        #'compute',
+        '--clusters',
+        localenv['clusters'],
+        "${TARGETS[0]}",
+        cmd_arg_str]
+    #cmd = cmd_arg
     c['MLE_res'].append(targets[0])
     return env.Command(
         targets, [

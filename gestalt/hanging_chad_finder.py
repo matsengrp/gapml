@@ -761,13 +761,17 @@ def tune(
             None,
             args.scratch_dir,
             args.num_processes)
-    worker_results = [w[0][0] for w in job_manager.run(successful_only=True)]
+    all_worker_results = job_manager.run()
+    worker_results = [r[0] for (r,_) in all_worker_results if r is not None]
+    filtered_chad_trees = [tree for tree, (r,_) in zip(single_full_chad_trees, all_worker_results) if r is not None]
     assert len(worker_results) > 0
+    if len(filtered_chad_trees) != len(single_full_chad_trees):
+        print("WARNING: some of the chad tuners failed")
 
     # Aggregate the results
     chad_tune_res = _create_chad_results(
         worker_results,
-        single_full_chad_trees,
+        filtered_chad_trees,
         no_chad_res,
         hanging_chad,
         args.scratch_dir)

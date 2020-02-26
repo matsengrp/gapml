@@ -150,6 +150,16 @@ class CLTObserver:
         if self.error_rate > 0:
             self._make_errors(observations)
 
+        # Label the true subtree with the error leaves
+        for k, (obs_seq, _, nodes) in observations.items():
+            for node in nodes:
+                node.add_feature(
+                    "allele_events_list_error",
+                    obs_seq.allele_events_list)
+                node.add_feature(
+                    "allele_list_error",
+                    obs_seq.allele_list)
+
         obs_vals = [obs[0] for obs in observations.values()]
         obs_idx_to_leaves = [obs[1] for obs in observations.values()]
 
@@ -211,13 +221,3 @@ class CLTObserver:
                             [a.allele for a in alleles],
                             self.bcode_meta)
                     obs_seq.set_allele_list(allele_list)
-
-        # Label the true subtree with the error leaves
-        for k, (obs_seq, _, nodes) in observations.items():
-            for node in nodes:
-                node.add_feature(
-                    "allele_events_list_error",
-                    obs_seq.allele_events_list)
-                node.add_feature(
-                    "allele_list_error",
-                    obs_seq.allele_list)
