@@ -1,5 +1,4 @@
-# Test if we have any sort of consistency
-# This simulates a larger tree and performs a topology search
+# Test if incorrectly resolving indels results in poor tree estimates
 
 import os
 
@@ -14,35 +13,36 @@ localenv = env.Clone()
 
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
-MAX_NUM_BARCODES = 256
-NUM_BCODES = [16,64,256]
+MAX_NUM_BARCODES = 10
+NUM_BCODES = [4]
+ERROR_RATES = [0.1]
 NUM_RANDOM_REARRANGE = 20
-SEEDS = range(10)
+SEEDS = [1]
 GROWTH_DICT = {
-    "tiny": {
-        "sampling_rate": 1,
+    "small": {
+        "sampling_rate": 0.08,
         "birth_sync_rounds": 5,
-        "birth_sync_time": 0.15,
-        "death_lambda": 0.2,
-        "birth_decay": -1,
-        "birth_min": 2,
-        "lambda_sequence": [1.4, 1.7, 1.1, 0.8],
+        "birth_sync_time": 0.1,
+        "death_lambda": 0.3,
+        "birth_decay": -18,
+        "birth_min": 6,
+        "lambda_sequence": [.75, .7, .65, .6, .55, .5, .45],
         "target_decay": 0,
-        "double": 0.03,
-        "min_leaves": 1,
-        "max_leaves": 10,
+        "double": 0.05,
+        "min_leaves": 70,
+        "max_leaves": 110,
     },
     "mini": {
-        "sampling_rate": 0.08,
-        "birth_sync_rounds": 4,
-        "birth_sync_time": 0.15,
+        "sampling_rate": 0.1,
+        "birth_sync_rounds": 5,
+        "birth_sync_time": 0.12,
         "death_lambda": 0.2,
         "birth_decay": -1,
         "birth_min": 2,
-        "lambda_sequence": [0.9, 1.0, 1.2, .75, .7, .65],
-        "target_decay": 0,
+        "lambda_sequence": [1.2, 0.9, .8, .75, .7, .65],
+        "target_decay": .6,
         "double": 0.03,
-        "min_leaves": 5,
+        "min_leaves": 10,
         "max_leaves": 100,
     },
 }
@@ -57,6 +57,12 @@ nest.add(
     'model_seed',
     [1],
     label_func=lambda c: 'model_seed%d' % c,
+)
+
+nest.add(
+    'error_rate',
+    ERROR_RATES,
+    label_func=lambda c: 'error_rate_%.2f' % c,
 )
 
 nest.add_aggregate('MLE_res', list)
@@ -80,6 +86,8 @@ def generate(env, outdir, c):
         '--out-obs-file ${TARGETS[0]}',
         '--out-model-file ${TARGETS[1]}',
         '--log-file ${TARGETS[2]}',
+        '--error-rate',
+        c['error_rate'],
         '--sampling-rate',
         GROWTH_DICT[c['growth_stage']]['sampling_rate'],
         '--model-seed',
@@ -105,7 +113,7 @@ def generate(env, outdir, c):
         GROWTH_DICT[c['growth_stage']]['min_leaves'],
         '--max-uniq-alleles',
         GROWTH_DICT[c['growth_stage']]['max_leaves'],
-        '--max-abundance 2000',
+        '--max-abundance 20000',
         '--double-cut-weight',
         GROWTH_DICT[c['growth_stage']]['double'],
         '--target-lambdas',
@@ -115,15 +123,12 @@ def generate(env, outdir, c):
         '--trim-zero-probs 0.15 0.1 0.15 0.1',
         '--trim-short-params 1.35 -0.1 1.2 0.1',
         '--trim-long-params 0.5 0.5',
-        '--trim-long-factor 0.1 0.1',
+        '--trim-long-factor 0.08 0.08',
         '--insert-zero-prob 0.5',
         '--insert-params 1 0.3',
         '--perturb-target-lambdas-variance 0',
         '--max-tries 20',
     ]
-    if c['growth_stage'] == 'tiny':
-        cmd += ['--is-stupid-cherry']
-
     c['model_list'].append(targets[1])
     return env.Command(
         targets,
@@ -192,25 +197,19 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    if c['num_barcodes'] == 16:
-        penalty_params = "8"
-        target_lam_penalty_params = "0.4"
-    if c['num_barcodes'] == 32:
-        penalty_params = "4"
-        target_lam_penalty_params = "0.2"
-    elif c['num_barcodes'] == 64:
-        penalty_params = "2"
-        target_lam_penalty_params = "0.1"
-    elif c['num_barcodes'] == 128:
-        penalty_params = "1"
-        target_lam_penalty_params = "0.05"
-    elif c['num_barcodes'] == 256:
-        penalty_params = "0.5"
-        target_lam_penalty_params = "0.025"
+    if c['num_barcodes'] == 1:
+        penalty_params = "1024"
+        target_lam_penalty_params = "16"
+    elif c['num_barcodes'] == 2:
+        penalty_params = "128"
+        target_lam_penalty_params = "2"
+    elif c['num_barcodes'] == 4:
+        penalty_params = "32"
+        target_lam_penalty_params = "1"
 
     targets = [
-                join(outdir, 'tune_fitted_new.pkl'),
-                join(outdir, 'tune_fitted_new.txt')]
+                join(outdir, 'gapml.pkl'),
+                join(outdir, 'gapml.txt')]
     sources = [
                 c['restrict_observed_alleles'][0],
                 c['run_topology'][0],
@@ -231,74 +230,61 @@ def run_MLE(env, outdir, c):
         '--num-penalty-tune-iters',
         1,
         '--num-penalty-tune-splits',
-        4,
+        4 if c['num_barcodes'] == 1 else 2,
         '--max-fit-splits',
-        4,
+        4 if c['num_barcodes'] == 1 else 4,
         '--num-chad-tune-iters',
-        15,
+        1,
         '--num-chad-stop',
         5,
         '--max-chad-tune-search',
-        15 if c['num_barcodes'] == 1 else 0,
+        0,
         '--max-sum-states',
         c['sum_states'],
         '--max-extra-steps',
         c['extra_steps'],
-        '--max-iters 5000',
+        '--max-iters 50',
         '--num-inits 1',
         '--tot-time-known',
-        '--num-processes',
-        1,
+        '--use-error-prone',
+        '--num-processes 1',
         '--num-init-random-rearrange',
-        NUM_RANDOM_REARRANGE if c['num_barcodes'] == 1 else 0,
+        0, #NUM_RANDOM_REARRANGE if c['num_barcodes'] == 1 else 0,
         '--count-chads' if c['num_barcodes'] == 1 else '',
         '--lambda-decay-known',
         '--scratch-dir',
-	join('simulation_consistency', outdir, 'scratch'),
+	join('simulation_sensitivity', outdir, 'scratch'),
     ]
-    #cmd = cmd_arg
-    #cpus = 16 if c['num_barcodes'] > 128 else 8
-    cmd_arg_str = "'%s'" % ' '.join(map(str, cmd_arg))
-    cmd = [
-        'python execute.py',
-        '--clusters',
-        localenv['clusters'],
-        '--aws-machine compute' if c['num_barcodes'] <= 64 else '--aws-machine mem',
-        "${TARGETS[0]}",
-        cmd_arg_str,
-        ]
-    #cmd = [
-    #    'srun -p matsen_e,campus',
-    #    '--cpus-per-task %d' % cpus] + cmd_arg
+    cmd = cmd_arg
     c['MLE_res'].append(targets[0])
     return env.Command(targets, sources, ' '.join(map(str, cmd)))
 
 nest.pop("seed")
 
-@nest.add_target_with_env(localenv)
-def plot_mle_res(env, outdir, c):
-    targets = [
-        join(outdir, 'plot_mle_res.png')]
-    sources = [
-                c['model_list'],
-                c['MLE_res'],
-              ]
-    TEMPLATES  = [
-                c['MLE_res'][0].replace("/%d/" % SEEDS[0], "/%d/").replace("num_barcodes%d" % NUM_BCODES[0],"num_barcodes%d"),
-                c['model_list'][0].replace("/%d/" % SEEDS[0], "/%d/").replace("num_barcodes%d" % NUM_BCODES[0],"num_barcodes%d")
-    ]
-    cmd = [
-        'python plot_simulation_consistency.py',
-        '--n-bcodes-list',
-        ",".join(map(str, NUM_BCODES)),
-        '--mle-file',
-        join("simulation_consistency", TEMPLATES[0]),
-        '--true-model-file',
-        join("simulation_consistency", TEMPLATES[1]),
-        '--data-seeds',
-        ",".join(map(str, SEEDS)),
-        '--out-plot ${TARGETS[0]}',
-        '--scratch-dir',
-	join("simulation_consistency", outdir, 'scratch'),
-    ]
-    return env.Command(targets, sources, ' '.join(map(str, cmd)))
+#@nest.add_target_with_env(localenv)
+#def plot_mle_res(env, outdir, c):
+#    targets = [
+#        join(outdir, 'plot_mle_res.png')]
+#    sources = [
+#                c['model_list'],
+#                c['MLE_res'],
+#              ]
+#    TEMPLATES  = [
+#                c['MLE_res'][0].replace("/0/", "/%d/").replace("num_barcodes1","num_barcodes%d"),
+#                c['model_list'][0].replace("/0/", "/%d/").replace("num_barcodes1","num_barcodes%d")
+#    ]
+#    cmd = [
+#        'python plot_simulation_consistency.py',
+#        '--n-bcodes-list',
+#        ",".join(map(str, NUM_BCODES)),
+#        '--mle-file',
+#        join("simulation_sensitivity", TEMPLATES[0]),
+#        '--true-model-file',
+#        join("simulation_sensitivity", TEMPLATES[1]),
+#        '--data-seeds',
+#        ",".join(map(str, SEEDS)),
+#        '--out-plot ${TARGETS[0]}',
+#        '--scratch-dir',
+#	join("simulation_sensitivity", outdir, 'scratch'),
+#    ]
+#    return env.Command(targets, sources, ' '.join(map(str, cmd)))

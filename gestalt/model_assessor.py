@@ -65,7 +65,9 @@ class ModelAssessor:
         # Compare to no collapse tree
         # If the other tree has a different set of leaves, figure out which subset of leaves to compare
         # against in the reference tree
-        ref_tree_pruned = self._prune_tree_to_match(self.ref_tree, other_tree)
+        ref_tree_pruned = self._prune_tree_to_match(
+                self.ref_tree,
+                other_tree)
 
         # Actually do the comparison
         tree_assessor = TreeDistanceMeasurerAgg.create_single_abundance_measurer(
@@ -129,7 +131,9 @@ class ModelAssessor:
         # Compare to no collapse tree
         # If the other tree has a different set of leaves, figure out which subset of leaves to compare
         # against in the reference tree
-        other_tree_pruned = self._prune_tree_to_match(other_tree, self.ref_tree)
+        other_tree_pruned = self._prune_tree_to_match(
+                other_tree,
+                self.ref_tree)
         logging.info("other_tree num leaves %d", len(other_tree_pruned))
         tree_assessor = self._get_full_tree_assessor(other_tree_pruned)
         full_dist_dict = tree_assessor.get_tree_dists([other_tree_pruned])[0]

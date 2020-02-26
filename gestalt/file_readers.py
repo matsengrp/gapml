@@ -4,9 +4,13 @@ from typing import List
 from model_assessor import ModelAssessor
 
 
-def read_data(obs_file: str, topology_file: str = None, leaf_key: str= "leaf_key"):
+def read_data(
+        obs_file: str,
+        topology_file: str = None,
+        leaf_key: str= "leaf_key"):
     """
     Read the data files...
+    @param leaf_key: use this new leaf attribute as the unique leaf identifier
     """
     with open(obs_file, "rb") as f:
         obs_data_dict = six.moves.cPickle.load(f)
@@ -36,9 +40,11 @@ def read_true_model(
         n_bcodes: int,
         measurer_classes: List = [],
         scratch_dir: str = None,
+        use_error_prone_alleles: bool = False,
         leaf_key: str = "leaf_key"):
     """
     @param n_bcodes: the number of barcodes to restrict to when loading the true model
+    #param use_error_prone_alleles: if True, use the alleles observed with error as the key for comparing leaves
 
     If true model files available, read them
     """
@@ -48,6 +54,12 @@ def read_true_model(
     assessor = None
     if len(measurer_classes):
         true_tree = true_model["true_subtree"]
+
+        # If we are using an alternate reference leaf key, copy over the relevant quantities
+        if use_error_prone_alleles:
+            for leaf in true_tree:
+                leaf.allele_events_list = leaf.allele_events_list_error
+                leaf.allele_list = leaf.allele_list_error
 
         # Restrict the number of observed barcodes
         true_tree.restrict_barcodes(range(n_bcodes))

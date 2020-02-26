@@ -162,6 +162,13 @@ def parse_args(args):
         default=0,
         help='number of times we randomly rearrange tree at the beginning')
     parser.add_argument(
+        '--use-error-prone-alleles',
+        action='store_true',
+        help="""
+        if True, compare the estimated tree to the oracle tree, but use the leaves as labeled by the error.
+        You should set this to True if the true tree is observed with error
+        """)
+    parser.add_argument(
         '--scratch-dir',
         type=str,
         default=None)
@@ -258,7 +265,9 @@ def read_data(args):
     """
     Read the data files...
     """
-    tree, obs_data_dict = file_readers.read_data(args.obs_file, args.topology_file)
+    tree, obs_data_dict = file_readers.read_data(
+            args.obs_file,
+            args.topology_file)
     bcode_meta = obs_data_dict["bcode_meta"]
 
     # This section just prints interesting things...
@@ -285,13 +294,14 @@ def read_true_model_files(args, num_barcodes, measurer_classes=None):
         return None, None
 
     if measurer_classes == None:
-        measurer_classes = [BHVDistanceMeasurer, InternalCorrMeasurer]
+        measurer_classes = [InternalCorrMeasurer]
 
     true_model_dict, assessor = file_readers.read_true_model(
             args.true_model_file,
             num_barcodes,
             measurer_classes=measurer_classes,
-            scratch_dir=args.scratch_dir)
+            scratch_dir=args.scratch_dir,
+            use_error_prone_alleles=args.use_error_prone_alleles)
 
     return true_model_dict, assessor
 

@@ -195,6 +195,7 @@ class Allele:
             for tgt_i, cut_site in enumerate(self.bcode_meta.abs_cut_sites):
                 if evt[0] <= cut_site and evt[1] >= cut_site:
                     matching_targets.append(tgt_i)
+            assert len(matching_targets) > 0
 
             events.append(Event(
                 evt[0],
