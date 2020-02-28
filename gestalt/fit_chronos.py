@@ -60,7 +60,7 @@ def parse_args(args):
         type=str,
         default=None)
 
-    parser.set_defaults()
+    parser.set_defaults(use_error_prone_alleles=False)
     args = parser.parse_args(args)
 
     create_directory(args.out_model_file)

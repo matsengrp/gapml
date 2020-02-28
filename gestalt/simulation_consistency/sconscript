@@ -1,5 +1,4 @@
-# Test if we have any sort of consistency
-# This simulates a larger tree and performs a topology search
+# Test for consistency of model parameters
 
 import os
 
@@ -17,21 +16,8 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 MAX_NUM_BARCODES = 256
 NUM_BCODES = [16,64,256]
 NUM_RANDOM_REARRANGE = 20
-SEEDS = range(10)
+SEEDS = range(10,20)
 GROWTH_DICT = {
-    "tiny": {
-        "sampling_rate": 1,
-        "birth_sync_rounds": 5,
-        "birth_sync_time": 0.15,
-        "death_lambda": 0.2,
-        "birth_decay": -1,
-        "birth_min": 2,
-        "lambda_sequence": [1.4, 1.7, 1.1, 0.8],
-        "target_decay": 0,
-        "double": 0.03,
-        "min_leaves": 1,
-        "max_leaves": 10,
-    },
     "mini": {
         "sampling_rate": 0.08,
         "birth_sync_rounds": 4,

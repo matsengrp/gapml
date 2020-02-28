@@ -61,8 +61,7 @@ def get_true_model(
         seed,
         n_bcodes,
         error,
-        measurer_classes=[BHVDistanceMeasurer]):
-    print(args.true_model_file_template)
+        measurer_classes: list):
     file_name = args.true_model_file_template % (error, seed)
     model_params, assessor = file_readers.read_true_model(
             file_name,
@@ -74,7 +73,6 @@ def get_true_model(
 
 def get_mle_result(args, seed, n_bcodes, error):
     file_name = args.mle_file_template % (error, seed, n_bcodes)
-    print(file_name)
     try:
         with open(file_name, "rb") as f:
             mle_model = six.moves.cPickle.load(f)["final_fit"]
@@ -84,28 +82,27 @@ def get_mle_result(args, seed, n_bcodes, error):
 
 def main(args=sys.argv[1:]):
     args = parse_args(args)
-    perf_key = "full_bhv"
+    perf_keys = {
+            "full_bhv": BHVDistanceMeasurer,
+            "full_internal_pearson": InternalCorrMeasurer}
 
     all_perfs = []
     for error in args.errors_list:
         for n_bcodes in args.n_bcodes_list:
-            print("barcodes", n_bcodes)
             for seed in args.data_seeds:
-                print("seed", seed)
-                true_params, assessor = get_true_model(args, seed, n_bcodes, error)
-
                 try:
-                    print("mle")
+                    true_params, assessor = get_true_model(args, seed, n_bcodes, error, measurer_classes=list(perf_keys.values()))
                     mle_params, mle_tree = get_mle_result(args, seed, n_bcodes, error)
 
                     mle_perf_dict = assessor.assess(mle_tree, mle_params)
-                    res_dict = {
-                        'Error rate': error,
-                        'barcodes': n_bcodes,
-                        'seed': seed,
-                        'Performance metric': perf_key,
-                        'Value': mle_perf_dict[perf_key]}
-                    all_perfs.append(res_dict)
+                    for k, v in perf_keys.items():
+                        res_dict = {
+                            'Error rate': error,
+                            'barcodes': n_bcodes,
+                            'seed': seed,
+                            'Tree error measure': k,
+                            'Value': mle_perf_dict[k]}
+                        all_perfs.append(res_dict)
                 except FileNotFoundError:
                     print("not found mle", n_bcodes, seed)
 
@@ -113,14 +110,31 @@ def main(args=sys.argv[1:]):
     all_perfs = pd.DataFrame(all_perfs)
     print(all_perfs)
     sns.set_context("paper", font_scale = 1.8)
-    sns_plot = sns.relplot(
+    if len(args.n_bcodes_list) == 1:
+        if len(perf_keys) == 1:
+            sns_plot = sns.relplot(
+                x="Error rate",
+                y="Value",
+                kind="line",
+                data=all_perfs,
+            )
+        else:
+            sns_plot = sns.relplot(
+                x="Error rate",
+                y="Value",
+                col="Tree error measure",
+                kind="line",
+                data=all_perfs,
+                facet_kws={"sharey": False},
+            )
+    else:
+        sns_plot = sns.relplot(
             x="barcodes",
             y="Value",
             hue="Error rate",
             kind="line",
             data=all_perfs,
-    )
-    #sns_plot.fig.get_axes()[0].set_yscale('log')
+        )
     sns_plot.savefig(args.out_plot)
 
 

@@ -52,17 +52,16 @@ def get_true_model(
         args,
         seed,
         n_bcodes):
-    print(args.true_model_file_template)
     file_name = args.true_model_file_template % seed
     model_params, assessor = file_readers.read_true_model(
             file_name,
             n_bcodes,
-            scratch_dir=args.scratch_dir)
-    return model_params
+            scratch_dir=args.scratch_dir,
+            measurer_classes=[BHVDistanceMeasurer])
+    return model_params, assessor
 
 def get_mle_result(args, seed, n_bcodes):
     file_name = args.mle_file_template % (seed, n_bcodes)
-    print(file_name)
     try:
         with open(file_name, "rb") as f:
             mle_model = six.moves.cPickle.load(f)["final_fit"]
@@ -73,48 +72,45 @@ def get_mle_result(args, seed, n_bcodes):
 def main(args=sys.argv[1:]):
     args = parse_args(args)
     all_perfs = []
+    all_estimates = {n_bcodes: [] for n_bcodes in args.n_bcodes_list}
+    all_true_vals = {n_bcodes: [] for n_bcodes in args.n_bcodes_list}
     for n_bcodes in args.n_bcodes_list:
-        print("barcodes", n_bcodes)
         for seed in args.data_seeds:
-            print("seed", seed)
-            true_params = get_true_model(args, seed, n_bcodes)
+            true_params, assessor = get_true_model(args, seed, n_bcodes)
 
             try:
-                print("mle")
                 mle_params, mle_tree = get_mle_result(args, seed, n_bcodes)
+                mle_perf_dict = assessor.assess(mle_tree, mle_params)
                 mle_estimates = []
                 true_vals = []
                 for k, mle_estimate in mle_params.items():
                     if k in ["tot_time", "tot_time_extra", "target_lam_decay_rate"]:
                         continue
-
-                    print(k)
                     true_val = np.array(true_params[k])
                     if true_val.size == 0:
                         continue
-
                     true_vals.append(true_val.flatten())
                     mle_estimates.append(mle_estimate.flatten())
-                    print("TRUE VAL", true_val)
-                    print("MLE VAL", mle_estimate)
-
                     assert true_val.size == mle_estimate.size
-                    all_perfs.append({
-                        "Param": k,
-                        "Error": np.mean(np.power(mle_estimate - true_val, 2))/np.mean(np.power(true_val, 2)),
-                        "Number of barcodes": n_bcodes,
-                    })
+
                 true_vals = np.concatenate(true_vals)
                 mle_estimates = np.concatenate(mle_estimates)
                 all_perfs.append({
-                    "Param": "all",
-                    "Error": np.mean(np.power(mle_estimates - true_vals, 2))/np.mean(np.power(true_vals, 2)),
+                    "Param": "Mutation parameters",
+                    "Error": np.mean(np.power(mle_estimates - true_vals, 2)),
                     "Number of barcodes": n_bcodes,
                 })
+                all_perfs.append({
+                    "Param": "Tree",
+                    "Error": mle_perf_dict["full_bhv"],
+                    "Number of barcodes": n_bcodes,
+                })
+                all_estimates[n_bcodes].append(mle_estimates)
+                all_true_vals[n_bcodes].append(true_vals)
             except FileNotFoundError:
                 print("not found mle", n_bcodes, seed)
 
-
+    # Plot MSE and BHV
     method_perfs = pd.DataFrame(all_perfs)
     print(method_perfs)
     sns.set_context("paper", font_scale = 1.8)
@@ -125,8 +121,27 @@ def main(args=sys.argv[1:]):
             kind="line",
             data=method_perfs,
     )
-    #sns_plot.fig.get_axes()[0].set_yscale('log')
+    sns_plot.fig.get_axes()[0].set_yscale('log')
+    sns_plot._legend.set_title("")
     sns_plot.savefig(args.out_plot)
+
+    # Plot bias and variance now
+    print(all_true_vals)
+    biases = [np.mean(np.array(all_estimates[n_bcodes]) - np.array(all_true_vals[n_bcodes])) for n_bcodes in args.n_bcodes_list]
+    variances = [np.mean(np.var(all_estimates[n_bcodes], axis=0)) for n_bcodes in args.n_bcodes_list]
+    bias_var_all = pd.DataFrame({
+        "Value": np.concatenate([biases, variances]),
+        "Number of barcodes": np.concatenate([args.n_bcodes_list, args.n_bcodes_list]),
+        "Measure": ["Bias"] * len(args.n_bcodes_list) + ["Variance"] * len(args.n_bcodes_list),
+    })
+    print(bias_var_all)
+    sns_plot = sns.relplot(
+        x="Number of barcodes",
+        y="Value",
+        col="Measure",
+        data=bias_var_all,
+        kind="scatter",
+    )
 
 
 if __name__ == "__main__":

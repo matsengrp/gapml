@@ -15,9 +15,9 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 MAX_NUM_BARCODES = 10
 NUM_BCODES = [4]
-ERROR_RATES = [0, 0.1]
+ERROR_RATES = [0, 0.05, 0.1, 0.2]
 NUM_RANDOM_REARRANGE = 20
-SEEDS = range(2)
+SEEDS = range(50)
 GROWTH_DICT = {
     "mini": {
         "sampling_rate": 0.05,
@@ -184,12 +184,10 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    if c['num_barcodes'] == 1:
-        penalty_params = "32"
-        target_lam_penalty_params = "1"
-    elif c['num_barcodes'] == 4:
-        penalty_params = "32"
-        target_lam_penalty_params = "1"
+    #penalty_params = "32,16,8"
+    #target_lam_penalty_params = "1,0.25,0.1"
+    penalty_params = "32"
+    target_lam_penalty_params = "1"
 
     targets = [
                 join(outdir, 'gapml.pkl'),
@@ -225,17 +223,20 @@ def run_MLE(env, outdir, c):
         c['sum_states'],
         '--max-extra-steps',
         c['extra_steps'],
-        '--max-iters 500',
+        '--max-iters 1000',
         '--use-error-prone',
         '--num-inits 1',
         '--tot-time-known',
-        '--num-processes 1',
+        '--num-processes 4',
         '--num-init-random-rearrange 0',
         '--lambda-decay-known',
         '--scratch-dir',
 	join('simulation_sensitivity', outdir, 'scratch'),
     ]
-    cmd = cmd_arg
+    #cmd = cmd_arg
+    cmd = [
+        'srun -p matsen_e,campus',
+        '--cpus-per-task 4'] + cmd_arg
     c['MLE_res'].append(targets[0])
     return env.Command(targets, sources, ' '.join(map(str, cmd)))
 
@@ -245,7 +246,7 @@ nest.pop("error_rate")
 @nest.add_target_with_env(localenv)
 def plot_mle_res(env, outdir, c):
     targets = [
-        join(outdir, 'plot_mle_res.png')]
+        join(outdir, 'plot_simulation_sensitivity.png')]
     sources = [
                 c['model_list'],
                 c['MLE_res'],

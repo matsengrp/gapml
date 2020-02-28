@@ -15,6 +15,7 @@ localenv = env.Clone()
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 NUM_RANDOM_REARRANGE = 10
+SEEDS = range(300,320)
 GROWTH_DICT = {
     "30hpf": {
         "sampling_rate": 0.025,
@@ -37,12 +38,12 @@ nest.add(
     label_func=lambda c: 'model_seed%d' % c,
 )
 
+nest.add_aggregate('MLE_res', list)
+nest.add_aggregate('model_list', list)
+
 nest.add(
     'seed',
-    # 300 - 301 done!
-    #range(301,311), # quokka
-    #range(311,320), # quoll
-    range(320,321), # quokka
+    SEEDS,
 )
 
 nest.add(
@@ -91,20 +92,22 @@ def generate(env, outdir, c):
         targ_lambdas,
         '--target-lam-decay',
         GROWTH_DICT[c['growth_stage']]['target_decay'],
-        '--trim-zero-probs 0.1 0.05 0.1 0.05',
-        '--trim-short-params 1.5 -0.1 1 0.1',
-        '--trim-long-arams 0.5 0.8',
-        '--trim-long-factor 0.07 0.1',
-        '--insert-zero-prob 0.4',
-        '--insert-params 1.5 0',
+        '--trim-zero-probs 0.5 0.5 0.5 0.2',
+        '--trim-short-params 0.6 0.1 0.6 0.2',
+        '--trim-long-params 1.3 0.9',
+        '--trim-long-factor 0.05 0.05',
+        '--insert-zero-prob 0.5',
+        '--insert-params 1.0 0.1',
         '--perturb-target-lambdas-variance 0',
         '--max-tries 20',
     ]
-    return env.Command(
-        [
+    targets = [
             join(outdir, 'obs_data.pkl'),
             join(outdir, 'true_model.pkl'),
-            join(outdir, 'log.txt')],
+            join(outdir, 'log.txt')]
+    c['model_list'].append(targets[1])
+    return env.Command(
+        targets,
         [],
         ' '.join(map(str, cmd)))
 
@@ -218,30 +221,13 @@ nest.add(
     label_func=lambda c: "extra_steps_%d" % c,
 )
 
-nest.add(
-    'pen',
-    ["again"],
-    label_func=lambda c: "pen_%s" % c,
-)
-
 @nest.add_target_with_env(localenv)
 def run_MLE(env, outdir, c):
-    if c["pen"] == "0":
-        penalty_params = "0.000001"
-        target_lam_penalty_params = "0.0000001"
-        max_chad_tune_search = 1
-        num_chad_tune_iters = 1
-        num_chad_stop = 1
-    else:
-        penalty_params = "512,128,32"
-        target_lam_penalty_params = "16,4,1"
-        max_chad_tune_search = 15
-        num_chad_tune_iters = 8
-        num_chad_stop = 10
-
-    # Best pen params something like
-    # RUNNING branch pen param 256.000000 target lam pen param 1.000000
-    # chosen 64.000000, target_lam 1.000000
+    penalty_params = "512,128,32"
+    target_lam_penalty_params = "16,4,1"
+    max_chad_tune_search = 15
+    num_chad_tune_iters = 8
+    num_chad_stop = 10
 
     cmd_arg = [
         'python tune_topology.py',
@@ -291,12 +277,43 @@ def run_MLE(env, outdir, c):
         '--aws-machine mem',
         "${TARGETS[0]}",
         cmd_arg_str]
-    return env.Command(
-        [
+    targets = [
             join(outdir, 'tune_fitted.pkl'),
-            join(outdir, 'tune_fitted.txt')],
+            join(outdir, 'tune_fitted.txt')]
+    c['MLE_res'].append(targets[0])
+    return env.Command(
+        targets,
         [
             c['restrict_observed_alleles'][0],
             c['run_topology'][0],
             c['generate'][1]],
         ' '.join(map(str, cmd)))
+
+nest.pop("seed")
+
+@nest.add_target_with_env(localenv)
+def plot_mle_res(env, outdir, c):
+    targets = [
+        join(outdir, 'plot_mle_res.png')]
+    sources = [
+                c['model_list'],
+                c['MLE_res'],
+              ]
+    TEMPLATES  = [
+                c['MLE_res'][0].replace("/300/", "/%d/").replace("num_barcodes1","num_barcodes%d"),
+                c['model_list'][0].replace("/300/", "/%d/").replace("num_barcodes1","num_barcodes%d")
+    ]
+    cmd = [
+        'python plot_simulation_consistency.py',
+        '--n-bcodes-list 1',
+        '--mle-file',
+        join("simulation_compare", TEMPLATES[0]),
+        '--true-model-file',
+        join("simulation_compare", TEMPLATES[1]),
+        '--data-seeds',
+        ",".join(map(str, SEEDS)),
+        '--out-plot ${TARGETS[0]}',
+        '--scratch-dir',
+	join("simulation_compare", outdir, 'scratch'),
+    ]
+    return env.Command(targets, sources, ' '.join(map(str, cmd)))
