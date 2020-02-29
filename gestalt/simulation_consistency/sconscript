@@ -264,7 +264,9 @@ nest.pop("seed")
 @nest.add_target_with_env(localenv)
 def plot_mle_res(env, outdir, c):
     targets = [
-        join(outdir, 'plot_mle_res.png')]
+        join(outdir, 'plot_mle_res.png'),
+        join(outdir, 'plot_bias_var.png'),
+    ]
     sources = [
                 c['model_list'],
                 c['MLE_res'],
@@ -284,6 +286,7 @@ def plot_mle_res(env, outdir, c):
         '--data-seeds',
         ",".join(map(str, SEEDS)),
         '--out-plot ${TARGETS[0]}',
+        '--bias-var-plot ${TARGETS[1]}',
         '--scratch-dir',
 	join("simulation_consistency", outdir, 'scratch'),
     ]

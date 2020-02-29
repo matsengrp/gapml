@@ -26,9 +26,11 @@ def parse_args(args):
         type=str,
         default=",".join(map(str, range(20,40))))
     parser.add_argument(
+        '--bias-var-plot',
+        type=str)
+    parser.add_argument(
         '--out-plot',
-        type=str,
-        default="_output/%s_plot_test.png")
+        type=str)
     parser.add_argument(
         '--scratch-dir',
         type=str,
@@ -126,7 +128,6 @@ def main(args=sys.argv[1:]):
     sns_plot.savefig(args.out_plot)
 
     # Plot bias and variance now
-    print(all_true_vals)
     biases = [np.mean(np.array(all_estimates[n_bcodes]) - np.array(all_true_vals[n_bcodes])) for n_bcodes in args.n_bcodes_list]
     variances = [np.mean(np.var(all_estimates[n_bcodes], axis=0)) for n_bcodes in args.n_bcodes_list]
     bias_var_all = pd.DataFrame({
@@ -141,7 +142,9 @@ def main(args=sys.argv[1:]):
         col="Measure",
         data=bias_var_all,
         kind="scatter",
+        facet_kws={"sharey": False},
     )
+    sns_plot.savefig(args.bias_var_plot)
 
 
 if __name__ == "__main__":
