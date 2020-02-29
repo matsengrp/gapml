@@ -137,6 +137,7 @@ def plot_distance_to_num_germ_layers(
     pyplot.ylabel("Number of descendant germ layers")
     pyplot.xlabel("Distance from root")
     pyplot.tight_layout()
+    sns.despine()
     pyplot.savefig(out_plot_file)
 
 def get_distance_to_num_cell_states(
@@ -189,6 +190,7 @@ def plot_distance_to_num_cell_states(
     pyplot.ylabel("Number of descendant cell types")
     pyplot.xlabel("Distance from root")
     pyplot.tight_layout()
+    sns.despine()
     pyplot.savefig(out_plot_file)
 
 

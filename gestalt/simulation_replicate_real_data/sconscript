@@ -14,21 +14,21 @@ localenv = env.Clone()
 # Set up state
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
-USE_AWS = False
 NUM_RANDOM_REARRANGE = 10
+SEEDS = range(10)
 GROWTH_DICT = {
     "dome": {
         "sampling_rate": 0.1,
         "birth_sync_rounds": 9,
-        "birth_sync_time": 0.081,
+        "birth_sync_time": 0.078,
         "death_lambda": 0.1,
         "birth_decay": -1,
         "birth_min": 0.1,
-        "lambda_sequence": [3.6, 0.2, 0.0225, 0.75, 0.25, 0.5, 1.53, 0.07, 1.5, 0.01],
+        "lambda_sequence": [1.7, 0.55, 0.2, 0.55, 0.45, 0.6, 1.4, 0.25, 1.25, 0.2],
         "target_decay": 0.01,
         "double": 0.04,
-        "min_leaves": 500,
-        "max_leaves": 800,
+        "min_leaves": 900,
+        "max_leaves": 2500,
     },
 }
 
@@ -37,10 +37,11 @@ nest.add(
     [0],
     label_func=lambda c: 'model_seed%d' % c,
 )
+nest.add_aggregate('obs_list', list)
 
 nest.add(
     'seed',
-    range(1,11),
+    SEEDS,
 )
 
 nest.add(
@@ -91,13 +92,12 @@ def generate(env, outdir, c):
         targ_lambdas,
         '--target-lam-decay',
         GROWTH_DICT[c['growth_stage']]['target_decay'],
-        '--boost 1 2 2',
-        '--trim-zero-probs 0.1 0.1 0.5 0.2',
-        '--trim-short-params 0.2 1 0.2 1',
-        '--trim-long-params 0.6 0.6',
-        '--trim-long-factor 0.1 0.1',
-        '--insert-zero-prob 0.1',
-        '--insert-param 0 1',
+        '--trim-zero-probs 0.0814752   0.09483087  0.51985543  0.30612402',
+        '--trim-short-params 0.4   1  -2 10',
+        '--trim-long-params 2.08453578  1.27399409',
+        '--trim-long-factor 0.0583183   0.09442545',
+        '--insert-zero-prob 0.6',
+        '--insert-params -0.37634279  1.65025805',
         '--perturb-target-lambdas-variance 0',
         '--max-tries 20',
     ]
@@ -125,9 +125,36 @@ def restrict_observed_alleles(env, outdir, c):
         '--out-obs-file ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}',
     ]
+    targets = [
+            join(outdir, 'obs_data.pkl'),
+            join(outdir, 'log_restrict.txt')]
+    c['obs_list'].append(targets[0])
+    return env.Command(
+        targets,
+        c['generate'],
+        ' '.join(map(str, cmd)))
+
+nest.pop('seed')
+
+@nest.add_target_with_env(localenv)
+def plot(env, outdir, c):
+    template = os.path.join("simulation_replicate_real_data", c['obs_list'][0].replace("/%d/" % SEEDS[0], "/%d/"))
+    cmd = [
+        'python plot_simulation_replicate_real_data.py',
+        '--real-data analyze_gestalt/_output/dome1/sampling_seed0/fish_data_restrict.pkl',
+        '--out-plot-abun ${TARGETS[0]}',
+        '--out-plot-target ${TARGETS[1]}',
+        '--out-plot-bcode ${TARGETS[2]}',
+        '--obs-file-template',
+        template,
+        '--data-seeds',
+        ','.join(map(str, SEEDS)),
+    ]
     return env.Command(
         [
-            join(outdir, 'obs_data.pkl'),
-            join(outdir, 'log_restrict.txt')],
-        c['generate'],
+            join(outdir, 'simulation_abundance.png'),
+            join(outdir, 'simulation_target_deact.png'),
+            join(outdir, 'simulation_bcode_exhaust.png'),
+        ],
+        c['obs_list'],
         ' '.join(map(str, cmd)))

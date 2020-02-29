@@ -299,9 +299,9 @@ nest.add(
         #"30hpf_v6_8", # DONE
         #"dome1", # DONE
         #"dome3", # DONE
-        #"dome5",  # running
+        #"dome5",  # failed
         #"dome8",  # DONE
-        "dome10", # failed chad tuning
+        #"dome10", # DONE
         #"epi90_2", # DONE
         #"epi90_5", # DONE
         #"epi90_8", # DONE
@@ -312,7 +312,7 @@ nest.add(
         #"3day3", # DONE
         #"3day4",  # DONE
         #"3day5", # DONE
-        #"3day6", # running
+        #"3day6", # failed
     ],
 )
 

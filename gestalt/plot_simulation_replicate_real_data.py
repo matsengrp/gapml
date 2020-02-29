@@ -22,28 +22,15 @@ def parse_args(args):
             description='plot descriptive stats of real data vs. simulated data')
     parser.add_argument(
         '--real-data',
-        type=str,
-        default="analyze_gestalt/_output/dome1_abund1/fish_data_restrict.pkl")
+        type=str)
     parser.add_argument(
         '--obs-file-template',
         type=str,
-        default="_output/model_seed%d/%d/%s/num_barcodes1/obs_data.pkl")
-    parser.add_argument(
-        '--simulation-folder',
-        type=str,
-        default="simulation_replicate_real_data")
-    parser.add_argument(
-        '--model-seed',
-        type=int,
-        default=0)
+        default="_output/model_seed0/%d/num_barcodes1/obs_data.pkl")
     parser.add_argument(
         '--data-seeds',
         type=str,
         default=",".join(map(str, range(1,11))))
-    parser.add_argument(
-        '--growth-stage',
-        type=str,
-        default="dome")
     parser.add_argument(
         '--out-plot-abundance',
         type=str,
@@ -92,6 +79,8 @@ def plot_abundance_histogram(sim_obs_all, real_obs_data_dict, out_plot_file):
             x="num_obs",
             y="CDF",
             hue="label",
+            hue_order=["Dome Fish 1"] + ["Simulation %d" % idx for idx in range(len(sim_obs_all))],
+            palette="Blues_d",
             data=df,
             size="style",
             sizes={
@@ -100,6 +89,7 @@ def plot_abundance_histogram(sim_obs_all, real_obs_data_dict, out_plot_file):
             legend=False)
     plt.xlabel("Number of times allele is observed")
     plt.tight_layout()
+    sns.despine()
     plt.savefig(out_plot_file)
 
 def get_target_deactivated_df(obs_data_dict, label, style):
@@ -125,7 +115,7 @@ def plot_target_deact_histogram(sim_obs_all, real_obs_data_dict, out_plot_file):
     for idx, sim_obs_data_dict in enumerate(sim_obs_all):
         sim_targ = get_target_deactivated_df(
                 sim_obs_data_dict,
-                "Simulated %d" % idx,
+                "Simulation %d" % idx,
                 "Simulation")
         all_data.append(sim_targ)
     real_targ = get_target_deactivated_df(
@@ -143,6 +133,8 @@ def plot_target_deact_histogram(sim_obs_all, real_obs_data_dict, out_plot_file):
             x="target",
             y="Frequency",
             hue="label",
+            hue_order=["Dome Fish 1"] + ["Simulation %d" % idx for idx in range(len(sim_obs_all))],
+            palette="Blues_d",
             data=df,
             size="style",
             sizes={
@@ -153,6 +145,7 @@ def plot_target_deact_histogram(sim_obs_all, real_obs_data_dict, out_plot_file):
     plt.xticks(np.arange(1, NUM_TARGETS + 1))
     plt.ylabel("Frequency target was deactivated")
     plt.tight_layout()
+    sns.despine()
     plt.savefig(out_plot_file)
 
 def get_bcode_exhaustion_df(obs_data_dict, label, style):
@@ -176,7 +169,7 @@ def plot_bcode_exhaustion(sim_obs_all, real_obs_data_dict, out_plot_file):
     for idx, sim_obs_data_dict in enumerate(sim_obs_all):
         sim_deact_proportions = get_bcode_exhaustion_df(
                 sim_obs_data_dict,
-                "Simulated %d" % idx,
+                "Simulation %d" % idx,
                 "Simulation")
         all_data.append(sim_deact_proportions)
     real_deact_proportions = get_bcode_exhaustion_df(
@@ -191,6 +184,8 @@ def plot_bcode_exhaustion(sim_obs_all, real_obs_data_dict, out_plot_file):
         x="num_targets_deactivated",
         y="proportions",
         hue="label",
+        hue_order=["Dome Fish 1"] + ["Simulation %d" % idx for idx in range(len(sim_obs_all))],
+        palette="Blues_d",
         data=data,
         size="style",
         sizes={
@@ -201,6 +196,7 @@ def plot_bcode_exhaustion(sim_obs_all, real_obs_data_dict, out_plot_file):
     plt.xlabel("Number of inactive targets in observed barcode")
     plt.xticks(np.arange(NUM_TARGETS + 1))
     plt.ylabel("Proportion")
+    sns.despine()
     plt.savefig(out_plot_file)
 
 def main(args=sys.argv[1:]):
@@ -212,13 +208,11 @@ def main(args=sys.argv[1:]):
 
     sim_obs_all = []
     for data_seed in args.data_seeds:
-        obs_file = os.path.join(
-                args.simulation_folder,
-                args.obs_file_template % (args.model_seed, data_seed, args.growth_stage))
+        obs_file = args.obs_file_template % data_seed
         with open(obs_file, "rb") as f:
             sim_obs_data_dict = six.moves.cPickle.load(f)
-            print("num obs SIM", len(sim_obs_data_dict["obs_leaves"]))
-        if len(sim_obs_data_dict["obs_leaves"]) > num_obs_real * 0.9:
+        print("num obs SIM", len(sim_obs_data_dict["obs_leaves"]))
+        if len(sim_obs_data_dict["obs_leaves"]) > num_obs_real * 0.85:
             sim_obs_all.append(sim_obs_data_dict)
         else:
             print("skipping. too few obs")

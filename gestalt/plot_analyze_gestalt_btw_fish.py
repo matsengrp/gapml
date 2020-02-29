@@ -243,6 +243,7 @@ def main(args=sys.argv[1:]):
         plt.yscale("log")
         plt.title(fish_name)
         plt.tight_layout()
+        sns.despine()
         plt.savefig(args.out_plot_template % fish_name.replace(" ","_"))
 
     if len(args.fishies) == 2:
