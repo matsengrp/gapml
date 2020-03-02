@@ -290,8 +290,8 @@ nest.add(
         #"ADR1", # DONE
         #"ADR2", # DONE
         #"30hpf_v6_1", # failed from weird things
-        #"30hpf_v6_2", # running
-        #"30hpf_v6_3", # running
+        #"30hpf_v6_2", # failed
+        #"30hpf_v6_3", # failed
         "30hpf_v6_4", # failed chad
         #"30hpf_v6_5", # DONE
         #"30hpf_v6_6", # DONE

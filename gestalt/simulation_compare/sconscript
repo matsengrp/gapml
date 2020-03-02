@@ -39,6 +39,8 @@ nest.add(
 )
 
 nest.add_aggregate('MLE_res', list)
+nest.add_aggregate('chronos_res', list)
+nest.add_aggregate('nj_res', list)
 nest.add_aggregate('model_list', list)
 
 nest.add(
@@ -174,10 +176,12 @@ def run_chronos(env, outdir, c):
         '--scratch-dir',
 	join('simulation_compare', outdir, 'scratch'),
     ]
-    return env.Command(
-        [
+    targets = [
             join(outdir, 'chronos_fitted.pkl'),
-            join(outdir, 'chronos_fitted.txt')],
+            join(outdir, 'chronos_fitted.txt')]
+    c['chronos_res'].append(targets[0])
+    return env.Command(
+        targets,
         [
             c['restrict_observed_alleles'][0],
             c['run_topology'][0],
@@ -200,10 +204,12 @@ def run_neighbor_joining(env, outdir, c):
         '--scratch-dir',
 	join('simulation_compare', outdir, 'scratch'),
     ]
-    return env.Command(
-        [
+    targets = [
             join(outdir, 'nj_fitted.pkl'),
-            join(outdir, 'nj_fitted.txt')],
+            join(outdir, 'nj_fitted.txt')]
+    c['nj_res'].append(targets[0])
+    return env.Command(
+        targets,
         [
             c['restrict_observed_alleles'][0],
             c['generate'][1]],
@@ -294,29 +300,34 @@ nest.pop("seed")
 @nest.add_target_with_env(localenv)
 def plot_mle_res(env, outdir, c):
     targets = [
-        join(outdir, 'plot_mle_res.png'),
-        join(outdir, 'plot_bias_var.png'),
+        join(outdir, 'log_simulation_compare.txt'),
     ]
     sources = [
                 c['model_list'],
                 c['MLE_res'],
+                c['nj_res'],
+                c['chronos_res'],
               ]
     TEMPLATES  = [
                 c['MLE_res'][0].replace("/300/", "/%d/").replace("num_barcodes1","num_barcodes%d"),
+                c['chronos_res'][0].replace("/300/", "/%d/").replace("num_barcodes1","num_barcodes%d"),
+                c['nj_res'][0].replace("/300/", "/%d/").replace("num_barcodes1","num_barcodes%d"),
                 c['model_list'][0].replace("/300/", "/%d/").replace("num_barcodes1","num_barcodes%d")
     ]
     cmd = [
-        'python plot_simulation_consistency.py',
-        '--n-bcodes-list 1',
+        'python plot_simulation_compare.py',
         '--mle-file',
         join("simulation_compare", TEMPLATES[0]),
-        '--true-model-file',
+        '--chronos-file',
         join("simulation_compare", TEMPLATES[1]),
+        '--nj-file',
+        join("simulation_compare", TEMPLATES[2]),
+        '--true-model-file',
+        join("simulation_compare", TEMPLATES[3]),
         '--data-seeds',
         ",".join(map(str, SEEDS)),
-        '--out-plot ${TARGETS[0]}',
-        '--bias-var-plot ${TARGETS[1]}',
         '--scratch-dir',
 	join("simulation_compare", outdir, 'scratch'),
+        '> ${TARGETS[0]}'
     ]
     return env.Command(targets, sources, ' '.join(map(str, cmd)))
