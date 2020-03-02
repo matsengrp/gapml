@@ -142,8 +142,8 @@ def main(args=sys.argv[1:]):
     # Plot MSE and BHV
     method_perfs = pd.DataFrame(all_perfs)
     print(method_perfs)
-    mean = method_perfs.groupby('Method').mean(axis=0)
-    std_err = np.sqrt(method_perfs.groupby('Method').var(axis=0)/method_perfs.shape[0])
+    mean = method_perfs.groupby('method').mean()
+    std_err = np.sqrt(method_perfs.groupby('method').var()/method_perfs.shape[0])
 
     print("MEAN", mean)
     print("LOWER 95 CI", mean - 1.96 * std_err)
