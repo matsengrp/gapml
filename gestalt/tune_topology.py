@@ -27,7 +27,7 @@ import collapsed_tree
 
 def parse_args(args):
     parser = argparse.ArgumentParser(
-            description='tune over topologies and fit model parameters')
+            description='tune over topologies using GAPML and fit model parameters')
     parser.add_argument(
         '--seed',
         type=int,
@@ -36,30 +36,46 @@ def parse_args(args):
         '--obs-file',
         type=str,
         default="_output/obs_data_b1.pkl",
-        help='pkl file with observed sequence data, should be a dict with ObservedAlignSeq')
+        help="""
+        pkl file with observed sequence data, should be a dict with ObservedAlignSeq.
+        (For example, you can use read_gestalt_data.py to process GESTALT data into this desired format.)
+        """)
     parser.add_argument(
         '--topology-file',
         type=str,
         default="_output/parsimony_tree0.pkl",
-        help="Topology file")
+        help="""
+        A tree topology to initialize the tree search.
+        Output should come from get_parsimony_topologies.py
+        """)
     parser.add_argument(
         '--init-model-params-file',
         type=str,
         default=None,
-        help='pkl file with initializations')
+        help="""
+        File with initial values for the model parameters. Optional.
+        """)
     parser.add_argument(
         '--out-model-file',
         type=str,
-        default="_output/tune_topology_fitted.pkl")
+        default="_output/tune_topology_fitted.pkl",
+        help="""
+        Where to output the tree estimate and model parameters. Comes out as a pkl file
+        """)
     parser.add_argument(
         '--log-file',
         type=str,
-        default="_output/log_tune_topology.txt")
+        default="_output/log_tune_topology.txt",
+        help="""
+        Where to output logs
+        """)
     parser.add_argument(
         '--true-model-file',
         type=str,
         default=None,
-        help='pkl file with true model if available')
+        help="""
+        pkl file with true model if available. Used to track model estimation progress
+        """)
     parser.add_argument(
         '--target-lam-pen-params',
         type=str,
@@ -88,14 +104,16 @@ def parse_args(args):
         type=int,
         default=5,
         help="""
-        Maximum number of random splits to fit on the data
+        Maximum number of random splits of the data to actually fit for tuning penalty parameters
+        (So even if you specify num_penalty_tune_splits = 5, if max_fit_splits = 3, then we will
+        randomly pick 3 of the splits for actually tuning penalty parameters)
         """)
     parser.add_argument(
         '--num-penalty-tune-splits',
         type=int,
         default=2,
         help="""
-        Number of random splits of the data for tuning penalty params.
+        Specifies K for constructing K-way data splits for tuning penalty params.
         """)
     parser.add_argument(
         '--num-chad-stop',
@@ -103,7 +121,8 @@ def parse_args(args):
         default=2,
         help="""
         If we select don't change the tree topology for this many steps in a row,
-        then we stop the hanging chad tuner.
+        then we stop tuning the topology.
+        Note: Hanging chads in the code refer to SPR moves that preserve the parsimony score.
         """)
     parser.add_argument(
         '--num-chad-tune-iters',
@@ -111,77 +130,99 @@ def parse_args(args):
         default=2,
         help="""
         Number of iterations to tune the tree topology (aka hanging chads)
+        Note: Hanging chads in the code refer to SPR moves that preserve the parsimony score.
         """)
     parser.add_argument(
         '--max-chad-tune-search',
         type=int,
         default=2,
         help="""
-        Maximum number of new hanging chad locations to consider at a time
+        Maximum number of candidate SPR moves to consider at each iteration
+        Note: Hanging chads in the code refer to SPR moves that preserve the parsimony score.
         """)
-    parser.add_argument('--max-iters', type=int, default=20)
-    parser.add_argument('--num-inits', type=int, default=1)
+    parser.add_argument(
+            '--max-iters',
+            type=int,
+            default=20,
+            help="""
+            Maximum number of training iterations used when tuning branch lengths and mutation parameters.
+            """)
+    parser.add_argument(
+            '--num-inits',
+            type=int,
+            default=1,
+            help="""
+            Number of initializations to try minimizing penalized log likelihood, for tuning branch lengths and mutation parameters
+            """)
     parser.add_argument(
         '--max-extra-steps',
         type=int,
         default=1,
-        help='maximum number of extra steps to explore possible ancestral states')
+        help="""
+        When computing the approximate likelihood, use this as the maximum number of additional hidden
+        mutations to consider when enumerating likely ancestral states
+        """)
     parser.add_argument(
         '--max-sum-states',
         type=int,
         default=1,
-        help='if number of ancestral states exceeds this, consider a smaller number of extra steps')
+        help="""
+        Maximum number of ancestral states to sum over when computing the likelihood.
+        If the number of likely ancestral states exceeds this number, try shrinking the number of additional hidden mutations when
+        enumerating likely ancestral states
+        """)
     parser.add_argument(
         '--lambda-known',
         action='store_true',
-        help='are target rates known?')
+        help='Indicates if target rates are known. Only use if you simulated data and provide the true model informaiton.')
     parser.add_argument(
         '--lambda-decay-known',
         action='store_true',
-        help='are target rate decay rates known?')
+        help='Indicates if target rate decay is known. Only use if you simulated data and provide the true model informaiton.')
     parser.add_argument(
         '--lambda-decay-fixed',
         type=float,
-        default=None)
+        default=0,
+        help='Fix the target rate decay. Zero means the target rate does not decay with time.')
     parser.add_argument(
         '--tot-time-known',
         action='store_true',
-        help='is total time known?')
-    parser.add_argument(
-        '--do-refit',
-        action='store_true',
-        help='refit the bifurc tree?')
+        default=True,
+        help='Indicates if total tree height is known. Set this to true!')
     parser.add_argument(
         '--num-processes',
         type=int,
         default=1,
-        help='number of subprocesses to invoke for running')
+        help='Number of subprocesses to invoke for running GAPML')
     parser.add_argument(
         '--num-init-random-rearrange',
         type=int,
         default=0,
-        help='number of times we randomly rearrange tree at the beginning')
+        help='Number of times we randomly rearrange the tree topology (preserving the parsimony score) at the beginning')
     parser.add_argument(
         '--use-error-prone-alleles',
         action='store_true',
         help="""
-        if True, compare the estimated tree to the oracle tree, but use the leaves as labeled by the error.
-        You should set this to True if the true tree is observed with error
+        Use only if feeding in simulated data where the alleles were observed at some nonzero error rate.
+        If True, compare the estimated tree to the oracle tree, but use the leaves as labeled by the error.
         """)
     parser.add_argument(
         '--scratch-dir',
         type=str,
-        default=None)
+        default=None,
+        help="""
+        A directory to put all the scratch files in
+        """)
     parser.add_argument(
         '--count-chads',
         action='store_true',
         help="""
-        Log the number of hanging chads found in the tree
+        Log the number of possible SPR moves in the tree
         """)
     parser.add_argument(
         '--use-poisson',
         action='store_true',
-        help="Use poisson distribution")
+        help="Use poisson distribution for the insertion and deletion length distributions")
 
     parser.set_defaults(tot_time_known=True, use_error_prone_alleles=False)
     args = parser.parse_args(args)
