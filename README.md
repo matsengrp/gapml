@@ -32,9 +32,10 @@ You need to create a file `constant_paths.py` in the `gestalt` folder that provi
 # Fitting the trees via alternative methods
 `fit_chronos.py`: uses Sanderson 2002, the `chronos` function in R package `ape`
 
-# Running analyses in the paper
-We do this using scons.
-For example: `scons simulation_topol_consist/ -n --clusters=beagle`
+# How to get things running quickly and how to run analyses in the paper
+The full pipelines are specified in the sconscript files.
+To run it, we use `scons`. For example: `scons simulation_topol_consist/`
+The sconscript files provides the full pipeline for generating data and analyzing it (see `simulation_topol_consist/sconscript` as an example) as well as processing data from GESTALT and analyzing it (see `analyze_gestalt/sconscript` as an example).
 
 # Running tests
 To run all the tests:
