@@ -45,3 +45,6 @@ To run specific test module tests/test\_me.py:
 ```
 python3 -m unittest tests.<test_me>
 ```
+
+# Experimental results
+The fitted trees for the two adult fish in the paper is available at `gestalt/analyze_gestalt/_output/ADR*_PMLE_tree.json`.
