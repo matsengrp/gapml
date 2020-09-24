@@ -1,5 +1,5 @@
 # GAPML: GESTALT analysis using penalized maximum likelihood
-Associated paper: Feng et al, "Estimation of cell lineage trees by maximum-likelihood phylogenetics" (submitted for review), preprint available on [BioRxiv](https://www.biorxiv.org/content/10.1101/595215v1).
+Associated paper: Feng et al, "Estimation of cell lineage trees by maximum-likelihood phylogenetics" (accepted at Annals of Applied Statistics), preprint available on [BioRxiv](https://www.biorxiv.org/content/10.1101/595215v1).
 
 # Installation
 You will need to have PHYLIP mix installed so that you can call `mix` on the command line.
