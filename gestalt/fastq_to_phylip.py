@@ -19,7 +19,7 @@ def write_seqs_to_phy(processed_seqs: Dict[str, List],
                       phy_file: str,
                       abundance_file: str,
                       encode_hidden: bool =True,
-                    # TODO: currently ignored. include cell state in the future?
+                    # TODO: currently ignored.
                     use_cell_state: bool =False):
     """
     @param processed_seqs: dict key = sequence id, dict val = [abundance, list of events]

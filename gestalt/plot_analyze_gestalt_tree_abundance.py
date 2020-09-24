@@ -82,7 +82,6 @@ def plot_gestalt_tree(
 def main(args=sys.argv[1:]):
     args = parse_args(args)
     print(args)
-    # TODO: this doesnt work right now. need to add in prefix of tmp_mount
     tree = load_data(args)
     out_plot = args.out_plot_template % args.fish
     plot_gestalt_tree(

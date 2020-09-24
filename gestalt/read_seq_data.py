@@ -28,7 +28,6 @@ def process_event_format7B(event_str: str, min_target: int, max_target: int, min
     Right now processes events in a super dumb way.
     There are no complex events grouped in a single event
     (e.g. there are no simultaneous deletions and insertions right now)
-    TODO: make this better? make the sequence file better?
     """
     event_split = event_str.split("+")
     event_type_str = event_split[0][-1]

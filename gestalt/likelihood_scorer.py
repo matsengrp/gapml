@@ -213,7 +213,6 @@ class LikelihoodScorer(ParallelWorker):
             scratch_dir=self.scratch_dir,
             use_poisson=self.use_poisson,
             # doesnt matter what value is set here for now. will be overridden
-            # TODO: remove this line/argument eventually cause it's ugly...
             target_lams=self.fit_param_list[0]['target_lams'])
         estimator = CLTPenalizedEstimator(
             res_model,

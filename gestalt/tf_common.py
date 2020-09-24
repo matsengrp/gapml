@@ -90,7 +90,6 @@ def _expm_grad(op, grad0, grad1, grad2, grad3):
             (This will be assuming that only the first output of expm is used
             and the rest is not used to calculate the final value.)
 
-    TODO: think about if this code can be less memory intensive
 
     Gradient calculations based on Kalbfleisch (1985)
     """

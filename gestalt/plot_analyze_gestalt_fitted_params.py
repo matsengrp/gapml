@@ -54,16 +54,12 @@ def get_insert_length_mean_sd(all_model_params):
     return insert_dist.mean() + 1, insert_dist.std()
 
 def get_long_trim_length_mean(all_model_params, is_left):
-    # TODO: take into account the inflation and stuff...
     start_idx = 0 if is_left else 2
     count = np.exp(all_model_params["trim_long_params"][start_idx + 0])
     prob = sigmoid(all_model_params["trim_long_params"][start_idx + 1])
-    print(count)
-    print(prob)
     return count * prob/(1 - prob)
 
 def get_long_trim_length_sd(all_model_params, is_left):
-    # TODO: take into account the inflation and stuff...
     start_idx = 0 if is_left else 2
     return 0
 

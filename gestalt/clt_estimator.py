@@ -107,7 +107,6 @@ class CLTParsimonyEstimator(CLTEstimator):
     def _create_mix_cfg(self, seed_num, num_jumbles=5):
         """
         Writes a mix config file
-        TODO: create and specify the weights file too, weights based on abundance values
 
         @param seed_num: seed passed to mix, specified in MIX config
         @param num_jumbles: number of jumbles, specified in MIX config
@@ -152,7 +151,6 @@ class CLTParsimonyEstimator(CLTEstimator):
                 calls out to mix on the command line
                 writes files: infile, test.abundance, outfile
 
-        TODO: send weights to phylip mix too eventually
         """
         processed_seqs, event_dicts, event_list = data_binarizer.binarize_observations(
             self.bcode_meta,

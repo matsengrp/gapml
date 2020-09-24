@@ -222,7 +222,6 @@ def get_parsimony_trees(
     return parsimony_trees
 
 def main(args=sys.argv[1:]):
-    # TODO: we may want to consider multiple runs and check that the parsimony score is stable
     args = parse_args()
     logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.DEBUG)
     logging.info(str(args))
@@ -239,8 +238,6 @@ def main(args=sys.argv[1:]):
     oracle_measurer = None
     distance_cls = UnrootRFDistanceMeasurer
     if args.model_file is not None:
-        # TODO: we might not think that the best tree is the collapsed tree. Need to add more flexibility
-        #       if we want to use a different tree metric and oracle tree
         with open(args.model_file, "rb") as f:
             true_model_dict = six.moves.cPickle.load(f)
             oracle_measurer = distance_cls(true_model_dict["collapsed_subtree"], args.scratch_dir)

@@ -124,7 +124,6 @@ class CLTObserver:
             allele_list_with_errors = self._observe_leaf_with_error(leaf, error=0)
             allele_events_list_with_errors = allele_list_with_errors.get_event_encoding()
 
-            # TODO: i dont think this observes cell state correctly
             # But then again, all te simulations with cell state are broekn probably
             if observe_cell_state:
                 collapse_id = (leaf.allele_events_list_str, str(leaf.cell_state))
@@ -184,14 +183,12 @@ class CLTObserver:
 
                 start_pos_perturb = evt.start_pos
                 if np.random.rand() < self.error_rate:
-                    # TODO: Be careful about deactivating other targets
                     min_start = self.bcode_meta.abs_cut_sites[evt.min_target - 1] if evt.min_target > 0 else 0
                     max_start = self.bcode_meta.abs_cut_sites[evt.min_target]
                     start_pos_perturb = np.random.randint(min_start, max_start)
 
                 del_len_perturb = evt.del_end - start_pos_perturb
                 if np.random.rand() < self.error_rate:
-                    # TODO: Be careful about deactivating other targets
                     min_end = self.bcode_meta.abs_cut_sites[evt.max_target]
                     max_end = self.bcode_meta.abs_cut_sites[evt.max_target + 1] if evt.max_target < self.bcode_meta.n_targets - 1 else self.bcode_meta.orig_length - 1
                     end_len_perturb = np.random.randint(min_end, max_end)

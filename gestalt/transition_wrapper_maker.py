@@ -172,8 +172,6 @@ class TransitionWrapperMaker:
         @param anc_state: AncState for specifying the possible ancestral states of this node
         @param requred_target_status: we want target tract tuples that are close to this target status
 
-        TODO: this code is really inefficient and slow but it works for now
-
         @return List[TargetTractTuples] -- target tract tuples within max_steps of
         """
         if max_steps == 0:

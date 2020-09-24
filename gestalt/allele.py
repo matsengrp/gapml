@@ -59,8 +59,6 @@ class Allele:
     GESTALT target array with spacer sequences
     v7 allele from GESTALT paper Table S4 is unedited allele
     initial allele state equal to v7 by default
-
-    TODO: check that we are using the right allele
     '''
     INDEL_TRANS = {'A':'-', 'C':'-','G':'-','T':'-','a':None,'c':None,'g':None,'t':None}
 
@@ -81,7 +79,6 @@ class Allele:
         @return List[int], index of the targets that can be cut, e.g. the targets where the crucial positions
         are not modified
         """
-        # TODO: right now this code is pretty inefficient... but only used by simulator i think?
         events = self.get_event_encoding().events
         target_status = TargetStatus()
         # Note that this code adds the events to the target status in some arbitrary, potentially incorrect, order

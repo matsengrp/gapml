@@ -92,15 +92,3 @@ class AlignerNW(Aligner):
                 return events
         return events_list
 
-# TODO:  can define different affine gap functions for each sequence and can be site-aware
-#
-# def gap_function(x, y):  # x is gap position in seq, y is gap length
-#     '''this is where we can introduce knowledge of cut sites'''
-#     if y == 0:  # No gap
-#         return 0
-#     elif y == 1:  # Gap open penalty
-#         return -2
-#     return - (2 + y/4.0 + log(y)/2.0)
-#
-# alignment = pairwise2.align.globalmc("ACCCCCGT", "ACG", 5, -4,
-#                                       gap_function, gap_function)

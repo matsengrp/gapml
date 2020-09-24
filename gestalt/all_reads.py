@@ -5,7 +5,6 @@ from allele_events import AlleleEvents
 
 class CellRead:
     def  __init__(self, allele: AlleleEvents, organ: CellTypeTree):
-        # TODO: make organ an int?
         self.allele = allele
         self.organ = organ
 

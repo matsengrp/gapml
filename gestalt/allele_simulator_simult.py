@@ -139,8 +139,6 @@ class AlleleSimulatorSimultaneous(AlleleSimulator):
         """
         allele = Allele(init_allele.allele, init_allele.bcode_meta)
 
-        # TODO: this is currently the stupidest and slowest implementation of changing target cut rates
-        # try to make this faster please.
         time_remain = node.dist
         while time_remain > 0:
             scale_hazard = scale_hazard_func(node.up.dist_to_root + node.dist - time_remain)

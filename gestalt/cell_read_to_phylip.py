@@ -44,7 +44,6 @@ def scale_to_phylip_weights(value: int, min_val: int, max_val: int):
 
     max_log = np.log(max_val - min_val)
     value_log = np.log(value)
-    # TODO: check this calculation
     ret = int(
         np.round(((value_log - min_val) / max_log) * (WEIGHT_ARRAY_LEN - 1)))
     return WEIGHT_ARRAY[ret]

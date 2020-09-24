@@ -44,7 +44,6 @@ def resolve_all_multifurcs(tree: CellLineageTree):
     """
     no_multifurcs = False
     while not no_multifurcs:
-        # TODO: worlds most ineffecieint resolver. oh well
         no_multifurcs = True
         for node in tree.traverse():
             children = node.get_children()
@@ -82,7 +81,6 @@ def NNI(node: CellLineageTree, xchild: CellLineageTree, ychild: CellLineageTree)
         xchild.dist = y_dist
 
         # Redo ancestral state calculations because of NNI moves
-        # TODO: reset the strings that are printed too.
         node.anc_state_list = anc_evt_finder.get_possible_anc_states(node)
         node.up.anc_state_list = anc_evt_finder.get_possible_anc_states(node.up)
 

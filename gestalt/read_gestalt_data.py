@@ -175,7 +175,6 @@ def process_observed_seq_format7B(
                     evt.start_pos - prev_evt.start_pos + evt.del_len,
                     prev_evt.min_target,
                     max(prev_evt.max_target, evt.max_target),
-                    # TODO: we're putting a dummy insertion string when merging events
                     prev_evt.insert_str + evt.insert_str + "a" * new_omit_str_len)
             non_clashing_events[-1] = new_event
         else:
@@ -399,9 +398,7 @@ def main():
     bcode_meta = BarcodeMetadata(
             unedited_barcode = barcode_padded,
             num_barcodes = 1,
-            # TODO: is this correct?
             cut_site = 6,
-            # TODO: is this correct?
             crucial_pos_len=[6,6])
 
     if args.reads_format == 0:

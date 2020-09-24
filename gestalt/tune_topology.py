@@ -517,8 +517,6 @@ def main(args=sys.argv[1:]):
             logging.info("Iter %d: Best pen param %f %s", i, fit_params["branch_pen_param"], fit_params["target_lam_pen_param"])
 
         # Find hanging chads
-        # TODO: kind slow right now... reruns chad-finding code
-        # cause nodes are getting renumbered...
         random_chad = None
         if args.max_chad_tune_search >= 1:
             logging.info("chad finding time")

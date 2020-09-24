@@ -231,7 +231,6 @@ def main(args=sys.argv[1:]):
                 bcode_meta,
                 args.out_folder,
                 args.mix_path)
-        #TODO: DOESN'T USE CELL STATE
         parsimony_trees = parsimony_estimator.estimate(
                 obs_leaves,
                 num_mix_runs = args.num_jumbles,

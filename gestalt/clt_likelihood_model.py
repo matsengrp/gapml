@@ -629,7 +629,6 @@ class CLTLikelihoodModel:
 
         if not use_random_assignment:
             try:
-                # TODO: figure out if there is easy way to use chronos
                 # We have this try catch because chronos will sometimes assign zero branch lengths
                 is_root_unifurc = len(tree.get_children()) == 1
                 chronos_tree = tree.get_children()[0] if is_root_unifurc else tree
@@ -644,7 +643,6 @@ class CLTLikelihoodModel:
                 # Check that chronos didn't assign terrible branch lengths
                 chronos_tree.dist = root_unifurc_prop * tot_time if is_root_unifurc else 0
                 chronos_tree.add_feature('dist_to_root', chronos_tree.dist)
-                # TODO make this work faster
                 for node in chronos_tree.get_descendants('preorder'):
                     if is_root_unifurc:
                         node.dist = (1 - root_unifurc_prop) * node.dist
@@ -829,10 +827,6 @@ class CLTLikelihoodModel:
 
         @return list of tensorflow tensors with indel probs for each singleton
         """
-        # TODO: move this check elsewhere? This is to check that all trim lengths make sense!
-        for sg in singletons:
-            sg.get_trim_lens(self.bcode_meta)
-
         if not singletons:
             return []
         else:
