@@ -9,7 +9,7 @@ import logging
 from scipy.stats import spearmanr, kendalltau, pearsonr
 from cell_lineage_tree import CellLineageTree
 from collapsed_tree import _remove_single_child_unobs_nodes
-from constant_paths import RSPR_PATH, BHV_PATH, TAU_GEO_JAR_PATH
+from constant_paths import RSPR_PATH, BHV_PATH
 import collapsed_tree
 
 
@@ -383,66 +383,6 @@ class SPRDistanceMeasurer(TreeDistanceMeasurer):
         os.remove(rspr_out_file)
 
         return spr_dist
-
-
-class GavruskinMeasurer(TreeDistanceMeasurer):
-    """
-    "BHV" distance but for ultrametric trees
-    The tau-metric trees
-    https://github.com/gavruskin/tauGeodesic
-    """
-    name = "tau-bhv"
-
-    def _perturb_distances(self, raw_tree, perturb_err=0.5 * 1e-4):
-        tree = raw_tree.copy()
-        for node in tree.traverse():
-            node.dist += np.random.rand() * perturb_err
-        return tree
-
-    def get_dist(self, tree):
-        """
-        Uses a modification of the tauGeodesic code
-        -- mostly modifies the code to deal with newick format instead
-        """
-        try_vals = [0, 1e-10, 1e-8, 1e-4 * 0.5, 1e-3]
-        for perturb_err in try_vals:
-            try:
-                tree = self._perturb_distances(tree, perturb_err)
-                self._rename_nodes(tree)
-
-                # Write tree out in newick format
-                suffix = "%d%d" % (int(time.time()), np.random.randint(1000000))
-
-                ref_tree_in_file = "%s/ref_tree_newick%s.txt" % (
-                        self.scratch_dir, suffix)
-                with open(ref_tree_in_file, "w") as f:
-                    f.write(self.ref_tree.write(format=5))
-
-                tree_in_file = "%s/tree_newick%s.txt" % (
-                        self.scratch_dir, suffix)
-                with open(tree_in_file, "w") as f:
-                    f.write(tree.write(format=5))
-
-                # Run geodesic distance code
-                out_file = "%s/tree_tau_ultra%s.txt" % (self.scratch_dir, suffix)
-                tau_cmd = "java -jar %s %s %s > %s 2>&1" % (TAU_GEO_JAR_PATH, ref_tree_in_file, tree_in_file, out_file)
-                subprocess.check_output(
-                        tau_cmd,
-                        shell=True)
-
-                # read tau-distance output, distance is on the last line
-                with open(out_file, "r") as f:
-                    lines = f.readlines()
-                    tau_dist = float(lines[-1])
-                print("good err", perturb_err)
-                return tau_dist
-            except subprocess.CalledProcessError as e:
-                print(e)
-            finally:
-                os.remove(ref_tree_in_file)
-                os.remove(tree_in_file)
-                os.remove(out_file)
-        raise ValueError("Failed to calculate tau dist")
 
 
 class MRCADistanceMeasurer(TreeDistanceMeasurer):
